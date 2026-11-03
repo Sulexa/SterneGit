@@ -3,6 +3,7 @@
 
 mod app;
 mod graph;
+mod repo_view;
 mod repository;
 
 use std::{borrow::Cow, path::PathBuf};

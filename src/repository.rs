@@ -197,6 +197,11 @@ pub(crate) fn load(path: &Path) -> Result<History> {
 }
 
 impl History {
+    /// The work tree, or the Git directory of a bare repository.
+    pub(crate) fn location(&self) -> &Path {
+        &self.location
+    }
+
     /// Returns a job that reads one commit's message and patch, to run off the
     /// UI thread.
     pub(crate) fn details_job(

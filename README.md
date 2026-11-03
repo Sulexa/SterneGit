@@ -33,8 +33,14 @@ xkbcommon, Vulkan, fontconfig).
 | Ctrl+O (Cmd+O) | Open a repository |
 | Ctrl+R (Cmd+R) | Refresh, keeping the selected commit |
 | Ctrl+Shift+C (Cmd+Shift+C) | Copy the selected commit's full hash |
+| Ctrl+W (Cmd+W) | Close the current tab |
+| Ctrl+Tab / Ctrl+Shift+Tab | Switch to the next / previous tab |
 
 Click a branch, remote branch or tag in the sidebar to jump to its commit.
+
+Each repository opens in its own tab under the top bar; **+** opens another one.
+Every action is also in the File, Edit, View and About menus of the top bar
+(macOS's own menu bar on a Mac).
 
 ## How it's built
 
@@ -44,8 +50,10 @@ Click a branch, remote branch or tag in the sidebar to jump to its commit.
   detection and the patch itself match what Git prints in a terminal.
 - `src/graph.rs` assigns each commit a lane and works out the line pieces that
   cross each row. It has unit tests.
-- `src/app.rs` is the window: a virtualized ref list, a virtualized commit list
-  that paints each row's piece of the graph, and gpui-kit's `Diff` for the
-  selected commit.
+- `src/app.rs` is the window: the top bar with its menus, a tab per open
+  repository, and the keyboard shortcuts.
+- `src/repo_view.rs` is one repository's view: a virtualized ref list, a
+  virtualized commit list that paints each row's piece of the graph, and
+  gpui-kit's `Diff` for the selected commit.
 
 Release builds use thin LTO and strip symbols to keep the binary small.
