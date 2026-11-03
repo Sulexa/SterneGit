@@ -3,11 +3,13 @@
 //! History and refs come from gix inside the process, so a refresh spawns no
 //! processes however large the history is. A commit's patch comes from
 //! `git show`: one spawn per selected commit, off every hot path, producing
-//! output every Git user already trusts.
+//! output every Git user already trusts. Fetching runs `git fetch` too, so it
+//! uses the user's own credentials, SSH keys and proxy settings.
 
 use std::{
     cmp::Reverse,
     collections::{BinaryHeap, HashMap},
+    hash::{DefaultHasher, Hash as _, Hasher as _},
     path::{Path, PathBuf},
     process::Command,
     time::{Duration, Instant},
@@ -68,6 +70,9 @@ pub(crate) struct History {
     /// Whether older commits exist beyond [`HISTORY_LIMIT`].
     pub(crate) truncated: bool,
     pub(crate) elapsed: Duration,
+    /// A digest of HEAD and every ref when the history was read. While it
+    /// stays the same, so does everything shown.
+    pub(crate) state: u64,
     repo: ThreadSafeRepository,
     /// Where `git` runs: the work tree, or the Git directory of a bare repository.
     location: PathBuf,
@@ -86,6 +91,9 @@ pub(crate) fn load(path: &Path) -> Result<History> {
     // Walking by commit time looks each commit up twice; a small cache keeps
     // that from decoding it twice.
     repo.object_cache_size_if_unset(4 * 1024 * 1024);
+    // Taken before the refs are read: a ref that moves meanwhile changes the
+    // next digest, so the change is read again rather than missed.
+    let state = ref_state(&repo)?;
 
     let location = repo.workdir().unwrap_or_else(|| repo.git_dir());
     // A repository found from "." would otherwise be named ".".
@@ -191,6 +199,7 @@ pub(crate) fn load(path: &Path) -> Result<History> {
         graph,
         truncated,
         elapsed: started.elapsed(),
+        state,
         repo: repo.into_sync(),
         location,
     })
@@ -200,6 +209,29 @@ impl History {
     /// The work tree, or the Git directory of a bare repository.
     pub(crate) fn location(&self) -> &Path {
         &self.location
+    }
+
+    /// Returns a job that digests HEAD and the refs as they are now, to compare
+    /// with [`History::state`] off the UI thread. It reads no commits, so it
+    /// costs a few milliseconds even in large repositories.
+    pub(crate) fn state_job(&self) -> impl FnOnce() -> Result<u64> + Send + 'static {
+        let repo = self.repo.clone();
+        move || ref_state(&repo.to_thread_local())
+    }
+
+    /// Returns a job that fetches every remote, to run off the UI thread. It
+    /// returns whether the repository has any remote: one with none spawns
+    /// nothing.
+    pub(crate) fn fetch_job(&self) -> impl FnOnce() -> Result<bool> + Send + 'static {
+        let repo = self.repo.clone();
+        let location = self.location.clone();
+        move || {
+            if repo.to_thread_local().remote_names().is_empty() {
+                return Ok(false);
+            }
+            git(&location, &["fetch", "--all", "--prune", "--quiet"])?;
+            Ok(true)
+        }
     }
 
     /// Returns a job that reads one commit's message and patch, to run off the
@@ -245,9 +277,29 @@ impl History {
     }
 }
 
+/// Digests HEAD and every ref's name and target, without peeling or reading
+/// any object.
+fn ref_state(repo: &gix::Repository) -> Result<u64> {
+    let mut hasher = DefaultHasher::new();
+    repo.head_name()?.map(|name| name.as_bstr().to_vec()).hash(&mut hasher);
+    repo.head_id().ok().map(|id| id.detach()).hash(&mut hasher);
+    for reference in repo.references()?.all()? {
+        let Ok(reference) = reference else { continue };
+        reference.name().as_bstr().hash(&mut hasher);
+        match reference.target() {
+            gix::refs::TargetRef::Object(id) => id.as_bytes().hash(&mut hasher),
+            gix::refs::TargetRef::Symbolic(name) => name.as_bstr().hash(&mut hasher),
+        }
+    }
+    Ok(hasher.finish())
+}
+
 fn git(location: &Path, args: &[&str]) -> Result<String> {
     let mut command = Command::new("git");
     command.arg("--no-pager").arg("-C").arg(location).args(args);
+    // Nothing can answer a prompt: Git fails instead of waiting for a password.
+    // Stdin isn't inherited either, so SSH can't wait on one.
+    command.env("GIT_TERMINAL_PROMPT", "0");
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt as _;
@@ -261,7 +313,7 @@ fn git(location: &Path, args: &[&str]) -> Result<String> {
     if !output.status.success() {
         bail!("{}", String::from_utf8_lossy(&output.stderr).trim());
     }
-    String::from_utf8(output.stdout).map_err(|_| anyhow!("This commit's patch isn't UTF-8."))
+    String::from_utf8(output.stdout).map_err(|_| anyhow!("Git's output isn't UTF-8."))
 }
 
 /// Orders commits newest first while keeping every child above its parents,
@@ -348,6 +400,34 @@ mod tests {
         assert_eq!(format_time(1_793_707_200, 3_600), "2026-11-03 13:00");
         assert_eq!(format_time(1_793_707_200, -13 * 3_600), "2026-11-02 23:00");
         assert_eq!(format_time(1_709_164_800, 0), "2024-02-29 00:00");
+    }
+
+    #[test]
+    fn the_ref_digest_follows_moved_refs() -> Result<()> {
+        let dir = std::env::temp_dir().join(format!("fastgit-state-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir)?;
+        let run = |args: &[&str]| git(&dir, args);
+        let commit = || {
+            run(&[
+                "-c", "user.name=Test", "-c", "user.email=test@example.com",
+                "commit", "--allow-empty", "--quiet", "-m", "change",
+            ])
+        };
+        run(&["init", "--quiet"])?;
+        commit()?;
+        let history = load(&dir)?;
+        let digest = || history.state_job()();
+        assert_eq!(digest()?, history.state, "nothing moved yet");
+        commit()?;
+        let after_commit = digest()?;
+        assert_ne!(after_commit, history.state, "a new commit moves the branch");
+        run(&["branch", "topic"])?;
+        assert_ne!(digest()?, after_commit, "a new branch is a new ref");
+        // A repository without remotes fetches nothing.
+        assert!(!history.fetch_job()()?);
+        let _ = std::fs::remove_dir_all(&dir);
+        Ok(())
     }
 
     #[test]

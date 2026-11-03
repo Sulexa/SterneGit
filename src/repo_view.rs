@@ -4,6 +4,7 @@
 use std::{
     path::{Path, PathBuf},
     sync::Arc,
+    time::{Duration, Instant},
 };
 
 use gix::ObjectId;
@@ -29,7 +30,7 @@ use gpui_kit::{
 };
 
 use crate::{
-    app::{CopyHash, NewerCommit, OlderCommit, Refresh},
+    app::{CopyHash, Fetch, NewerCommit, OlderCommit, Refresh},
     graph::{Edge, Row},
     repository::{self, CommitDetails, HISTORY_LIMIT, History, RefKind, RefLabel},
 };
@@ -80,11 +81,19 @@ pub(crate) struct RepoView {
     /// Bumped by every load, so a slow result can't replace a newer one.
     history_revision: usize,
     details_revision: usize,
+    /// Whether a check for moved refs is running.
+    checking: bool,
+    fetching: bool,
+    /// When the last fetch started, so a failing one isn't retried at once.
+    last_fetch: Option<Instant>,
+    fetch_error: Option<SharedString>,
     history_focus: FocusHandle,
     history_scroll: UniformListScrollHandle,
     refs_scroll: UniformListScrollHandle,
     _history_task: Task<()>,
     _details_task: Task<()>,
+    _check_task: Task<()>,
+    _fetch_task: Task<()>,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -105,11 +114,17 @@ impl RepoView {
             diff,
             history_revision: 0,
             details_revision: 0,
+            checking: false,
+            fetching: false,
+            last_fetch: None,
+            fetch_error: None,
             history_focus,
             history_scroll: UniformListScrollHandle::new(),
             refs_scroll: UniformListScrollHandle::new(),
             _history_task: Task::ready(()),
             _details_task: Task::ready(()),
+            _check_task: Task::ready(()),
+            _fetch_task: Task::ready(()),
             _subscriptions: subscriptions,
         };
         this.refresh(cx);
@@ -179,6 +194,70 @@ impl RepoView {
                         this.selected = None;
                         this.clear_details(cx);
                         this.error = Some(format!("{error:#}").into());
+                    }
+                }
+                cx.notify();
+            });
+        });
+        cx.notify();
+    }
+
+    /// Reads the history again only if HEAD or a ref moved since it was read:
+    /// a commit, checkout or fetch made outside FastGit.
+    pub(crate) fn check_for_changes(&mut self, cx: &mut Context<Self>) {
+        if self.loading || self.checking {
+            return;
+        }
+        let Some(history) = &self.history else { return };
+        let job = history.state_job();
+        self.checking = true;
+        self._check_task = cx.spawn(async move |this, cx| {
+            let result = cx.background_spawn(async move { job() }).await;
+            let _ = this.update(cx, |this, cx| {
+                this.checking = false;
+                let shown = this.history.as_ref().map(|history| history.state);
+                // A failed check changes nothing; the next one tries again.
+                if let Ok(state) = result
+                    && Some(state) != shown
+                    && !this.loading
+                {
+                    this.refresh(cx);
+                }
+            });
+        });
+    }
+
+    /// Fetches unless a fetch started less than `age` ago.
+    pub(crate) fn fetch_if_older_than(&mut self, age: Duration, cx: &mut Context<Self>) {
+        if self.last_fetch.is_none_or(|started| started.elapsed() >= age) {
+            self.fetch(cx);
+        }
+    }
+
+    /// Fetches every remote in the background, then shows what moved.
+    pub(crate) fn fetch(&mut self, cx: &mut Context<Self>) {
+        if self.fetching {
+            return;
+        }
+        let Some(history) = &self.history else { return };
+        let job = history.fetch_job();
+        self.fetching = true;
+        self.last_fetch = Some(Instant::now());
+        self._fetch_task = cx.spawn(async move |this, cx| {
+            let result = cx.background_spawn(async move { job() }).await;
+            let _ = this.update(cx, |this, cx| {
+                this.fetching = false;
+                match result {
+                    Ok(_) => {
+                        this.fetch_error = None;
+                        this.check_for_changes(cx);
+                    }
+                    // Git's last line says why, e.g. "fatal: Authentication failed".
+                    Err(error) => {
+                        let message = format!("{error:#}");
+                        let reason = message.lines().rfind(|line| !line.trim().is_empty());
+                        this.fetch_error =
+                            Some(reason.unwrap_or("unknown error").trim().to_owned().into());
                     }
                 }
                 cx.notify();
@@ -599,9 +678,26 @@ impl RepoView {
             ),
             _ => String::new(),
         };
+        let fetch = if self.fetching {
+            Some(div().text_color(muted).child("Fetching…"))
+        } else {
+            self.fetch_error.clone().map(|error| {
+                div()
+                    .max_w(px(480.))
+                    .truncate()
+                    .text_color(cx.theme().red)
+                    .child(SharedString::from(format!("Fetch failed: {error}")))
+            })
+        };
         StatusBar::new()
             .left(div().text_xs().text_color(muted).child(summary))
-            .right(div().text_xs().text_color(muted).child(position))
+            .right(
+                h_flex()
+                    .gap_4()
+                    .text_xs()
+                    .children(fetch)
+                    .child(div().text_color(muted).child(position)),
+            )
     }
 }
 
@@ -614,6 +710,7 @@ impl Render for RepoView {
             .on_action(cx.listener(|this, _: &OlderCommit, _, cx| this.move_selection(1, cx)))
             .on_action(cx.listener(|this, _: &NewerCommit, _, cx| this.move_selection(-1, cx)))
             .on_action(cx.listener(|this, _: &Refresh, _, cx| this.refresh(cx)))
+            .on_action(cx.listener(|this, _: &Fetch, _, cx| this.fetch(cx)))
             .on_action(cx.listener(|this, _: &CopyHash, window, cx| this.copy_hash(window, cx)))
             .child(div().flex_1().min_h_0().child(self.render_body(window, cx)))
             .child(self.render_status_bar(cx))

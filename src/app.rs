@@ -2,7 +2,7 @@
 //! the active repository, a tab per open repository below it, and the active
 //! repository's view.
 
-use std::path::PathBuf;
+use std::{path::PathBuf, time::Duration};
 
 use gpui_kit::assets::IconName;
 use gpui_kit::component::{
@@ -18,7 +18,7 @@ use gpui_kit::component::{
 use gpui_kit::{
     AnyElement, App, AppContext as _, Context, Entity, InteractiveElement as _, IntoElement,
     KeyBinding, Menu, MenuItem, ParentElement as _, PathPromptOptions, Render, SharedString, Styled as _,
-    Subscription, Window, div, prelude::FluentBuilder as _, px,
+    Subscription, Task, Window, div, prelude::FluentBuilder as _, px,
 };
 
 use crate::repo_view::RepoView;
@@ -30,6 +30,7 @@ mod commands {
             OlderCommit,
             NewerCommit,
             Refresh,
+            Fetch,
             OpenRepository,
             CopyHash,
             CloseTab,
@@ -42,6 +43,14 @@ mod commands {
 }
 pub(crate) use commands::*;
 
+/// How often the active repository is checked for refs that moved outside
+/// FastGit. A check reads only the refs, so it is cheap.
+const CHECK_INTERVAL: Duration = Duration::from_secs(3);
+/// How often every open repository fetches its remotes in the background.
+const FETCH_INTERVAL: Duration = Duration::from_secs(5 * 60);
+/// Coming back to the window or a tab fetches, unless it fetched this recently.
+const FETCH_ON_FOCUS_AFTER: Duration = Duration::from_secs(60);
+
 pub(crate) fn init(cx: &mut App) {
     let is_mac = cx.platform_info().is_mac();
     let primary = |mac: &'static str, other: &'static str| if is_mac { mac } else { other };
@@ -51,6 +60,7 @@ pub(crate) fn init(cx: &mut App) {
         KeyBinding::new("up", NewerCommit, Some("History")),
         KeyBinding::new("k", NewerCommit, Some("History")),
         KeyBinding::new(primary("cmd-r", "ctrl-r"), Refresh, Some("FastGit")),
+        KeyBinding::new(primary("cmd-shift-r", "ctrl-shift-r"), Fetch, Some("FastGit")),
         KeyBinding::new(primary("cmd-o", "ctrl-o"), OpenRepository, Some("FastGit")),
         KeyBinding::new(
             primary("cmd-shift-c", "ctrl-shift-c"),
@@ -73,6 +83,7 @@ pub(crate) fn init(cx: &mut App) {
         Menu::new("Edit").items([MenuItem::action("Copy Commit Hash", CopyHash)]),
         Menu::new("View").items([
             MenuItem::action("Refresh", Refresh),
+            MenuItem::action("Fetch All Remotes", Fetch),
             MenuItem::separator(),
             MenuItem::action("Newer Commit", NewerCommit),
             MenuItem::action("Older Commit", OlderCommit),
@@ -100,22 +111,63 @@ pub(crate) struct FastGit {
     active: usize,
     /// The in-window menus, on Windows and Linux.
     menu_bar: Option<Entity<AppMenuBar>>,
+    _poll: Task<()>,
+    _activation: Subscription,
 }
 
 impl FastGit {
     pub(crate) fn new(path: Option<PathBuf>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         Theme::change(ThemeMode::Dark, Some(window), cx);
         let menu_bar = (!cx.platform_info().is_mac()).then(|| AppMenuBar::new(cx));
+        let poll = cx.spawn(async move |this, cx| {
+            loop {
+                cx.background_executor().timer(CHECK_INTERVAL).await;
+                if this.update(cx, |this, cx| this.poll(cx)).is_err() {
+                    break;
+                }
+            }
+        });
+        let activation = cx.observe_window_activation(window, |this, window, cx| {
+            if window.is_window_active() {
+                this.catch_up(cx);
+            }
+        });
         let mut this = Self {
             tabs: Vec::new(),
             active: 0,
             menu_bar,
+            _poll: poll,
+            _activation: activation,
         };
         match path {
             Some(path) => this.open_paths(vec![path], window, cx),
             None => this.update_title(window, cx),
         }
         this
+    }
+
+    /// Picks up refs that moved in the active repository, and fetches every
+    /// repository whose last fetch is old enough.
+    fn poll(&mut self, cx: &mut Context<Self>) {
+        let active = self.active;
+        for (ix, tab) in self.tabs.iter().enumerate() {
+            tab.view.update(cx, |view, cx| {
+                if ix == active {
+                    view.check_for_changes(cx);
+                }
+                view.fetch_if_older_than(FETCH_INTERVAL, cx);
+            });
+        }
+    }
+
+    /// Brings the active repository up to date when the user comes back to it.
+    fn catch_up(&self, cx: &mut App) {
+        if let Some(view) = self.active_view() {
+            view.update(cx, |view, cx| {
+                view.check_for_changes(cx);
+                view.fetch_if_older_than(FETCH_ON_FOCUS_AFTER, cx);
+            });
+        }
     }
 
     fn active_view(&self) -> Option<&Entity<RepoView>> {
@@ -161,6 +213,7 @@ impl FastGit {
         self.active = ix;
         let focus = self.tabs[ix].view.read(cx).focus_handle();
         focus.focus(window, cx);
+        self.catch_up(cx);
         self.update_title(window, cx);
         cx.notify();
     }
@@ -219,6 +272,12 @@ impl FastGit {
     fn refresh(&self, cx: &mut App) {
         if let Some(view) = self.active_view() {
             view.update(cx, |view, cx| view.refresh(cx));
+        }
+    }
+
+    fn fetch(&self, cx: &mut App) {
+        if let Some(view) = self.active_view() {
+            view.update(cx, |view, cx| view.fetch(cx));
         }
     }
 
@@ -408,6 +467,7 @@ impl Render for FastGit {
             )
             // The active view handles these first when it has focus.
             .on_action(cx.listener(|this, _: &Refresh, _, cx| this.refresh(cx)))
+            .on_action(cx.listener(|this, _: &Fetch, _, cx| this.fetch(cx)))
             .on_action(cx.listener(|this, _: &CopyHash, window, cx| this.copy_hash(window, cx)))
             .on_action(|_: &About, window, cx| Self::show_about(window, cx))
             .on_action(|_: &Quit, _, cx| cx.quit())
