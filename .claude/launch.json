@@ -4,7 +4,7 @@
     {
       "name": "mockup",
       "runtimeExecutable": "python",
-      "runtimeArgs": ["-m", "http.server", "8765", "--directory", "docs/mockup"],
+      "runtimeArgs": ["-c", "import functools, http.server, os; http.server.ThreadingHTTPServer(('127.0.0.1', int(os.environ.get('PORT', 8765))), functools.partial(http.server.SimpleHTTPRequestHandler, directory='docs/mockup')).serve_forever()"],
       "port": 8765
     }
   ]
