@@ -1,0 +1,144 @@
+use gpui_kit::{
+    Bounds, ContentMask, Hsla, IntoElement, ParentElement as _, PathBuilder, Pixels, Point,
+    Styled as _, Window, canvas, div, fill, point, px, size, transparent_black,
+};
+
+use super::{
+    palette::{LANE_COLORS, Palette},
+    rows::ROW_HEIGHT,
+};
+use crate::git::{Edge, Row};
+
+const LANE_WIDTH: Pixels = px(12.);
+const GRAPH_MARGIN: Pixels = px(6.);
+const MAX_VISIBLE_LANES: usize = 32;
+const NODE_RADIUS: Pixels = px(4.5);
+const MERGE_NODE_SCALE: f32 = 0.7;
+const HEAD_RING_GAP: Pixels = px(3.);
+const LINE_WIDTH: Pixels = px(2.);
+const RING_WIDTH: Pixels = px(1.5);
+
+pub(crate) fn graph_width<'a>(visible: impl IntoIterator<Item = &'a Row>) -> Pixels {
+    let lanes = visible
+        .into_iter()
+        .map(|row| row.lanes as usize)
+        .max()
+        .unwrap_or(1)
+        .clamp(1, MAX_VISIBLE_LANES);
+    LANE_WIDTH * lanes as f32 + GRAPH_MARGIN
+}
+
+pub(crate) fn graph_cell(
+    row: Row,
+    is_head: bool,
+    palette: &Palette,
+    width: Pixels,
+) -> impl IntoElement {
+    let lanes = palette.lanes;
+    cell(width, move |bounds, window| {
+        paint_row(&row, is_head, &lanes, bounds, window)
+    })
+}
+
+pub(crate) fn uncommitted_cell(color: Hsla) -> impl IntoElement {
+    cell(LANE_WIDTH + GRAPH_MARGIN, move |bounds, window| {
+        let center = point(bounds.left() + LANE_WIDTH * 0.5, bounds.center().y);
+        paint_ring(window, center, NODE_RADIUS, color);
+    })
+}
+
+fn cell(
+    width: Pixels,
+    paint: impl FnOnce(Bounds<Pixels>, &mut Window) + 'static,
+) -> impl IntoElement {
+    div().flex_none().w(width).h(ROW_HEIGHT).child(
+        canvas(
+            |_, _, _| {},
+            move |bounds, (), window, _| paint(bounds, window),
+        )
+        .size_full(),
+    )
+}
+
+fn paint_row(
+    row: &Row,
+    is_head: bool,
+    lanes: &[Hsla; LANE_COLORS],
+    bounds: Bounds<Pixels>,
+    window: &mut Window,
+) {
+    let x = |lane: u16| bounds.left() + LANE_WIDTH * (lane as f32 + 0.5);
+    let color = |lane: u16| lanes[lane as usize % LANE_COLORS];
+    let (top, middle, bottom) = (bounds.top(), bounds.center().y, bounds.bottom());
+    let node = row.node_lane;
+    window.with_content_mask(Some(ContentMask { bounds }), |window| {
+        for edge in &row.edges {
+            let mut path = PathBuilder::stroke(LINE_WIDTH);
+            let lane = match *edge {
+                Edge::Pass(lane) => {
+                    path.move_to(point(x(lane), top));
+                    path.line_to(point(x(lane), bottom));
+                    lane
+                }
+                Edge::In { from } => {
+                    path.move_to(point(x(from), top));
+                    if from == node {
+                        path.line_to(point(x(node), middle));
+                    } else {
+                        bend_into_commit(&mut path, point(x(from), middle), point(x(node), middle));
+                    }
+                    from
+                }
+                Edge::Out { to } => {
+                    path.move_to(point(x(node), middle));
+                    if to == node {
+                        path.line_to(point(x(node), bottom));
+                    } else {
+                        bend_down_to_parent(&mut path, point(x(to), middle), point(x(to), bottom));
+                    }
+                    to
+                }
+            };
+            if let Ok(path) = path.build() {
+                window.paint_path(path, color(lane));
+            }
+        }
+
+        let center = point(x(node), middle);
+        let radius = if row.is_merge {
+            NODE_RADIUS * MERGE_NODE_SCALE
+        } else {
+            NODE_RADIUS
+        };
+        window.paint_quad(
+            fill(
+                Bounds::centered_at(center, size(radius * 2., radius * 2.)),
+                color(node),
+            )
+            .corner_radii(radius),
+        );
+        if is_head {
+            paint_ring(window, center, NODE_RADIUS + HEAD_RING_GAP, color(node));
+        }
+    });
+}
+
+fn bend_into_commit(path: &mut PathBuilder, corner: Point<Pixels>, commit: Point<Pixels>) {
+    path.cubic_bezier_to(commit, corner, corner);
+}
+
+fn bend_down_to_parent(path: &mut PathBuilder, corner: Point<Pixels>, lane_bottom: Point<Pixels>) {
+    path.cubic_bezier_to(lane_bottom, corner, corner);
+}
+
+fn paint_ring(window: &mut Window, center: Point<Pixels>, radius: Pixels, color: Hsla) {
+    window.paint_quad(
+        fill(
+            Bounds::centered_at(center, size(radius * 2., radius * 2.)),
+            transparent_black(),
+        )
+        .corner_radii(radius)
+        .border_widths(RING_WIDTH)
+        .border_color(color),
+    );
+}

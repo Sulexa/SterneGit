@@ -1,0 +1,353 @@
+mod changes_list;
+mod commit_panel;
+mod file_diff_panel;
+mod history_list;
+mod navigation;
+mod patch_view;
+mod refs_list;
+mod repository;
+mod status_bar;
+
+use std::{path::PathBuf, sync::Arc};
+
+use gix::ObjectId;
+use gpui_kit::{
+    AnyElement, AppContext as _, Context, Entity, FocusHandle, InteractiveElement as _,
+    IntoElement, ParentElement as _, Render, ScrollStrategy, Subscription, UniformListScrollHandle,
+    Window,
+    component::{
+        WindowExt as _,
+        button::Button,
+        resizable::{h_resizable, resizable_panel},
+        v_flex,
+    },
+    div,
+};
+
+use crate::{
+    actions::{CloseDiff, CopyHash, Fetch, NewerCommit, OlderCommit, Refresh},
+    git::{FileChange, HISTORY_LIMIT, History, Scope, Side},
+    ui::{self, Failure, Look as _, Notice, thousands},
+};
+use changes_list::ChangesList;
+use commit_panel::{CommitPanel, copy_commit_hash};
+use file_diff_panel::{CloseFileDiff, FileDiffPanel};
+use history_list::HistoryList;
+use navigation::{OpenFile, Step, Target};
+use refs_list::RefsList;
+pub(crate) use repository::{Repository, RepositoryEvent};
+use status_bar::RepoStatusBar;
+
+pub(crate) struct RepoView {
+    repository: Entity<Repository>,
+    target: Target,
+    commit_panel: Entity<CommitPanel>,
+    file_diff: Entity<FileDiffPanel>,
+    history_focus: FocusHandle,
+    history_scroll: UniformListScrollHandle,
+    refs_scroll: UniformListScrollHandle,
+    changes_scroll: UniformListScrollHandle,
+    _subscriptions: [Subscription; 2],
+}
+
+impl RepoView {
+    pub(crate) fn new(path: PathBuf, cx: &mut Context<Self>) -> Self {
+        let repository = cx.new(|cx| Repository::new(path, cx));
+        let commit_panel = cx.new(CommitPanel::new);
+        let file_diff = cx.new(|cx| FileDiffPanel::new(repository.clone(), cx));
+        let subscriptions = [
+            cx.subscribe(&repository, |this, _, event, cx| match event {
+                RepositoryEvent::HistoryRead => this.on_history_read(cx),
+                RepositoryEvent::ChangesRead => this.on_changes_read(cx),
+            }),
+            cx.subscribe(&file_diff, |this, _, _: &CloseFileDiff, cx| {
+                this.close_file(cx)
+            }),
+        ];
+        Self {
+            repository,
+            target: Target::Nothing,
+            commit_panel,
+            file_diff,
+            history_focus: cx.focus_handle().tab_stop(true),
+            history_scroll: UniformListScrollHandle::new(),
+            refs_scroll: UniformListScrollHandle::new(),
+            changes_scroll: UniformListScrollHandle::new(),
+            _subscriptions: subscriptions,
+        }
+    }
+
+    pub(crate) fn repository(&self) -> &Entity<Repository> {
+        &self.repository
+    }
+
+    pub(crate) fn focus_handle(&self) -> FocusHandle {
+        self.history_focus.clone()
+    }
+
+    pub(crate) fn copy_hash(&self, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(id) = self.target.commit() {
+            copy_commit_hash(id, window, cx);
+        }
+    }
+
+    fn on_history_read(&mut self, cx: &mut Context<Self>) {
+        let repository = self.repository.read(cx);
+        let changes = repository.changes().map(Arc::as_ref);
+        let surviving = match repository.history() {
+            Some(history) => self.target.after_history_read(history, changes),
+            None => Target::Nothing,
+        };
+        match surviving {
+            Target::Commit(id) => self.show_commit(id, cx),
+            Target::Nothing => {
+                self.target = Target::Nothing;
+                self.commit_panel.update(cx, |panel, cx| panel.clear(cx));
+                self.file_diff.update(cx, |panel, cx| panel.close(cx));
+            }
+            working_tree => self.target = working_tree,
+        }
+        cx.notify();
+    }
+
+    fn on_changes_read(&mut self, cx: &mut Context<Self>) {
+        let repository = self.repository.read(cx);
+        let (Some(repo), Some(history), Some(changes)) = (
+            repository.repo().cloned(),
+            repository.history().cloned(),
+            repository.changes().cloned(),
+        ) else {
+            return;
+        };
+        let target = self.target.after_changes_read(&changes, &history);
+        match target {
+            Target::Commit(id) if self.target != target => self.show_commit(id, cx),
+            target => {
+                self.target = target;
+                let followed = self.target.open_file().and_then(|file| {
+                    let change = changes.find(file.side, &file.path)?;
+                    Some((file.side, change.clone()))
+                });
+                self.file_diff.update(cx, |panel, cx| match followed {
+                    Some((side, change)) => panel.open(&repo, change, side, cx),
+                    None => panel.close(cx),
+                });
+            }
+        }
+        cx.notify();
+    }
+
+    fn select_commit(&mut self, id: ObjectId, cx: &mut Context<Self>) {
+        if self.target != Target::Commit(id) {
+            self.show_commit(id, cx);
+        }
+    }
+
+    fn show_commit(&mut self, id: ObjectId, cx: &mut Context<Self>) {
+        let repository = self.repository.read(cx);
+        let (Some(repo), Some(history)) =
+            (repository.repo().cloned(), repository.history().cloned())
+        else {
+            return;
+        };
+        let Some(row) = history.row_of(&id) else {
+            return;
+        };
+        self.target = Target::Commit(id);
+        self.file_diff.update(cx, |panel, cx| panel.close(cx));
+        self.commit_panel
+            .update(cx, |panel, cx| panel.show(&repo, &history.commits[row], cx));
+        self.history_scroll
+            .scroll_to_item(row, ScrollStrategy::Nearest);
+        cx.notify();
+    }
+
+    fn select_working_tree(&mut self, cx: &mut Context<Self>) {
+        if !self.target.is_working_tree() {
+            self.target = Target::WorkingTree { open: None };
+            cx.notify();
+        }
+    }
+
+    fn open_file(&mut self, side: Side, change: FileChange, cx: &mut Context<Self>) {
+        let Some(repo) = self.repository.read(cx).repo().cloned() else {
+            return;
+        };
+        self.target = Target::WorkingTree {
+            open: Some(OpenFile {
+                side,
+                path: change.path.clone(),
+            }),
+        };
+        self.file_diff
+            .update(cx, |panel, cx| panel.open(&repo, change, side, cx));
+        cx.notify();
+    }
+
+    fn close_file(&mut self, cx: &mut Context<Self>) {
+        if let Target::WorkingTree { open } = &mut self.target
+            && open.take().is_some()
+        {
+            self.file_diff.update(cx, |panel, cx| panel.close(cx));
+            cx.notify();
+        }
+    }
+
+    fn step(&mut self, step: Step, cx: &mut Context<Self>) {
+        let repository = self.repository.read(cx);
+        let Some(history) = repository.history() else {
+            return;
+        };
+        match self.target.step(step, history, repository.has_changes()) {
+            Some(Target::Commit(id)) => self.select_commit(id, cx),
+            Some(Target::WorkingTree { .. }) => self.select_working_tree(cx),
+            Some(Target::Nothing) | None => {}
+        }
+    }
+
+    fn reveal_ref(&mut self, ix: usize, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(history) = self.repository.read(cx).history().cloned() else {
+            return;
+        };
+        let Some(label) = history.refs.get(ix) else {
+            return;
+        };
+        match history.row_of(&label.target) {
+            Some(row) => {
+                self.select_commit(label.target, cx);
+                self.history_scroll
+                    .scroll_to_item(row, ScrollStrategy::Center);
+            }
+            None => window.push_notification(
+                format!(
+                    "{} points to a commit older than the newest {} shown.",
+                    label.name,
+                    thousands(HISTORY_LIMIT)
+                ),
+                cx,
+            ),
+        }
+    }
+
+    fn move_files(&mut self, from: Side, scope: Scope, cx: &mut Context<Self>) {
+        self.repository
+            .update(cx, |repository, cx| repository.move_across(from, scope, cx));
+    }
+
+    fn render_body(&self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+        let repository = self.repository.read(cx);
+        let Some(history) = repository.history().cloned() else {
+            return if repository.is_reading_history() {
+                ui::loading("Reading history…")
+            } else {
+                self.render_failure(cx)
+            };
+        };
+        let rem = window.rem_size();
+        h_resizable("fastgit-panes")
+            .child(
+                resizable_panel()
+                    .size(rem * 14.)
+                    .size_range(rem * 10. ..rem * 30.)
+                    .child(self.refs_list(history.clone(), cx)),
+            )
+            .child(resizable_panel().size_range(rem * 30. ..rem * 400.).child(
+                match self.target.open_file() {
+                    Some(_) => self.file_diff.clone().into_any_element(),
+                    None => self.history_list(history, cx).into_any_element(),
+                },
+            ))
+            .child(
+                resizable_panel()
+                    .size(rem * 30.)
+                    .size_range(rem * 22. ..rem * 90.)
+                    .child(match &self.target {
+                        Target::WorkingTree { open } => {
+                            self.changes_list(open.clone(), cx).into_any_element()
+                        }
+                        Target::Commit(_) => self.commit_panel.clone().into_any_element(),
+                        Target::Nothing => ui::hint("Select a commit to see its changes.", cx),
+                    }),
+            )
+            .into_any_element()
+    }
+
+    fn render_failure(&self, cx: &mut Context<Self>) -> AnyElement {
+        let reason = self
+            .repository
+            .read(cx)
+            .failure()
+            .map(Failure::message)
+            .unwrap_or_default();
+        Notice::new(
+            "Couldn't open this repository",
+            reason,
+            Button::new("retry")
+                .label("Retry")
+                .on_click(cx.listener(|this, _, _, cx| {
+                    this.repository
+                        .update(cx, |repository, cx| repository.refresh(cx))
+                })),
+        )
+        .into_any_element()
+    }
+
+    fn refs_list(&self, history: Arc<History>, cx: &mut Context<Self>) -> RefsList {
+        RefsList::new(history, self.refs_scroll.clone())
+            .selected(self.target.commit())
+            .on_reveal(cx.listener(|this, ix: &usize, window, cx| this.reveal_ref(*ix, window, cx)))
+    }
+
+    fn history_list(&self, history: Arc<History>, cx: &mut Context<Self>) -> HistoryList {
+        let changes = self.repository.read(cx).changes().cloned();
+        HistoryList::new(
+            history,
+            self.history_focus.clone(),
+            self.history_scroll.clone(),
+        )
+        .selected(self.target.commit())
+        .uncommitted(changes, self.target.is_working_tree())
+        .on_select_commit(cx.listener(|this, id: &ObjectId, _, cx| this.select_commit(*id, cx)))
+        .on_select_uncommitted(cx.listener(|this, _: &(), _, cx| this.select_working_tree(cx)))
+    }
+
+    fn changes_list(&self, open: Option<OpenFile>, cx: &mut Context<Self>) -> ChangesList {
+        let repository = self.repository.read(cx);
+        ChangesList::new(repository.changes().cloned(), self.changes_scroll.clone())
+            .open(open)
+            .writing(
+                repository.is_writing(),
+                repository.write_failure().map(Failure::message),
+            )
+            .on_open(
+                cx.listener(|this, (side, change): &(Side, FileChange), _, cx| {
+                    this.open_file(*side, change.clone(), cx)
+                }),
+            )
+            .on_move(cx.listener(|this, (side, scope): &(Side, Scope), _, cx| {
+                this.move_files(*side, scope.clone(), cx)
+            }))
+    }
+}
+
+impl Render for RepoView {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let status_bar = RepoStatusBar::new(self.repository.read(cx), self.target.commit());
+        v_flex()
+            .pane()
+            .on_action(cx.listener(|this, _: &OlderCommit, _, cx| this.step(Step::Older, cx)))
+            .on_action(cx.listener(|this, _: &NewerCommit, _, cx| this.step(Step::Newer, cx)))
+            .on_action(cx.listener(|this, _: &Refresh, _, cx| {
+                this.repository
+                    .update(cx, |repository, cx| repository.refresh(cx))
+            }))
+            .on_action(cx.listener(|this, _: &Fetch, _, cx| {
+                this.repository
+                    .update(cx, |repository, cx| repository.fetch(cx))
+            }))
+            .on_action(cx.listener(|this, _: &CopyHash, window, cx| this.copy_hash(window, cx)))
+            .on_action(cx.listener(|this, _: &CloseDiff, _, cx| this.close_file(cx)))
+            .child(div().fill_height().child(self.render_body(window, cx)))
+            .child(status_bar)
+    }
+}

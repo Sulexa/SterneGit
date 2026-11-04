@@ -53,18 +53,26 @@ Every action is also in the File, Edit, View and About menus of the top bar
 
 ## How it's built
 
-- `src/repository.rs` reads refs and history with gix inside the process, so a
-  refresh starts no processes however large the history is. The newest 10,000
-  commits are read. Selecting a commit runs one `git show` for its patch, so rename
-  detection and the patch itself match what Git prints in a terminal. Uncommitted
-  changes come from `git status`, each file's comparison from `git diff`, and
-  staging from `git add` / `git reset`.
-- `src/graph.rs` assigns each commit a lane and works out the line pieces that
-  cross each row. It has unit tests.
-- `src/app.rs` is the window: the top bar with its menus, a tab per open
-  repository, and the keyboard shortcuts.
-- `src/repo_view.rs` is one repository's view: a virtualized ref list, a
-  virtualized commit list that paints each row's piece of the graph, and
-  gpui-kit's `Diff` for the selected commit.
+- `src/git/` reads and changes the repository, and knows nothing about the UI.
+  Refs and history come from gix inside the process, so a refresh starts no
+  processes however large the history is; the newest 10,000 commits are read.
+  A commit's patch comes from one `git show`, uncommitted changes from
+  `git status`, each file's comparison from `git diff`, staging from
+  `git add` / `git reset`, and fetching from `git fetch`, so patches match what
+  Git prints in a terminal and fetches use the user's own credentials. `graph.rs`
+  assigns each commit a lane and works out the line pieces that cross each row.
+- `src/repo/` is one repository's tab. `repository.rs` holds what was read and
+  runs Git in the background, `navigation.rs` decides what stays selected when
+  the history or the changes are read again, and `mod.rs` lays the panels out and
+  connects them. Each panel has its own file: the ref list, the commit list that
+  paints the graph, the commit details, the uncommitted changes, the file
+  comparison and the status bar.
+- `src/ui/` holds the pieces every panel is drawn with: rows and section headers,
+  badges, the graph cell, notices, and `Load` / `Job`, which tie a background
+  task to the state it fills.
+- `src/app/` is the window: the top bar with its menus and a tab per open
+  repository. `src/actions.rs` lists every action and its shortcut context.
+- The code carries no comments: names, types and tests say what it does, and
+  `tests/no_comments.rs` keeps it that way. `cargo test` runs the unit tests.
 
 Release builds use thin LTO and strip symbols to keep the binary small.
