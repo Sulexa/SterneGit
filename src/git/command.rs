@@ -1,9 +1,16 @@
 use std::{
+    ffi::OsStr,
+    io::Write as _,
     path::Path,
-    process::{Command, Stdio},
+    process::{Command, Output, Stdio},
 };
 
-use anyhow::{Context as _, Result, anyhow, bail};
+use anyhow::{Context as _, Result, bail};
+
+use super::text::decode;
+
+pub(crate) const READ_ONLY: &str = "--no-optional-locks";
+const GIT_MISSING: &str = "Couldn't run git. Is it installed and on PATH?";
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Exit {
@@ -11,24 +18,46 @@ pub(crate) enum Exit {
     SuccessOrDifference,
 }
 
-pub(crate) fn run(location: &Path, args: &[&str], exit: Exit) -> Result<Vec<u8>> {
+pub(crate) fn run<A: AsRef<OsStr>>(location: &Path, args: &[A], exit: Exit) -> Result<Vec<u8>> {
+    let output = git(location, args).output().context(GIT_MISSING)?;
+    checked(output, exit)
+}
+
+pub(crate) fn run_text<A: AsRef<OsStr>>(location: &Path, args: &[A], exit: Exit) -> Result<String> {
+    Ok(decode(&run(location, args, exit)?))
+}
+
+pub(crate) fn run_with_input<A: AsRef<OsStr>>(
+    location: &Path,
+    args: &[A],
+    input: &[u8],
+) -> Result<Vec<u8>> {
+    let mut child = git(location, args)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .context(GIT_MISSING)?;
+    if let Some(mut stdin) = child.stdin.take() {
+        stdin.write_all(input)?;
+    }
+    checked(child.wait_with_output()?, Exit::Success)
+}
+
+fn git<A: AsRef<OsStr>>(location: &Path, args: &[A]) -> Command {
     let mut command = Command::new("git");
     command.arg("--no-pager").arg("-C").arg(location).args(args);
     never_prompt(&mut command);
     without_console_window(&mut command);
-    let output = command
-        .output()
-        .context("Couldn't run git. Is it installed and on PATH?")?;
-    let found_difference = exit == Exit::SuccessOrDifference && output.status.code() == Some(1);
-    if !output.status.success() && !found_difference {
-        bail!("{}", String::from_utf8_lossy(&output.stderr).trim());
-    }
-    Ok(output.stdout)
+    command
 }
 
-pub(crate) fn run_utf8(location: &Path, args: &[&str]) -> Result<String> {
-    let output = run(location, args, Exit::Success)?;
-    String::from_utf8(output).map_err(|_| anyhow!("Git's output isn't UTF-8."))
+fn checked(output: Output, exit: Exit) -> Result<Vec<u8>> {
+    let found_difference = exit == Exit::SuccessOrDifference && output.status.code() == Some(1);
+    if !output.status.success() && !found_difference {
+        bail!("{}", decode(&output.stderr).trim());
+    }
+    Ok(output.stdout)
 }
 
 fn never_prompt(command: &mut Command) {

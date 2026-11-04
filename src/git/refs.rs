@@ -3,10 +3,12 @@ use std::hash::{DefaultHasher, Hash as _, Hasher as _};
 use anyhow::Result;
 use gix::{
     ObjectId,
-    bstr::{BStr, ByteSlice as _},
+    bstr::BStr,
     refs::{Category, FullName, TargetRef},
 };
 use gpui_kit::SharedString;
+
+use super::text::decode;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum RefKind {
@@ -77,7 +79,7 @@ pub(crate) fn read_labels(
         if kind == RefKind::RemoteBranch && is_alias_for_another_remote_branch(short_name) {
             continue;
         }
-        let name = short_name.to_str_lossy().into_owned().into();
+        let name = decode(short_name).into();
         let is_head = kind == RefKind::LocalBranch
             && head.is_some_and(|head| head.as_bstr() == reference.name().as_bstr());
         let Ok(commit) = reference.peel_to_commit() else {

@@ -7,7 +7,6 @@ use std::{
 use anyhow::Result;
 use gix::{
     ObjectId,
-    bstr::ByteSlice as _,
     refs::FullName,
     revision::walk::{Info, Sorting},
     traverse::commit::simple::CommitTimeOrder,
@@ -17,6 +16,7 @@ use gpui_kit::SharedString;
 use super::{
     graph::{self, Graph},
     refs::{self, RefDigest, RefLabel},
+    text::decode,
     time::format_time,
 };
 
@@ -45,13 +45,8 @@ impl Commit {
             id: info.id,
             short_id: short_id(info.id),
             parents: info.parent_ids.iter().copied().collect(),
-            subject: commit
-                .message()?
-                .summary()
-                .to_str_lossy()
-                .into_owned()
-                .into(),
-            author: author.name.to_str_lossy().into_owned().into(),
+            subject: decode(&commit.message()?.summary()).into(),
+            author: decode(author.name).into(),
             authored: format_time(authored.seconds, authored.offset).into(),
             committed: format_time(committed.seconds, committed.offset).into(),
             committed_at: committed.seconds,
@@ -91,7 +86,7 @@ impl Head {
 
     fn label(&self) -> Option<SharedString> {
         match (&self.name, self.id) {
-            (Some(name), _) => Some(name.shorten().to_str_lossy().into_owned().into()),
+            (Some(name), _) => Some(decode(name.shorten()).into()),
             (None, Some(id)) => Some(format!("detached at {}", short_id(id)).into()),
             (None, None) => None,
         }
@@ -311,6 +306,33 @@ mod tests {
             .map(|commit| commit.id.as_bytes()[0])
             .collect();
         assert_eq!(ordered, [1, 2, 3]);
+    }
+
+    #[test]
+    fn a_latin_1_commit_message_reads_as_its_accented_letters() -> Result<()> {
+        let scratch = ScratchRepo::new("latin-1-message")?;
+        std::fs::write(
+            scratch.dir.join("message.txt"),
+            b"Caf\xE9 cr\xE8me\n\nCorps du message, \xE2g\xE9\n",
+        )?;
+        scratch.git(&[
+            "-c",
+            "i18n.commitEncoding=ISO-8859-1",
+            "commit",
+            "--allow-empty",
+            "--no-verify",
+            "--quiet",
+            "-F",
+            "message.txt",
+        ])?;
+        let (repo, history) = scratch.open()?;
+        let commit = &history.commits[0];
+        assert_eq!(&*commit.subject, "Café crème");
+        assert_eq!(
+            &*repo.commit_details(commit.id)?.body,
+            "Corps du message, âgé"
+        );
+        Ok(())
     }
 
     #[test]

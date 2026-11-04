@@ -137,11 +137,7 @@ mod tests {
     };
 
     fn file(path: &str) -> FileChange {
-        FileChange {
-            path: path.to_owned().into(),
-            original_path: None,
-            kind: ChangeKind::Modified,
-        }
+        FileChange::new(path.as_bytes(), None, ChangeKind::Modified)
     }
 
     fn changes(unstaged: &[&str], staged: &[&str]) -> WorkingChanges {

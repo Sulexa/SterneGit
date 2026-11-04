@@ -1,6 +1,9 @@
 use anyhow::Result;
 
-use super::{Repo, command::run_utf8};
+use super::{
+    Repo,
+    command::{Exit, run},
+};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Fetched {
@@ -13,7 +16,11 @@ impl Repo {
         if self.local().remote_names().is_empty() {
             return Ok(Fetched::NoRemotes);
         }
-        run_utf8(&self.location, &["fetch", "--all", "--prune", "--quiet"])?;
+        run(
+            &self.location,
+            &["fetch", "--all", "--prune", "--quiet"],
+            Exit::Success,
+        )?;
         Ok(Fetched::AllRemotes)
     }
 }

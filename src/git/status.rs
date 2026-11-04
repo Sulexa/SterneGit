@@ -1,15 +1,18 @@
 use std::{
+    ffi::OsStr,
     hash::{DefaultHasher, Hash as _, Hasher as _},
     path::Path,
+    sync::Arc,
 };
 
 use anyhow::Result;
-use gix::{ObjectId, bstr::ByteSlice as _};
+use gix::ObjectId;
 use gpui_kit::SharedString;
 
 use super::{
     Repo,
-    command::{Exit, run},
+    command::{Exit, READ_ONLY, run},
+    text::{decode, os_name},
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -53,11 +56,41 @@ pub(crate) struct FileChange {
     pub(crate) path: SharedString,
     pub(crate) original_path: Option<SharedString>,
     pub(crate) kind: ChangeKind,
+    path_as_git_wrote_it: Arc<[u8]>,
+    original_path_as_git_wrote_it: Option<Arc<[u8]>>,
 }
 
 impl FileChange {
-    pub(crate) fn paths(&self) -> impl Iterator<Item = &str> {
-        std::iter::once(self.path.as_str()).chain(self.original_path.as_deref())
+    pub(crate) fn new(path: &[u8], original_path: Option<&[u8]>, kind: ChangeKind) -> Self {
+        Self {
+            path: decode(path).into(),
+            original_path: original_path.map(|path| decode(path).into()),
+            kind,
+            path_as_git_wrote_it: path.into(),
+            original_path_as_git_wrote_it: original_path.map(Into::into),
+        }
+    }
+
+    pub(crate) fn name_as_git_wrote_it(&self) -> &[u8] {
+        &self.path_as_git_wrote_it
+    }
+
+    pub(crate) fn names_as_git_wrote_them(&self) -> impl Iterator<Item = &[u8]> {
+        std::iter::once(self.name_as_git_wrote_it())
+            .chain(self.original_path_as_git_wrote_it.as_deref())
+    }
+
+    pub(crate) fn exact_path(&self) -> &OsStr {
+        os_name(&self.path_as_git_wrote_it, &self.path)
+    }
+
+    pub(crate) fn exact_paths(&self) -> impl Iterator<Item = &OsStr> {
+        let original = self
+            .original_path_as_git_wrote_it
+            .as_deref()
+            .zip(self.original_path.as_deref())
+            .map(|(bytes, shown)| os_name(bytes, shown));
+        std::iter::once(self.exact_path()).chain(original)
     }
 }
 
@@ -90,7 +123,7 @@ impl StatusDigest {
         status.hash(&mut hasher);
         head.hash(&mut hasher);
         for change in unstaged {
-            hash_size_and_modified_time(&work_tree.join(change.path.as_str()), &mut hasher);
+            hash_size_and_modified_time(&work_tree.join(change.exact_path()), &mut hasher);
         }
         Self(hasher.finish())
     }
@@ -133,6 +166,7 @@ impl Repo {
         let output = run(
             &self.location,
             &[
+                READ_ONLY,
                 "status",
                 "--porcelain=v1",
                 "-z",
@@ -164,44 +198,33 @@ fn parse_status(output: &[u8]) -> WorkingChanges {
             continue;
         }
         let (index, worktree) = (entry[0], entry[1]);
-        let path: SharedString = entry[3..].to_str_lossy().into_owned().into();
+        let path = &entry[3..];
         let original_path = matches!(index, b'R' | b'C')
             .then(|| entries.next())
-            .flatten()
-            .map(|path| SharedString::from(path.to_str_lossy().into_owned()));
+            .flatten();
         let conflicted = matches!(
             (index, worktree),
             (b'U', _) | (_, b'U') | (b'A', b'A') | (b'D', b'D')
         );
         if conflicted {
-            changes.unstaged.push(FileChange {
-                path,
-                original_path: None,
-                kind: ChangeKind::Conflicted,
-            });
+            changes
+                .unstaged
+                .push(FileChange::new(path, None, ChangeKind::Conflicted));
             continue;
         }
         if index == b'?' {
-            changes.unstaged.push(FileChange {
-                path,
-                original_path: None,
-                kind: ChangeKind::Untracked,
-            });
+            changes
+                .unstaged
+                .push(FileChange::new(path, None, ChangeKind::Untracked));
             continue;
         }
         if let Some(kind) = ChangeKind::from_status_code(index) {
-            changes.staged.push(FileChange {
-                path: path.clone(),
-                original_path,
-                kind,
-            });
+            changes
+                .staged
+                .push(FileChange::new(path, original_path, kind));
         }
         if let Some(kind) = ChangeKind::from_status_code(worktree) {
-            changes.unstaged.push(FileChange {
-                path,
-                original_path: None,
-                kind,
-            });
+            changes.unstaged.push(FileChange::new(path, None, kind));
         }
     }
     let by_path = |a: &FileChange, b: &FileChange| a.path.as_str().cmp(b.path.as_str());
@@ -243,6 +266,20 @@ mod tests {
                 ("fresh.txt".into(), ChangeKind::Untracked),
                 ("gone.rs".into(), ChangeKind::Deleted),
             ]
+        );
+    }
+
+    #[test]
+    fn a_name_that_is_not_utf8_keeps_the_bytes_git_wrote() {
+        let status = parse_status(b" M caf\xE9.txt\0R  n\xE9w.txt\0\xF6ld.txt\0");
+        let modified = &status.unstaged[0];
+        assert_eq!(&*modified.path, "café.txt");
+        assert_eq!(&*modified.path_as_git_wrote_it, b"caf\xE9.txt");
+        let renamed = &status.staged[0];
+        assert_eq!(renamed.original_path.as_deref(), Some("öld.txt"));
+        assert_eq!(
+            renamed.original_path_as_git_wrote_it.as_deref(),
+            Some(&b"\xF6ld.txt"[..])
         );
     }
 

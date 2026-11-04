@@ -6,6 +6,7 @@ mod patch;
 mod refs;
 mod remote;
 mod status;
+mod text;
 mod time;
 
 use std::{
@@ -106,7 +107,10 @@ pub(crate) mod scratch {
 
     use anyhow::Result;
 
-    use super::{History, Repo, command::run_utf8};
+    use super::{
+        History, Repo,
+        command::{Exit, run_text, run_with_input},
+    };
 
     pub(crate) const DEFAULT_BRANCH: &str = "main";
 
@@ -146,7 +150,7 @@ pub(crate) mod scratch {
         }
 
         pub(crate) fn git(&self, args: &[&str]) -> Result<String> {
-            run_utf8(&self.dir, args)
+            run_text(&self.dir, args, Exit::Success)
         }
 
         pub(crate) fn commit(&self, message: &str) -> Result<String> {
@@ -158,6 +162,18 @@ pub(crate) mod scratch {
                 "-m",
                 message,
             ])
+        }
+
+        pub(crate) fn commit_file_named(&self, name: &[u8], contents: &str) -> Result<()> {
+            self.write("contents.txt", contents)?;
+            let blob = self.git(&["hash-object", "-w", "contents.txt"])?;
+            std::fs::remove_file(self.dir.join("contents.txt"))?;
+            let mut entry = format!("100644 {}\t", blob.trim()).into_bytes();
+            entry.extend_from_slice(name);
+            entry.push(0);
+            run_with_input(&self.dir, &["update-index", "-z", "--index-info"], &entry)?;
+            self.commit("Add a file")?;
+            Ok(())
         }
 
         pub(crate) fn write(&self, path: &str, contents: &str) -> Result<()> {

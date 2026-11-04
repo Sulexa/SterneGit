@@ -16,7 +16,7 @@ use gpui_kit::{
 use super::{
     Repository,
     navigation::OpenFile,
-    patch_view::{PatchStats, PatchTexts, file_patch_files, patch_content},
+    patch_view::{PatchStats, PatchTexts, RedrawAfterMeasuring, file_patch_files, patch_content},
 };
 use crate::{
     actions::{CloseDiff, WINDOW_CONTEXT},
@@ -39,6 +39,7 @@ pub(crate) struct FileDiffPanel {
     open: Option<OpenFile>,
     patch: Load<PatchStats>,
     diff: Entity<DiffState>,
+    redraw_after_measuring: RedrawAfterMeasuring,
     _diff_changed: Subscription,
 }
 
@@ -53,6 +54,7 @@ impl FileDiffPanel {
             open: None,
             patch: Load::Idle,
             diff,
+            redraw_after_measuring: RedrawAfterMeasuring::default(),
             _diff_changed: diff_changed,
         }
     }
@@ -76,6 +78,7 @@ impl FileDiffPanel {
                 let stats = result.map(|files| {
                     let stats = PatchStats::of(&files);
                     this.diff.update(cx, |state, cx| state.set_files(files, cx));
+                    this.redraw_after_measuring.files_changed();
                     stats
                 });
                 this.patch.finish(stats);
@@ -123,7 +126,8 @@ impl FileDiffPanel {
 }
 
 impl Render for FileDiffPanel {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.redraw_after_measuring.request(window);
         let Some(open) = self.open.clone() else {
             return div().into_any_element();
         };

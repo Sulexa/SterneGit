@@ -30,7 +30,8 @@ fn every_source_file_the_mockup_names_exists() {
 
 #[test]
 fn only_source_fields_count() {
-    let script = "{ source: 'src/repo/mod.rs', path: 'src/ui/toast.rs' }, { source: 'src/ui/rows.rs' }";
+    let script =
+        "{ source: 'src/repo/mod.rs', path: 'src/ui/toast.rs' }, { source: 'src/ui/rows.rs' }";
     assert_eq!(sources_named(script), ["src/repo/mod.rs", "src/ui/rows.rs"]);
 }
 

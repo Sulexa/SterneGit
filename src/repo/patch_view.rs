@@ -1,5 +1,5 @@
 use gpui_kit::{
-    AnyElement, App, IntoElement,
+    AnyElement, App, IntoElement, Window,
     component::diff::{Diff, DiffFile},
     div,
 };
@@ -25,6 +25,23 @@ impl PatchStats {
             files: files.len(),
             additions,
             deletions,
+        }
+    }
+}
+
+#[derive(Default)]
+pub(crate) struct RedrawAfterMeasuring {
+    due: bool,
+}
+
+impl RedrawAfterMeasuring {
+    pub(crate) fn files_changed(&mut self) {
+        self.due = true;
+    }
+
+    pub(crate) fn request(&mut self, window: &Window) {
+        if std::mem::take(&mut self.due) {
+            window.request_animation_frame();
         }
     }
 }
@@ -111,6 +128,18 @@ two
             counts(PatchStats::of(&parse_patch(&first.patch)?)),
             (1, 1, 0)
         );
+        Ok(())
+    }
+
+    #[test]
+    fn a_file_named_in_latin_1_reads_in_its_commit() -> Result<()> {
+        let scratch = ScratchRepo::new("latin-1-name-commit")?;
+        scratch.commit_file_named(b"caf\xE9.txt", "un\n")?;
+        let (repo, history) = scratch.open()?;
+        let patch = repo.commit_details(history.commits[0].id)?.patch;
+        let files = parse_patch(&patch)?;
+        assert_eq!(files[0].path().as_str(), "café.txt");
+        assert_eq!(counts(PatchStats::of(&files)), (1, 1, 0));
         Ok(())
     }
 

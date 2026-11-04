@@ -14,7 +14,7 @@ use gpui_kit::{
     px,
 };
 
-use super::patch_view::{PatchStats, PatchTexts, parse_patch, patch_content};
+use super::patch_view::{PatchStats, PatchTexts, RedrawAfterMeasuring, parse_patch, patch_content};
 use crate::{
     actions::{CopyHash, WINDOW_CONTEXT},
     git::{Commit, Repo, short_id},
@@ -36,6 +36,7 @@ pub(crate) struct CommitPanel {
     commit: Option<Commit>,
     details: Load<Summary>,
     diff: Entity<DiffState>,
+    redraw_after_measuring: RedrawAfterMeasuring,
     _diff_changed: Subscription,
 }
 
@@ -47,6 +48,7 @@ impl CommitPanel {
             commit: None,
             details: Load::Idle,
             diff,
+            redraw_after_measuring: RedrawAfterMeasuring::default(),
             _diff_changed: diff_changed,
         }
     }
@@ -73,6 +75,7 @@ impl CommitPanel {
                 let summary = result.map(|(body, files)| {
                     let stats = PatchStats::of(&files);
                     this.diff.update(cx, |state, cx| state.set_files(files, cx));
+                    this.redraw_after_measuring.files_changed();
                     Summary { body, stats }
                 });
                 this.details.finish(summary);
@@ -97,7 +100,8 @@ pub(crate) fn copy_commit_hash(id: ObjectId, window: &mut Window, cx: &mut App) 
 }
 
 impl Render for CommitPanel {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.redraw_after_measuring.request(window);
         let Some(commit) = self.commit.clone() else {
             return ui::hint("Select a commit to see its changes.", cx);
         };

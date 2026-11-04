@@ -1,13 +1,21 @@
+use std::ffi::OsStr;
+
 use anyhow::{Context as _, Result};
-use gix::{ObjectId, bstr::ByteSlice as _};
+use gix::ObjectId;
 use gpui_kit::SharedString;
 
 use super::{
     ChangeKind, FileChange, Repo, Side,
-    command::{Exit, run, run_utf8},
+    command::{Exit, READ_ONLY, run_text},
+    text::decode,
 };
 
+const NAMES_AS_WRITTEN: &str = "core.quotePath=false";
+
 const COMMIT_PATCH: &[&str] = &[
+    READ_ONLY,
+    "-c",
+    NAMES_AS_WRITTEN,
     "show",
     "--no-show-signature",
     "--no-color",
@@ -22,6 +30,9 @@ const COMMIT_PATCH: &[&str] = &[
 ];
 
 const FILE_PATCH: &[&str] = &[
+    READ_ONLY,
+    "-c",
+    NAMES_AS_WRITTEN,
     "diff",
     "--no-color",
     "--no-ext-diff",
@@ -51,17 +62,17 @@ impl Repo {
         let id = id.to_string();
         let mut args = COMMIT_PATCH.to_vec();
         args.extend([id.as_str(), "--"]);
-        let patch = run_utf8(&self.location, &args)?;
+        let patch = run_text(&self.location, &args, Exit::Success)?;
         Ok(CommitDetails { body, patch })
     }
 
     pub(crate) fn file_patch(&self, change: &FileChange, side: Side) -> Result<FilePatch> {
-        let paths: Vec<&str> = change.paths().collect();
+        let paths: Vec<&OsStr> = change.exact_paths().collect();
         match (change.kind, side) {
             (ChangeKind::Conflicted, _) => self.conflicted_file(change),
             (ChangeKind::Untracked, _) => self.diff(
                 &["--no-index"],
-                &[NOTHING, change.path.as_str()],
+                &[OsStr::new(NOTHING), change.exact_path()],
                 Exit::SuccessOrDifference,
             ),
             (_, Side::Staged) => self.diff(&["--cached", "--find-renames"], &paths, Exit::Success),
@@ -69,33 +80,83 @@ impl Repo {
         }
     }
 
-    fn diff(&self, options: &[&str], paths: &[&str], exit: Exit) -> Result<FilePatch> {
-        let mut args = FILE_PATCH.to_vec();
-        args.extend(options);
-        args.push("--");
+    fn diff(&self, options: &[&str], paths: &[&OsStr], exit: Exit) -> Result<FilePatch> {
+        let mut args: Vec<&OsStr> = FILE_PATCH.iter().chain(options).map(OsStr::new).collect();
+        args.push(OsStr::new("--"));
         args.extend(paths);
-        let patch = run(&self.location, &args, exit)?;
-        Ok(FilePatch::Diff(
-            String::from_utf8_lossy(&patch).into_owned(),
-        ))
+        Ok(FilePatch::Diff(run_text(&self.location, &args, exit)?))
     }
 
     fn conflicted_file(&self, change: &FileChange) -> Result<FilePatch> {
         let path = change.path.as_str();
-        let bytes = std::fs::read(self.location.join(path))
+        let bytes = std::fs::read(self.location.join(change.exact_path()))
             .with_context(|| format!("Couldn't read {path}"))?;
         Ok(FilePatch::Conflicted {
             path: change.path.clone(),
-            contents: String::from_utf8_lossy(&bytes).into_owned(),
+            contents: decode(&bytes),
         })
     }
 }
 
 fn message_body(commit: &gix::Commit<'_>) -> SharedString {
-    let message = commit.message_raw_sloppy().to_str_lossy();
+    let message = decode(commit.message_raw_sloppy());
     message
         .split_once("\n\n")
         .map_or("", |(_, body)| body.trim())
         .to_owned()
         .into()
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::{Duration, SystemTime};
+
+    use anyhow::Result;
+
+    use crate::git::{Side, scratch::ScratchRepo};
+
+    const LONG_AGO: Duration = Duration::from_secs(1_000_000_000);
+
+    #[test]
+    fn reading_the_repository_leaves_its_index_alone() -> Result<()> {
+        let scratch = ScratchRepo::new("read-only")?;
+        scratch.write("same.txt", "same\n")?;
+        scratch.write("edited.txt", "before\n")?;
+        scratch.git(&["add", "same.txt", "edited.txt"])?;
+        scratch.commit("first")?;
+        scratch.write("edited.txt", "after\n")?;
+        std::fs::File::options()
+            .write(true)
+            .open(scratch.dir.join("same.txt"))?
+            .set_modified(SystemTime::UNIX_EPOCH + LONG_AGO)?;
+        let index = scratch.dir.join(".git").join("index");
+        let untouched = std::fs::read(&index)?;
+
+        let (repo, history) = scratch.open()?;
+        let edited = repo.status()?.unstaged[0].clone();
+        repo.file_patch(&edited, Side::Unstaged)?;
+        repo.commit_details(history.commits[0].id)?;
+        assert_eq!(
+            std::fs::read(&index)?,
+            untouched,
+            "a read rewrote the index"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn a_latin_1_file_shows_its_accented_letters() -> Result<()> {
+        let scratch = ScratchRepo::new("latin-1")?;
+        std::fs::write(scratch.dir.join("notes.txt"), b"caf\xE9 cr\xE8me, \xE2ge\n")?;
+        scratch.git(&["add", "notes.txt"])?;
+        scratch.commit("Add notes")?;
+        let (repo, history) = scratch.open()?;
+        let details = repo.commit_details(history.commits[0].id)?;
+        assert!(
+            details.patch.contains("+café crème, âge"),
+            "{}",
+            details.patch
+        );
+        Ok(())
+    }
 }

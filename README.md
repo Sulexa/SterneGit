@@ -14,7 +14,8 @@ cargo run --release -- path/to/repository
 ```
 
 Without a path it opens the current directory if that's a repository, and otherwise
-offers **Open repository…**. Git must be on `PATH` for diffs.
+offers **Open repository…**. Git 2.26 or newer must be on `PATH` for diffs and
+staging.
 
 To time how long reading a repository takes, without opening a window:
 
@@ -59,7 +60,13 @@ Every action is also in the File, Edit, View and About menus of the top bar
   A commit's patch comes from one `git show`, uncommitted changes from
   `git status`, each file's comparison from `git diff`, staging from
   `git add` / `git reset`, and fetching from `git fetch`, so patches match what
-  Git prints in a terminal and fetches use the user's own credentials. `graph.rs`
+  Git prints in a terminal and fetches use the user's own credentials. The
+  background reads pass `--no-optional-locks`, so they never hold the index lock
+  while you commit in a terminal. Text is read as UTF-8, and a line that isn't
+  valid UTF-8 is read as Windows-1252 (Latin-1), so files and commit messages
+  saved in older Western encodings show é, â, ç and € correctly. File names
+  reach Git exactly as Git wrote them, so a file stages and compares whatever
+  encoding its name is in. `graph.rs`
   assigns each commit a lane and works out the line pieces that cross each row.
 - `src/repo/` is one repository's tab. `repository.rs` holds what was read and
   runs Git in the background, `navigation.rs` decides what stays selected when
