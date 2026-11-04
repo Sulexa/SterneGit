@@ -74,5 +74,8 @@ Every action is also in the File, Edit, View and About menus of the top bar
   repository. `src/actions.rs` lists every action and its shortcut context.
 - The code carries no comments: names, types and tests say what it does, and
   `tests/no_comments.rs` keeps it that way. `cargo test` runs the unit tests.
+- `docs/mockup/` is a browser mockup of every screen and of each reusable
+  component, kept up to date with the UI. Open `docs/mockup/index.html`; its
+  README says how to update it.
 
 Release builds use thin LTO and strip symbols to keep the binary small.

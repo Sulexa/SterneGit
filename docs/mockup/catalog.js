@@ -1,0 +1,410 @@
+const Catalog = (() => {
+  const { history, changes, commitDetails, fileDiff, tabs } = Sample;
+  const commit = (ix) => history.commits[ix];
+  const width = graphWidth(history.commits);
+  const row = 736;
+  const lanes = (graph, extra = {}) => () => C.GraphCell({ graph, ...extra });
+
+  return [
+    {
+      key: 'foundations',
+      title: 'Foundations',
+      about: 'The Default Dark theme of gpui-kit, which FastGit switches to at start-up, and the sizes every row shares.',
+      items: [
+        { name: 'Colors', special: 'colors', source: 'src/ui/palette.rs', about: 'Theme tokens used by the panels. Values come from gpui-component\'s default-theme.json (Default Dark).' },
+        { name: 'LaneColors', special: 'lanes', source: 'src/ui/palette.rs', about: 'Graph lanes cycle through six theme colors. A commit\'s ref badges take the color of its lane.' },
+        { name: 'Typography', special: 'type', source: 'src/ui/rows.rs', about: 'Text sizes as GPUI names them, plus the 28 px row height every list uses.' },
+        { name: 'Icons', special: 'icons', source: 'src/assets.rs', about: 'Lucide icons from gpui-kit, plus the ones FastGit adds in assets.rs.' },
+      ],
+    },
+    {
+      key: 'kit',
+      title: 'Kit pieces',
+      about: 'gpui-kit components as FastGit configures them. FastGit does not own their look, only the options it passes.',
+      items: [
+        {
+          name: 'Button',
+          code: 'gpui_kit::button::Button',
+          source: 'src/repo/changes_list.rs',
+          about: 'Ghost xsmall buttons everywhere in panels; primary only for the welcome action; default (filled) for Stage / Unstage and Retry.',
+          variants: [
+            ['Primary, medium', () => C.Button({ label: 'Open repository…', variant: 'primary', size: 'md' })],
+            ['Default, medium', () => C.Button({ label: 'Retry', size: 'md' })],
+            ['Default, xsmall, icon', () => C.Button({ label: 'Stage', icon: 'plus' })],
+            ['Ghost, xsmall', () => C.Button({ label: 'Copy hash', variant: 'ghost' })],
+            ['Ghost, selected', () => C.Button({ label: 'Split', icon: 'columns-2', variant: 'ghost', selected: true })],
+            ['Ghost, icon only', () => C.Button({ icon: 'close', variant: 'ghost' })],
+            ['Disabled', () => C.Button({ label: 'Stage all', icon: 'plus', variant: 'ghost', disabled: true })],
+          ],
+        },
+        {
+          name: 'Spinner',
+          code: 'gpui_kit::spinner::Spinner',
+          source: 'src/ui/notice.rs',
+          about: 'Medium in loading notices, xsmall in a tab that is reading.',
+          variants: [
+            ['Medium', () => C.Spinner()],
+            ['XSmall', () => C.Spinner({ size: 'xs' })],
+          ],
+        },
+        {
+          name: 'WindowControls',
+          code: 'gpui_kit::TitleBar',
+          source: 'src/app/top_bar.rs',
+          about: 'Drawn by the kit\'s TitleBar on Windows and Linux. macOS keeps its own traffic lights.',
+          variants: [['Windows / Linux', () => `<div style="height:34px;background:var(--title-bar)">${C.WindowControls()}</div>`]],
+        },
+        {
+          name: 'AppMenuBar',
+          code: 'gpui_kit::menu::AppMenuBar',
+          source: 'src/app/mod.rs',
+          about: 'File, Edit, View and About, drawn inside the top bar where the platform has no global menu bar.',
+          variants: [
+            ['Closed', () => `<div style="height:34px;background:var(--title-bar);padding:0 8px" class="h">${C.AppMenuBar()}</div>`],
+            ['View open', () => `<div style="height:34px;background:var(--title-bar);padding:0 8px" class="h">${C.AppMenuBar({ open: 'View' })}</div>`],
+          ],
+        },
+        {
+          name: 'Menu',
+          code: 'gpui_kit::Menu',
+          source: 'src/app/mod.rs',
+          about: 'Every action with its shortcut. The same list feeds the drawn menu bar and the macOS menu bar.',
+          variants: Object.entries(Menus).map(([name, items]) => [
+            name,
+            () => `<div style="position:relative;width:240px;height:${items.length * 28 + 16}px">${C.Menu({ items })}</div>`,
+          ]),
+        },
+        {
+          name: 'Notification',
+          code: 'window.push_notification',
+          source: 'src/repo/commit_panel.rs',
+          about: 'Short confirmations and warnings, top right.',
+          variants: [
+            ['Hash copied', () => C.Notification({ message: 'Commit hash copied' })],
+            ['Ref too old', () => C.Notification({ message: `v0.0.1 points to a commit older than the newest ${thousands(Texts.historyLimit)} shown.` })],
+          ],
+        },
+        {
+          name: 'AlertDialog',
+          code: 'window.open_alert_dialog',
+          source: 'src/app/window.rs',
+          about: 'Only used by About FastGit.',
+          variants: [['About', () => `<div style="position:relative;width:520px;height:260px" class="mk-dialog-frame">${C.AlertDialog({ title: 'FastGit 0.1.0', description: Texts.aboutDescription })}</div>`]],
+        },
+        {
+          name: 'DiffView',
+          code: 'gpui_kit::diff::Diff',
+          source: 'src/repo/patch_view.rs',
+          about: 'The kit\'s diff with line numbers and soft wrap. Unified with file headers for a commit; split or unified without the header for one file.',
+          variants: [
+            ['Unified with file headers (commit)', () => `<div class="v" style="width:480px;height:420px">${C.DiffView({ files: commitDetails.files.slice(1), mode: 'unified' })}</div>`],
+            ['Split without header (one file)', () => `<div class="v" style="width:736px;height:420px">${C.DiffView({ files: [{ path: fileDiff.change.path, additions: 9, deletions: 1, hunks: fileDiff.hunks }], mode: 'split', header: false })}</div>`],
+          ],
+        },
+      ],
+    },
+    {
+      key: 'ui',
+      title: 'Shared pieces (ui/)',
+      about: 'The pieces every panel is drawn with. Each one lives in src/ui/ and knows nothing about repositories.',
+      items: [
+        {
+          name: 'ListRow',
+          code: 'ui::list_row',
+          source: 'src/ui/rows.rs',
+          about: 'A 28 px selectable row. RefRow, CommitRow, UncommittedRow and ChangeRow are all built on it.',
+          variants: [
+            ['Normal', () => C.ListRow({ content: '<span class="sm">A row</span>' }), { w: 320 }],
+            ['Selected', () => C.ListRow({ content: '<span class="sm">A selected row</span>', selected: true }), { w: 320 }],
+          ],
+        },
+        {
+          name: 'SectionHeader',
+          code: 'ui::SectionHeader',
+          source: 'src/ui/rows.rs',
+          about: 'A muted 28 px title with an optional count and an optional action on the right.',
+          variants: [
+            ['With a count', () => C.SectionHeader({ title: 'Branches', count: 3 }), { w: 224 }],
+            ['With an action', () => C.SectionHeader({ title: 'Unstaged files (4)', action: C.Button({ label: 'Stage all', icon: 'plus', variant: 'ghost' }) }), { w: 480 }],
+          ],
+        },
+        {
+          name: 'RefBadge',
+          code: 'ui::ref_badge',
+          source: 'src/ui/badges.rs',
+          about: 'A ref on a commit row, tinted with the commit\'s lane color. The checked-out branch is filled more and bold. Width 32–160 px, then ellipsis.',
+          variants: [
+            ['HEAD branch', () => C.RefBadge({ name: 'main', kind: 'local', head: true })],
+            ['Branch', () => C.RefBadge({ name: 'feature/diff-view', kind: 'local', color: LaneColors[1] })],
+            ['Remote', () => C.RefBadge({ name: 'origin/main', kind: 'remote' })],
+            ['Tag', () => C.RefBadge({ name: 'v0.2.0', kind: 'tag', color: LaneColors[2] })],
+            ['Long name', () => C.RefBadge({ name: 'origin/feature/a-very-long-branch-name', kind: 'remote', color: LaneColors[3] })],
+          ],
+        },
+        {
+          name: 'ChangeBadge',
+          code: 'ui::change_badge',
+          source: 'src/ui/badges.rs',
+          about: 'The status letter of a changed file.',
+          variants: [
+            ['Added', () => C.ChangeBadge({ kind: 'A' })],
+            ['Untracked', () => C.ChangeBadge({ kind: '?' })],
+            ['Modified', () => C.ChangeBadge({ kind: 'M' })],
+            ['Deleted', () => C.ChangeBadge({ kind: 'D' })],
+            ['Renamed', () => C.ChangeBadge({ kind: 'R' })],
+            ['Copied', () => C.ChangeBadge({ kind: 'C' })],
+            ['Conflicted', () => C.ChangeBadge({ kind: 'U' })],
+          ],
+        },
+        {
+          name: 'Additions',
+          code: 'ui::additions',
+          source: 'src/ui/badges.rs',
+          about: 'Added line count, grouped by thousands.',
+          variants: [['Count', () => C.Additions({ count: 1248 })]],
+        },
+        {
+          name: 'Deletions',
+          code: 'ui::deletions',
+          source: 'src/ui/badges.rs',
+          about: 'Deleted line count, with a real minus sign.',
+          variants: [['Count', () => C.Deletions({ count: 37 })]],
+        },
+        {
+          name: 'GraphCell',
+          code: 'ui::graph_cell',
+          source: 'src/ui/graph_cell.rs',
+          about: 'One row of the commit graph: 12 px per lane plus 6 px, lines 2 px, nodes 4.5 px, merges at 70 %, a ring around HEAD.',
+          variants: [
+            ['HEAD, first commit', lanes([0, 1, 'O0'], { head: true }), { zoom: 2 }],
+            ['On a straight lane', lanes([0, 1, 'I0 O0']), { zoom: 2 }],
+            ['Branch tip beside a lane', lanes([1, 2, 'P0 O1']), { zoom: 2 }],
+            ['Merge', lanes([0, 3, 'I0 P1 O0 O2'], { merge: true }), { zoom: 2 }],
+            ['Lane joining its parent', lanes([2, 3, 'P0 P1 I2 O0']), { zoom: 2 }],
+            ['Root commit', lanes([0, 1, 'I0']), { zoom: 2 }],
+          ],
+        },
+        {
+          name: 'UncommittedCell',
+          code: 'ui::uncommitted_cell',
+          source: 'src/ui/graph_cell.rs',
+          about: 'The hollow muted ring in front of the Uncommitted changes row.',
+          variants: [['Ring', () => C.UncommittedCell(), { zoom: 2 }]],
+        },
+        {
+          name: 'Loading',
+          code: 'ui::loading',
+          source: 'src/ui/notice.rs',
+          about: 'A centered spinner with a message.',
+          variants: [['Reading commit', () => C.Loading({ message: Texts.readingCommit }), { w: 480, h: 160 }]],
+        },
+        {
+          name: 'Hint',
+          code: 'ui::hint',
+          source: 'src/ui/notice.rs',
+          about: 'A centered muted sentence for an empty pane.',
+          variants: [['Nothing selected', () => C.Hint({ message: Texts.selectCommit }), { w: 480, h: 120 }]],
+        },
+        {
+          name: 'Failure',
+          code: 'ui::failure',
+          source: 'src/ui/notice.rs',
+          about: 'A title and the reason Git gave, top-left in the pane.',
+          variants: [['Patch failed', () => C.Failure({ title: Texts.commitFailed, reason: 'stream did not contain valid UTF-8' }), { w: 480, h: 100 }]],
+        },
+        {
+          name: 'Notice',
+          code: 'ui::Notice',
+          source: 'src/ui/notice.rs',
+          about: 'A full-pane message with an icon, a title, a description and one action.',
+          variants: [
+            ['Welcome', () => C.Notice({ title: Texts.welcomeTitle, description: Texts.welcomeDescription, action: C.Button({ label: 'Open repository…', variant: 'primary', size: 'md' }) }), { w: 720, h: 260 }],
+            ['Open failed', () => C.Notice({ title: Texts.openFailedTitle, description: "could not open repository at 'D:\\Archive\\old-site': not a git repository", action: C.Button({ label: 'Retry', size: 'md' }) }), { w: 720, h: 260 }],
+          ],
+        },
+      ],
+    },
+    {
+      key: 'app',
+      title: 'Window (app/)',
+      about: 'The window around the repository tabs.',
+      items: [
+        {
+          name: 'FastGit',
+          code: 'app::window::FastGit',
+          source: 'src/app/window.rs',
+          about: 'The root view: top bar, tab strip when a tab is open, then the active tab or the welcome notice. 1440 × 900 by default, 960 × 600 at least.',
+          variants: [['Layout', () => Screens.find((screen) => screen.id === 'history').render(), { scale: 0.5 }]],
+        },
+        {
+          name: 'TopBar',
+          code: 'app::top_bar::TopBar',
+          source: 'src/app/top_bar.rs',
+          about: '34 px. Logo, the menu bar where the platform has none, then the active repository and its checked-out branch on the right.',
+          variants: [
+            ['Windows / Linux, repository open', () => C.TopBar({ repository: 'fastgit', head: 'main' }), { w: 1000 }],
+            ['Windows / Linux, nothing open', () => C.TopBar(), { w: 1000 }],
+            ['Detached HEAD', () => C.TopBar({ repository: 'fastgit', head: '3f9c2e1' }), { w: 1000 }],
+            ['macOS', () => C.TopBar({ platform: 'mac', repository: 'fastgit', head: 'main' }), { w: 1000 }],
+          ],
+        },
+        {
+          name: 'TabStrip',
+          code: 'app::tab_strip::TabStrip',
+          source: 'src/app/tab_strip.rs',
+          about: 'One tab per open repository and a + button that opens another.',
+          variants: [
+            ['Three tabs', () => C.TabStrip({ tabs, active: 0 }), { w: 1000 }],
+            ['One tab', () => C.TabStrip({ tabs: tabs.slice(0, 1), active: 0 }), { w: 1000 }],
+          ],
+        },
+        {
+          name: 'Tab',
+          code: 'gpui_kit::tab::Tab',
+          source: 'src/app/tab_strip.rs',
+          about: '120–240 px wide. A spinner while history is read, a red warning when opening failed.',
+          variants: [
+            ['Active', () => `<div class="tab-strip">${C.Tab({ name: 'fastgit', active: true })}</div>`],
+            ['Inactive', () => `<div class="tab-strip">${C.Tab({ name: 'website' })}</div>`],
+            ['Reading', () => `<div class="tab-strip">${C.Tab({ name: 'linux', state: 'reading' })}</div>`],
+            ['Failed', () => `<div class="tab-strip">${C.Tab({ name: 'old-site', state: 'failed' })}</div>`],
+          ],
+        },
+      ],
+    },
+    {
+      key: 'repo',
+      title: 'Repository tab (repo/)',
+      about: 'One repository\'s tab: three resizable panes and a status bar.',
+      items: [
+        {
+          name: 'RepoView',
+          code: 'repo::RepoView',
+          source: 'src/repo/mod.rs',
+          about: 'Refs 14 rem (10–30), the middle at least 30 rem, the right pane 30 rem (22–90). The middle shows the graph or the open file; the right shows the commit, the changes or a hint.',
+          variants: [['Layout', () => `<div class="v" style="width:1440px;height:840px">${commitSelectedBody()}</div>`, { scale: 0.5 }]],
+        },
+        {
+          name: 'RefsList',
+          code: 'repo::refs_list::RefsList',
+          source: 'src/repo/refs_list.rs',
+          about: 'Branches, remotes and tags, each section only when it has refs. Clicking a ref selects its commit.',
+          variants: [['With a selection', () => C.RefsList({ refs: history.refs, selectedRow: 2 }), { w: 224, h: 340 }]],
+        },
+        {
+          name: 'RefRow',
+          code: 'repo::refs_list::ref_row',
+          source: 'src/repo/refs_list.rs',
+          about: 'Icon by kind, the name in bold for the checked-out branch.',
+          variants: [
+            ['Checked-out branch', () => C.RefRow({ label: history.refs[1] }), { w: 224 }],
+            ['Points at the selection', () => C.RefRow({ label: history.refs[0], selected: true }), { w: 224 }],
+            ['Remote', () => C.RefRow({ label: history.refs[4] }), { w: 224 }],
+            ['Tag', () => C.RefRow({ label: history.refs[6] }), { w: 224 }],
+          ],
+        },
+        {
+          name: 'HistoryList',
+          code: 'repo::history_list::HistoryList',
+          source: 'src/repo/history_list.rs',
+          about: 'The Uncommitted changes row when the work tree has changes, then one row per commit. The graph is as wide as the widest visible row.',
+          variants: [['First rows', () => C.HistoryList({ history: { ...history, commits: history.commits.slice(0, 12) }, selectedRow: 2, changes }), { w: row, h: 370 }]],
+        },
+        {
+          name: 'CommitRow',
+          code: 'repo::history_list::commit_row',
+          source: 'src/repo/history_list.rs',
+          about: 'Graph, up to three ref badges (then +n), subject, author 120 px, date 104 px, short id 56 px.',
+          variants: [
+            ['HEAD with refs', () => C.CommitRow({ commit: commit(0), width }), { w: row }],
+            ['Selected', () => C.CommitRow({ commit: commit(2), width, selected: true }), { w: row }],
+            ['Merge', () => C.CommitRow({ commit: commit(3), width }), { w: row }],
+            ['More than three refs', () => C.CommitRow({ commit: { ...commit(6), refs: [['v0.2.0', 'tag'], ['release', 'local'], ['origin/release', 'remote'], ['stable', 'tag'], ['lts', 'tag']] }, width }), { w: row }],
+            ['No message', () => C.CommitRow({ commit: { ...commit(8), subject: '' }, width }), { w: row }],
+          ],
+        },
+        {
+          name: 'UncommittedRow',
+          code: 'repo::history_list::uncommitted_row',
+          source: 'src/repo/history_list.rs',
+          about: 'Sits above the graph only while the work tree has changes.',
+          variants: [
+            ['Unstaged and staged', () => C.UncommittedRow({ changes }), { w: row }],
+            ['Selected, unstaged only', () => C.UncommittedRow({ changes: { unstaged: changes.unstaged, staged: [] }, selected: true }), { w: row }],
+          ],
+        },
+        {
+          name: 'CommitPanel',
+          code: 'repo::commit_panel::CommitPanel',
+          source: 'src/repo/commit_panel.rs',
+          about: 'Subject, body (140 px at most), author and date, short id and parents, Copy hash, file and line counts, then the patch.',
+          variants: [
+            ['Ready', () => C.CommitPanel({ commit: commit(2), details: commitDetails }), { w: 480, h: 560 }],
+            ['Reading', () => C.CommitPanel({ commit: commit(2), details: commitDetails, state: 'loading' }), { w: 480, h: 260 }],
+            ['Failed', () => C.CommitPanel({ commit: commit(2), details: commitDetails, state: 'failed', reason: 'stream did not contain valid UTF-8' }), { w: 480, h: 260 }],
+            ['No file changed', () => C.CommitPanel({ commit: commit(3), details: { body: '', parents: ['b47d0a8', 'e1c55f2'], files: [] }, state: 'empty' }), { w: 480, h: 260 }],
+            ['Nothing selected', () => C.CommitPanel({}), { w: 480, h: 160 }],
+          ],
+        },
+        {
+          name: 'ChangesList',
+          code: 'repo::changes_list::ChangesList',
+          source: 'src/repo/changes_list.rs',
+          about: 'Unstaged then staged files, each list with a Stage all / Unstage all action. A failed git add / reset shows in red under the counts.',
+          variants: [
+            ['With files', () => C.ChangesList({ changes, open: { side: 'unstaged', path: 'src/git/patch.rs' } }), { w: 480, h: 380 }],
+            ['Writing failed', () => C.ChangesList({ changes, failure: "fatal: Unable to create '.git/index.lock': File exists." }), { w: 480, h: 400 }],
+            ['Clean', () => C.ChangesList({ changes: { unstaged: [], staged: [] } }), { w: 480, h: 200 }],
+            ['Reading', () => C.ChangesList({}), { w: 480, h: 160 }],
+          ],
+        },
+        {
+          name: 'ChangeRow',
+          code: 'repo::changes_list::change_row',
+          source: 'src/repo/changes_list.rs',
+          about: 'Status letter, file name, folder in muted text, and a + or − that moves the file to the other list.',
+          variants: [
+            ['Unstaged', () => C.ChangeRow({ change: changes.unstaged[0], side: 'unstaged' }), { w: 480 }],
+            ['Open', () => C.ChangeRow({ change: changes.unstaged[1], side: 'unstaged', selected: true }), { w: 480 }],
+            ['Staged', () => C.ChangeRow({ change: changes.staged[0], side: 'staged' }), { w: 480 }],
+            ['While writing', () => C.ChangeRow({ change: changes.unstaged[2], side: 'unstaged', writing: true }), { w: 480 }],
+          ],
+        },
+        {
+          name: 'FileDiffPanel',
+          code: 'repo::file_diff_panel::FileDiffPanel',
+          source: 'src/repo/file_diff_panel.rs',
+          about: 'A 40 px toolbar (status, path, side, counts, Split / Unified, Stage or Unstage, close) over the comparison.',
+          variants: [
+            ['Split', () => C.FileDiffPanel({ diff: fileDiff, mode: 'split' }), { w: row, h: 420 }],
+            ['Unified', () => C.FileDiffPanel({ diff: fileDiff, mode: 'unified' }), { w: row, h: 420 }],
+            ['Renamed, staged', () => C.FileDiffPanel({ diff: { ...fileDiff, side: 'staged', change: changes.staged[1] }, state: 'empty' }), { w: row, h: 160 }],
+            ['Reading', () => C.FileDiffPanel({ diff: fileDiff, state: 'loading' }), { w: row, h: 160 }],
+          ],
+        },
+        {
+          name: 'RepoStatusBar',
+          code: 'repo::status_bar::RepoStatusBar',
+          source: 'src/repo/status_bar.rs',
+          about: 'What was read and how fast on the left; the fetch state and the selected commit\'s position on the right.',
+          variants: [
+            ['Commit selected', () => C.RepoStatusBar({ summary: historySummary(history), position: 'Commit 3 of 1,284' }), { w: 1000 }],
+            ['Reading', () => C.RepoStatusBar({ summary: Texts.readingHistory }), { w: 1000 }],
+            ['Truncated history', () => C.RepoStatusBar({ summary: historySummary({ ...history, total: 10000, truncated: true }), position: 'Commit 1 of 10,000' }), { w: 1000 }],
+            ['Fetching', () => C.RepoStatusBar({ summary: historySummary(history), position: 'Commit 3 of 1,284', fetching: true }), { w: 1000 }],
+            ['Fetch failed', () => C.RepoStatusBar({ summary: historySummary(history), failure: 'fatal: Authentication failed for \'https://github.com/example/fastgit.git/\'' }), { w: 1000 }],
+          ],
+        },
+      ],
+    },
+  ];
+
+  function commitSelectedBody() {
+    return C.RepoView({
+      left: C.RefsList({ refs: history.refs, selectedRow: 2 }),
+      middle: C.HistoryList({ history, selectedRow: 2, changes }),
+      right: C.CommitPanel({ commit: commit(2), details: commitDetails }),
+      status: C.RepoStatusBar({ summary: historySummary(history), position: 'Commit 3 of 1,284' }),
+    });
+  }
+})();
