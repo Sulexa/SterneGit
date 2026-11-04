@@ -105,10 +105,10 @@ const Viewer = (() => {
     }
     if (kind === 'type') {
       const rows = [
-        ['text_lg', 'lg', '18 / 28', 'Notice titles, dialog titles'],
-        ['text_base', 'base', '16 / 24', 'Panel titles (commit subject, Uncommitted changes)'],
-        ['text_sm', 'sm', '14 / 20', 'Row text, descriptions, menus'],
-        ['text_xs', 'xs', '12 / 16', 'Meta: authors, dates, counts, section headers, status bar'],
+        ['lg_text', 'lg', '18 / 28', 'Notice titles'],
+        ['base_text', 'base', '16 / 24', 'Panel titles (commit subject, Uncommitted changes)'],
+        ['sm_text', 'sm', '14 / 20', 'Row text, descriptions'],
+        ['xs_text', 'xs', '12 / 16', 'Meta: authors, dates, counts, section headers, status bar'],
       ];
       return `<table class="mk-table fg">${rows.map(([gpui, cls, px, use]) => `<tr><td><code>${gpui}</code></td><td>${px}</td><td class="${cls}">The quick brown fox</td><td class="muted xs">${use}</td></tr>`).join('')}<tr><td><code>mono_font_family</code></td><td>12–13</td><td class="mono sm">3f9c2e1 src/git/patch.rs</td><td class="muted xs">Short ids, paths, diffs</td></tr><tr><td><code>ROW_HEIGHT</code></td><td>28 px</td><td>${C.ListRow({ content: '<span class="sm">Every list row and section header</span>' })}</td><td class="muted xs">src/ui/rows.rs</td></tr></table>`;
     }

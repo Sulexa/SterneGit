@@ -160,7 +160,7 @@ impl Render for FileDiffPanel {
             .child(
                 div()
                     .ellipsis()
-                    .text_sm()
+                    .sm_text()
                     .font_family(cx.theme().mono_font_family.clone())
                     .child(match &original {
                         Some(original) => SharedString::from(format!("{original} → {}", open.path)),
@@ -170,13 +170,13 @@ impl Render for FileDiffPanel {
             .child(
                 div()
                     .flex_none()
-                    .text_xs()
+                    .xs_text()
                     .text_color(muted)
                     .child(labels.state),
             )
             .when_some(stats, |this, stats| {
-                this.child(ui::additions(stats.additions, cx).flex_none().text_xs())
-                    .child(ui::deletions(stats.deletions, cx).flex_none().text_xs())
+                this.child(ui::additions(stats.additions, cx).flex_none().xs_text())
+                    .child(ui::deletions(stats.deletions, cx).flex_none().xs_text())
             })
             .child(div().flex_1())
             .child(

@@ -6,6 +6,8 @@ use gpui_kit::{
     div, px,
 };
 
+use super::look::Look as _;
+
 pub(crate) fn loading(message: &'static str) -> AnyElement {
     v_flex()
         .size_full()
@@ -13,7 +15,7 @@ pub(crate) fn loading(message: &'static str) -> AnyElement {
         .justify_center()
         .gap_3()
         .child(Spinner::new())
-        .child(div().text_sm().child(message))
+        .child(div().sm_text().child(message))
         .into_any_element()
 }
 
@@ -24,7 +26,7 @@ pub(crate) fn hint(message: &'static str, cx: &App) -> AnyElement {
         .items_center()
         .justify_center()
         .p_6()
-        .text_sm()
+        .sm_text()
         .text_color(cx.theme().muted_foreground)
         .child(message)
         .into_any_element()
@@ -35,10 +37,10 @@ pub(crate) fn failure(title: &'static str, reason: SharedString, cx: &App) -> An
         .size_full()
         .p_4()
         .gap_2()
-        .child(div().font_medium().child(title))
+        .child(div().sm_text().font_medium().child(title))
         .child(
             div()
-                .text_sm()
+                .sm_text()
                 .text_color(cx.theme().muted_foreground)
                 .child(reason),
         )
@@ -76,11 +78,11 @@ impl RenderOnce for Notice {
             .gap_3()
             .p_6()
             .child(Icon::new(IconName::GitMerge).large().text_color(muted))
-            .child(div().text_lg().font_medium().child(self.title))
+            .child(div().lg_text().font_medium().child(self.title))
             .child(
                 div()
                     .max_w(px(520.))
-                    .text_sm()
+                    .sm_text()
                     .text_center()
                     .text_color(muted)
                     .child(self.description),

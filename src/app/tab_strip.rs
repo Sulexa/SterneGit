@@ -15,7 +15,7 @@ use gpui_kit::{
 
 use crate::{
     actions::{CloseTab, OpenRepository, WINDOW_CONTEXT},
-    ui::{Handler, handler},
+    ui::{Handler, Look as _, handler},
 };
 
 const MIN_TAB_WIDTH: f32 = 120.;
@@ -98,7 +98,7 @@ impl RenderOnce for TabStrip {
                     ),
                     TabState::Ready => tab,
                 })
-                .child(div().truncate().child(label.name))
+                .child(div().flex_1().ellipsis().child(label.name))
                 .suffix(
                     Button::new(("close-tab", ix))
                         .ghost()
@@ -116,27 +116,32 @@ impl RenderOnce for TabStrip {
                         }),
                 )
         });
-        TabBar::new("repo-tabs")
+        let new_tab = h_flex().h_full().px_1().child(
+            Button::new("new-tab")
+                .ghost()
+                .xsmall()
+                .icon(IconName::Plus)
+                .tooltip_with_action(
+                    "Open a repository in a new tab",
+                    &OpenRepository,
+                    Some(WINDOW_CONTEXT),
+                )
+                .when_some(self.on_open, |button, on_open| {
+                    button.on_click(move |_, window, cx| on_open(&(), window, cx))
+                }),
+        );
+        let bar = TabBar::new("repo-tabs")
             .children(tabs.collect::<Vec<_>>())
             .selected_index(self.active)
             .when_some(self.on_select, |bar, on_select| {
                 bar.on_click(move |ix, window, cx| on_select(ix, window, cx))
-            })
-            .suffix(
-                h_flex().h_full().px_1().child(
-                    Button::new("new-tab")
-                        .ghost()
-                        .xsmall()
-                        .icon(IconName::Plus)
-                        .tooltip_with_action(
-                            "Open a repository in a new tab",
-                            &OpenRepository,
-                            Some(WINDOW_CONTEXT),
-                        )
-                        .when_some(self.on_open, |button, on_open| {
-                            button.on_click(move |_, window, cx| on_open(&(), window, cx))
-                        }),
-                ),
-            )
+            });
+        right_after_the_last_tab(bar, new_tab)
     }
+}
+
+fn right_after_the_last_tab(bar: TabBar, element: impl IntoElement) -> TabBar {
+    let bar_draws_its_last_empty_space_only_beside_a_suffix = div();
+    bar.last_empty_space(element)
+        .suffix(bar_draws_its_last_empty_space_only_beside_a_suffix)
 }

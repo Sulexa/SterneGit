@@ -14,7 +14,7 @@ const Catalog = (() => {
       items: [
         { name: 'Colors', special: 'colors', source: 'src/ui/palette.rs', about: 'Theme tokens used by the panels. Values come from gpui-component\'s default-theme.json (Default Dark).' },
         { name: 'LaneColors', special: 'lanes', source: 'src/ui/palette.rs', about: 'Graph lanes cycle through six theme colors. A commit\'s ref badges take the color of its lane.' },
-        { name: 'Typography', special: 'type', source: 'src/ui/rows.rs', about: 'Text sizes as GPUI names them, plus the 28 px row height every list uses.' },
+        { name: 'Typography', special: 'type', source: 'src/ui/look.rs', about: 'The text sizes of ui::Look. Each one sets a line height with the font size, because GPUI\'s own text_xs to text_lg leave it at 1.618 times the size. Plus the 28 px row height every list uses.' },
         { name: 'Icons', special: 'icons', source: 'src/assets.rs', about: 'Lucide icons from gpui-kit, plus the ones FastGit adds in assets.rs.' },
       ],
     },
@@ -69,7 +69,7 @@ const Catalog = (() => {
           name: 'Menu',
           code: 'gpui_kit::Menu',
           source: 'src/app/mod.rs',
-          about: 'Every action with its shortcut. The same list feeds the drawn menu bar and the macOS menu bar.',
+          about: 'Every action with its shortcut. The same list feeds the drawn menu bar and the macOS menu bar. Newer and Older Commit show their arrow keys while the history list has the focus; the kit spells them Up and Down.',
           variants: Object.entries(Menus).map(([name, items]) => [
             name,
             () => `<div style="position:relative;width:240px;height:${items.length * 28 + 16}px">${C.Menu({ items })}</div>`,
@@ -96,7 +96,7 @@ const Catalog = (() => {
           name: 'DiffView',
           code: 'gpui_kit::diff::Diff',
           source: 'src/repo/patch_view.rs',
-          about: 'The kit\'s diff with line numbers and soft wrap. Unified with file headers for a commit; split or unified without the header for one file.',
+          about: 'The kit\'s diff with line numbers and soft wrap, without its own border. Unified with file headers for a commit; split or unified without the header for one file. The kit draws the file headers (a fold button, the path, the line counts) and the grey hunk headers.',
           variants: [
             ['Unified with file headers (commit)', () => `<div class="v" style="width:480px;height:420px">${C.DiffView({ files: commitDetails.files.slice(1), mode: 'unified' })}</div>`],
             ['Split without header (one file)', () => `<div class="v" style="width:736px;height:420px">${C.DiffView({ files: [{ path: fileDiff.change.path, additions: 9, deletions: 1, hunks: fileDiff.hunks }], mode: 'split', header: false })}</div>`],
@@ -255,7 +255,7 @@ const Catalog = (() => {
           name: 'TabStrip',
           code: 'app::tab_strip::TabStrip',
           source: 'src/app/tab_strip.rs',
-          about: 'One tab per open repository and a + button that opens another.',
+          about: 'One tab per open repository and, right after the last one, a + button that opens another.',
           variants: [
             ['Three tabs', () => C.TabStrip({ tabs, active: 0 }), { w: 1000 }],
             ['One tab', () => C.TabStrip({ tabs: tabs.slice(0, 1), active: 0 }), { w: 1000 }],

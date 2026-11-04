@@ -34,7 +34,7 @@ pub(crate) fn ref_badge(label: &RefLabel, color: Hsla, cx: &App) -> AnyElement {
         .border_1()
         .border_color(color.opacity(LABEL_BORDER))
         .bg(color.opacity(if label.is_head { HEAD_FILL } else { LABEL_FILL }))
-        .text_xs()
+        .xs_text()
         .text_color(cx.theme().foreground)
         .child(Icon::new(ref_icon(label.kind)).xsmall().text_color(color))
         .child(
@@ -68,7 +68,7 @@ pub(crate) fn change_badge(kind: ChangeKind, cx: &App) -> AnyElement {
         .justify_center()
         .rounded(px(4.))
         .bg(color.opacity(CHANGE_FILL))
-        .text_xs()
+        .xs_text()
         .font_semibold()
         .font_family(cx.theme().mono_font_family.clone())
         .text_color(color)

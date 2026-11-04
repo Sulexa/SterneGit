@@ -6,7 +6,10 @@ use gpui_kit::{
 };
 
 use super::Repository;
-use crate::{git::HISTORY_LIMIT, ui::thousands};
+use crate::{
+    git::HISTORY_LIMIT,
+    ui::{Look as _, thousands},
+};
 
 const FAILURE_WIDTH: f32 = 480.;
 
@@ -66,11 +69,11 @@ impl RenderOnce for RepoStatusBar {
             })
         };
         StatusBar::new()
-            .left(div().text_xs().text_color(muted).child(self.summary))
+            .left(div().xs_text().text_color(muted).child(self.summary))
             .right(
                 h_flex()
                     .gap_4()
-                    .text_xs()
+                    .xs_text()
                     .children(fetch)
                     .child(div().text_color(muted).child(self.position)),
             )

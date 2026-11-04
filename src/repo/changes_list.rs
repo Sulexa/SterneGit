@@ -101,14 +101,14 @@ impl RenderOnce for ChangesList {
             .gap_1()
             .border_b_1()
             .border_color(cx.theme().border)
-            .child(div().text_base().font_medium().child("Uncommitted changes"))
-            .child(div().text_xs().text_color(muted).child(format!(
+            .child(div().base_text().font_medium().child("Uncommitted changes"))
+            .child(div().xs_text().text_color(muted).child(format!(
                 "{} unstaged · {} staged",
                 thousands(changes.unstaged.len()),
                 thousands(changes.staged.len())
             )))
             .when_some(failure, |this, failure| {
-                this.child(div().text_xs().text_color(cx.theme().red).child(failure))
+                this.child(div().xs_text().text_color(cx.theme().red).child(failure))
             });
         if changes.is_empty() {
             return v_flex()
@@ -212,14 +212,14 @@ fn change_row(
                                 .flex_none()
                                 .max_w_full()
                                 .truncate()
-                                .text_sm()
+                                .sm_text()
                                 .child(name),
                         )
                         .when_some(folder, |this, folder| {
                             this.child(
                                 div()
                                     .ellipsis()
-                                    .text_xs()
+                                    .xs_text()
                                     .text_color(cx.theme().muted_foreground)
                                     .child(folder),
                             )

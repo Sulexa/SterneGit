@@ -227,7 +227,7 @@ fn tree_line(
             div()
                 .flex_1()
                 .ellipsis()
-                .text_sm()
+                .sm_text()
                 .when(bold, |this| this.font_semibold())
                 .child(SharedString::from(name.to_owned())),
         )

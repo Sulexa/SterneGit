@@ -10,6 +10,7 @@ use gpui_kit::{
 
 use super::{
     handler::{Handler, handler},
+    look::Look as _,
     text::thousands,
 };
 
@@ -84,7 +85,7 @@ impl RenderOnce for SectionHeader {
             .h(ROW_HEIGHT)
             .px_3()
             .gap_2()
-            .text_xs()
+            .xs_text()
             .font_medium()
             .text_color(cx.theme().muted_foreground)
             .when_some(self.open, |this, open| {

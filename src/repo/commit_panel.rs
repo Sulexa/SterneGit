@@ -142,7 +142,7 @@ impl Render for CommitPanel {
                     .border_color(cx.theme().border)
                     .child(
                         div()
-                            .text_base()
+                            .base_text()
                             .font_medium()
                             .child(commit_subject(&commit)),
                     )
@@ -152,7 +152,7 @@ impl Render for CommitPanel {
                                 .id("message-body")
                                 .max_h(px(140.))
                                 .overflow_y_scroll()
-                                .text_sm()
+                                .sm_text()
                                 .text_color(muted)
                                 .child(body),
                         )
@@ -160,7 +160,7 @@ impl Render for CommitPanel {
                     .child(
                         h_flex()
                             .gap_2()
-                            .text_xs()
+                            .xs_text()
                             .text_color(muted)
                             .child(commit.author.clone())
                             .child("·")
@@ -169,7 +169,7 @@ impl Render for CommitPanel {
                     .child(
                         h_flex()
                             .gap_2()
-                            .text_xs()
+                            .xs_text()
                             .text_color(muted)
                             .child(
                                 div()
@@ -206,7 +206,7 @@ impl Render for CommitPanel {
                         this.child(
                             h_flex()
                                 .gap_3()
-                                .text_xs()
+                                .xs_text()
                                 .child(div().text_color(muted).child(counted(
                                     stats.files,
                                     "file",

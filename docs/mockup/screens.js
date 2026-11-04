@@ -139,7 +139,7 @@ const Screens = (() => {
           topBar: topBar({ openMenu: 'View' }),
           tabStrip: tabStrip(),
           body: commitSelected(),
-          overlays: C.Menu({ items: Menus.View, left: 122, top: 32, hot: 'Fetch All Remotes' }),
+          overlays: C.Menu({ items: Menus.View, left: 114, top: 32, hot: 'Fetch All Remotes' }),
         }),
     },
     {

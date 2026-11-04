@@ -182,7 +182,7 @@ fn commit_row(
                             this.child(
                                 div()
                                     .flex_none()
-                                    .text_xs()
+                                    .xs_text()
                                     .text_color(palette.muted)
                                     .child(format!("+{}", labels.len() - MAX_BADGES)),
                             )
@@ -191,7 +191,7 @@ fn commit_row(
                             div()
                                 .flex_1()
                                 .ellipsis()
-                                .text_sm()
+                                .sm_text()
                                 .when(commit.subject.is_empty(), |this| {
                                     this.text_color(palette.muted)
                                 })
@@ -203,7 +203,7 @@ fn commit_row(
                         .flex_none()
                         .w(AUTHOR_WIDTH)
                         .truncate()
-                        .text_xs()
+                        .xs_text()
                         .text_color(palette.muted)
                         .child(commit.author.clone()),
                 )
@@ -211,7 +211,7 @@ fn commit_row(
                     div()
                         .flex_none()
                         .w(DATE_WIDTH)
-                        .text_xs()
+                        .xs_text()
                         .text_color(palette.muted)
                         .child(commit.committed.clone()),
                 )
@@ -219,7 +219,7 @@ fn commit_row(
                     div()
                         .flex_none()
                         .w(ID_WIDTH)
-                        .text_xs()
+                        .xs_text()
                         .font_family(palette.mono.clone())
                         .text_color(palette.muted)
                         .child(commit.short_id.clone()),
@@ -261,14 +261,14 @@ fn uncommitted_row(
                     div()
                         .flex_1()
                         .ellipsis()
-                        .text_sm()
+                        .sm_text()
                         .italic()
                         .child("Uncommitted changes"),
                 )
                 .child(
                     div()
                         .flex_none()
-                        .text_xs()
+                        .xs_text()
                         .text_color(palette.muted)
                         .child(summary.join(" · ")),
                 ),

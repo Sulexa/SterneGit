@@ -9,6 +9,8 @@ use gpui_kit::{
     px,
 };
 
+use crate::ui::Look as _;
+
 #[derive(IntoElement)]
 pub(crate) struct TopBar {
     menu_bar: Option<Entity<AppMenuBar>>,
@@ -57,7 +59,7 @@ impl RenderOnce for TopBar {
                         h_flex()
                             .min_w_0()
                             .gap_2()
-                            .child(div().text_sm().font_medium().truncate().child(name))
+                            .child(div().sm_text().font_medium().truncate().child(name))
                             .when_some(head, |this, head| {
                                 this.child(
                                     h_flex()
@@ -68,7 +70,7 @@ impl RenderOnce for TopBar {
                                         .rounded(px(4.))
                                         .border_1()
                                         .border_color(border)
-                                        .text_xs()
+                                        .xs_text()
                                         .text_color(muted)
                                         .child(Icon::new(IconName::GitBranch).xsmall())
                                         .child(div().truncate().child(head)),

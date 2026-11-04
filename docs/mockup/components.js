@@ -1,5 +1,5 @@
 const IconPaths = {
-  'git-branch': '<line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/>',
+  'git-branch': '<path d="M15 6a9 9 0 0 0-9 9V3"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/>',
   'git-merge': '<circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/>',
   cloud: '<path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/>',
   tag: '<path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z"/><circle cx="7.5" cy="7.5" r=".5" fill="currentColor"/>',
@@ -9,13 +9,13 @@ const IconPaths = {
   minus: '<path d="M5 12h14"/>',
   close: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
   'triangle-alert': '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
-  loader: '<path d="M21 12a9 9 0 1 1-6.219-8.56"/>',
+  loader: '<path d="M12 2v4"/><path d="m16.2 7.8 2.9-2.9"/><path d="M18 12h4"/><path d="m16.2 16.2 2.9 2.9"/><path d="M12 18v4"/><path d="m4.9 19.1 2.9-2.9"/><path d="M2 12h4"/><path d="m4.9 4.9 2.9 2.9"/>',
   'chevron-down': '<path d="m6 9 6 6 6-6"/>',
   'chevron-right': '<path d="m9 18 6-6-6-6"/>',
   folder: '<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>',
-  'window-minimize': '<path d="M6 12h12"/>',
-  'window-maximize': '<rect width="12" height="12" x="6" y="6" rx="1"/>',
-  'window-close': '<path d="M17 7 7 17"/><path d="m7 7 10 10"/>',
+  'window-minimize': '<path d="M4.8 11.2h14.4" stroke-width="1.6"/>',
+  'window-maximize': '<rect width="14.4" height="14.4" x="4.8" y="4.8" rx="1.6" stroke-width="1.6"/>',
+  'window-close': '<path d="M19.2 4.8 4.8 19.2" stroke-width="1.6"/><path d="m4.8 4.8 14.4 14.4" stroke-width="1.6"/>',
 };
 
 const IconSizes = { xs: 12, sm: 14, md: 16, lg: 24 };
@@ -83,8 +83,8 @@ const Menus = {
     ['Fetch All Remotes', 'Ctrl+Shift+R'],
     ['Close File Diff', 'Esc'],
     '-',
-    ['Newer Commit', '↑'],
-    ['Older Commit', '↓'],
+    ['Newer Commit', 'Up'],
+    ['Older Commit', 'Down'],
     '-',
     ['Next Tab', 'Ctrl+Tab'],
     ['Previous Tab', 'Ctrl+Shift+Tab'],
@@ -423,7 +423,7 @@ const C = {
     };
     const file = (f) => {
       const top = header
-        ? `<div class="diff-file-header">${icon('chevron-down', 'xs', 'var(--muted)')}<span class="ellipsis mono">${esc(f.path)}</span>${C.Additions({ count: f.additions })}${C.Deletions({ count: f.deletions })}</div>`
+        ? `<div class="diff-file-header">${C.Button({ icon: 'chevron-down', variant: 'ghost' })}<span class="title ellipsis">${esc(f.path)}</span><span class="stats xs muted">+${thousands(f.additions)} −${thousands(f.deletions)}</span></div>`
         : '';
       return `<div class="diff-file">${top}${f.hunks.map(hunk).join('')}</div>`;
     };
@@ -556,7 +556,7 @@ const C = {
   },
 
   AlertDialog({ title, description }) {
-    return `<div class="overlay"><div data-c="AlertDialog" class="dialog"><div class="lg medium">${esc(title)}</div><div class="sm muted">${esc(description)}</div><div class="footer">${C.Button({ label: 'OK', variant: 'primary', size: 'md' })}</div></div></div>`;
+    return `<div class="overlay"><div data-c="AlertDialog" class="dialog"><div class="base semibold">${esc(title)}</div><div class="sm muted">${esc(description)}</div><div class="footer">${C.Button({ label: 'OK', variant: 'primary', size: 'md' })}</div></div></div>`;
   },
 
   FastGit({ topBar, tabStrip = '', body, overlays = '' }) {

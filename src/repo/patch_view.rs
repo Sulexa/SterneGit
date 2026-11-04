@@ -1,5 +1,5 @@
 use gpui_kit::{
-    AnyElement, App, IntoElement, Window,
+    AnyElement, App, IntoElement, Styled as _, Window,
     component::diff::{Diff, DiffFile},
     div,
 };
@@ -66,7 +66,7 @@ pub(crate) fn patch_content<T>(
         Load::Refreshing { value, .. } | Load::Ready(value) if stats(value).files == 0 => {
             ui::hint(texts.empty, cx)
         }
-        Load::Refreshing { .. } | Load::Ready(_) => diff.into_any_element(),
+        Load::Refreshing { .. } | Load::Ready(_) => diff.border_0().into_any_element(),
     }
 }
 

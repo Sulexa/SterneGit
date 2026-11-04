@@ -6,7 +6,7 @@ mod window;
 use std::path::PathBuf;
 
 use gpui_kit::{
-    App, AppContext as _, KeyBinding, Menu, MenuItem, WindowBounds, WindowOptions,
+    Action, App, AppContext as _, KeyBinding, Menu, MenuItem, WindowBounds, WindowOptions,
     component::{GlobalState, TitleBar},
     px, size,
 };
@@ -54,11 +54,17 @@ fn draws_its_own_menu_bar(cx: &App) -> bool {
 fn bind_keys(cx: &mut App) {
     let is_mac = cx.platform_info().is_mac();
     let primary = |mac: &'static str, other: &'static str| if is_mac { mac } else { other };
+    cx.bind_keys(menus_show_the_last_key(
+        OlderCommit,
+        ["j", "down"],
+        HISTORY_CONTEXT,
+    ));
+    cx.bind_keys(menus_show_the_last_key(
+        NewerCommit,
+        ["k", "up"],
+        HISTORY_CONTEXT,
+    ));
     cx.bind_keys([
-        KeyBinding::new("down", OlderCommit, Some(HISTORY_CONTEXT)),
-        KeyBinding::new("j", OlderCommit, Some(HISTORY_CONTEXT)),
-        KeyBinding::new("up", NewerCommit, Some(HISTORY_CONTEXT)),
-        KeyBinding::new("k", NewerCommit, Some(HISTORY_CONTEXT)),
         KeyBinding::new(primary("cmd-r", "ctrl-r"), Refresh, Some(WINDOW_CONTEXT)),
         KeyBinding::new(
             primary("cmd-shift-r", "ctrl-shift-r"),
@@ -81,6 +87,14 @@ fn bind_keys(cx: &mut App) {
         KeyBinding::new("ctrl-shift-tab", PreviousTab, Some(WINDOW_CONTEXT)),
         KeyBinding::new(primary("cmd-q", "ctrl-q"), Quit, Some(WINDOW_CONTEXT)),
     ]);
+}
+
+fn menus_show_the_last_key<A: Action + Clone>(
+    action: A,
+    keys: [&'static str; 2],
+    context: &'static str,
+) -> [KeyBinding; 2] {
+    keys.map(|key| KeyBinding::new(key, action.clone(), Some(context)))
 }
 
 fn install_menus(cx: &mut App) {
