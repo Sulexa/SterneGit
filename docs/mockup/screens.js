@@ -336,7 +336,7 @@ const Screens = (() => {
     {
       id: 'merged',
       title: 'Branch merged',
-      about: 'Check out, Merge, Rebase and Delete say what they did in a notification. A merge that stops on conflicts, or a check-out that uncommitted changes would overwrite, explains what to do in an error notification instead.',
+      about: 'Check out, Merge, Rebase and Delete say what they did in a notification. A merge that stops on conflicts explains what to do in an error notification instead.',
       source: 'src/repo/operation.rs',
       render: () =>
         C.FastGit({
@@ -344,6 +344,19 @@ const Screens = (() => {
           tabStrip: tabStrip(),
           body: commitSelected(),
           overlays: `<div class="toasts">${C.Notification({ kind: 'success', message: 'Merged feature/blame into main' })}</div>`,
+        }),
+    },
+    {
+      id: 'checked-out-stash-kept',
+      title: 'Checked out, changes left in the stash',
+      about: "When uncommitted changes are in the way of a check-out, FastGit stashes them, switches and pops the stash, so what was staged stays staged. When they conflict with the branch or don't apply on it, the check-out still happens, the stash keeps them and a warning says so until it is closed.",
+      source: 'src/git/branch.rs',
+      render: () =>
+        C.FastGit({
+          topBar: topBar(),
+          tabStrip: tabStrip(),
+          body: commitSelected(),
+          overlays: `<div class="toasts">${C.Notification({ kind: 'warning', title: 'Switched to main', message: 'Your uncommitted changes conflict with main: resolve the conflicted files. The stash keeps a copy of them.' })}</div>`,
         }),
     },
     {

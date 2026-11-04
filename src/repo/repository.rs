@@ -6,7 +6,7 @@ use std::{
 
 use gpui_kit::{Context, EventEmitter, SharedString};
 
-use super::operation::{self, Operated, Operation};
+use super::operation::{self, Operated, Operation, Outcome};
 use crate::{
     git::{
         self, CheckedOut, FileChange, History, PartAction, PullMode, RefLabel, RemoteBranch, Repo,
@@ -372,8 +372,9 @@ impl Repository {
         self.operate(
             Operation::Branch,
             move |repo| {
-                repo.create_branch(&name, start.as_deref())
-                    .map(|()| operation::branch_created(&name))
+                repo.create_branch(&name, start.as_deref()).map(|carried| {
+                    operation::switched(operation::branch_created(&name), &name, carried)
+                })
             },
             cx,
         );
@@ -385,14 +386,15 @@ impl Repository {
             None,
             failed,
             move |repo| {
-                let checked_out = match label.on_remote() {
+                let (checked_out, carried) = match label.on_remote() {
                     Some(remote) => repo.check_out_remote(&label.name, remote.branch)?,
-                    None => {
-                        repo.check_out(&label.name)?;
-                        CheckedOut::Existing(label.name.to_string())
-                    }
+                    None => (
+                        CheckedOut::Existing(label.name.to_string()),
+                        repo.check_out(&label.name)?,
+                    ),
                 };
-                Ok(operation::checked_out(&checked_out))
+                let done = operation::checked_out(&checked_out);
+                Ok(operation::switched(done, label.local_name(), carried))
             },
             cx,
         );
@@ -484,7 +486,10 @@ impl Repository {
     pub(crate) fn stash(&mut self, cx: &mut Context<Self>) {
         self.operate(
             Operation::Stash,
-            |repo| repo.stash().map(|()| operation::STASHED.into()),
+            |repo| {
+                repo.stash()
+                    .map(|()| SharedString::from(operation::STASHED))
+            },
             cx,
         );
     }
@@ -492,7 +497,10 @@ impl Repository {
     pub(crate) fn pop_stash(&mut self, cx: &mut Context<Self>) {
         self.operate(
             Operation::Pop,
-            |repo| repo.pop_stash().map(|()| operation::POPPED.into()),
+            |repo| {
+                repo.pop_stash()
+                    .map(|()| SharedString::from(operation::POPPED))
+            },
             cx,
         );
     }
@@ -518,20 +526,20 @@ impl Repository {
         cx.notify();
     }
 
-    fn operate(
+    fn operate<R: Into<Outcome> + Send + 'static>(
         &mut self,
         operation: Operation,
-        work: impl FnOnce(&Repo) -> anyhow::Result<SharedString> + Send + 'static,
+        work: impl FnOnce(&Repo) -> anyhow::Result<R> + Send + 'static,
         cx: &mut Context<Self>,
     ) {
         self.write_and_report(Some(operation), operation.failed().into(), work, cx);
     }
 
-    fn write_and_report(
+    fn write_and_report<R: Into<Outcome> + Send + 'static>(
         &mut self,
         header_button: Option<Operation>,
         failed: SharedString,
-        work: impl FnOnce(&Repo) -> anyhow::Result<SharedString> + Send + 'static,
+        work: impl FnOnce(&Repo) -> anyhow::Result<R> + Send + 'static,
         cx: &mut Context<Self>,
     ) {
         if self.write.is_running() {
@@ -548,7 +556,9 @@ impl Repository {
             move |this, result, cx| {
                 this.write.finish();
                 this.running = None;
-                let outcome = result.map_err(|error| operation::failure(&error));
+                let outcome = result
+                    .map(Into::into)
+                    .map_err(|error| operation::failure(&error));
                 cx.emit(RepositoryEvent::Operated(Operated { failed, outcome }));
                 this.refresh(cx);
                 cx.notify();

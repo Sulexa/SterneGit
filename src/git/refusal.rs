@@ -27,6 +27,7 @@ pub(crate) enum Refusal {
     MergeStopped,
     RebaseStopped,
     StashKept,
+    StashNotApplied,
 }
 
 impl fmt::Display for Refusal {
@@ -68,6 +69,10 @@ impl fmt::Display for Refusal {
             Refusal::StashKept => write!(
                 f,
                 "The stash didn't apply cleanly: resolve the conflicted files. The stash is kept, so nothing is lost."
+            ),
+            Refusal::StashNotApplied => write!(
+                f,
+                "The stash doesn't apply on top of the current files, so nothing changed. The stash is kept, so nothing is lost."
             ),
         }
     }

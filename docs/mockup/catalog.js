@@ -97,7 +97,7 @@ const Catalog = (() => {
           name: 'Notification',
           code: 'window.push_notification',
           source: 'src/repo/commit_panel.rs',
-          about: 'Short confirmations and warnings, top right. The header uses the kit\'s success and error kinds, which add an icon; an error has a title and stays until it is closed.',
+          about: 'Short confirmations and warnings, top right. The header uses the kit\'s success, warning and error kinds, which add an icon; a warning or an error has a title and stays until it is closed.',
           variants: [
             ['Hash copied', () => C.Notification({ message: 'Commit hash copied' })],
             ['Ref too old', () => C.Notification({ message: `v0.0.1 points to a commit older than the newest ${thousands(Texts.historyLimit)} shown.` })],
@@ -108,7 +108,9 @@ const Catalog = (() => {
             ['Changes in the way', () => C.Notification({ kind: 'error', title: 'Pull failed', message: 'Uncommitted changes are in the way: commit or stash them, then try again.' })],
             ['Merged', () => C.Notification({ kind: 'success', message: 'Merged feature/blame into main' })],
             ['Checked out a remote branch', () => C.Notification({ kind: 'success', message: 'Switched to the new branch feature/diff-view, tracking origin/feature/diff-view' })],
-            ['Check-out blocked', () => C.Notification({ kind: 'error', title: "Couldn't check out feature/blame", message: 'Uncommitted changes are in the way: commit or stash them, then try again.' })],
+            ['Check-out with conflicting changes', () => C.Notification({ kind: 'warning', title: 'Switched to feature/blame', message: 'Your uncommitted changes conflict with feature/blame: resolve the conflicted files. The stash keeps a copy of them.' })],
+            ['Check-out with changes left in the stash', () => C.Notification({ kind: 'warning', title: 'Switched to feature/blame', message: "Your uncommitted changes don't apply on feature/blame, so they stay in the stash." })],
+            ['Stash left unapplied', () => C.Notification({ kind: 'error', title: 'Pop failed', message: "The stash doesn't apply on top of the current files, so nothing changed. The stash is kept, so nothing is lost." })],
             ['Fast-forward refused on another branch', () => C.Notification({ kind: 'error', title: 'Pull failed', message: "feature/blame and origin/feature/blame have diverged, so feature/blame can't fast-forward. Check it out to merge or rebase." })],
           ],
         },
@@ -451,7 +453,7 @@ const Catalog = (() => {
           name: 'BranchMenu',
           code: 'repo::branch_menu::BranchMenu',
           source: 'src/repo/branch_menu.rs',
-          about: 'The right-click menu of a local or remote branch in the RefsList, in groups: Check out; Pull and Push; Merge and Rebase with the checked-out branch; Create branch here…; Delete…. Items that cannot apply are left out: the checked-out branch has no Check out, Merge, Rebase or Delete, a remote branch has no Pull or Push, and a detached HEAD has no Merge or Rebase. Every item is disabled while Git writes; Pull and Push spin the header's button while they run. Check out on a remote branch switches to the local branch of the same name, or makes one that tracks it.',
+          about: 'The right-click menu of a local or remote branch in the RefsList, in groups: Check out; Pull and Push; Merge and Rebase with the checked-out branch; Create branch here…; Delete…. Items that cannot apply are left out: the checked-out branch has no Check out, Merge, Rebase or Delete, a remote branch has no Pull or Push, and a detached HEAD has no Merge or Rebase. Every item is disabled while Git writes; Pull and Push spin the header\'s button while they run. Check out on a remote branch switches to the local branch of the same name, or makes one that tracks it.',
           variants: [
             ['Another local branch', () => menuFrame(C.BranchMenu({ label: ref('feature/blame'), current: 'main' }), 280)],
             ['Checked-out branch', () => menuFrame(C.BranchMenu({ label: ref('main'), current: 'main' }), 280)],
@@ -463,7 +465,7 @@ const Catalog = (() => {
           name: 'DeleteBranchDialog',
           code: 'repo::branch_menu::confirm_delete',
           source: 'src/repo/branch_menu.rs',
-          about: 'An AlertDialog opened by Delete…. For a local branch it counts the commits no other branch or tag holds, among the history FastGit has read, and says they are lost, or that nothing is lost; when the branch is older than the history read, it says it can't tell. Delete then runs git branch -D. For a remote branch it says the branch goes for everyone, and Delete runs git push --delete. Cancel or Esc does nothing.',
+          about: 'An AlertDialog opened by Delete…. For a local branch it counts the commits no other branch or tag holds, among the history FastGit has read, and says they are lost, or that nothing is lost; when the branch is older than the history read, it says it can\'t tell. Delete then runs git branch -D. For a remote branch it says the branch goes for everyone, and Delete runs git push --delete. Cancel or Esc does nothing.',
           variants: [
             ['Commits only it holds', () => dialogFrame(C.DeleteBranchDialog({ label: ref('feature/blame'), only: 1 }))],
             ['Merged', () => dialogFrame(C.DeleteBranchDialog({ label: ref('feature/stash') }))],

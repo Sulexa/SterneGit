@@ -17,7 +17,7 @@ use gpui_kit::{
 };
 
 use super::{
-    operation::{Operated, Operation},
+    operation::{Operated, Operation, Outcome},
     repository::Repository,
 };
 use crate::{
@@ -246,7 +246,10 @@ fn pull_mode_menu(
 
 pub(crate) fn notification(operated: &Operated) -> Notification {
     match &operated.outcome {
-        Ok(message) => Notification::success(message.clone()),
+        Ok(Outcome::Done(message)) => Notification::success(message.clone()),
+        Ok(Outcome::Warning { title, message }) => Notification::warning(message.clone())
+            .title(title.clone())
+            .autohide(false),
         Err(failure) => Notification::error(failure.message())
             .title(operated.failed.clone())
             .autohide(false),

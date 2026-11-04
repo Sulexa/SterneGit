@@ -897,7 +897,11 @@ const C = {
   },
 
   Notification({ message, title, kind }) {
-    const glyphs = { success: icon('circle-check', 'md', 'var(--green)'), error: icon('circle-x', 'md', 'var(--red)') };
+    const glyphs = {
+      success: icon('circle-check', 'md', 'var(--green)'),
+      warning: icon('triangle-alert', 'md', 'var(--yellow)'),
+      error: icon('circle-x', 'md', 'var(--red)'),
+    };
     const glyph = glyphs[kind] ? `<span class="kind">${glyphs[kind]}</span>` : '';
     const heading = title ? `<div class="semibold">${esc(title)}</div>` : '';
     return `<div data-c="Notification" class="toast sm">${glyph}<div class="message">${heading}${esc(message)}</div>${C.Button({ icon: 'close', variant: 'ghost' })}</div>`;

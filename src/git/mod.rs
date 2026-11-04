@@ -40,6 +40,7 @@ pub(crate) use pull_mode::PullMode;
 pub(crate) use refs::{RefDigest, RefKind, RefLabel, RemoteBranch};
 pub(crate) use refusal::{Refusal, Tracking};
 pub(crate) use remote::{Pulled, Pushed};
+pub(crate) use stash::Carried;
 pub(crate) use status::{ChangeKind, FileChange, Side, WorkingChanges};
 
 const OBJECT_CACHE_BYTES: usize = 4 * 1024 * 1024;

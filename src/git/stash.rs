@@ -1,4 +1,5 @@
 use anyhow::Result;
+use gix::ObjectId;
 
 use super::{
     ChangeKind, Refusal, Repo,
@@ -6,12 +7,22 @@ use super::{
 };
 
 const STASH: &str = "refs/stash";
+const STASH_LEFT_UNAPPLIED: [&str; 3] = [
+    "conflicts in index",
+    "could not restore untracked files",
+    "would be overwritten by",
+];
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Carried {
+    Along,
+    WithConflicts,
+    OnlyInStash,
+}
 
 impl Repo {
     pub(crate) fn has_stash(&self) -> bool {
-        self.local()
-            .try_find_reference(STASH)
-            .is_ok_and(|found| found.is_some())
+        self.latest_stash().is_some()
     }
 
     pub(crate) fn stash(&self) -> Result<()> {
@@ -24,15 +35,36 @@ impl Repo {
     }
 
     pub(crate) fn pop_stash(&self) -> Result<()> {
-        run(&self.location, &["stash", "pop", "--quiet"], Exit::Success)
-            .map(drop)
-            .map_err(|error| {
-                if self.has_conflicts() {
-                    Refusal::StashKept.into()
-                } else {
-                    error
-                }
-            })
+        match self.reapply_stash()? {
+            Carried::Along => Ok(()),
+            Carried::WithConflicts => Err(Refusal::StashKept.into()),
+            Carried::OnlyInStash => Err(Refusal::StashNotApplied.into()),
+        }
+    }
+
+    pub(super) fn stash_aside(&self) -> Result<bool> {
+        let before = self.latest_stash();
+        self.stash()?;
+        Ok(self.latest_stash() != before)
+    }
+
+    pub(super) fn reapply_stash(&self) -> Result<Carried> {
+        match run(
+            &self.location,
+            &["stash", "pop", "--index", "--quiet"],
+            Exit::Success,
+        ) {
+            Ok(_) => Ok(Carried::Along),
+            Err(_) if self.has_conflicts() => Ok(Carried::WithConflicts),
+            Err(error) if left_unapplied(&error) => Ok(Carried::OnlyInStash),
+            Err(error) => Err(error),
+        }
+    }
+
+    fn latest_stash(&self) -> Option<ObjectId> {
+        let local = self.local();
+        let stash = local.try_find_reference(STASH).ok()??;
+        stash.try_id().map(|id| id.detach())
     }
 
     fn has_conflicts(&self) -> bool {
@@ -44,6 +76,11 @@ impl Repo {
                 .any(|change| change.kind == ChangeKind::Conflicted)
         })
     }
+}
+
+fn left_unapplied(error: &anyhow::Error) -> bool {
+    let message = error.to_string().to_lowercase();
+    STASH_LEFT_UNAPPLIED.iter().any(|why| message.contains(why))
 }
 
 #[cfg(test)]
@@ -80,6 +117,52 @@ mod tests {
         repo.pop_stash()?;
         assert_eq!(changed_paths(&scratch)?, ["tracked.txt", "untracked.txt"]);
         assert!(!repo.has_stash());
+        Ok(())
+    }
+
+    #[test]
+    fn a_popped_stash_keeps_what_was_staged_staged() -> Result<()> {
+        let scratch = ScratchRepo::new("stash-staged")?;
+        scratch.write("staged.txt", "one\n")?;
+        scratch.write("unstaged.txt", "one\n")?;
+        scratch.git(&["add", "staged.txt", "unstaged.txt"])?;
+        scratch.commit("first")?;
+        scratch.write("staged.txt", "two\n")?;
+        scratch.git(&["add", "staged.txt"])?;
+        scratch.write("unstaged.txt", "two\n")?;
+        let (repo, _) = scratch.open()?;
+        repo.stash()?;
+        repo.pop_stash()?;
+        assert_eq!(
+            scratch.git(&["diff", "--cached", "--name-only"])?,
+            "staged.txt\n"
+        );
+        assert_eq!(scratch.git(&["diff", "--name-only"])?, "unstaged.txt\n");
+        Ok(())
+    }
+
+    #[test]
+    fn a_stash_that_cannot_apply_is_kept_and_changes_nothing() -> Result<()> {
+        let scratch = ScratchRepo::new("stash-not-applied")?;
+        scratch.write("shared.txt", "one\n")?;
+        scratch.git(&["add", "shared.txt"])?;
+        scratch.commit("first")?;
+        scratch.write("shared.txt", "stashed\n")?;
+        scratch.git(&["add", "shared.txt"])?;
+        let (repo, _) = scratch.open()?;
+        repo.stash()?;
+        scratch.write("shared.txt", "committed\n")?;
+        scratch.git(&["add", "shared.txt"])?;
+        scratch.commit("second")?;
+        let error = repo
+            .pop_stash()
+            .expect_err("the staged change contradicts the commit");
+        assert_eq!(
+            error.downcast_ref::<Refusal>(),
+            Some(&Refusal::StashNotApplied)
+        );
+        assert!(changed_paths(&scratch)?.is_empty());
+        assert!(repo.has_stash());
         Ok(())
     }
 

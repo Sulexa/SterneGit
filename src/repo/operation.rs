@@ -1,7 +1,10 @@
 use gpui_kit::SharedString;
 
 use crate::{
-    git::{CheckedOut, Merged, Pulled, Pushed, Rebased, RefLabel, Refusal, RemoteBranch, Tracking},
+    git::{
+        Carried, CheckedOut, Merged, Pulled, Pushed, Rebased, RefLabel, Refusal, RemoteBranch,
+        Tracking,
+    },
     ui::Failure,
 };
 
@@ -40,9 +43,24 @@ impl Operation {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum Outcome {
+    Done(SharedString),
+    Warning {
+        title: SharedString,
+        message: SharedString,
+    },
+}
+
+impl From<SharedString> for Outcome {
+    fn from(done: SharedString) -> Self {
+        Outcome::Done(done)
+    }
+}
+
 pub(crate) struct Operated {
     pub(crate) failed: SharedString,
-    pub(crate) outcome: Result<SharedString, Failure>,
+    pub(crate) outcome: Result<Outcome, Failure>,
 }
 
 pub(crate) fn pulled(pulled: &Pulled) -> SharedString {
@@ -81,6 +99,22 @@ pub(crate) fn checked_out(checked_out: &CheckedOut) -> SharedString {
         CheckedOut::Tracking(Tracking { branch, upstream }) => {
             format!("Switched to the new branch {branch}, tracking {upstream}").into()
         }
+    }
+}
+
+pub(crate) fn switched(done: SharedString, branch: &str, carried: Carried) -> Outcome {
+    let message = match carried {
+        Carried::Along => return Outcome::Done(done),
+        Carried::WithConflicts => format!(
+            "Your uncommitted changes conflict with {branch}: resolve the conflicted files. The stash keeps a copy of them."
+        ),
+        Carried::OnlyInStash => {
+            format!("Your uncommitted changes don't apply on {branch}, so they stay in the stash.")
+        }
+    };
+    Outcome::Warning {
+        title: done,
+        message: message.into(),
     }
 }
 
@@ -132,9 +166,11 @@ pub(crate) fn failure(error: &anyhow::Error) -> Failure {
 
 #[cfg(test)]
 mod tests {
-    use super::{checked_out, deleted, failure, merged, pulled, pushed, rebased};
+    use super::{
+        Outcome, checked_out, deleted, failure, merged, pulled, pushed, rebased, switched,
+    };
     use crate::git::{
-        CheckedOut, Merged, Pulled, Pushed, Rebased, RefKind, RefLabel, Refusal, Tracking,
+        Carried, CheckedOut, Merged, Pulled, Pushed, Rebased, RefKind, RefLabel, Refusal, Tracking,
         fixtures::id,
     };
 
@@ -205,6 +241,34 @@ mod tests {
         assert_eq!(
             checked_out(&CheckedOut::Existing("feature/blame".into())),
             "Switched to feature/blame"
+        );
+    }
+
+    #[test]
+    fn a_check_out_that_left_changes_in_the_stash_warns_under_where_it_switched() {
+        let switched_to = |carried| switched("Switched to topic".into(), "topic", carried);
+        assert_eq!(
+            switched_to(Carried::Along),
+            Outcome::Done("Switched to topic".into())
+        );
+        assert_eq!(
+            switched_to(Carried::WithConflicts),
+            Outcome::Warning {
+                title: "Switched to topic".into(),
+                message:
+                    "Your uncommitted changes conflict with topic: resolve the conflicted files. \
+                          The stash keeps a copy of them."
+                        .into()
+            }
+        );
+        assert_eq!(
+            switched_to(Carried::OnlyInStash),
+            Outcome::Warning {
+                title: "Switched to topic".into(),
+                message:
+                    "Your uncommitted changes don't apply on topic, so they stay in the stash."
+                        .into()
+            }
         );
     }
 
