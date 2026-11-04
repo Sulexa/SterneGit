@@ -4,7 +4,7 @@
     {
       "name": "mockup",
       "runtimeExecutable": "python",
-      "runtimeArgs": ["-m", "http.server", "8765", "--directory", "E:/Projects/FastGit/docs/mockup"],
+      "runtimeArgs": ["-m", "http.server", "8765", "--directory", "docs/mockup"],
       "port": 8765
     }
   ]
