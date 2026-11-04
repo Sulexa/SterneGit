@@ -150,6 +150,30 @@ const Catalog = (() => {
             ['Plain', () => C.FileRow({ kind: 'M', path: 'src/git/patch.rs' }), { w: 480 }],
             ['Selected', () => C.FileRow({ kind: 'A', path: 'src/repo/commit_files.rs', selected: true }), { w: 480 }],
             ['At the root', () => C.FileRow({ kind: 'M', path: 'Cargo.toml' }), { w: 480 }],
+            ['In a tree', () => C.FileRow({ kind: 'M', path: 'src/git/patch.rs', depth: 1 }), { w: 480 }],
+          ],
+        },
+        {
+          name: 'FolderRow',
+          code: 'ui::folder_row',
+          source: 'src/ui/rows.rs',
+          about: 'One folder of a file tree: a chevron that shows whether it is open, a folder icon and the name, indented 18 px per level like the refs. A folder whose only child is a folder shares its row with it and shows both names, such as src/repo. The files inside get an empty chevron slot, so their status letters line up with the folder icons beside them. Its list can put an action on the right.',
+          variants: [
+            ['Open', () => C.FolderRow({ name: 'docs' }), { w: 480 }],
+            ['Folded', () => C.FolderRow({ name: 'docs', open: false }), { w: 480 }],
+            ['Two folders in one row', () => C.FolderRow({ name: 'src/repo' }), { w: 480 }],
+            ['Inside a folder', () => C.FolderRow({ name: 'repo', depth: 1 }), { w: 480 }],
+            ['With an action', () => C.FolderRow({ name: 'src/git', trailing: C.Button({ icon: 'plus', variant: 'ghost', tooltip: 'Stage folder' }) }), { w: 480 }],
+          ],
+        },
+        {
+          name: 'FileViewToggle',
+          code: 'ui::FileViewToggle',
+          source: 'src/ui/file_view.rs',
+          about: 'Two ghost icon buttons that show files as a list or as a tree, the current one highlighted. There is one choice for the whole window, kept as a GPUI global: the commit files and both changes lists follow it, in every tab. FastGit keeps no settings file yet, so it opens as a list each time.',
+          variants: [
+            ['List', () => C.FileViewToggle({ view: 'list' })],
+            ['Tree', () => C.FileViewToggle({ view: 'tree' })],
           ],
         },
         {
@@ -388,9 +412,10 @@ const Catalog = (() => {
           name: 'CommitPanel',
           code: 'repo::commit_panel::CommitPanel',
           source: 'src/repo/commit_panel.rs',
-          about: 'Subject, body (140 px at most), author and date, short id and parents, Copy hash, file and line counts, then the files the commit changes. Clicking a file compares it in the middle pane.',
+          about: 'Subject, body (140 px at most), author and date, short id and parents, Copy hash, file and line counts with the FileViewToggle at their right, then the files the commit changes. Clicking a file compares it in the middle pane.',
           variants: [
             ['Ready', () => C.CommitPanel({ commit: commit(2), details: commitDetails }), { w: 480, h: 420 }],
+            ['Files as a tree', () => C.CommitPanel({ commit: commit(2), details: commitDetails, view: 'tree' }), { w: 480, h: 420 }],
             ['A file open', () => C.CommitPanel({ commit: commit(2), details: commitDetails, open: commitFileDiff.change.path }), { w: 480, h: 420 }],
             ['Reading', () => C.CommitPanel({ commit: commit(2), details: commitDetails, state: 'loading' }), { w: 480, h: 260 }],
             ['Failed', () => C.CommitPanel({ commit: commit(2), details: commitDetails, state: 'failed', reason: 'stream did not contain valid UTF-8' }), { w: 480, h: 260 }],
@@ -402,10 +427,12 @@ const Catalog = (() => {
           name: 'CommitFiles',
           code: 'repo::commit_files::CommitFiles',
           source: 'src/repo/commit_files.rs',
-          about: 'Every file the commit changes, in patch order, in a virtual list. The open file is highlighted.',
+          about: 'Every file the commit changes in a virtual list: in patch order as a list, or as a tree with folders first, then files, both by name and regardless of case. Clicking a folder folds it; folded folders open again when another commit is selected. The open file is highlighted.',
           variants: [
             ['Files', () => C.CommitFiles({ files: commitDetails.files }), { w: 480, h: 180 }],
             ['One open', () => C.CommitFiles({ files: commitDetails.files, open: commitFileDiff.change.path }), { w: 480, h: 180 }],
+            ['As a tree, one open', () => C.CommitFiles({ files: commitDetails.files, open: commitFileDiff.change.path, view: 'tree' }), { w: 480, h: 240 }],
+            ['As a tree, a folder folded', () => C.CommitFiles({ files: commitDetails.files, view: 'tree', collapsed: ['docs/mockup'] }), { w: 480, h: 180 }],
           ],
         },
         {
@@ -416,6 +443,7 @@ const Catalog = (() => {
           variants: [
             ['Modified', () => C.CommitFileRow({ file: commitDetails.files[0] }), { w: 480 }],
             ['Open', () => C.CommitFileRow({ file: commitDetails.files[0], selected: true }), { w: 480 }],
+            ['In a tree', () => C.CommitFileRow({ file: commitDetails.files[0], depth: 1 }), { w: 480 }],
             ['Added', () => C.CommitFileRow({ file: commitDetails.files[1] }), { w: 480 }],
             ['Binary, deleted', () => C.CommitFileRow({ file: commitDetails.files[3] }), { w: 480 }],
           ],
@@ -424,9 +452,11 @@ const Catalog = (() => {
           name: 'ChangesList',
           code: 'repo::changes_list::ChangesList',
           source: 'src/repo/changes_list.rs',
-          about: 'The CommitForm on top, then the staged files, then the unstaged files at the bottom. The two lists share the space below the form equally and each has a Stage all / Unstage all action. A failed git add / reset / commit shows in red under the Commit button.',
+          about: 'The CommitForm on top, then the number of changed files with the FileViewToggle, then the staged files, then the unstaged files at the bottom. The two lists share the space below equally and each has a Stage all / Unstage all action. As a tree, each list has its own folders, which stay folded while the changes are read again, and a folder row moves every file under it to the other list. A failed git add / reset / commit shows in red under the Commit button.',
           variants: [
             ['With files', () => C.ChangesList({ changes, open: { side: 'unstaged', path: 'src/git/patch.rs' } }), { w: 480, h: 640 }],
+            ['As a tree', () => C.ChangesList({ changes, open: { side: 'unstaged', path: 'src/git/patch.rs' }, view: 'tree' }), { w: 480, h: 680 }],
+            ['As a tree, a folder folded', () => C.ChangesList({ changes, view: 'tree', collapsed: ['unstaged:src/git'] }), { w: 480, h: 600 }],
             ['Ready to commit', () => C.ChangesList({ changes, draft: { ...Sample.draft, focus: 'message' } }), { w: 480, h: 640 }],
             ['Nothing staged', () => C.ChangesList({ changes: { unstaged: changes.unstaged, staged: [] }, draft: { message: Sample.draft.message } }), { w: 480, h: 560 }],
             ['Everything staged', () => C.ChangesList({ changes: { unstaged: [], staged: [...changes.staged, ...changes.unstaged] } }), { w: 480, h: 560 }],
@@ -457,6 +487,7 @@ const Catalog = (() => {
           variants: [
             ['Unstaged', () => C.ChangeRow({ change: changes.unstaged[0], side: 'unstaged' }), { w: 480 }],
             ['Open', () => C.ChangeRow({ change: changes.unstaged[1], side: 'unstaged', selected: true }), { w: 480 }],
+            ['In a tree', () => C.ChangeRow({ change: changes.unstaged[1], side: 'unstaged', depth: 1 }), { w: 480 }],
             ['Staged', () => C.ChangeRow({ change: changes.staged[0], side: 'staged' }), { w: 480 }],
             ['While writing', () => C.ChangeRow({ change: changes.unstaged[2], side: 'unstaged', writing: true }), { w: 480 }],
             ['Right-clicked', () => `<div style="height:200px">${C.ChangeRow({ change: changes.unstaged[0], side: 'unstaged', menu: C.FileMenu({ change: changes.unstaged[0], side: 'unstaged', left: 168, top: 16 }) })}</div>`, { w: 480 }],
@@ -518,7 +549,7 @@ const Catalog = (() => {
           name: 'LineMenu',
           code: 'repo::hunk_actions::HunkActions::menu',
           source: 'src/repo/hunk_actions.rs',
-          about: 'The right-click menu of a line in a working file, with the same actions as HunkActions. On a changed line: its hunk, then the line alone. On an unchanged line or a hunk header: the hunk only, or its selected lines like the header buttons. Inside a selection: the selected lines, then their hunk. A staged file has no Discard. Built on the kit's Diff::on_line_secondary_press and on_hunk_secondary_press, which vendor/gpui-component adds, so the menu always acts on what the press landed on.',
+          about: 'The right-click menu of a line in a working file, with the same actions as HunkActions. On a changed line: its hunk, then the line alone. On an unchanged line or a hunk header: the hunk only, or its selected lines like the header buttons. Inside a selection: the selected lines, then their hunk. A staged file has no Discard. Built on the kit\'s Diff::on_line_secondary_press and on_hunk_secondary_press, which vendor/gpui-component adds, so the menu always acts on what the press landed on.',
           variants: [
             ['Changed line', () => menuFrame(C.LineMenu({ side: 'unstaged' }))],
             ['Unchanged line or hunk header', () => menuFrame(C.LineMenu({ side: 'unstaged', changed: false }))],

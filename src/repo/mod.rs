@@ -3,6 +3,7 @@ mod commit_files;
 mod commit_form;
 mod commit_panel;
 mod file_diff_panel;
+mod file_tree;
 mod history_list;
 mod hunk_actions;
 mod navigation;
@@ -17,8 +18,8 @@ use std::{path::PathBuf, sync::Arc};
 use gix::ObjectId;
 use gpui_kit::{
     AnyElement, AppContext as _, Context, Entity, FocusHandle, InteractiveElement as _,
-    IntoElement, ParentElement as _, Render, ScrollStrategy, Subscription, UniformListScrollHandle,
-    Window,
+    IntoElement, ParentElement as _, Render, ScrollStrategy, SharedString, Subscription,
+    UniformListScrollHandle, Window,
     component::{
         WindowExt as _,
         button::{Button, ButtonVariant},
@@ -32,15 +33,15 @@ use gpui_kit::{
 use crate::{
     actions::{CloseDiff, CopyHash, Fetch, NewerCommit, OlderCommit, Refresh},
     git::{FileChange, HISTORY_LIMIT, History, Scope, Side, short_id},
-    ui::{self, Failure, Look as _, Notice, thousands},
+    ui::{self, Failure, FileView, Folded, Look as _, Notice, thousands},
 };
-use changes_list::{ChangesList, SideScrolls, discard_question};
+use changes_list::{ChangesList, SideFolds, SideScrolls, discard_question};
 use commit_form::CommitForm;
 use commit_panel::{CommitPanel, OpenCommitFile, copy_commit_hash};
 use file_diff_panel::{CloseFileDiff, FileDiffPanel};
 use history_list::HistoryList;
 use navigation::{OpenFile, Step, Target};
-use ref_tree::{Folded, RefGroup};
+use ref_tree::RefGroup;
 use refs_list::RefsList;
 pub(crate) use repository::{Repository, RepositoryEvent};
 use status_bar::RepoStatusBar;
@@ -48,7 +49,8 @@ use status_bar::RepoStatusBar;
 pub(crate) struct RepoView {
     repository: Entity<Repository>,
     target: Target,
-    folded: Folded,
+    folded_refs: Folded<RefGroup>,
+    folded_changes: SideFolds,
     commit_panel: Entity<CommitPanel>,
     commit_form: Entity<CommitForm>,
     file_diff: Entity<FileDiffPanel>,
@@ -81,7 +83,8 @@ impl RepoView {
         Self {
             repository,
             target: Target::Nothing,
-            folded: Folded::default(),
+            folded_refs: Folded::default(),
+            folded_changes: SideFolds::default(),
             commit_panel,
             commit_form,
             file_diff,
@@ -268,8 +271,13 @@ impl RepoView {
         }
     }
 
-    fn toggle_fold(&mut self, group: RefGroup, cx: &mut Context<Self>) {
-        self.folded.toggle(group);
+    fn toggle_ref_fold(&mut self, group: RefGroup, cx: &mut Context<Self>) {
+        self.folded_refs.toggle(group);
+        cx.notify();
+    }
+
+    fn toggle_change_fold(&mut self, side: Side, folder: SharedString, cx: &mut Context<Self>) {
+        self.folded_changes.of_mut(side).toggle(folder);
         cx.notify();
     }
 
@@ -361,11 +369,13 @@ impl RepoView {
     }
 
     fn refs_list(&self, history: Arc<History>, cx: &mut Context<Self>) -> RefsList {
-        RefsList::new(history, &self.folded, self.refs_scroll.clone())
+        RefsList::new(history, &self.folded_refs, self.refs_scroll.clone())
             .selected(self.target.commit())
             .on_reveal(cx.listener(|this, ix: &usize, window, cx| this.reveal_ref(*ix, window, cx)))
             .on_toggle(
-                cx.listener(|this, group: &RefGroup, _, cx| this.toggle_fold(group.clone(), cx)),
+                cx.listener(|this, group: &RefGroup, _, cx| {
+                    this.toggle_ref_fold(group.clone(), cx)
+                }),
             )
     }
 
@@ -387,6 +397,8 @@ impl RepoView {
         ChangesList::new(
             repository.changes().cloned(),
             self.commit_form.clone(),
+            FileView::current(cx),
+            &self.folded_changes,
             self.changes_scrolls.clone(),
         )
         .root(repository.repo().map(|repo| Arc::from(repo.location())))
@@ -403,6 +415,11 @@ impl RepoView {
         .on_discard(cx.listener(|this, change: &FileChange, window, cx| {
             this.confirm_discard(change.clone(), window, cx)
         }))
+        .on_fold(
+            cx.listener(|this, (side, folder): &(Side, SharedString), _, cx| {
+                this.toggle_change_fold(*side, folder.clone(), cx)
+            }),
+        )
     }
 }
 

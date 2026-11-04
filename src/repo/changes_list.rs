@@ -1,4 +1,4 @@
-use std::{path::Path, sync::Arc};
+use std::{path::Path, rc::Rc, sync::Arc};
 
 use gpui_kit::{
     AnyElement, AnyView, App, ClipboardItem, InteractiveElement as _, IntoElement,
@@ -15,10 +15,16 @@ use gpui_kit::{
     uniform_list,
 };
 
-use super::navigation::OpenFile;
+use super::{
+    file_tree::{FileTreeRow, file_rows, is_inside},
+    navigation::OpenFile,
+};
 use crate::{
     git::{ChangeKind, FileChange, Scope, Side, WorkingChanges},
-    ui::{self, Handler, Look as _, SectionHeader, SideUi as _, file_row, handler, thousands},
+    ui::{
+        self, BySide, FilePlace, FileView, FileViewToggle, Folded, Handler, Look as _,
+        SectionHeader, SideUi as _, counted, file_row, folder_row, handler, thousands,
+    },
 };
 
 const SIDES_TOP_DOWN: [Side; 2] = [Side::Staged, Side::Unstaged];
@@ -67,6 +73,7 @@ struct RowActions {
     on_open: Option<Handler<(Side, FileChange)>>,
     on_move: Option<Handler<(Side, Scope)>>,
     on_discard: Option<Handler<FileChange>>,
+    on_fold: Option<Handler<(Side, SharedString)>>,
 }
 
 impl RowActions {
@@ -127,24 +134,14 @@ fn copy_path(path: &Path, window: &mut Window, cx: &mut App) {
     window.push_notification("Path copied", cx);
 }
 
-#[derive(Clone, Default)]
-pub(crate) struct SideScrolls {
-    unstaged: UniformListScrollHandle,
-    staged: UniformListScrollHandle,
-}
+pub(crate) type SideScrolls = BySide<UniformListScrollHandle>;
 
-impl SideScrolls {
-    fn of(&self, side: Side) -> &UniformListScrollHandle {
-        match side {
-            Side::Unstaged => &self.unstaged,
-            Side::Staged => &self.staged,
-        }
-    }
-}
+pub(crate) type SideFolds = BySide<Folded<SharedString>>;
 
 #[derive(IntoElement)]
 pub(crate) struct ChangesList {
     changes: Option<Arc<WorkingChanges>>,
+    rows: BySide<Rc<[FileTreeRow]>>,
     form: AnyView,
     open: Option<OpenFile>,
     scrolls: SideScrolls,
@@ -155,10 +152,21 @@ impl ChangesList {
     pub(crate) fn new(
         changes: Option<Arc<WorkingChanges>>,
         form: impl Into<AnyView>,
+        view: FileView,
+        folded: &SideFolds,
         scrolls: SideScrolls,
     ) -> Self {
+        let rows = BySide::new(|side| {
+            let paths = changes
+                .as_deref()
+                .map_or(&[][..], |changes| changes.files(side))
+                .iter()
+                .map(|change| change.path.as_ref());
+            file_rows(view, paths, folded.of(side)).into()
+        });
         Self {
             changes,
+            rows,
             form: form.into(),
             open: None,
             scrolls,
@@ -168,6 +176,7 @@ impl ChangesList {
                 on_open: None,
                 on_move: None,
                 on_discard: None,
+                on_fold: None,
             },
         }
     }
@@ -211,12 +220,20 @@ impl ChangesList {
         self
     }
 
+    pub(crate) fn on_fold(
+        mut self,
+        callback: impl Fn(&(Side, SharedString), &mut Window, &mut App) + 'static,
+    ) -> Self {
+        self.actions.on_fold = Some(handler(callback));
+        self
+    }
+
     fn side_section(&self, side: Side, changes: &Arc<WorkingChanges>, cx: &App) -> AnyElement {
         let count = changes.files(side).len();
         let content = if count == 0 {
             ui::hint(side.labels().empty, cx)
         } else {
-            self.side_list(side, count, changes.clone())
+            self.side_list(side, changes.clone())
         };
         v_flex()
             .fill_height()
@@ -233,8 +250,9 @@ impl ChangesList {
             .into_any_element()
     }
 
-    fn side_list(&self, side: Side, count: usize, changes: Arc<WorkingChanges>) -> AnyElement {
+    fn side_list(&self, side: Side, changes: Arc<WorkingChanges>) -> AnyElement {
         let scroll = self.scrolls.of(side).clone();
+        let rows = self.rows.of(side).clone();
         let open = self.open.clone();
         let actions = self.actions.clone();
         div()
@@ -244,16 +262,36 @@ impl ChangesList {
             .child(
                 uniform_list(
                     ("change-list", side as usize),
-                    count,
+                    rows.len(),
                     move |range, _, cx| {
                         let files = changes.files(side);
-                        range
-                            .filter_map(|ix| files.get(ix))
-                            .map(|change| {
-                                let selected = open.as_ref().is_some_and(|open| {
-                                    open.side == side && open.path == change.path
-                                });
-                                change_row(change, side, selected, &actions, cx)
+                        rows[range]
+                            .iter()
+                            .filter_map(|row| match row {
+                                FileTreeRow::Folder {
+                                    path,
+                                    name,
+                                    depth,
+                                    open,
+                                } => Some(change_folder_row(
+                                    side,
+                                    Folder {
+                                        path,
+                                        name,
+                                        depth: *depth,
+                                        open: *open,
+                                    },
+                                    &changes,
+                                    &actions,
+                                    cx,
+                                )),
+                                &FileTreeRow::File { ix, place } => {
+                                    let change = files.get(ix)?;
+                                    let selected = open.as_ref().is_some_and(|open| {
+                                        open.side == side && open.path == change.path
+                                    });
+                                    Some(change_row(change, side, place, selected, &actions, cx))
+                                }
                             })
                             .collect::<Vec<_>>()
                     },
@@ -279,9 +317,12 @@ impl RenderOnce for ChangesList {
                     .into_any_element(),
             ]
         } else {
-            SIDES_TOP_DOWN
-                .iter()
-                .map(|&side| self.side_section(side, &changes, cx))
+            std::iter::once(files_bar(&changes, cx))
+                .chain(
+                    SIDES_TOP_DOWN
+                        .iter()
+                        .map(|&side| self.side_section(side, &changes, cx)),
+                )
                 .collect()
         };
         v_flex()
@@ -290,6 +331,73 @@ impl RenderOnce for ChangesList {
             .children(lists)
             .into_any_element()
     }
+}
+
+fn files_bar(changes: &WorkingChanges, cx: &App) -> AnyElement {
+    div()
+        .flex_none()
+        .border_b_1()
+        .border_color(cx.theme().border)
+        .child(
+            SectionHeader::new(counted(
+                changes.file_count(),
+                "changed file",
+                "changed files",
+            ))
+            .action(FileViewToggle),
+        )
+        .into_any_element()
+}
+
+struct Folder<'a> {
+    path: &'a SharedString,
+    name: &'a str,
+    depth: usize,
+    open: bool,
+}
+
+fn change_folder_row(
+    side: Side,
+    folder: Folder,
+    changes: &Arc<WorkingChanges>,
+    actions: &RowActions,
+    cx: &App,
+) -> AnyElement {
+    let labels = side.labels();
+    let id = format!("{side:?}/{}/", folder.path);
+    let move_button = Button::new(SharedString::from(format!("stage/{id}")))
+        .ghost()
+        .xsmall()
+        .icon(labels.icon)
+        .tooltip(labels.folder_tooltip)
+        .disabled(actions.writing)
+        .when_some(actions.on_move.clone(), |button, on_move| {
+            let changes = changes.clone();
+            let path = folder.path.clone();
+            button.on_click(move |_, window, cx| {
+                cx.stop_propagation();
+                let inside = changes
+                    .files(side)
+                    .iter()
+                    .filter(|change| is_inside(&change.path, &path))
+                    .cloned()
+                    .collect();
+                on_move(&(side, Scope::Files(inside)), window, cx)
+            })
+        });
+    let folded = (side, folder.path.clone());
+    folder_row(
+        SharedString::from(id),
+        folder.name,
+        folder.depth,
+        folder.open,
+        Some(move_button.into_any_element()),
+        cx,
+    )
+    .when_some(actions.on_fold.clone(), |row, on_fold| {
+        row.on_click(move |_, window, cx| on_fold(&folded, window, cx))
+    })
+    .into_any_element()
 }
 
 fn side_header(
@@ -319,6 +427,7 @@ fn side_header(
 fn change_row(
     change: &FileChange,
     side: Side,
+    place: FilePlace,
     selected: bool,
     actions: &RowActions,
     cx: &App,
@@ -346,6 +455,7 @@ fn change_row(
         SharedString::from(id),
         change.kind,
         &change.path,
+        place,
         selected,
         move_button,
         cx,

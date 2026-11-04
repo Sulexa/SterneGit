@@ -4,7 +4,9 @@ use gpui_kit::{AssetSource, SharedString};
 
 gpui_kit::assets::icon_assets!(
     IconsBeyondTheKit,
-    [GitBranch, GitMerge, Cloud, Tag, Columns2, Rows2]
+    [
+        GitBranch, GitMerge, Cloud, Tag, Columns2, Rows2, List, ListTree
+    ]
 );
 
 pub(crate) struct Assets;

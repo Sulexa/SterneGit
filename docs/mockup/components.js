@@ -14,6 +14,8 @@ const IconPaths = {
   'chevron-down': '<path d="m6 9 6 6 6-6"/>',
   'chevron-right': '<path d="m9 18 6-6-6-6"/>',
   folder: '<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>',
+  list: '<path d="M3 5h.01"/><path d="M3 12h.01"/><path d="M3 19h.01"/><path d="M8 5h13"/><path d="M8 12h13"/><path d="M8 19h13"/>',
+  'list-tree': '<path d="M8 5h13"/><path d="M13 12h8"/><path d="M13 19h8"/><path d="M3 10a2 2 0 0 0 2 2h3"/><path d="M3 5v12a2 2 0 0 0 2 2h3"/>',
   'window-minimize': '<path d="M4.8 11.2h14.4" stroke-width="1.6"/>',
   'window-maximize': '<rect width="14.4" height="14.4" x="4.8" y="4.8" rx="1.6" stroke-width="1.6"/>',
   'window-close': '<path d="M19.2 4.8 4.8 19.2" stroke-width="1.6"/><path d="m4.8 4.8 14.4 14.4" stroke-width="1.6"/>',
@@ -62,6 +64,7 @@ const SideLabels = {
     verb: 'Stage',
     all: 'Stage all',
     fileTooltip: 'Stage file',
+    folderTooltip: 'Stage folder',
     openFileTooltip: 'Stage this file',
     icon: 'plus',
     discards: true,
@@ -72,6 +75,7 @@ const SideLabels = {
     verb: 'Unstage',
     all: 'Unstage all',
     fileTooltip: 'Unstage file',
+    folderTooltip: 'Unstage folder',
     openFileTooltip: 'Unstage this file',
     icon: 'minus',
     discards: false,
@@ -124,6 +128,8 @@ const Texts = {
   commitTooltip: 'Commit the staged files  Ctrl+Enter',
   nothingStaged: 'Stage files to commit them.',
   nothingUnstaged: 'Every change is staged.',
+  listView: 'Show files as a list',
+  treeView: 'Show files as a tree',
   aboutDescription: 'A lightweight Git client for Linux, macOS and Windows, built with GPUI and gitoxide.',
   discardTitle: (name) => `Discard the changes to ${name}?`,
   discardDescription: (path) => `The unstaged changes in ${path} are thrown away. Git keeps no copy of them, so this can't be undone.`,
@@ -187,6 +193,48 @@ function refTree(labels) {
     level.push({ name: parts[parts.length - 1], label });
   }
   return root;
+}
+
+function fileTree(items) {
+  const root = { children: [] };
+  for (const item of items) {
+    const parts = item.path.split('/');
+    let folder = root;
+    parts.slice(0, -1).forEach((part, depth) => {
+      let next = folder.children.find((node) => node.children && node.name === part);
+      if (!next) {
+        next = { name: part, path: parts.slice(0, depth + 1).join('/'), children: [] };
+        folder.children.push(next);
+      }
+      folder = next;
+    });
+    folder.children.push({ name: parts[parts.length - 1], item });
+  }
+  return compactFolders(root.children);
+}
+
+function compactFolders(nodes) {
+  return nodes
+    .map((node) => {
+      if (!node.children) return node;
+      let folder = node;
+      while (folder.children.length === 1 && folder.children[0].children) {
+        const only = folder.children[0];
+        folder = { name: `${folder.name}/${only.name}`, path: only.path, children: only.children };
+      }
+      return { ...folder, children: compactFolders(folder.children) };
+    })
+    .sort((a, b) => !a.children - !b.children || a.name.localeCompare(b.name));
+}
+
+function fileTreeRows(nodes, render, depth = 0) {
+  return nodes
+    .map((node) => {
+      if (!node.children) return render.file(node.item, depth);
+      const open = !render.collapsed.has(node.path);
+      return treeGroup(open, render.folder(node, depth, open), fileTreeRows(node.children, render, depth + 1));
+    })
+    .join('');
 }
 
 function twisty(open) {
@@ -524,7 +572,18 @@ const C = {
     return C.Menu({ items: fileMenuItems({ change, side }), left, top, hot, name: 'FileMenu' });
   },
 
-  CommitPanel({ commit, details, state = 'ready', reason = '', open }) {
+  FileViewToggle({ view = 'list' } = {}) {
+    const list = C.Button({ icon: 'list', variant: 'ghost', selected: view === 'list', tooltip: Texts.listView });
+    const tree = C.Button({ icon: 'list-tree', variant: 'ghost', selected: view === 'tree', tooltip: Texts.treeView });
+    return `<div data-c="FileViewToggle" class="file-view-toggle">${list}${tree}</div>`;
+  },
+
+  FolderRow({ name, depth = 0, open = true, trailing = '' }) {
+    const content = `<div class="h fill tree-row" style="padding-left:${depth * TreeIndent}px">${twisty(open)}${icon('folder', 'sm', 'var(--muted)')}<div class="fill ellipsis sm">${esc(name)}</div></div>${trailing}`;
+    return C.ListRow({ content, extraClass: 'folder-row', name: 'FolderRow' });
+  },
+
+  CommitPanel({ commit, details, state = 'ready', reason = '', open, view = 'list', collapsed }) {
     if (!commit || state === 'none') return `<div data-c="CommitPanel" class="commit-panel">${C.Hint({ message: Texts.selectCommit })}</div>`;
     const ready = state === 'ready' || state === 'empty';
     const files = state === 'empty' ? [] : details.files;
@@ -535,7 +594,7 @@ const C = {
     const body = ready && details.body ? `<div class="message-body sm muted">${esc(details.body)}</div>` : '';
     const stats =
       ready && files.length
-        ? `<div class="h xs" style="gap:12px"><div class="muted">${counted(files.length, 'file', 'files')}</div>${C.Additions({ count: additions })}${C.Deletions({ count: deletions })}</div>`
+        ? `<div class="h xs" style="gap:12px"><div class="muted">${counted(files.length, 'file', 'files')}</div>${C.Additions({ count: additions })}${C.Deletions({ count: deletions })}<div class="fill"></div>${C.FileViewToggle({ view })}</div>`
         : '';
     const copy = C.Button({ label: 'Copy hash', variant: 'ghost', tooltip: 'Copy the full hash  Ctrl+Shift+C' });
     const header =
@@ -553,35 +612,44 @@ const C = {
           ? C.Failure({ title: Texts.commitFailed, reason })
           : state === 'empty'
             ? C.Hint({ message: Texts.commitEmpty })
-            : C.CommitFiles({ files, open });
+            : C.CommitFiles({ files, open, view, collapsed });
     return `<div data-c="CommitPanel" class="commit-panel">${header}<div class="fill v">${content}</div></div>`;
   },
 
-  FileRow({ kind, path, selected = false, trailing = '', name = 'FileRow' }) {
+  FileRow({ kind, path, depth, selected = false, trailing = '', name = 'FileRow' }) {
     const [file, folder] = splitPath(path);
-    const content =
-      C.ChangeBadge({ kind }) +
-      `<div class="path"><div class="none ellipsis sm" style="max-width:100%">${esc(file)}</div>${folder ? `<div class="ellipsis xs muted">${esc(folder)}</div>` : ''}</div>` +
-      trailing;
-    return C.ListRow({ content, selected, extraClass: 'file-row', name, base: name === 'FileRow' ? 'ListRow' : 'FileRow' });
+    const place =
+      depth === undefined
+        ? C.ChangeBadge({ kind }) +
+          `<div class="path"><div class="none ellipsis sm" style="max-width:100%">${esc(file)}</div>${folder ? `<div class="ellipsis xs muted">${esc(folder)}</div>` : ''}</div>`
+        : `<div class="h fill tree-row" style="padding-left:${depth * TreeIndent}px">${twisty(null)}${C.ChangeBadge({ kind })}<div class="fill ellipsis sm">${esc(file)}</div></div>`;
+    return C.ListRow({ content: place + trailing, selected, extraClass: 'file-row', name, base: name === 'FileRow' ? 'ListRow' : 'FileRow' });
   },
 
-  CommitFileRow({ file, selected = false }) {
+  CommitFileRow({ file, depth, selected = false }) {
     const counts = file.binary
       ? '<div class="counts xs muted">binary</div>'
       : `<div class="counts xs">${C.Additions({ count: file.additions })}${C.Deletions({ count: file.deletions })}</div>`;
-    return C.FileRow({ kind: file.kind, path: file.path, selected, trailing: counts, name: 'CommitFileRow' });
+    return C.FileRow({ kind: file.kind, path: file.path, depth, selected, trailing: counts, name: 'CommitFileRow' });
   },
 
-  CommitFiles({ files, open }) {
-    const rows = files.map((file) => C.CommitFileRow({ file, selected: file.path === open })).join('');
+  CommitFiles({ files, open, view = 'list', collapsed = [] }) {
+    const row = (file, depth) => C.CommitFileRow({ file, depth, selected: file.path === open });
+    const rows =
+      view === 'tree'
+        ? fileTreeRows(fileTree(files), {
+            collapsed: new Set(collapsed),
+            file: row,
+            folder: (node, depth, open) => C.FolderRow({ name: node.name, depth, open }),
+          })
+        : files.map((file) => row(file)).join('');
     return `<div data-c="CommitFiles" class="commit-files">${rows}</div>`;
   },
 
-  ChangeRow({ change, side, selected = false, writing = false, menu = '' }) {
+  ChangeRow({ change, side, depth, selected = false, writing = false, menu = '' }) {
     const labels = SideLabels[side];
     const trailing = C.Button({ icon: labels.icon, variant: 'ghost', disabled: writing, tooltip: labels.fileTooltip }) + menu;
-    return C.FileRow({ kind: change.kind, path: change.path, selected, trailing, name: 'ChangeRow' });
+    return C.FileRow({ kind: change.kind, path: change.path, depth, selected, trailing, name: 'ChangeRow' });
   },
 
   CommitForm({ message = '', description = '', focus, staged = 0, committing = false, writing = false, failure }) {
@@ -598,34 +666,41 @@ const C = {
     );
   },
 
-  ChangesList({ changes, open, pointed, draft = {}, committing = false, writing = false, failure }) {
+  ChangesList({ changes, open, pointed, draft = {}, committing = false, writing = false, failure, view = 'list', collapsed = [] }) {
     if (!changes) return `<div data-c="ChangesList" class="changes">${C.Loading({ message: Texts.readingChanges })}</div>`;
     const busy = writing || committing;
     const form = C.CommitForm({ ...draft, staged: changes.staged.length, committing, writing, failure });
     if (!changes.unstaged.length && !changes.staged.length) {
       return `<div data-c="ChangesList" class="changes">${form}<div class="fill v">${C.Hint({ message: Texts.noChanges })}</div></div>`;
     }
+    const changed = new Set([...changes.staged, ...changes.unstaged].map((change) => change.path)).size;
+    const bar = `<div class="changes-bar">${C.SectionHeader({ title: counted(changed, 'changed file', 'changed files'), action: C.FileViewToggle({ view }) })}</div>`;
+    const foldedIn = (side) => new Set(collapsed.filter((key) => key.startsWith(`${side}:`)).map((key) => key.slice(side.length + 1)));
     const section = (side, empty) => {
       const files = changes[side];
       const labels = SideLabels[side];
       const action = C.Button({ label: labels.all, icon: labels.icon, variant: 'ghost', disabled: busy || !files.length });
       const head = C.SectionHeader({ title: `${labels.files} (${thousands(files.length)})`, action });
       const at = (place, change) => !!place && place.side === side && place.path === change.path;
-      const rows = files
-        .map((change) =>
-          C.ChangeRow({
-            change,
-            side,
-            writing: busy,
-            selected: at(open, change),
-            menu: at(pointed, change) ? C.FileMenu({ change, side, left: pointed.left, top: pointed.top, hot: pointed.hot }) : '',
-          }),
-        )
-        .join('');
+      const row = (change, depth) =>
+        C.ChangeRow({
+          change,
+          side,
+          depth,
+          writing: busy,
+          selected: at(open, change),
+          menu: at(pointed, change) ? C.FileMenu({ change, side, left: pointed.left, top: pointed.top, hot: pointed.hot }) : '',
+        });
+      const folder = (node, depth, open) =>
+        C.FolderRow({ name: node.name, depth, open, trailing: C.Button({ icon: labels.icon, variant: 'ghost', disabled: busy, tooltip: labels.folderTooltip }) });
+      const rows =
+        view === 'tree'
+          ? fileTreeRows(fileTree(files), { collapsed: foldedIn(side), file: row, folder })
+          : files.map((change) => row(change)).join('');
       const body = files.length ? `<div class="fill">${rows}</div>` : C.Hint({ message: empty });
       return `<div class="change-section">${head}${body}</div>`;
     };
-    return `<div data-c="ChangesList" class="changes">${form}${section('staged', Texts.nothingStaged)}${section('unstaged', Texts.nothingUnstaged)}</div>`;
+    return `<div data-c="ChangesList" class="changes">${form}${bar}${section('staged', Texts.nothingStaged)}${section('unstaged', Texts.nothingUnstaged)}</div>`;
   },
 
   FileDiffPanel({ diff, mode = 'split', state = 'ready', writing = false, reason = '', selection, pointed }) {

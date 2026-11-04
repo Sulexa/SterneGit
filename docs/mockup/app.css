@@ -548,6 +548,22 @@
 }
 
 .change-section + .change-section { border-top: 1px solid var(--border); }
+
+.changes-bar {
+  flex: none;
+  border-bottom: 1px solid var(--border);
+}
+
+.file-view-toggle {
+  flex: none;
+  display: flex;
+  gap: 2px;
+}
+
+.folder-row {
+  gap: 8px;
+  padding-right: 4px;
+}
 .change-section > .hint { height: auto; flex: 1; }
 
 .message-body {

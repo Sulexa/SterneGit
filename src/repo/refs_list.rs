@@ -2,22 +2,20 @@ use std::sync::Arc;
 
 use gix::ObjectId;
 use gpui_kit::{
-    AnyElement, App, InteractiveElement as _, IntoElement, ParentElement as _, Pixels, RenderOnce,
+    AnyElement, App, InteractiveElement as _, IntoElement, ParentElement as _, RenderOnce,
     SharedString, Styled as _, UniformListScrollHandle, Window,
     assets::IconName,
-    component::{ActiveTheme as _, Icon, Sizable as _, StyledExt as _, h_flex, scroll::Scrollbar},
+    component::{ActiveTheme as _, Icon, Sizable as _, scroll::Scrollbar},
     div,
     prelude::FluentBuilder as _,
-    px, uniform_list,
+    uniform_list,
 };
 
-use super::ref_tree::{Folded, RefGroup, RefTreeRow, last_segment, ref_tree};
+use super::ref_tree::{RefGroup, RefTreeRow, last_segment, ref_tree};
 use crate::{
     git::{History, RefKind, RefLabel},
-    ui::{Handler, Look as _, SectionHeader, fold_icon, handler, list_row},
+    ui::{Folded, Handler, SectionHeader, handler, list_row, tree_line},
 };
-
-const INDENT: Pixels = px(18.);
 
 #[derive(IntoElement)]
 pub(crate) struct RefsList {
@@ -32,7 +30,7 @@ pub(crate) struct RefsList {
 impl RefsList {
     pub(crate) fn new(
         history: Arc<History>,
-        folded: &Folded,
+        folded: &Folded<RefGroup>,
         scroll: UniformListScrollHandle,
     ) -> Self {
         Self {
@@ -167,7 +165,7 @@ fn folder_row(
         .child(tree_line(
             depth,
             Some(open),
-            folder_icon(kind, depth),
+            muted_icon(folder_icon(kind, depth), cx),
             last_segment(path),
             false,
             cx,
@@ -194,7 +192,7 @@ fn ref_row(
     .child(tree_line(
         depth,
         None,
-        leaf_icon(label.kind),
+        muted_icon(leaf_icon(label.kind), cx),
         last_segment(&label.name),
         label.is_head,
         cx,
@@ -205,30 +203,8 @@ fn ref_row(
     .into_any_element()
 }
 
-fn tree_line(
-    depth: usize,
-    open: Option<bool>,
-    icon: IconName,
-    name: &str,
-    bold: bool,
-    cx: &App,
-) -> impl IntoElement {
-    let muted = cx.theme().muted_foreground;
-    h_flex()
-        .gap_1p5()
-        .min_w_0()
-        .pl(INDENT * depth as f32)
-        .child(match open {
-            Some(open) => fold_icon(open).text_color(muted).into_any_element(),
-            None => div().flex_none().size_3().into_any_element(),
-        })
-        .child(Icon::new(icon).small().text_color(muted))
-        .child(
-            div()
-                .flex_1()
-                .ellipsis()
-                .sm_text()
-                .when(bold, |this| this.font_semibold())
-                .child(SharedString::from(name.to_owned())),
-        )
+fn muted_icon(name: IconName, cx: &App) -> Icon {
+    Icon::new(name)
+        .small()
+        .text_color(cx.theme().muted_foreground)
 }

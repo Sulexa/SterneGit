@@ -1,4 +1,5 @@
 use std::{
+    collections::HashSet,
     ffi::OsStr,
     hash::{DefaultHasher, Hash as _, Hasher as _},
     path::Path,
@@ -158,6 +159,15 @@ impl WorkingChanges {
         }
     }
 
+    pub(crate) fn file_count(&self) -> usize {
+        self.unstaged
+            .iter()
+            .chain(&self.staged)
+            .map(|change| change.path.as_ref())
+            .collect::<HashSet<&str>>()
+            .len()
+    }
+
     pub(crate) fn find(&self, side: Side, path: &str) -> Option<&FileChange> {
         self.files(side).iter().find(|change| change.path == path)
     }
@@ -243,6 +253,12 @@ mod tests {
 
     use super::{ChangeKind, FileChange, parse_status};
     use crate::git::{FilePatch, PartAction, Side, scratch::ScratchRepo};
+
+    #[test]
+    fn a_file_in_both_lists_counts_once() {
+        let status = parse_status(b"MM both.rs\0A  new.rs\0?? fresh.txt\0");
+        assert_eq!(status.file_count(), 3);
+    }
 
     #[test]
     fn status_splits_staged_and_unstaged_changes() {

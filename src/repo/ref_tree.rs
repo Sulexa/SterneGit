@@ -1,28 +1,14 @@
-use std::collections::HashSet;
-
 use gpui_kit::SharedString;
 
-use crate::git::{RefKind, RefLabel};
+use crate::{
+    git::{RefKind, RefLabel},
+    ui::Folded,
+};
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) enum RefGroup {
     Section(RefKind),
     Folder(RefKind, SharedString),
-}
-
-#[derive(Default)]
-pub(crate) struct Folded(HashSet<RefGroup>);
-
-impl Folded {
-    pub(crate) fn toggle(&mut self, group: RefGroup) {
-        if !self.0.remove(&group) {
-            self.0.insert(group);
-        }
-    }
-
-    fn is_open(&self, group: &RefGroup) -> bool {
-        !self.0.contains(group)
-    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -44,7 +30,7 @@ pub(crate) enum RefTreeRow {
     },
 }
 
-pub(crate) fn ref_tree(refs: &[RefLabel], folded: &Folded) -> Vec<RefTreeRow> {
+pub(crate) fn ref_tree(refs: &[RefLabel], folded: &Folded<RefGroup>) -> Vec<RefTreeRow> {
     let mut rows = Vec::new();
     let mut first = 0;
     for kind in RefKind::ALL {
@@ -68,7 +54,7 @@ fn add_section(
     kind: RefKind,
     refs: &[RefLabel],
     first: usize,
-    folded: &Folded,
+    folded: &Folded<RefGroup>,
 ) {
     let mut folders: Vec<(&str, bool)> = Vec::new();
     for (offset, label) in refs.iter().enumerate() {
@@ -101,7 +87,7 @@ fn add_folder(
     kind: RefKind,
     path: &str,
     depth: usize,
-    folded: &Folded,
+    folded: &Folded<RefGroup>,
 ) -> bool {
     let path = SharedString::from(path.to_owned());
     let open = folded.is_open(&RefGroup::Folder(kind, path.clone()));
@@ -126,11 +112,14 @@ pub(crate) fn last_segment(path: &str) -> &str {
 mod tests {
     use gpui_kit::SharedString;
 
-    use super::{Folded, RefGroup, RefTreeRow, last_segment, ref_tree};
-    use crate::git::{
-        RefKind::{self, LocalBranch, RemoteBranch, Tag},
-        RefLabel,
-        fixtures::id,
+    use super::{RefGroup, RefTreeRow, last_segment, ref_tree};
+    use crate::{
+        git::{
+            RefKind::{self, LocalBranch, RemoteBranch, Tag},
+            RefLabel,
+            fixtures::id,
+        },
+        ui::Folded,
     };
 
     fn labels(names: &[(&str, RefKind)]) -> Vec<RefLabel> {
@@ -162,7 +151,7 @@ mod tests {
         RefTreeRow::Ref { ix, depth }
     }
 
-    fn folded(groups: impl IntoIterator<Item = RefGroup>) -> Folded {
+    fn folded(groups: impl IntoIterator<Item = RefGroup>) -> Folded<RefGroup> {
         let mut folded = Folded::default();
         for group in groups {
             folded.toggle(group);

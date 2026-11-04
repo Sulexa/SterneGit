@@ -9,24 +9,38 @@ use gpui_kit::{
     uniform_list,
 };
 
-use super::patch_view::change_kind;
-use crate::ui::{self, Handler, Look as _, file_row, handler};
+use super::{
+    file_tree::{FileTreeRow, file_rows},
+    patch_view::change_kind,
+};
+use crate::ui::{
+    self, FilePlace, FileView, Folded, Handler, Look as _, file_row, folder_row, handler,
+};
 
 #[derive(IntoElement)]
 pub(crate) struct CommitFiles {
     files: Arc<[DiffFile]>,
+    rows: Vec<FileTreeRow>,
     open: Option<SharedString>,
     scroll: UniformListScrollHandle,
     on_open: Option<Handler<DiffFile>>,
+    on_fold: Option<Handler<SharedString>>,
 }
 
 impl CommitFiles {
-    pub(crate) fn new(files: Arc<[DiffFile]>, scroll: UniformListScrollHandle) -> Self {
+    pub(crate) fn new(
+        files: Arc<[DiffFile]>,
+        view: FileView,
+        folded: &Folded<SharedString>,
+        scroll: UniformListScrollHandle,
+    ) -> Self {
         Self {
+            rows: file_rows(view, files.iter().map(|file| file.path().as_ref()), folded),
             files,
             open: None,
             scroll,
             on_open: None,
+            on_fold: None,
         }
     }
 
@@ -42,27 +56,46 @@ impl CommitFiles {
         self.on_open = Some(handler(callback));
         self
     }
+
+    pub(crate) fn on_fold(
+        mut self,
+        callback: impl Fn(&SharedString, &mut Window, &mut App) + 'static,
+    ) -> Self {
+        self.on_fold = Some(handler(callback));
+        self
+    }
 }
 
 impl RenderOnce for CommitFiles {
     fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
         let Self {
             files,
+            rows,
             open,
             scroll,
             on_open,
+            on_fold,
         } = self;
         div()
             .id("commit-files")
             .relative()
             .size_full()
             .child(
-                uniform_list("commit-file-list", files.len(), move |range, _, cx| {
-                    files[range]
+                uniform_list("commit-file-list", rows.len(), move |range, _, cx| {
+                    rows[range]
                         .iter()
-                        .map(|file| {
-                            let selected = open.as_ref() == Some(file.path());
-                            commit_file_row(file, selected, &on_open, cx)
+                        .map(|row| match row {
+                            FileTreeRow::Folder {
+                                path,
+                                name,
+                                depth,
+                                open,
+                            } => commit_folder_row(path, name, *depth, *open, &on_fold, cx),
+                            &FileTreeRow::File { ix, place } => {
+                                let file = &files[ix];
+                                let selected = open.as_ref() == Some(file.path());
+                                commit_file_row(file, place, selected, &on_open, cx)
+                            }
                         })
                         .collect::<Vec<_>>()
                 })
@@ -73,8 +106,32 @@ impl RenderOnce for CommitFiles {
     }
 }
 
+fn commit_folder_row(
+    path: &SharedString,
+    name: &str,
+    depth: usize,
+    open: bool,
+    on_fold: &Option<Handler<SharedString>>,
+    cx: &App,
+) -> AnyElement {
+    let folded = path.clone();
+    folder_row(
+        SharedString::from(format!("commit-folder/{path}/")),
+        name,
+        depth,
+        open,
+        None,
+        cx,
+    )
+    .when_some(on_fold.clone(), |row, on_fold| {
+        row.on_click(move |_, window, cx| on_fold(&folded, window, cx))
+    })
+    .into_any_element()
+}
+
 fn commit_file_row(
     file: &DiffFile,
+    place: FilePlace,
     selected: bool,
     on_open: &Option<Handler<DiffFile>>,
     cx: &App,
@@ -100,6 +157,7 @@ fn commit_file_row(
         SharedString::from(format!("commit-file/{}", file.path())),
         change_kind(file),
         file.path(),
+        place,
         selected,
         counts,
         cx,

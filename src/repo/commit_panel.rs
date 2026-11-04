@@ -23,7 +23,10 @@ use super::{
 use crate::{
     actions::{CopyHash, WINDOW_CONTEXT},
     git::{Commit, Repo, short_id},
-    ui::{self, Load, Look as _, commit_subject, counted, run_in_background},
+    ui::{
+        self, FileView, FileViewToggle, Folded, Load, Look as _, commit_subject, counted,
+        run_in_background,
+    },
 };
 
 const TEXTS: PatchTexts = PatchTexts {
@@ -44,6 +47,7 @@ pub(crate) struct CommitPanel {
     commit: Option<Commit>,
     details: Load<Summary>,
     open: Option<SharedString>,
+    folded: Folded<SharedString>,
     files_scroll: UniformListScrollHandle,
 }
 
@@ -55,6 +59,7 @@ impl CommitPanel {
             commit: None,
             details: Load::Idle,
             open: None,
+            folded: Folded::default(),
             files_scroll: UniformListScrollHandle::new(),
         }
     }
@@ -69,6 +74,7 @@ impl CommitPanel {
         }
         if !already_shown {
             self.open = None;
+            self.folded = Folded::default();
             self.files_scroll = UniformListScrollHandle::new();
         }
         self.commit = Some(commit.clone());
@@ -97,6 +103,7 @@ impl CommitPanel {
         self.commit = None;
         self.details.clear();
         self.open = None;
+        self.folded = Folded::default();
         cx.notify();
     }
 
@@ -121,15 +128,26 @@ impl Render for CommitPanel {
         let muted = cx.theme().muted_foreground;
         let on_open =
             cx.listener(|_, file: &DiffFile, _, cx| cx.emit(OpenCommitFile(file.clone())));
+        let on_fold = cx.listener(|this, folder: &SharedString, _, cx| {
+            this.folded.toggle(folder.clone());
+            cx.notify();
+        });
+        let view = FileView::current(cx);
         let content = patch_content(
             &self.details,
             |summary| summary.stats,
             &TEXTS,
             |summary| {
-                CommitFiles::new(summary.files.clone(), self.files_scroll.clone())
-                    .open(self.open.clone())
-                    .on_open(on_open)
-                    .into_any_element()
+                CommitFiles::new(
+                    summary.files.clone(),
+                    view,
+                    &self.folded,
+                    self.files_scroll.clone(),
+                )
+                .open(self.open.clone())
+                .on_open(on_open)
+                .on_fold(on_fold)
+                .into_any_element()
             },
             cx,
         );
@@ -233,7 +251,9 @@ impl Render for CommitPanel {
                                     "files",
                                 )))
                                 .child(ui::additions(stats.additions, cx))
-                                .child(ui::deletions(stats.deletions, cx)),
+                                .child(ui::deletions(stats.deletions, cx))
+                                .child(div().flex_1())
+                                .child(FileViewToggle),
                         )
                     }),
             )

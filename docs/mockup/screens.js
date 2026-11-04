@@ -18,10 +18,10 @@ const Screens = (() => {
       }),
     });
 
-  const commitSelected = (status) =>
+  const commitSelected = (status, panel = {}) =>
     repo({
       selectedRow: selected,
-      right: C.CommitPanel({ commit: history.commits[selected], details: commitDetails }),
+      right: C.CommitPanel({ commit: history.commits[selected], details: commitDetails, ...panel }),
       status,
     });
 
@@ -38,7 +38,7 @@ const Screens = (() => {
     repo({
       wipSelected: true,
       middle: C.FileDiffPanel({ diff: extra.diff || fileDiff, mode, selection: extra.selection, pointed: extra.pointed }),
-      right: C.ChangesList({ changes: extra.changes || changes, open: openFile }),
+      right: C.ChangesList({ changes: extra.changes || changes, open: openFile, view: extra.view }),
     });
 
   const firstUnstaged = changes.unstaged[0];
@@ -108,6 +108,13 @@ const Screens = (() => {
       render: () => C.FastGit({ topBar: topBar(), tabStrip: tabStrip(), body: commitFileComparison() }),
     },
     {
+      id: 'history-tree',
+      title: 'Commit files as a tree',
+      about: "The two buttons at the right end of the file counts show the files as a list or as a tree. The tree splits each path at its slashes: folders first, then files, both by name, and a folder whose only child is a folder shares its row with it, as in src/repo. Each file row keeps its status letter and line counts. Click a folder to fold it. The choice applies to every file list in every tab, the changes list included.",
+      source: 'src/repo/commit_files.rs',
+      render: () => C.FastGit({ topBar: topBar(), tabStrip: tabStrip(), body: commitSelected(undefined, { view: 'tree' }) }),
+    },
+    {
       id: 'nothing-selected',
       title: 'History — nothing selected',
       about: 'History is read but nothing is selected yet, so the right pane asks for a selection.',
@@ -122,7 +129,7 @@ const Screens = (() => {
     {
       id: 'uncommitted',
       title: 'Uncommitted changes',
-      about: 'The Uncommitted changes row is selected. The right pane starts with the commit message, its description and the Commit button, then the staged files, then the unstaged files at the bottom. Each file has a button that moves it to the other list. Commit stays disabled until there is a message and at least one staged file.',
+      about: 'The Uncommitted changes row is selected. The right pane starts with the commit message, its description and the Commit button, then the number of changed files with the list and tree buttons, then the staged files, then the unstaged files at the bottom. Each file has a button that moves it to the other list. Commit stays disabled until there is a message and at least one staged file.',
       source: 'src/repo/changes_list.rs',
       render: () =>
         C.FastGit({
@@ -142,6 +149,13 @@ const Screens = (() => {
           tabStrip: tabStrip(),
           body: repo({ wipSelected: true, right: C.ChangesList({ changes, draft: { ...draft, focus: 'description' } }) }),
         }),
+    },
+    {
+      id: 'changes-tree',
+      title: 'Uncommitted changes as a tree',
+      about: 'The same switch sits between the commit form and the file lists, beside the number of changed files. In a tree, the staged and the unstaged files each get their own folders, and a folder row ends with a + or − that moves every file under it to the other list. Here patch.rs is open in the middle pane and highlighted in its folder.',
+      source: 'src/repo/changes_list.rs',
+      render: () => C.FastGit({ topBar: topBar(), tabStrip: tabStrip(), body: fileComparison('split', { view: 'tree' }) }),
     },
     {
       id: 'file-menu',

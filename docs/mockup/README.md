@@ -8,8 +8,8 @@ nothing to install.
   **Outline components** (or the `o` key) draws the outline of every component on
   the screen; hover one to see its name and source file, click it to jump to it.
   ← and → move between screens, and **Open alone** shows a screen with nothing
-  around it, for screenshots. Click a section or a folder in the refs list to fold
-  or unfold it.
+  around it, for screenshots. Click a section or a folder in the refs list or in a
+  file tree to fold or unfold it.
 - **Components** shows every reusable piece with its variants, the Rust type or
   function it stands for, the file it lives in, what it is built from, and the
   screens that use it. Those last two lists are worked out from the screens, so
