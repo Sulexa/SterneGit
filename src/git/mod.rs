@@ -2,6 +2,7 @@ mod command;
 mod commit;
 mod graph;
 mod history;
+mod hunks;
 mod index;
 mod patch;
 mod refs;
@@ -24,6 +25,7 @@ pub(crate) use graph::{Edge, Row};
 #[cfg(test)]
 pub(crate) use history::fixtures;
 pub(crate) use history::{Commit, HISTORY_LIMIT, History, short_id};
+pub(crate) use hunks::{Hunks, LineAt, LineSide, LineSpan, Part, PartAction};
 pub(crate) use index::Scope;
 pub(crate) use patch::FilePatch;
 pub(crate) use refs::{RefDigest, RefKind, RefLabel};

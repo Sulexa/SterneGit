@@ -1,10 +1,13 @@
 const Catalog = (() => {
-  const { history, collapsed, changes, commitDetails, commitFileDiff, fileDiff, tabs } = Sample;
+  const { history, collapsed, changes, partlyStaged, commitDetails, commitFileDiff, fileDiff, stagedHunkDiff, selectedLines, tabs } = Sample;
   const commit = (ix) => history.commits[ix];
   const ref = (name) => history.refs.find((label) => label.name === name);
   const width = graphWidth(history.commits);
   const row = 736;
   const lanes = (graph, extra = {}) => () => C.GraphCell({ graph, ...extra });
+  const menuFrame = (menu) => `<div style="position:relative;width:240px;height:${(menu.match(/class="item/g).length + 1) * 28 + 8}px">${menu}</div>`;
+  const dialogFrame = (dialog) => `<div style="position:relative;width:520px;height:260px" class="mk-dialog-frame">${dialog}</div>`;
+  const hunkFrame = (actions) => `<div class="diff" style="width:560px;flex:none"><div class="diff-line hunk"><span class="text">${esc(fileDiff.hunks[0].header)}</span>${actions}</div></div>`;
 
   return [
     {
@@ -27,11 +30,12 @@ const Catalog = (() => {
           name: 'Button',
           code: 'gpui_kit::button::Button',
           source: 'src/repo/changes_list.rs',
-          about: 'Ghost xsmall buttons everywhere in panels; primary for the welcome action and Commit; default (filled) for Stage / Unstage and Retry.',
+          about: 'Ghost xsmall buttons everywhere in panels; primary for the welcome action and Commit; default (filled) for Stage / Unstage and Retry; danger for the button that confirms a discard.',
           variants: [
             ['Primary, medium', () => C.Button({ label: 'Open repository…', variant: 'primary', size: 'md' })],
             ['Primary, loading', () => C.Button({ label: Texts.committing, variant: 'primary', size: 'md', loading: true })],
             ['Default, medium', () => C.Button({ label: 'Retry', size: 'md' })],
+            ['Danger, medium', () => C.Button({ label: 'Discard', variant: 'danger', size: 'md' })],
             ['Default, xsmall, icon', () => C.Button({ label: 'Stage', icon: 'plus' })],
             ['Ghost, xsmall', () => C.Button({ label: 'Copy hash', variant: 'ghost' })],
             ['Ghost, selected', () => C.Button({ label: 'Split', icon: 'columns-2', variant: 'ghost', selected: true })],
@@ -83,7 +87,7 @@ const Catalog = (() => {
           name: 'Menu',
           code: 'gpui_kit::Menu',
           source: 'src/app/mod.rs',
-          about: 'Every action with its shortcut. The same list feeds the drawn menu bar and the macOS menu bar. Newer and Older Commit show their arrow keys while the history list has the focus; the kit spells them Up and Down.',
+          about: 'Every action with its shortcut. The same list feeds the drawn menu bar and the macOS menu bar. Newer and Older Commit show their arrow keys while the history list has the focus; the kit spells them Up and Down. LineMenu and FileMenu are the same popup, opened by a right-click.',
           variants: Object.entries(Menus).map(([name, items]) => [
             name,
             () => `<div style="position:relative;width:240px;height:${items.length * 28 + 16}px">${C.Menu({ items })}</div>`,
@@ -103,17 +107,21 @@ const Catalog = (() => {
           name: 'AlertDialog',
           code: 'window.open_alert_dialog',
           source: 'src/app/window.rs',
-          about: 'Only used by About FastGit.',
-          variants: [['About', () => `<div style="position:relative;width:520px;height:260px" class="mk-dialog-frame">${C.AlertDialog({ title: 'FastGit 0.1.0', description: Texts.aboutDescription })}</div>`]],
+          about: 'About FastGit shows one with OK. Discarding a file asks with one that has Cancel and a danger button; Esc cancels.',
+          variants: [
+            ['About', () => `<div style="position:relative;width:520px;height:260px" class="mk-dialog-frame">${C.AlertDialog({ title: 'FastGit 0.1.0', description: Texts.aboutDescription })}</div>`],
+            ['Confirm', () => `<div style="position:relative;width:520px;height:260px" class="mk-dialog-frame">${C.AlertDialog({ title: Texts.discardTitle('command.rs'), description: Texts.discardDescription('src/git/command.rs'), confirm: 'Discard' })}</div>`],
+          ],
         },
         {
           name: 'DiffView',
           code: 'gpui_kit::diff::Diff',
           source: 'src/repo/patch_view.rs',
-          about: 'The kit\'s diff with line numbers and soft wrap, without its own border, showing one file without its header: the FileDiffPanel toolbar names the file instead. The kit draws the grey hunk headers.',
+          about: 'The kit\'s diff with line numbers and soft wrap, without its own border, showing one file without its header: the FileDiffPanel toolbar names the file instead. The kit draws the grey hunk headers and the selected lines in the selection color; while a file can be staged in parts, it also draws the line under the pointer in the hover color.',
           variants: [
             ['Unified without header (one file)', () => `<div class="v" style="width:480px;height:420px">${C.DiffView({ files: commitDetails.files.slice(0, 1), mode: 'unified', header: false })}</div>`],
-            ['Split without header (one file)', () => `<div class="v" style="width:736px;height:420px">${C.DiffView({ files: [{ path: fileDiff.change.path, additions: 9, deletions: 1, hunks: fileDiff.hunks }], mode: 'split', header: false })}</div>`],
+            ['Split without header (one file)', () => `<div class="v" style="width:736px;height:420px">${C.DiffView({ files: [{ path: fileDiff.change.path, additions: fileDiff.additions, deletions: fileDiff.deletions, hunks: fileDiff.hunks }], mode: 'split', header: false })}</div>`],
+            ['Lines selected', () => `<div class="v" style="width:736px;height:300px">${C.DiffView({ files: [{ path: fileDiff.change.path, hunks: fileDiff.hunks.slice(0, 1) }], mode: 'split', header: false, selection: selectedLines })}</div>`],
           ],
         },
       ],
@@ -422,6 +430,7 @@ const Catalog = (() => {
             ['Ready to commit', () => C.ChangesList({ changes, draft: { ...Sample.draft, focus: 'message' } }), { w: 480, h: 640 }],
             ['Nothing staged', () => C.ChangesList({ changes: { unstaged: changes.unstaged, staged: [] }, draft: { message: Sample.draft.message } }), { w: 480, h: 560 }],
             ['Everything staged', () => C.ChangesList({ changes: { unstaged: [], staged: [...changes.staged, ...changes.unstaged] } }), { w: 480, h: 560 }],
+            ['Part of a file staged', () => C.ChangesList({ changes: partlyStaged, open: { side: 'unstaged', path: 'src/git/patch.rs' } }), { w: 480, h: 640 }],
             ['Writing failed', () => C.ChangesList({ changes, failure: "fatal: Unable to create '.git/index.lock': File exists." }), { w: 480, h: 660 }],
             ['Clean', () => C.ChangesList({ changes: { unstaged: [], staged: [] } }), { w: 480, h: 320 }],
             ['Reading', () => C.ChangesList({}), { w: 480, h: 160 }],
@@ -444,25 +453,77 @@ const Catalog = (() => {
           name: 'ChangeRow',
           code: 'repo::changes_list::change_row',
           source: 'src/repo/changes_list.rs',
-          about: 'A FileRow with a + or − that moves the file to the other list.',
+          about: 'A FileRow with a + or − that moves the file to the other list. A right-click opens its FileMenu.',
           variants: [
             ['Unstaged', () => C.ChangeRow({ change: changes.unstaged[0], side: 'unstaged' }), { w: 480 }],
             ['Open', () => C.ChangeRow({ change: changes.unstaged[1], side: 'unstaged', selected: true }), { w: 480 }],
             ['Staged', () => C.ChangeRow({ change: changes.staged[0], side: 'staged' }), { w: 480 }],
             ['While writing', () => C.ChangeRow({ change: changes.unstaged[2], side: 'unstaged', writing: true }), { w: 480 }],
+            ['Right-clicked', () => `<div style="height:200px">${C.ChangeRow({ change: changes.unstaged[0], side: 'unstaged', menu: C.FileMenu({ change: changes.unstaged[0], side: 'unstaged', left: 168, top: 16 }) })}</div>`, { w: 480 }],
+          ],
+        },
+        {
+          name: 'FileMenu',
+          code: 'repo::changes_list::RowActions::menu',
+          source: 'src/repo/changes_list.rs',
+          about: 'The right-click menu of a changed file. Stage or Unstage, then Discard changes… for an unstaged file (Delete file… for an untracked one, nothing for a conflicted one), which asks first in a DiscardDialog. Open file uses the default app, Show in folder the file manager; a deleted file has neither. Copy path copies the full path and says so in a notification.',
+          variants: [
+            ['Unstaged, modified', () => menuFrame(C.FileMenu({ change: changes.unstaged[0], side: 'unstaged' }))],
+            ['Unstaged, untracked', () => menuFrame(C.FileMenu({ change: changes.unstaged[3], side: 'unstaged' }))],
+            ['Staged', () => menuFrame(C.FileMenu({ change: changes.staged[0], side: 'staged' }))],
+            ['Unstaged, deleted', () => menuFrame(C.FileMenu({ change: { kind: 'D', path: 'docs/old.md' }, side: 'unstaged' }))],
+          ],
+        },
+        {
+          name: 'DiscardDialog',
+          code: 'repo::RepoView::confirm_discard',
+          source: 'src/repo/changes_list.rs',
+          about: 'An AlertDialog that names the file and says the changes cannot come back. Discard checks the file out of the index, so it goes back to how it is staged, or to the last commit when nothing of it is staged; Delete removes an untracked file. Cancel or Esc does nothing.',
+          variants: [
+            ['Tracked file', () => dialogFrame(C.DiscardDialog({ change: changes.unstaged[0] }))],
+            ['Untracked file', () => dialogFrame(C.DiscardDialog({ change: changes.unstaged[3] }))],
           ],
         },
         {
           name: 'FileDiffPanel',
           code: 'repo::file_diff_panel::FileDiffPanel',
           source: 'src/repo/file_diff_panel.rs',
-          about: 'A 40 px toolbar (status, path, side or commit, counts, Split / Unified, Stage or Unstage, close) over the comparison. A file from a commit says which commit and has no Stage button.',
+          about: 'A 40 px toolbar (status, path, side or commit, counts, Split / Unified, Stage or Unstage, close) over the comparison. A modified working file gets HunkActions in each hunk header and a LineMenu on right-click; after any of them the comparison reads the file again and keeps the scroll position. A new, deleted, renamed, untracked or conflicted file only moves whole, and a file from a commit says which commit and has neither the Stage button nor the hunk actions.',
           variants: [
             ['From a commit', () => C.FileDiffPanel({ diff: commitFileDiff, mode: 'split' }), { w: row, h: 420 }],
             ['Split', () => C.FileDiffPanel({ diff: fileDiff, mode: 'split' }), { w: row, h: 420 }],
             ['Unified', () => C.FileDiffPanel({ diff: fileDiff, mode: 'unified' }), { w: row, h: 420 }],
+            ['Lines selected', () => C.FileDiffPanel({ diff: fileDiff, mode: 'split', selection: selectedLines }), { w: row, h: 420 }],
+            ['Right-clicked line', () => C.FileDiffPanel({ diff: fileDiff, mode: 'unified', pointed: { hunk: 1, line: 3, left: 220, top: 12, hot: 'Stage hunk' } }), { w: row, h: 520 }],
+            ['Staged hunk', () => C.FileDiffPanel({ diff: stagedHunkDiff, mode: 'split' }), { w: row, h: 340 }],
+            ['While writing', () => C.FileDiffPanel({ diff: fileDiff, mode: 'split', writing: true }), { w: row, h: 260 }],
             ['Renamed, staged', () => C.FileDiffPanel({ diff: { ...fileDiff, side: 'staged', change: changes.staged[1] }, state: 'empty' }), { w: row, h: 160 }],
             ['Reading', () => C.FileDiffPanel({ diff: fileDiff, state: 'loading' }), { w: row, h: 160 }],
+          ],
+        },
+        {
+          name: 'HunkActions',
+          code: 'repo::hunk_actions::HunkActions::buttons',
+          source: 'src/repo/hunk_actions.rs',
+          about: 'Ghost xsmall buttons at the right end of each hunk header. Unstaged: Discard hunk then Stage hunk; staged: Unstage hunk alone. While lines of that hunk are selected they act on those lines and say how many. Disabled while Git writes or the file is read again. Built on the kit\'s Diff::render_hunk_suffix, which vendor/gpui-component adds. Git applies the hunk or the lines to the index (git apply --cached) or, to discard them, in reverse to the work tree.',
+          variants: [
+            ['Unstaged hunk', () => hunkFrame(C.HunkActions({ side: 'unstaged' }))],
+            ['Lines selected', () => hunkFrame(C.HunkActions({ side: 'unstaged', selected: 3 }))],
+            ['Staged hunk', () => hunkFrame(C.HunkActions({ side: 'staged' }))],
+            ['Staged, one line selected', () => hunkFrame(C.HunkActions({ side: 'staged', selected: 1 }))],
+            ['While writing', () => hunkFrame(C.HunkActions({ side: 'unstaged', writing: true }))],
+          ],
+        },
+        {
+          name: 'LineMenu',
+          code: 'repo::hunk_actions::HunkActions::menu',
+          source: 'src/repo/hunk_actions.rs',
+          about: 'The right-click menu of a line in a working file, with the same actions as HunkActions. On a changed line: its hunk, then the line alone. On an unchanged line or a hunk header: the hunk only, or its selected lines like the header buttons. Inside a selection: the selected lines, then their hunk. A staged file has no Discard. Built on the kit's Diff::on_line_secondary_press and on_hunk_secondary_press, which vendor/gpui-component adds, so the menu always acts on what the press landed on.',
+          variants: [
+            ['Changed line', () => menuFrame(C.LineMenu({ side: 'unstaged' }))],
+            ['Unchanged line or hunk header', () => menuFrame(C.LineMenu({ side: 'unstaged', changed: false }))],
+            ['Inside a selection', () => menuFrame(C.LineMenu({ side: 'unstaged', selected: 3 }))],
+            ['Staged, changed line', () => menuFrame(C.LineMenu({ side: 'staged' }))],
           ],
         },
         {

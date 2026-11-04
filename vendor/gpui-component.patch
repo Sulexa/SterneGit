@@ -1,0 +1,231 @@
+diff --git a/src/diff/mod.rs b/src/diff/mod.rs
+index 2781ce0..56ac22b 100644
+--- a/src/diff/mod.rs
++++ b/src/diff/mod.rs
+@@ -196,6 +196,9 @@ type MarkerRenderer = Rc<dyn Fn(&DiffGutterMarker, &mut Window, &mut App) -> Any
+ type RangeHandler = Rc<dyn Fn(&DiffLineRange, &mut Window, &mut App)>;
+ type ClickHandler = Rc<dyn Fn(&DiffLinePosition, &ClickEvent, &mut Window, &mut App)>;
+ type HoverHandler = Rc<dyn Fn(Option<&DiffLinePosition>, &mut Window, &mut App)>;
++type PressHandler = Rc<dyn Fn(&DiffLinePosition, &mut Window, &mut App)>;
++type HunkPressHandler = Rc<dyn Fn(&SharedString, usize, &mut Window, &mut App)>;
++type HunkRenderer = Rc<dyn Fn(&DiffFile, usize, &mut Window, &mut App) -> AnyElement>;
+ 
+ #[derive(Default)]
+ struct HeaderSlots {
+@@ -237,9 +240,12 @@ pub struct Diff {
+     decorations: Rc<Decorations>,
+     gutter_markers: Rc<GutterMarkers>,
+     gutter_marker_content: Option<MarkerRenderer>,
++    hunk_suffix: Option<HunkRenderer>,
+     on_add_annotation: Option<RangeHandler>,
+     on_line_click: Option<ClickHandler>,
+     on_line_hover: Option<HoverHandler>,
++    on_line_secondary_press: Option<PressHandler>,
++    on_hunk_secondary_press: Option<HunkPressHandler>,
+ }
+ 
+ fn file_renderer<F, E>(render: F) -> FileRenderer
+@@ -269,9 +275,12 @@ impl Diff {
+             decorations: Rc::default(),
+             gutter_markers: Rc::default(),
+             gutter_marker_content: None,
++            hunk_suffix: None,
+             on_add_annotation: None,
+             on_line_click: None,
+             on_line_hover: None,
++            on_line_secondary_press: None,
++            on_hunk_secondary_press: None,
+         }
+     }
+     /// Shows the original and modified line-number lanes. Default is true.
+@@ -415,6 +424,19 @@ impl Diff {
+         self.header.suffix = Some(file_renderer(render));
+         self
+     }
++    /// Inserts trailing content at the end of each hunk separator, such as
++    /// actions on that hunk. The renderer receives the file and the index of
++    /// the hunk among its `@@` hunks, in patch order.
++    pub fn render_hunk_suffix<F, E>(mut self, render: F) -> Self
++    where
++        F: Fn(&DiffFile, usize, &mut Window, &mut App) -> E + 'static,
++        E: IntoElement,
++    {
++        self.hunk_suffix = Some(Rc::new(move |file, hunk, window, cx| {
++            render(file, hunk, window, cx).into_any_element()
++        }));
++        self
++    }
+     /// Compatibility alias for [`Self::render_annotation`].
+     pub fn annotation_content<F, E>(self, render: F) -> Self
+     where
+@@ -486,6 +508,26 @@ impl Diff {
+         self.on_line_hover = Some(Rc::new(handler));
+         self
+     }
++    /// Reports the line a right press lands on. It runs before an enclosing
++    /// [`crate::menu::ContextMenuExt::context_menu`] builds its items, so the
++    /// menu can act on that line without tracking hover.
++    pub fn on_line_secondary_press<F>(mut self, handler: F) -> Self
++    where
++        F: Fn(&DiffLinePosition, &mut Window, &mut App) + 'static,
++    {
++        self.on_line_secondary_press = Some(Rc::new(handler));
++        self
++    }
++    /// Reports the hunk separator a right press lands on, with the
++    /// [`DiffFile::path`] of its file and the index of the hunk in patch order,
++    /// like [`Self::on_line_secondary_press`] does for lines.
++    pub fn on_hunk_secondary_press<F>(mut self, handler: F) -> Self
++    where
++        F: Fn(&SharedString, usize, &mut Window, &mut App) + 'static,
++    {
++        self.on_hunk_secondary_press = Some(Rc::new(handler));
++        self
++    }
+ }
+ impl Styled for Diff {
+     fn style(&mut self) -> &mut StyleRefinement {
+@@ -586,10 +628,13 @@ fn render_diff(
+         decorations: props.decorations,
+         gutter_markers: props.gutter_markers,
+         gutter_marker_content: props.gutter_marker_content.filter(|_| marker_lane),
++        hunk_suffix: props.hunk_suffix,
+         lane_width,
+         on_add_annotation: props.on_add_annotation,
+         on_line_click: props.on_line_click,
+         on_line_hover: props.on_line_hover,
++        on_line_secondary_press: props.on_line_secondary_press,
++        on_hunk_secondary_press: props.on_hunk_secondary_press,
+         selection: state.selection().clone(),
+         selected_lines: state.selected_lines(),
+         selected: state.selected_span(),
+@@ -834,10 +879,13 @@ struct CodePresentation {
+     gutter_markers: Rc<GutterMarkers>,
+     /// Set only while the marker lane is shown.
+     gutter_marker_content: Option<MarkerRenderer>,
++    hunk_suffix: Option<HunkRenderer>,
+     lane_width: Pixels,
+     on_add_annotation: Option<RangeHandler>,
+     on_line_click: Option<ClickHandler>,
+     on_line_hover: Option<HoverHandler>,
++    on_line_secondary_press: Option<PressHandler>,
++    on_hunk_secondary_press: Option<HunkPressHandler>,
+     selection: gpui_base::TextSelectionHandle,
+     selected_lines: Option<DiffLineRange>,
+     selected: Option<SelectedLines>,
+@@ -948,7 +996,7 @@ fn render_row(
+     match row {
+         DisplayRow::File(file) => render_file_header(*file, &code, window, cx),
+         DisplayRow::Notice(file) => render_notice(&code.files[*file], cx),
+-        DisplayRow::Hunk { file, hunk } => render_hunk_separator(*file, *hunk, &code, cx),
++        DisplayRow::Hunk { file, hunk } => render_hunk_separator(*file, *hunk, &code, window, cx),
+         DisplayRow::Fold { file, pairs } => render_fold(*file, pairs.clone(), &code, cx),
+         DisplayRow::Conflict {
+             file,
+@@ -1011,31 +1059,48 @@ fn render_hunk_separator(
+     file: usize,
+     hunk: usize,
+     code: &CodePresentation,
+-    cx: &App,
++    window: &mut Window,
++    cx: &mut App,
+ ) -> AnyElement {
+     let hunks = code.files[file].hunks();
+     let row = h_flex()
+         .w_full()
+         .px_3()
++        .gap_3()
+         .bg(cx.theme().muted.opacity(0.35))
+         .text_xs()
+-        .text_color(cx.theme().muted_foreground);
+-    match code.hunk_separator {
+-        DiffHunkSeparator::Metadata => row
+-            .h_6()
+-            .child(hunks[hunk].label().clone())
+-            .into_any_element(),
++        .text_color(cx.theme().muted_foreground)
++        .when_some(code.on_hunk_secondary_press.clone(), |row, handler| {
++            let path = code.files[file].path().clone();
++            row.on_mouse_down(MouseButton::Right, move |_, window, cx| {
++                handler(&path, hunk, window, cx)
++            })
++        });
++    let label = match code.hunk_separator {
++        DiffHunkSeparator::Metadata => Some(hunks[hunk].label().to_string()),
+         DiffHunkSeparator::LineInfo => {
+             let hidden = hunks[hunk].hidden_lines_before(hunk.checked_sub(1).map(|ix| &hunks[ix]));
+-            if hidden == 0 {
+-                return div().into_any_element();
+-            }
+-            row.h_6()
+-                .child(t!("Diff.HiddenLines", count = hidden).to_string())
+-                .into_any_element()
++            (hidden > 0).then(|| t!("Diff.HiddenLines", count = hidden).to_string())
+         }
+-        DiffHunkSeparator::Simple => row.h_1().into_any_element(),
++        DiffHunkSeparator::Simple => return row.h_1().into_any_element(),
++    };
++    let suffix = code
++        .hunk_suffix
++        .as_ref()
++        .map(|render| render(&code.files[file], hunk, window, cx));
++    if label.is_none() && suffix.is_none() {
++        return div().into_any_element();
+     }
++    row.h_6()
++        .child(
++            div()
++                .flex_1()
++                .min_w_0()
++                .truncate()
++                .children(label),
++        )
++        .children(suffix.map(|suffix| h_flex().flex_none().mr_neg_2().child(suffix)))
++        .into_any_element()
+ }
+ 
+ fn render_fold(
+@@ -1824,6 +1889,12 @@ fn code_line(
+                 handler(hovered.then_some(&position), window, cx)
+             })
+         })
++        .when_some(code.on_line_secondary_press.clone(), |this, handler| {
++            let position = position.clone();
++            this.on_mouse_down(MouseButton::Right, move |_, window, cx| {
++                handler(&position, window, cx)
++            })
++        })
+         .when(code.line_number, |this| {
+             this.children(
+                 gutters
+diff --git a/src/diff/state.rs b/src/diff/state.rs
+index fb309b8..f2ba66e 100644
+--- a/src/diff/state.rs
++++ b/src/diff/state.rs
+@@ -635,6 +635,26 @@ impl DiffState {
+         cx.notify();
+     }
+ 
++    /// Replaces the files like [`Self::set_files`], but keeps the viewport:
++    /// the source line at its top stays there while the new files still show
++    /// it, and the same row stays at the top otherwise.
++    pub fn refresh_files(
++        &mut self,
++        files: impl IntoIterator<Item = DiffFile>,
++        cx: &mut Context<Self>,
++    ) {
++        let top = self.list.logical_scroll_top();
++        let anchor = self.row_position(top.item_ix);
++        self.set_files(files, cx);
++        let anchored = anchor.and_then(|anchor| self.source_row(&anchor));
++        let item_ix = anchored.unwrap_or(top.item_ix.min(self.rows.len().saturating_sub(1)));
++        self.list.scroll_to(ListOffset {
++            item_ix,
++            offset_in_item: top.offset_in_item,
++        });
++        cx.notify();
++    }
++
+     /// Changes the display mode while preserving source-line selection and a
+     /// nearby source row.
+     pub fn set_mode(&mut self, mode: DiffMode, cx: &mut Context<Self>) {

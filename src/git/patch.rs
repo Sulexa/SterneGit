@@ -6,7 +6,8 @@ use gpui_kit::SharedString;
 
 use super::{
     ChangeKind, FileChange, Repo, Side,
-    command::{Exit, READ_ONLY, run_text},
+    command::{Exit, READ_ONLY, run, run_text},
+    hunks::Hunks,
     text::decode,
 };
 
@@ -49,7 +50,10 @@ pub(crate) struct CommitDetails {
 }
 
 pub(crate) enum FilePatch {
-    Diff(String),
+    Diff {
+        text: String,
+        hunks: Option<Hunks>,
+    },
     Conflicted {
         path: SharedString,
         contents: String,
@@ -68,23 +72,40 @@ impl Repo {
 
     pub(crate) fn file_patch(&self, change: &FileChange, side: Side) -> Result<FilePatch> {
         let paths: Vec<&OsStr> = change.exact_paths().collect();
+        let split = change.kind == ChangeKind::Modified;
         match (change.kind, side) {
             (ChangeKind::Conflicted, _) => self.conflicted_file(change),
             (ChangeKind::Untracked, _) => self.diff(
                 &["--no-index"],
                 &[OsStr::new(NOTHING), change.exact_path()],
                 Exit::SuccessOrDifference,
+                false,
             ),
-            (_, Side::Staged) => self.diff(&["--cached", "--find-renames"], &paths, Exit::Success),
-            (_, Side::Unstaged) => self.diff(&[], &paths, Exit::Success),
+            (_, Side::Staged) => self.diff(
+                &["--cached", "--find-renames"],
+                &paths,
+                Exit::Success,
+                split,
+            ),
+            (_, Side::Unstaged) => self.diff(&[], &paths, Exit::Success, split),
         }
     }
 
-    fn diff(&self, options: &[&str], paths: &[&OsStr], exit: Exit) -> Result<FilePatch> {
+    fn diff(
+        &self,
+        options: &[&str],
+        paths: &[&OsStr],
+        exit: Exit,
+        split: bool,
+    ) -> Result<FilePatch> {
         let mut args: Vec<&OsStr> = FILE_PATCH.iter().chain(options).map(OsStr::new).collect();
         args.push(OsStr::new("--"));
         args.extend(paths);
-        Ok(FilePatch::Diff(run_text(&self.location, &args, exit)?))
+        let patch = run(&self.location, &args, exit)?;
+        Ok(FilePatch::Diff {
+            text: decode(&patch),
+            hunks: split.then(|| Hunks::parse(&patch)).flatten(),
+        })
     }
 
     fn conflicted_file(&self, change: &FileChange) -> Result<FilePatch> {

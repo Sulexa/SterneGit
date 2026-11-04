@@ -5,7 +5,7 @@ use gpui_kit::{
 };
 
 use crate::{
-    git::{ChangeKind, FilePatch},
+    git::{ChangeKind, FilePatch, Hunks},
     ui::{self, Load},
 };
 
@@ -90,13 +90,24 @@ pub(crate) fn parse_patch(patch: &str) -> anyhow::Result<Vec<DiffFile>> {
     DiffFile::parse(patch).map_err(|error| anyhow::anyhow!("{error}"))
 }
 
-pub(crate) fn file_patch_files(patch: FilePatch) -> anyhow::Result<Vec<DiffFile>> {
+pub(crate) struct WorkingPatch {
+    pub(crate) files: Vec<DiffFile>,
+    pub(crate) hunks: Option<Hunks>,
+}
+
+pub(crate) fn working_patch(patch: FilePatch) -> anyhow::Result<WorkingPatch> {
     match patch {
-        FilePatch::Diff(text) => parse_patch(&text),
-        FilePatch::Conflicted { path, contents } => Ok(vec![
-            DiffFile::parse_conflicts(&path, &contents)
-                .unwrap_or_else(|_| DiffFile::unchanged(&path, &contents)),
-        ]),
+        FilePatch::Diff { text, hunks } => Ok(WorkingPatch {
+            files: parse_patch(&text)?,
+            hunks,
+        }),
+        FilePatch::Conflicted { path, contents } => Ok(WorkingPatch {
+            files: vec![
+                DiffFile::parse_conflicts(&path, &contents)
+                    .unwrap_or_else(|_| DiffFile::unchanged(&path, &contents)),
+            ],
+            hunks: None,
+        }),
     }
 }
 
@@ -104,7 +115,7 @@ pub(crate) fn file_patch_files(patch: FilePatch) -> anyhow::Result<Vec<DiffFile>
 mod tests {
     use anyhow::Result;
 
-    use super::{PatchStats, change_kind, file_patch_files, parse_patch, renamed_from};
+    use super::{PatchStats, change_kind, parse_patch, renamed_from, working_patch};
     use crate::git::{
         ChangeKind, Side,
         scratch::{DEFAULT_BRANCH, ScratchRepo},
@@ -123,7 +134,7 @@ mod tests {
         )?;
         let (repo, _) = scratch.open()?;
         let untracked = repo.status()?.unstaged[0].clone();
-        let files = file_patch_files(repo.file_patch(&untracked, Side::Unstaged)?)?;
+        let files = working_patch(repo.file_patch(&untracked, Side::Unstaged)?)?.files;
         assert_eq!(counts(PatchStats::of(&files)), (1, 1, 0));
 
         scratch.git(&["add", "a.txt"])?;
@@ -136,7 +147,7 @@ two
         scratch.git(&["add", "a.txt"])?;
         let (repo, history) = scratch.open()?;
         let staged = repo.status()?.staged[0].clone();
-        let files = file_patch_files(repo.file_patch(&staged, Side::Staged)?)?;
+        let files = working_patch(repo.file_patch(&staged, Side::Staged)?)?.files;
         assert_eq!(counts(PatchStats::of(&files)), (1, 1, 0));
 
         let first = repo.commit_details(history.commits[0].id)?;
@@ -277,7 +288,7 @@ five
             .into_iter()
             .find(|change| change.kind == ChangeKind::Conflicted)
             .expect("a.txt is conflicted");
-        let files = file_patch_files(repo.file_patch(&conflicted, Side::Unstaged)?)?;
+        let files = working_patch(repo.file_patch(&conflicted, Side::Unstaged)?)?.files;
         assert_eq!(files.len(), 1);
         assert_eq!(files[0].conflicts().len(), 1);
         Ok(())

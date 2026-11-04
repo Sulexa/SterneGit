@@ -1,7 +1,7 @@
 use anyhow::Result;
 
 use super::{
-    FileChange, Repo,
+    ChangeKind, FileChange, Repo,
     command::{Exit, run, run_with_input},
 };
 
@@ -39,6 +39,16 @@ impl Repo {
         } else {
             self.update_index(&["rm", "--cached", "-r", "--quiet"], names, Some("."))
         }
+    }
+
+    pub(crate) fn discard(&self, change: &FileChange) -> Result<()> {
+        if change.kind == ChangeKind::Untracked {
+            return Ok(std::fs::remove_file(
+                self.location.join(change.exact_path()),
+            )?);
+        }
+        let names = nul_separated([change.name_as_git_wrote_it()]);
+        self.update_index(&["checkout", "--quiet"], Some(names), None)
     }
 
     fn update_index(
@@ -80,7 +90,7 @@ mod tests {
     use crate::git::{ChangeKind, FilePatch, Side, scratch::ScratchRepo};
 
     fn added_and_removed(patch: &FilePatch) -> (usize, usize) {
-        let FilePatch::Diff(text) = patch else {
+        let FilePatch::Diff { text, .. } = patch else {
             panic!("expected a diff");
         };
         let lines = text

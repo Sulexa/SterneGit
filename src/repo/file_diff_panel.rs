@@ -1,12 +1,17 @@
+use std::sync::Arc;
+
 use gpui_kit::{
-    AnyElement, AppContext as _, Context, Entity, EventEmitter, IntoElement, ParentElement as _,
-    Render, SharedString, Styled as _, Subscription, Window,
+    AnyElement, AppContext as _, Context, Entity, EventEmitter, InteractiveElement as _,
+    IntoElement, MouseButton, MouseDownEvent, ParentElement as _, Render, SharedString,
+    Styled as _, Subscription, Window,
     assets::IconName,
     component::{
         ActiveTheme as _, Disableable as _, Selectable as _, Sizable as _,
         button::{Button, ButtonVariants as _},
-        diff::{Diff, DiffFile, DiffMode, DiffState},
-        h_flex, v_flex,
+        diff::{Diff, DiffFile, DiffHoverHighlight, DiffMode, DiffState},
+        h_flex,
+        menu::ContextMenuExt as _,
+        v_flex,
     },
     div,
     prelude::FluentBuilder as _,
@@ -15,16 +20,17 @@ use gpui_kit::{
 
 use super::{
     Repository,
+    hunk_actions::{HunkActions, Offers, Pressed, line_at, line_span},
     navigation::OpenFile,
     patch_view::{
-        PatchStats, PatchTexts, RedrawAfterMeasuring, change_kind, file_patch_files, patch_content,
-        renamed_from,
+        PatchStats, PatchTexts, RedrawAfterMeasuring, change_kind, patch_content, renamed_from,
+        working_patch,
     },
 };
 use crate::{
     actions::{CloseDiff, WINDOW_CONTEXT},
-    git::{ChangeKind, FileChange, Repo, Scope, Side},
-    ui::{self, Load, Look as _, SideUi as _, change_badge, run_in_background},
+    git::{ChangeKind, FileChange, Hunks, Part, PartAction, Repo, Scope, Side},
+    ui::{self, Load, Look as _, SideUi as _, change_badge, handler, run_in_background},
 };
 
 const TEXTS: PatchTexts = PatchTexts {
@@ -45,6 +51,11 @@ enum Compared {
     },
 }
 
+struct WorkingParts {
+    side: Side,
+    hunks: Arc<Hunks>,
+}
+
 struct Heading {
     kind: ChangeKind,
     path: SharedString,
@@ -57,6 +68,8 @@ pub(crate) struct FileDiffPanel {
     compared: Option<Compared>,
     patch: Load<PatchStats>,
     diff: Entity<DiffState>,
+    parts: Option<WorkingParts>,
+    pressed: Option<Pressed>,
     redraw_after_measuring: RedrawAfterMeasuring,
     _diff_changed: Subscription,
 }
@@ -72,6 +85,8 @@ impl FileDiffPanel {
             compared: None,
             patch: Load::Idle,
             diff,
+            parts: None,
+            pressed: None,
             redraw_after_measuring: RedrawAfterMeasuring::default(),
             _diff_changed: diff_changed,
         }
@@ -89,23 +104,38 @@ impl FileDiffPanel {
             path: change.path.clone(),
         };
         let repo = repo.clone();
+        let reload = matches!(&self.compared, Some(Compared::WorkingFile(shown)) if *shown == file);
         let task = run_in_background(
             cx,
-            move || file_patch_files(repo.file_patch(&change, side)?),
-            |this, result, cx| {
-                let stats = result.map(|files| {
-                    let stats = PatchStats::of(&files);
-                    this.diff.update(cx, |state, cx| state.set_files(files, cx));
+            move || working_patch(repo.file_patch(&change, side)?),
+            move |this, result, cx| {
+                let stats = result.map(|patch| {
+                    let stats = PatchStats::of(&patch.files);
+                    this.parts = patch.hunks.map(|hunks| WorkingParts {
+                        side,
+                        hunks: Arc::new(hunks),
+                    });
+                    this.diff.update(cx, |state, cx| {
+                        if reload {
+                            state.refresh_files(patch.files, cx)
+                        } else {
+                            state.set_files(patch.files, cx)
+                        }
+                    });
                     this.redraw_after_measuring.files_changed();
                     stats
                 });
+                if stats.is_err() {
+                    this.parts = None;
+                }
                 this.patch.finish(stats);
                 cx.notify();
             },
         );
-        if matches!(&self.compared, Some(Compared::WorkingFile(shown)) if *shown == file) {
+        if reload {
             self.patch.reload(task);
         } else {
+            self.parts = None;
             self.diff.update(cx, |state, cx| state.set_files([], cx));
             self.patch.load(task);
         }
@@ -124,12 +154,15 @@ impl FileDiffPanel {
             .update(cx, |state, cx| state.set_files([file.clone()], cx));
         self.redraw_after_measuring.files_changed();
         self.patch = Load::Ready(stats);
+        self.parts = None;
         self.compared = Some(Compared::CommitFile { short_id, file });
         cx.notify();
     }
 
     pub(crate) fn close(&mut self, cx: &mut Context<Self>) {
         if self.compared.take().is_some() {
+            self.parts = None;
+            self.pressed = None;
             self.patch.clear();
             self.diff.update(cx, |state, cx| state.set_files([], cx));
             cx.notify();
@@ -156,6 +189,81 @@ impl FileDiffPanel {
                 repository.move_across(open.side, Scope::Files(vec![change]), cx)
             });
         }
+    }
+
+    fn apply(&mut self, action: PartAction, part: &Part, cx: &mut Context<Self>) {
+        let Some(patch) = self
+            .parts
+            .as_ref()
+            .and_then(|parts| parts.hunks.patch(part, action))
+        else {
+            return;
+        };
+        self.repository.update(cx, |repository, cx| {
+            repository.apply_part(action, patch, cx)
+        });
+    }
+
+    fn hunk_actions(&self, cx: &mut Context<Self>) -> Option<HunkActions> {
+        let parts = self
+            .parts
+            .as_ref()
+            .filter(|_| matches!(self.compared, Some(Compared::WorkingFile(_))))?;
+        let selection = self
+            .diff
+            .read(cx)
+            .selected_lines()
+            .map(|range| line_span(&range));
+        let enabled = !self.repository.read(cx).is_writing() && !self.patch.is_loading();
+        let on_apply = handler(
+            cx.listener(|this, (action, part): &(PartAction, Part), _, cx| {
+                this.apply(*action, part, cx)
+            }),
+        );
+        Some(HunkActions::new(
+            Offers::new(parts.hunks.clone(), parts.side, selection),
+            enabled,
+            on_apply,
+        ))
+    }
+
+    fn diff_view(&self, actions: Option<HunkActions>, cx: &mut Context<Self>) -> AnyElement {
+        let diff = Diff::new(&self.diff)
+            .line_number(true)
+            .soft_wrap(true)
+            .header_visible(false)
+            .border_0();
+        let Some(actions) = actions else {
+            return diff.into_any_element();
+        };
+        let panel = cx.entity().downgrade();
+        let on_line = panel.clone();
+        let on_hunk = panel.clone();
+        let buttons = actions.clone();
+        let diff = diff
+            .hover_highlight(DiffHoverHighlight::Line)
+            .on_line_secondary_press(move |position, _, cx| {
+                let pressed = Pressed::Line(line_at(position));
+                let _ = on_line.update(cx, |this, _| this.pressed = Some(pressed));
+            })
+            .on_hunk_secondary_press(move |_, hunk, _, cx| {
+                let _ = on_hunk.update(cx, |this, _| this.pressed = Some(Pressed::Hunk(hunk)));
+            })
+            .render_hunk_suffix(move |_, hunk, _, _| buttons.buttons(hunk));
+        div()
+            .id("working-diff")
+            .size_full()
+            .capture_any_mouse_down(cx.listener(|this, event: &MouseDownEvent, _, _| {
+                if event.button == MouseButton::Right {
+                    this.pressed = None;
+                }
+            }))
+            .child(diff)
+            .context_menu(move |menu, _, cx| {
+                let at = panel.upgrade().and_then(|panel| panel.read(cx).pressed);
+                actions.menu(menu, at)
+            })
+            .into_any_element()
     }
 
     fn move_button(&self, open: &OpenFile, listed: bool, cx: &mut Context<Self>) -> AnyElement {
@@ -254,18 +362,17 @@ impl Render for FileDiffPanel {
                     .tooltip_with_action("Back to the graph", &CloseDiff, Some(WINDOW_CONTEXT))
                     .on_click(cx.listener(|_, _, _, cx| cx.emit(CloseFileDiff))),
             );
+        let actions = self.hunk_actions(cx);
+        let diff_view = self
+            .patch
+            .value()
+            .is_some()
+            .then(|| self.diff_view(actions, cx));
         let content = patch_content(
             &self.patch,
             |stats| *stats,
             &TEXTS,
-            |_| {
-                Diff::new(&self.diff)
-                    .line_number(true)
-                    .soft_wrap(true)
-                    .header_visible(false)
-                    .border_0()
-                    .into_any_element()
-            },
+            |_| diff_view.unwrap_or_else(|| div().into_any_element()),
             cx,
         );
         v_flex()

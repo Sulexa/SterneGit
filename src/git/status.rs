@@ -116,12 +116,14 @@ impl StatusDigest {
     fn of(
         status: &[u8],
         head: Option<ObjectId>,
+        index: &Path,
         work_tree: &Path,
         unstaged: &[FileChange],
     ) -> Self {
         let mut hasher = DefaultHasher::new();
         status.hash(&mut hasher);
         head.hash(&mut hasher);
+        hash_size_and_modified_time(index, &mut hasher);
         for change in unstaged {
             hash_size_and_modified_time(&work_tree.join(change.exact_path()), &mut hasher);
         }
@@ -175,12 +177,14 @@ impl Repo {
             ],
             Exit::Success,
         )?;
-        let head_after_status = self.local().head_id().ok().map(|id| id.detach());
+        let local = self.local();
+        let head_after_status = local.head_id().ok().map(|id| id.detach());
         let mut changes = parse_status(&output);
         changes.head = head_after_status;
         changes.digest = StatusDigest::of(
             &output,
             head_after_status,
+            &local.index_path(),
             &self.location,
             &changes.unstaged,
         );
@@ -238,7 +242,7 @@ mod tests {
     use anyhow::Result;
 
     use super::{ChangeKind, FileChange, parse_status};
-    use crate::git::scratch::ScratchRepo;
+    use crate::git::{FilePatch, PartAction, Side, scratch::ScratchRepo};
 
     #[test]
     fn status_splits_staged_and_unstaged_changes() {
@@ -299,6 +303,44 @@ mod tests {
         );
         assert_ne!(before.head, after.head);
         assert_ne!(before.digest, after.digest);
+        Ok(())
+    }
+
+    #[test]
+    fn staging_more_of_a_file_already_in_both_lists_changes_the_digest() -> Result<()> {
+        let scratch = ScratchRepo::new("stage-more")?;
+        let lines = |edited: &[usize]| -> String {
+            (1..=20)
+                .map(|n| match edited.contains(&n) {
+                    true => format!("edited {n}\n"),
+                    false => format!("line {n}\n"),
+                })
+                .collect()
+        };
+        scratch.write("a.txt", &lines(&[]))?;
+        scratch.git(&["add", "a.txt"])?;
+        scratch.commit("first")?;
+        scratch.write("a.txt", &lines(&[2, 10, 18]))?;
+        let (repo, _) = scratch.open()?;
+        let stage_first_hunk = || -> Result<()> {
+            let change = repo.status()?.unstaged[0].clone();
+            let FilePatch::Diff {
+                hunks: Some(hunks), ..
+            } = repo.file_patch(&change, Side::Unstaged)?
+            else {
+                anyhow::bail!("expected hunks");
+            };
+            let patch = hunks.patch(&hunks.hunk(0), PartAction::Stage);
+            repo.apply_part(PartAction::Stage, &patch.expect("a hunk"))
+        };
+        stage_first_hunk()?;
+        let first = repo.status()?;
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        stage_first_hunk()?;
+        let second = repo.status()?;
+        assert_eq!(first.unstaged, second.unstaged);
+        assert_eq!(first.staged, second.staged);
+        assert_ne!(first.digest, second.digest);
         Ok(())
     }
 

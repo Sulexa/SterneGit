@@ -180,37 +180,79 @@ const Sample = (() => {
     hunks: commitFile.hunks,
   };
 
-  const fileDiff = {
-    change: { kind: 'M', path: 'src/git/patch.rs' },
-    side: 'unstaged',
-    additions: 9,
-    deletions: 1,
-    hunks: [
-      {
-        header: '@@ -14,10 +14,17 @@ pub(crate) enum FilePatch {',
-        lines: [
-          [' ', 14, 14, 'impl Repo {'],
-          [' ', 15, 15, '    pub(crate) fn file_patch(&self, change: &FileChange, side: Side) -> Result<FilePatch> {'],
-          ['-', 16, null, '        let args = diff_args(change, side);'],
-          ['+', null, 16, '        if change.kind == ChangeKind::Conflicted {'],
-          ['+', null, 17, '            return self.conflicted(change);'],
-          ['+', null, 18, '        }'],
-          ['+', null, 19, '        let args = diff_args(change, side)?;'],
-          [' ', 17, 20, '        let output = self.git(&args)?;'],
-          [' ', 18, 21, '        Ok(FilePatch::Diff(output))'],
-          [' ', 19, 22, '    }'],
-          [' ', 20, 23, ''],
-          ['+', null, 24, '    fn conflicted(&self, change: &FileChange) -> Result<FilePatch> {'],
-          ['+', null, 25, '        let contents = std::fs::read_to_string(self.workdir().join(&change.path))?;'],
-          ['+', null, 26, '        Ok(FilePatch::Conflicted { path: change.path.clone(), contents })'],
-          ['+', null, 27, '    }'],
-          ['+', null, 28, ''],
-          [' ', 21, 29, '    fn untracked(&self, path: &str) -> Result<String> {'],
-          [' ', 22, 30, '        let null = if cfg!(windows) { "NUL" } else { "/dev/null" };'],
-        ],
-      },
-    ],
+  const hunk = (oldStart, newStart, scope, lines) => {
+    let oldNo = oldStart;
+    let newNo = newStart;
+    const numbered = lines.map(([sign, text]) => [sign, sign === '+' ? null : oldNo++, sign === '-' ? null : newNo++, text]);
+    const oldCount = lines.filter(([sign]) => sign !== '+').length;
+    const newCount = lines.filter(([sign]) => sign !== '-').length;
+    return { header: `@@ -${oldStart},${oldCount} +${newStart},${newCount} @@ ${scope}`, lines: numbered };
   };
+
+  const counts = (hunks) => {
+    const lines = hunks.flatMap((h) => h.lines);
+    return { additions: lines.filter(([sign]) => sign === '+').length, deletions: lines.filter(([sign]) => sign === '-').length };
+  };
+
+  const conflictedBranch = [
+    [' ', 'impl Repo {'],
+    [' ', '    pub(crate) fn file_patch(&self, change: &FileChange, side: Side) -> Result<FilePatch> {'],
+    ['-', '        let args = diff_args(change, side);'],
+    ['+', '        if change.kind == ChangeKind::Conflicted {'],
+    ['+', '            return self.conflicted(change);'],
+    ['+', '        }'],
+    ['+', '        let args = diff_args(change, side)?;'],
+    [' ', '        let output = self.git(&args)?;'],
+    [' ', '        Ok(FilePatch::Diff(output))'],
+    [' ', '    }'],
+  ];
+
+  const conflictedReader = [
+    [' ', '    }'],
+    [' ', ''],
+    ['+', '    fn conflicted(&self, change: &FileChange) -> Result<FilePatch> {'],
+    ['+', '        let contents = std::fs::read_to_string(self.workdir().join(&change.path))?;'],
+    ['+', '        Ok(FilePatch::Conflicted { path: change.path.clone(), contents })'],
+    ['+', '    }'],
+    ['+', ''],
+    [' ', '    fn untracked(&self, path: &str) -> Result<String> {'],
+    [' ', '        let null = if cfg!(windows) { "NUL" } else { "/dev/null" };'],
+  ];
+
+  const pathArguments = [
+    [' ', '    let mut args = vec!["diff".to_owned(), "--no-color".to_owned()];'],
+    [' ', '    if side == Side::Staged {'],
+    [' ', '        args.push("--cached".to_owned());'],
+    [' ', '    }'],
+    ['-', '    args.push("--".to_owned());'],
+    ['-', '    args.push(change.path.clone());'],
+    ['+', '    args.extend(["--".to_owned(), change.path.clone()]);'],
+    [' ', '    Ok(args)'],
+  ];
+
+  const patchFile = { kind: 'M', path: 'src/git/patch.rs' };
+
+  const workingDiff = (side, hunks) => ({ change: patchFile, side, ...counts(hunks), hunks });
+
+  const fileDiff = workingDiff('unstaged', [
+    hunk(14, 14, 'pub(crate) enum FilePatch {', conflictedBranch),
+    hunk(27, 30, 'impl Repo {', conflictedReader),
+    hunk(52, 60, 'fn diff_args(change: &FileChange, side: Side) -> Result<Vec<String>> {', pathArguments),
+  ]);
+
+  const stagedHunkDiff = workingDiff('staged', [hunk(14, 14, 'pub(crate) enum FilePatch {', conflictedBranch)]);
+
+  const partlyStagedDiff = workingDiff('unstaged', [
+    hunk(30, 30, 'impl Repo {', conflictedReader),
+    hunk(55, 60, 'fn diff_args(change: &FileChange, side: Side) -> Result<Vec<String>> {', pathArguments),
+  ]);
+
+  const partlyStaged = {
+    unstaged: changes.unstaged,
+    staged: [...changes.staged, patchFile],
+  };
+
+  const selectedLines = { hunk: 0, from: 3, to: 5 };
 
   const draft = {
     message: 'Show conflicted files in the changes list',
@@ -223,5 +265,5 @@ const Sample = (() => {
     { name: 'linux', state: 'reading' },
   ];
 
-  return { history, collapsed, changes, draft, commitDetails, commitFileDiff, fileDiff, tabs };
+  return { history, collapsed, changes, partlyStaged, draft, commitDetails, commitFileDiff, fileDiff, stagedHunkDiff, partlyStagedDiff, selectedLines, tabs };
 })();

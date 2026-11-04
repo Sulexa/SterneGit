@@ -1,5 +1,5 @@
 const Screens = (() => {
-  const { history, collapsed, changes, draft, commitDetails, commitFileDiff, fileDiff, tabs } = Sample;
+  const { history, collapsed, changes, partlyStaged, draft, commitDetails, commitFileDiff, fileDiff, partlyStagedDiff, selectedLines, tabs } = Sample;
   const selected = 2;
   const position = (row) => `Commit ${thousands(row + 1)} of ${thousands(history.total)}`;
 
@@ -34,12 +34,14 @@ const Screens = (() => {
 
   const openFile = { side: fileDiff.side, path: fileDiff.change.path };
 
-  const fileComparison = (mode) =>
+  const fileComparison = (mode, extra = {}) =>
     repo({
       wipSelected: true,
-      middle: C.FileDiffPanel({ diff: fileDiff, mode }),
-      right: C.ChangesList({ changes, open: openFile }),
+      middle: C.FileDiffPanel({ diff: extra.diff || fileDiff, mode, selection: extra.selection, pointed: extra.pointed }),
+      right: C.ChangesList({ changes: extra.changes || changes, open: openFile }),
     });
+
+  const firstUnstaged = changes.unstaged[0];
 
   return [
     {
@@ -142,18 +144,77 @@ const Screens = (() => {
         }),
     },
     {
+      id: 'file-menu',
+      title: 'Right-click on a changed file',
+      about: 'A right-click on a file in the changes list opens its menu where the pointer is: move it to the other list, discard its unstaged changes (Delete file… when Git does not track it), open it with its default app, show it in the file manager or copy its full path. A staged or conflicted file has no Discard; a deleted one has nothing to open or show.',
+      source: 'src/repo/changes_list.rs',
+      render: () =>
+        C.FastGit({
+          topBar: topBar(),
+          tabStrip: tabStrip(),
+          body: repo({
+            wipSelected: true,
+            right: C.ChangesList({ changes, pointed: { side: 'unstaged', path: firstUnstaged.path, left: 168, top: 16, hot: 'Discard changes…' } }),
+          }),
+        }),
+    },
+    {
+      id: 'discard-file',
+      title: 'Discard a file',
+      about: 'Discard changes… asks first, because Git keeps no copy of unstaged changes. Discard puts the file back as it is staged, or as it was committed when nothing of it is staged; Cancel or Esc keeps it.',
+      source: 'src/repo/changes_list.rs',
+      render: () =>
+        C.FastGit({
+          topBar: topBar(),
+          tabStrip: tabStrip(),
+          body: repo({ wipSelected: true, right: C.ChangesList({ changes }) }),
+          overlays: C.DiscardDialog({ change: firstUnstaged }),
+        }),
+    },
+    {
       id: 'file-split',
       title: 'File comparison — Split',
-      about: 'A file was clicked in the changes list. The middle pane swaps the graph for a side-by-side comparison; Esc or × goes back to the graph.',
+      about: 'A file was clicked in the changes list. The middle pane swaps the graph for a side-by-side comparison; Esc or × goes back to the graph. Each hunk header ends with Discard hunk and Stage hunk, so one part of the file can be staged or thrown away without the rest.',
       source: 'src/repo/file_diff_panel.rs',
       render: () => C.FastGit({ topBar: topBar(), tabStrip: tabStrip(), body: fileComparison('split') }),
     },
     {
       id: 'file-unified',
       title: 'File comparison — Unified',
-      about: 'The same comparison in one column, after clicking Unified.',
+      about: 'The same comparison in one column, after clicking Unified. The hunk buttons are the same.',
       source: 'src/repo/file_diff_panel.rs',
       render: () => C.FastGit({ topBar: topBar(), tabStrip: tabStrip(), body: fileComparison('unified') }),
+    },
+    {
+      id: 'file-lines',
+      title: 'File comparison — lines selected',
+      about: 'Clicking a line number selects that line; dragging over line numbers, or Shift-clicking a second one, selects more. The header of the hunk that holds them then reads Discard 3 lines and Stage 3 lines, which act on the selected changed lines only; the other hunks keep their hunk buttons.',
+      source: 'src/repo/file_diff_panel.rs',
+      render: () => C.FastGit({ topBar: topBar(), tabStrip: tabStrip(), body: fileComparison('split', { selection: selectedLines }) }),
+    },
+    {
+      id: 'line-menu',
+      title: 'Right-click on a change',
+      about: 'The line under the pointer is highlighted, and a right-click on it opens a menu where the pointer is. On a changed line it offers its hunk, then the line alone; on an unchanged line or a hunk header only the hunk; inside a selection, the selected lines first. Discarding a hunk or lines happens at once, like staging them, without asking.',
+      source: 'src/repo/file_diff_panel.rs',
+      render: () =>
+        C.FastGit({
+          topBar: topBar(),
+          tabStrip: tabStrip(),
+          body: fileComparison('split', { pointed: { hunk: 1, line: 2, left: 132, top: 12, hot: 'Stage hunk' } }),
+        }),
+    },
+    {
+      id: 'partly-staged',
+      title: 'Part of a file staged',
+      about: 'After Stage hunk on the first hunk, patch.rs is in both lists: the staged copy holds that hunk, the open unstaged comparison holds the two hunks left. Unstage hunk on the staged side brings it back.',
+      source: 'src/repo/changes_list.rs',
+      render: () =>
+        C.FastGit({
+          topBar: topBar(),
+          tabStrip: tabStrip(),
+          body: fileComparison('split', { diff: partlyStagedDiff, changes: partlyStaged }),
+        }),
     },
     {
       id: 'menu',

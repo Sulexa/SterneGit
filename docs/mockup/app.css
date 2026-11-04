@@ -24,6 +24,7 @@
   --input: #2f2f2f;
   --input-background: #151515;
   --ring: #737373;
+  --selection: #1d4ed84d;
   --blue: #60a5fa;
   --magenta: #c084fc;
   --green: #4ade80;
@@ -137,6 +138,8 @@
 .btn.primary { background: var(--primary); color: var(--primary-foreground); }
 .btn.primary:hover { background: #f5f5f5; }
 .btn.primary.disabled { background: #2e2e2e; color: #686868; opacity: 1; }
+.btn.danger { background: color-mix(in srgb, var(--danger) 18%, transparent); color: var(--danger); }
+.btn.danger:hover { background: color-mix(in srgb, var(--danger) 26%, transparent); }
 .btn.disabled { opacity: 0.5; }
 
 .window-controls {
@@ -616,6 +619,7 @@
 .diff-file + .diff-file .diff-file-header { border-top: 1px solid var(--border); }
 
 .diff-line {
+  position: relative;
   display: flex;
   min-height: 20.8px;
 }
@@ -658,6 +662,17 @@
 .diff-line.added > .sign { color: var(--green); }
 .diff-line.deleted { background: color-mix(in srgb, var(--red) 12%, transparent); }
 .diff-line.deleted > .sign { color: var(--red); }
+.diff-line.selected { background: var(--selection); }
+
+.hunk-actions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 12px;
+  margin-right: -8px;
+  color: var(--foreground);
+}
 .diff-line.blank { background: repeating-linear-gradient(135deg, transparent 0 4px, #ffffff08 4px 8px); }
 
 .diff-split-row {
@@ -685,6 +700,7 @@
   flex-direction: column;
   gap: 2px;
   padding: 4px;
+  font-family: var(--font);
   background: var(--popover);
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -738,6 +754,7 @@
 .dialog > .footer {
   display: flex;
   justify-content: flex-end;
+  gap: 8px;
   margin-top: 12px;
 }
 

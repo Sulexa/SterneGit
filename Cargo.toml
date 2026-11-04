@@ -19,3 +19,6 @@ opt-level = 2
 [profile.release]
 lto = "thin"
 strip = true
+
+[patch.crates-io]
+gpui-component = { path = "vendor/gpui-component" }

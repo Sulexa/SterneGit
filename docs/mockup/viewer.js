@@ -3,7 +3,7 @@ const Viewer = (() => {
   const ThemeTokens = [
     'background', 'foreground', 'border', 'muted', 'sidebar', 'title-bar', 'tab-bar', 'tab-active',
     'tab-foreground', 'status-bar', 'list-active', 'list-hover', 'secondary', 'secondary-hover',
-    'primary', 'primary-foreground', 'popover', 'accent', 'overlay', 'scrollbar-thumb', 'danger', 'input', 'input-background', 'ring',
+    'primary', 'primary-foreground', 'popover', 'accent', 'overlay', 'scrollbar-thumb', 'danger', 'input', 'input-background', 'ring', 'selection',
   ];
   const BaseColors = ['blue', 'magenta', 'green', 'yellow', 'cyan', 'red'];
   const KitBases = {

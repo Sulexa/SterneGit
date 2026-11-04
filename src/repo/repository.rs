@@ -7,7 +7,7 @@ use std::{
 use gpui_kit::{Context, EventEmitter, SharedString};
 
 use crate::{
-    git::{self, History, Repo, Scope, Side, WorkingChanges},
+    git::{self, FileChange, History, PartAction, Repo, Scope, Side, WorkingChanges},
     ui::{Failure, Job, Load, run_in_background},
 };
 
@@ -230,6 +230,33 @@ impl Repository {
     }
 
     pub(crate) fn move_across(&mut self, from: Side, scope: Scope, cx: &mut Context<Self>) {
+        self.write_to(
+            move |repo| match from {
+                Side::Unstaged => repo.stage(&scope),
+                Side::Staged => repo.unstage(&scope),
+            },
+            cx,
+        );
+    }
+
+    pub(crate) fn apply_part(
+        &mut self,
+        action: PartAction,
+        patch: Vec<u8>,
+        cx: &mut Context<Self>,
+    ) {
+        self.write_to(move |repo| repo.apply_part(action, &patch), cx);
+    }
+
+    pub(crate) fn discard(&mut self, change: FileChange, cx: &mut Context<Self>) {
+        self.write_to(move |repo| repo.discard(&change), cx);
+    }
+
+    fn write_to(
+        &mut self,
+        work: impl FnOnce(&Repo) -> anyhow::Result<()> + Send + 'static,
+        cx: &mut Context<Self>,
+    ) {
         if self.write.is_running() {
             return;
         }
@@ -240,10 +267,7 @@ impl Repository {
         self.status_read.cancel();
         let task = run_in_background(
             cx,
-            move || match from {
-                Side::Unstaged => repo.stage(&scope),
-                Side::Staged => repo.unstage(&scope),
-            },
+            move || work(&repo),
             |this, result, cx| {
                 this.write.finish();
                 if let Err(error) = result {

@@ -4,6 +4,7 @@ mod commit_form;
 mod commit_panel;
 mod file_diff_panel;
 mod history_list;
+mod hunk_actions;
 mod navigation;
 mod patch_view;
 mod ref_tree;
@@ -20,7 +21,7 @@ use gpui_kit::{
     Window,
     component::{
         WindowExt as _,
-        button::Button,
+        button::{Button, ButtonVariant},
         diff::DiffFile,
         resizable::{h_resizable, resizable_panel},
         v_flex,
@@ -33,7 +34,7 @@ use crate::{
     git::{FileChange, HISTORY_LIMIT, History, Scope, Side, short_id},
     ui::{self, Failure, Look as _, Notice, thousands},
 };
-use changes_list::{ChangesList, SideScrolls};
+use changes_list::{ChangesList, SideScrolls, discard_question};
 use commit_form::CommitForm;
 use commit_panel::{CommitPanel, OpenCommitFile, copy_commit_hash};
 use file_diff_panel::{CloseFileDiff, FileDiffPanel};
@@ -277,6 +278,25 @@ impl RepoView {
             .update(cx, |repository, cx| repository.move_across(from, scope, cx));
     }
 
+    fn confirm_discard(&mut self, change: FileChange, window: &mut Window, cx: &mut Context<Self>) {
+        let repository = self.repository.clone();
+        let question = discard_question(&change);
+        window.open_alert_dialog(cx, move |alert, _, _| {
+            let repository = repository.clone();
+            let change = change.clone();
+            alert
+                .confirm()
+                .title(question.title.clone())
+                .description(question.description.clone())
+                .ok_text(question.confirm)
+                .ok_variant(ButtonVariant::Danger)
+                .on_ok(move |_, _, cx| {
+                    repository.update(cx, |repository, cx| repository.discard(change.clone(), cx));
+                    true
+                })
+        });
+    }
+
     fn render_body(&self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         let repository = self.repository.read(cx);
         let Some(history) = repository.history().cloned() else {
@@ -369,6 +389,7 @@ impl RepoView {
             self.commit_form.clone(),
             self.changes_scrolls.clone(),
         )
+        .root(repository.repo().map(|repo| Arc::from(repo.location())))
         .open(open)
         .writing(repository.is_writing())
         .on_open(
@@ -378,6 +399,9 @@ impl RepoView {
         )
         .on_move(cx.listener(|this, (side, scope): &(Side, Scope), _, cx| {
             this.move_files(*side, scope.clone(), cx)
+        }))
+        .on_discard(cx.listener(|this, change: &FileChange, window, cx| {
+            this.confirm_discard(change.clone(), window, cx)
         }))
     }
 }

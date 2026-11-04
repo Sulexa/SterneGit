@@ -8,6 +8,7 @@ const IconPaths = {
   plus: '<path d="M5 12h14"/><path d="M12 5v14"/>',
   minus: '<path d="M5 12h14"/>',
   close: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+  'undo-2': '<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11"/>',
   'triangle-alert': '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
   loader: '<path d="M12 2v4"/><path d="m16.2 7.8 2.9-2.9"/><path d="M18 12h4"/><path d="m16.2 16.2 2.9 2.9"/><path d="M12 18v4"/><path d="m4.9 19.1 2.9-2.9"/><path d="M2 12h4"/><path d="m4.9 4.9 2.9 2.9"/>',
   'chevron-down': '<path d="m6 9 6 6 6-6"/>',
@@ -63,6 +64,7 @@ const SideLabels = {
     fileTooltip: 'Stage file',
     openFileTooltip: 'Stage this file',
     icon: 'plus',
+    discards: true,
   },
   staged: {
     files: 'Staged files',
@@ -72,7 +74,18 @@ const SideLabels = {
     fileTooltip: 'Unstage file',
     openFileTooltip: 'Unstage this file',
     icon: 'minus',
+    discards: false,
   },
+};
+
+const lineCount = (n) => counted(n, 'line', 'lines');
+
+const PartLabels = {
+  hunk: (verb) => `${verb} hunk`,
+  line: (verb) => `${verb} this line`,
+  lines: (verb, n) => `${verb} ${lineCount(n)}`,
+  hunkTooltip: { Stage: 'Stage this hunk', Unstage: 'Unstage this hunk', Discard: 'Throw away this hunk' },
+  linesTooltip: { Stage: 'Stage the selected lines', Unstage: 'Unstage the selected lines', Discard: 'Throw away the selected lines' },
 };
 
 const Menus = {
@@ -112,6 +125,11 @@ const Texts = {
   nothingStaged: 'Stage files to commit them.',
   nothingUnstaged: 'Every change is staged.',
   aboutDescription: 'A lightweight Git client for Linux, macOS and Windows, built with GPUI and gitoxide.',
+  discardTitle: (name) => `Discard the changes to ${name}?`,
+  discardDescription: (path) => `The unstaged changes in ${path} are thrown away. Git keeps no copy of them, so this can't be undone.`,
+  deleteTitle: (name) => `Delete ${name}?`,
+  deleteDescription: (path) => `${path} isn't tracked by Git, so it can't be brought back once deleted.`,
+  pathCopied: 'Path copied',
   historyLimit: 10000,
 };
 
@@ -220,6 +238,30 @@ function pairLines(lines) {
   return rows;
 }
 
+function selectedEntries(hunks, selection) {
+  if (!selection) return new Set();
+  return new Set(hunks[selection.hunk].lines.slice(selection.from, selection.to + 1));
+}
+
+function selectionSize(selection) {
+  return selection ? selection.to - selection.from + 1 : 0;
+}
+
+function lineMenuItems({ side, selected = 0, changed = true }) {
+  const { verb, discards } = SideLabels[side];
+  const pair = (label) => [[label(verb), ''], discards && [label('Discard'), '']].filter(Boolean);
+  const hunk = pair(PartLabels.hunk);
+  if (selected) return [...pair((action) => PartLabels.lines(action, selected)), '-', ...hunk];
+  return changed ? [...hunk, '-', ...pair(PartLabels.line)] : hunk;
+}
+
+function fileMenuItems({ change, side }) {
+  const labels = SideLabels[side];
+  const discard = labels.discards && change.kind !== 'U' && [change.kind === '?' ? 'Delete file…' : 'Discard changes…', ''];
+  const onDisk = change.kind !== 'D' && [['Open file', ''], ['Show in folder', '']];
+  return [[labels.fileTooltip, ''], discard, '-', ...(onDisk || []), ['Copy path', '']].filter(Boolean);
+}
+
 const C = {
   Button({ label, icon: iconName, variant = 'default', size = 'xs', selected = false, disabled = false, loading = false, tooltip }) {
     const classes = ['btn', variant, size, selected && 'selected', disabled && 'disabled', !label && 'icon-only']
@@ -293,7 +335,8 @@ const C = {
   ListRow({ content, selected = false, extraClass = '', name = 'ListRow', base }) {
     const shownBase = base || (name === 'ListRow' ? '' : 'ListRow');
     const baseAttribute = shownBase ? ` data-base="${shownBase}"` : '';
-    return `<div data-c="${name}"${baseAttribute} class="list-row${selected ? ' selected' : ''}${extraClass ? ` ${extraClass}` : ''}">${content}</div>`;
+    const classes = ['list-row', selected && 'selected', extraClass].filter(Boolean).join(' ');
+    return `<div data-c="${name}"${baseAttribute} class="${classes}">${content}</div>`;
   },
 
   SectionHeader({ title, count, action, open }) {
@@ -425,33 +468,60 @@ const C = {
     return `<div data-c="HistoryList" class="history v">${wip}<div class="fill" style="position:relative;overflow:hidden">${rows}<div class="scrollbar" style="top:2px;height:${thumb}px"></div></div></div>`;
   },
 
-  DiffView({ files, mode = 'unified', header = true }) {
-    const line = (entry, side) => {
+  DiffView({ files, mode = 'unified', header = true, actions, selection, pointed, menu = '' }) {
+    const line = (entry, side, marks) => {
       if (!entry) return '<div class="diff-line blank"><span class="number"></span><span class="sign"></span><span class="text"></span></div>';
       const [sign, oldNo, newNo, text] = entry;
-      const kind = sign === '+' ? ' added' : sign === '-' ? ' deleted' : '';
+      const kind = sign === '+' ? 'added' : sign === '-' ? 'deleted' : '';
+      const pointedSide = pointed && (pointed.side || (sign === '-' ? 'old' : 'new'));
+      const anchored = entry === marks.pointed && (side === 'both' || side === pointedSide);
+      const classes = ['diff-line', kind, marks.selected.has(entry) && 'selected'].filter(Boolean).join(' ');
       const numbers =
         side === 'old'
           ? `<span class="number">${oldNo ?? ''}</span>`
           : side === 'new'
             ? `<span class="number">${newNo ?? ''}</span>`
             : `<span class="number">${oldNo ?? ''}</span><span class="number">${newNo ?? ''}</span>`;
-      return `<div class="diff-line${kind}">${numbers}<span class="sign">${sign === ' ' ? '' : sign === '-' ? '−' : '+'}</span><span class="text">${highlight(text)}</span></div>`;
+      return `<div class="${classes}">${numbers}<span class="sign">${sign === ' ' ? '' : sign === '-' ? '−' : '+'}</span><span class="text">${highlight(text)}</span>${anchored ? menu : ''}</div>`;
     };
-    const hunk = (h) => {
-      const top = `<div class="diff-line hunk"><span class="text">${esc(h.header)}</span></div>`;
+    const hunk = (h, hx, marks, own) => {
+      const selected = own && selection && selection.hunk === hx ? selectionSize(selection) : 0;
+      const buttons = actions ? C.HunkActions({ side: actions.side, selected, writing: actions.writing }) : '';
+      const top = `<div class="diff-line hunk"><span class="text">${esc(h.header)}</span>${buttons}</div>`;
       if (mode === 'split') {
-        return top + pairLines(h.lines).map(([left, right]) => `<div class="diff-split-row">${line(left, 'old')}${line(right, 'new')}</div>`).join('');
+        return top + pairLines(h.lines).map(([left, right]) => `<div class="diff-split-row">${line(left, 'old', marks)}${line(right, 'new', marks)}</div>`).join('');
       }
-      return top + h.lines.map((entry) => line(entry, 'both')).join('');
+      return top + h.lines.map((entry) => line(entry, 'both', marks)).join('');
     };
-    const file = (f) => {
+    const file = (f, fx) => {
+      const own = fx === 0;
+      const marks = {
+        selected: selectedEntries(f.hunks, own ? selection : null),
+        pointed: own && pointed ? f.hunks[pointed.hunk].lines[pointed.line] : null,
+      };
       const top = header
         ? `<div class="diff-file-header">${C.Button({ icon: 'chevron-down', variant: 'ghost' })}<span class="title ellipsis">${esc(f.path)}</span><span class="stats xs muted">+${thousands(f.additions)} −${thousands(f.deletions)}</span></div>`
         : '';
-      return `<div class="diff-file">${top}${f.hunks.map(hunk).join('')}</div>`;
+      return `<div class="diff-file">${top}${f.hunks.map((h, hx) => hunk(h, hx, marks, own)).join('')}</div>`;
     };
     return `<div data-c="DiffView" data-base="Diff" class="diff">${files.map(file).join('')}</div>`;
+  },
+
+  HunkActions({ side, selected = 0, writing = false }) {
+    const { verb, icon: verbIcon, discards } = SideLabels[side];
+    const tips = selected ? PartLabels.linesTooltip : PartLabels.hunkTooltip;
+    const label = (action) => (selected ? PartLabels.lines(action, selected) : PartLabels.hunk(action));
+    const discard = discards ? C.Button({ label: label('Discard'), icon: 'undo-2', variant: 'ghost', disabled: writing, tooltip: tips.Discard }) : '';
+    const move = C.Button({ label: label(verb), icon: verbIcon, variant: 'ghost', disabled: writing, tooltip: tips[verb] });
+    return `<div data-c="HunkActions" class="hunk-actions">${discard}${move}</div>`;
+  },
+
+  LineMenu({ side, selected = 0, changed = true, left = 0, top = 0, hot }) {
+    return C.Menu({ items: lineMenuItems({ side, selected, changed }), left, top, hot, name: 'LineMenu' });
+  },
+
+  FileMenu({ change, side, left = 0, top = 0, hot }) {
+    return C.Menu({ items: fileMenuItems({ change, side }), left, top, hot, name: 'FileMenu' });
   },
 
   CommitPanel({ commit, details, state = 'ready', reason = '', open }) {
@@ -508,9 +578,9 @@ const C = {
     return `<div data-c="CommitFiles" class="commit-files">${rows}</div>`;
   },
 
-  ChangeRow({ change, side, selected = false, writing = false }) {
+  ChangeRow({ change, side, selected = false, writing = false, menu = '' }) {
     const labels = SideLabels[side];
-    const trailing = C.Button({ icon: labels.icon, variant: 'ghost', disabled: writing, tooltip: labels.fileTooltip });
+    const trailing = C.Button({ icon: labels.icon, variant: 'ghost', disabled: writing, tooltip: labels.fileTooltip }) + menu;
     return C.FileRow({ kind: change.kind, path: change.path, selected, trailing, name: 'ChangeRow' });
   },
 
@@ -528,7 +598,7 @@ const C = {
     );
   },
 
-  ChangesList({ changes, open, draft = {}, committing = false, writing = false, failure }) {
+  ChangesList({ changes, open, pointed, draft = {}, committing = false, writing = false, failure }) {
     if (!changes) return `<div data-c="ChangesList" class="changes">${C.Loading({ message: Texts.readingChanges })}</div>`;
     const busy = writing || committing;
     const form = C.CommitForm({ ...draft, staged: changes.staged.length, committing, writing, failure });
@@ -540,8 +610,17 @@ const C = {
       const labels = SideLabels[side];
       const action = C.Button({ label: labels.all, icon: labels.icon, variant: 'ghost', disabled: busy || !files.length });
       const head = C.SectionHeader({ title: `${labels.files} (${thousands(files.length)})`, action });
+      const at = (place, change) => !!place && place.side === side && place.path === change.path;
       const rows = files
-        .map((change) => C.ChangeRow({ change, side, writing: busy, selected: !!open && open.side === side && open.path === change.path }))
+        .map((change) =>
+          C.ChangeRow({
+            change,
+            side,
+            writing: busy,
+            selected: at(open, change),
+            menu: at(pointed, change) ? C.FileMenu({ change, side, left: pointed.left, top: pointed.top, hot: pointed.hot }) : '',
+          }),
+        )
         .join('');
       const body = files.length ? `<div class="fill">${rows}</div>` : C.Hint({ message: empty });
       return `<div class="change-section">${head}${body}</div>`;
@@ -549,7 +628,7 @@ const C = {
     return `<div data-c="ChangesList" class="changes">${form}${section('staged', Texts.nothingStaged)}${section('unstaged', Texts.nothingUnstaged)}</div>`;
   },
 
-  FileDiffPanel({ diff, mode = 'split', state = 'ready', writing = false, reason = '' }) {
+  FileDiffPanel({ diff, mode = 'split', state = 'ready', writing = false, reason = '', selection, pointed }) {
     const labels = diff.commit ? null : SideLabels[diff.side];
     const shownState = diff.commit ? `in ${diff.commit}` : labels.state;
     const moveButton = labels ? C.Button({ label: labels.verb, icon: labels.icon, disabled: writing, tooltip: labels.openFileTooltip }) : '';
@@ -576,7 +655,15 @@ const C = {
           ? C.Failure({ title: Texts.fileFailed, reason })
           : state === 'empty'
             ? C.Hint({ message: Texts.fileEmpty })
-            : C.DiffView({ files: [{ path: diff.change.path, additions: diff.additions, deletions: diff.deletions, hunks: diff.hunks }], mode, header: false });
+            : C.DiffView({
+                files: [{ path: diff.change.path, additions: diff.additions, deletions: diff.deletions, hunks: diff.hunks }],
+                mode,
+                header: false,
+                actions: labels && diff.change.kind === 'M' ? { side: diff.side, writing } : undefined,
+                selection,
+                pointed,
+                menu: pointed && labels ? C.LineMenu({ side: diff.side, selected: pointed.selected, changed: pointed.changed, left: pointed.left, top: pointed.top, hot: pointed.hot }) : '',
+              });
     return `<div data-c="FileDiffPanel" class="file-diff">${toolbar}<div class="fill v">${content}</div></div>`;
   },
 
@@ -594,7 +681,7 @@ const C = {
     return `<div data-c="RepoView" class="repo-view"><div class="fill v">${panes}</div>${status}</div>`;
   },
 
-  Menu({ items, left = 0, top = 0, hot }) {
+  Menu({ items, left = 0, top = 0, hot, name = 'Menu' }) {
     const rows = items
       .map((item) =>
         item === '-'
@@ -602,15 +689,29 @@ const C = {
           : `<div class="item${item[0] === hot ? ' hot' : ''}"><span class="label">${esc(item[0])}</span><span class="keys">${esc(item[1])}</span></div>`,
       )
       .join('');
-    return `<div data-c="Menu" data-base="PopupMenu" class="menu sm" style="left:${left}px;top:${top}px">${rows}</div>`;
+    const length = (value) => (typeof value === 'number' ? `${value}px` : value);
+    return `<div data-c="${name}" data-base="PopupMenu" class="menu sm" style="left:${length(left)};top:${length(top)}">${rows}</div>`;
   },
 
   Notification({ message }) {
     return `<div data-c="Notification" class="toast sm"><div class="message">${esc(message)}</div>${C.Button({ icon: 'close', variant: 'ghost' })}</div>`;
   },
 
-  AlertDialog({ title, description }) {
-    return `<div class="overlay"><div data-c="AlertDialog" class="dialog"><div class="base semibold">${esc(title)}</div><div class="sm muted">${esc(description)}</div><div class="footer">${C.Button({ label: 'OK', variant: 'primary', size: 'md' })}</div></div></div>`;
+  AlertDialog({ title, description, confirm }) {
+    const buttons = confirm
+      ? C.Button({ label: 'Cancel', size: 'md' }) + C.Button({ label: confirm, variant: 'danger', size: 'md' })
+      : C.Button({ label: 'OK', variant: 'primary', size: 'md' });
+    return `<div class="overlay"><div data-c="AlertDialog" class="dialog"><div class="base semibold">${esc(title)}</div><div class="sm muted">${esc(description)}</div><div class="footer">${buttons}</div></div></div>`;
+  },
+
+  DiscardDialog({ change }) {
+    const [name] = splitPath(change.path);
+    const untracked = change.kind === '?';
+    return C.AlertDialog({
+      title: untracked ? Texts.deleteTitle(name) : Texts.discardTitle(name),
+      description: untracked ? Texts.deleteDescription(change.path) : Texts.discardDescription(change.path),
+      confirm: untracked ? 'Delete' : 'Discard',
+    });
   },
 
   FastGit({ topBar, tabStrip = '', body, overlays = '' }) {
