@@ -275,6 +275,43 @@
   flex-direction: column;
 }
 
+.repo-toolbar {
+  flex: none;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: var(--background);
+  border-bottom: 1px solid var(--border);
+}
+
+.repo-toolbar > .group { display: flex; gap: 4px; }
+.repo-toolbar > .separator { width: 1px; height: 24px; background: var(--border); }
+
+.btn.toolbar-button {
+  min-width: 56px;
+  height: 40px;
+  padding: 0 8px;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.toolbar-split { display: flex; }
+.toolbar-split > .btn.toolbar-button { border-radius: 6px 0 0 6px; }
+.toolbar-split > .btn.caret { width: 16px; height: 40px; padding: 0; border-radius: 0 6px 6px 0; color: var(--muted); }
+.toolbar-split:hover > .btn:not(.disabled) { background: color-mix(in srgb, var(--secondary-hover) 50%, transparent); }
+.toolbar-split > .btn:not(.disabled):hover,
+.toolbar-split.open > .btn.caret { background: var(--secondary-hover); color: var(--foreground); }
+
+.menu.pull-modes { min-width: 280px; }
+.menu > .heading { padding: 4px 8px 2px; font-size: 12px; line-height: 16px; color: var(--muted); }
+.menu.pull-modes > .item { height: auto; align-items: flex-start; gap: 8px; padding: 4px 8px; }
+.menu.pull-modes > .item > .check { flex: none; width: 14px; padding-top: 3px; }
+.menu.pull-modes > .item > .label > .about { font-size: 12px; line-height: 16px; color: var(--muted); }
+
 .panes {
   flex: 1;
   min-height: 0;
@@ -756,6 +793,7 @@
 }
 
 .dialog {
+  position: relative;
   width: 420px;
   display: flex;
   flex-direction: column;
@@ -766,6 +804,11 @@
   border-radius: 8px;
   box-shadow: 0 16px 48px #000000a0;
 }
+
+.dialog > .close { position: absolute; top: 12px; right: 12px; color: var(--muted); }
+.dialog > .field { gap: 6px; margin-top: 12px; }
+.dialog > .footer.stretch > .btn { flex: 1; }
+.dialog > .field > .problem { color: var(--red); }
 
 .dialog > .footer {
   display: flex;
@@ -798,6 +841,7 @@
   box-shadow: 0 8px 24px #00000080;
 }
 
+.toast > .kind { flex: none; padding-top: 3px; }
 .toast > .message { flex: 1; }
 .toast > .btn { position: absolute; top: 4px; right: 4px; visibility: hidden; }
 .toast:hover > .btn { visibility: visible; }

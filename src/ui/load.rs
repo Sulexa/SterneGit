@@ -22,6 +22,10 @@ impl Failure {
         Self(reason.unwrap_or("unknown error").to_owned().into())
     }
 
+    pub(crate) fn followed_by(&self, advice: &str) -> Self {
+        Self(format!("{} {advice}", self.0).into())
+    }
+
     pub(crate) fn message(&self) -> SharedString {
         self.0.clone()
     }

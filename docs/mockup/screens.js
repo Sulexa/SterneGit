@@ -6,8 +6,9 @@ const Screens = (() => {
   const topBar = (extra = {}) => C.TopBar({ repository: history.name, head: history.head, ...extra });
   const tabStrip = (overrides = {}) => C.TabStrip({ tabs: tabs.map((tab, ix) => ({ ...tab, ...(overrides[ix] || {}) })), active: 0 });
 
-  const repo = ({ middle, right, selectedRow = null, wipSelected = false, status = {} }) =>
+  const repo = ({ middle, right, selectedRow = null, wipSelected = false, status = {}, toolbar }) =>
     C.RepoView({
+      toolbar,
       left: C.RefsList({ refs: history.refs, selectedRow, collapsed }),
       middle: middle || C.HistoryList({ history, selectedRow, changes, wipSelected }),
       right,
@@ -18,11 +19,12 @@ const Screens = (() => {
       }),
     });
 
-  const commitSelected = (status, panel = {}) =>
+  const commitSelected = (status, panel = {}, toolbar) =>
     repo({
       selectedRow: selected,
       right: C.CommitPanel({ commit: history.commits[selected], details: commitDetails, ...panel }),
       status,
+      toolbar,
     });
 
   const commitFileComparison = () =>
@@ -69,6 +71,7 @@ const Screens = (() => {
           topBar: C.TopBar({ repository: 'linux' }),
           tabStrip: C.TabStrip({ tabs, active: 2 }),
           body: C.RepoView({
+            toolbar: C.RepoToolbar({ ready: false }),
             body: C.Loading({ message: Texts.readingHistory }),
             status: C.RepoStatusBar({ summary: Texts.readingHistory }),
           }),
@@ -84,6 +87,7 @@ const Screens = (() => {
           topBar: C.TopBar({ repository: 'old-site' }),
           tabStrip: C.TabStrip({ tabs: [...tabs.slice(0, 2), { name: 'old-site', state: 'failed' }], active: 2 }),
           body: C.RepoView({
+            toolbar: C.RepoToolbar({ ready: false }),
             body: C.Notice({
               title: Texts.openFailedTitle,
               description: "could not open repository at 'D:\\Archive\\old-site': not a git repository",
@@ -96,7 +100,7 @@ const Screens = (() => {
     {
       id: 'history',
       title: 'History — commit selected',
-      about: 'The main screen. Refs on the left, split into folders at each slash, the commit graph in the middle, the selected commit and the files it changes on the right. The refs pointing at the selected commit are highlighted too. Click a section or a folder to fold it.',
+      about: 'The main screen. Under the tabs, the header holds Pull, Push, Branch, Stash and Pop. Then refs on the left, split into folders at each slash, the commit graph in the middle, the selected commit and the files it changes on the right. The refs pointing at the selected commit are highlighted too. Click a section or a folder to fold it.',
       source: 'src/repo/mod.rs',
       render: () => C.FastGit({ topBar: topBar(), tabStrip: tabStrip(), body: commitSelected() }),
     },
@@ -228,6 +232,65 @@ const Screens = (() => {
           topBar: topBar(),
           tabStrip: tabStrip(),
           body: fileComparison('split', { diff: partlyStagedDiff, changes: partlyStaged }),
+        }),
+    },
+    {
+      id: 'pulling',
+      title: 'Header — pulling',
+      about: 'Pull was clicked. Its icon turns into a spinner and the other header buttons wait, like the stage and commit buttons, because FastGit runs one Git write at a time. Pull and Push need a checked-out branch, except that Pull in Fetch only mode works anywhere; Stash needs uncommitted changes; Pop needs a stash.',
+      source: 'src/repo/toolbar.rs',
+      render: () => C.FastGit({ topBar: topBar(), tabStrip: tabStrip(), body: commitSelected(undefined, {}, C.RepoToolbar({ running: 'pull' })) }),
+    },
+    {
+      id: 'pull-modes',
+      title: 'Header — pull mode',
+      about: "The caret beside Pull opens its modes. The checked one is what a click on Pull does; picking another makes it Pull's default for this repository, without pulling. FastGit saves it in the repository's Git config as fastgit.pullMode, which Git itself ignores. Until a mode is picked, Pull follows Git's own settings: Rebase when pull.rebase is true, Fast-forward only when pull.ff is only, Fast-forward if possible otherwise.",
+      source: 'src/repo/toolbar.rs',
+      render: () =>
+        C.FastGit({
+          topBar: topBar(),
+          tabStrip: tabStrip(),
+          body: commitSelected(undefined, {}, C.RepoToolbar({ menuOpen: true })),
+          overlays: C.PullModeMenu({ mode: 'merge', left: 607, top: 112, hot: 'rebase' }),
+        }),
+    },
+    {
+      id: 'pushed',
+      title: 'Header — pushed',
+      about: 'A pull, a push, a stash or a pop that worked says so in a notification. The first push of a branch that has no upstream sends it to origin, or to the only remote, and makes that copy its upstream.',
+      source: 'src/repo/toolbar.rs',
+      render: () =>
+        C.FastGit({
+          topBar: topBar(),
+          tabStrip: tabStrip(),
+          body: commitSelected(),
+          overlays: `<div class="toasts">${C.Notification({ kind: 'success', message: 'Pushed main to origin/main' })}</div>`,
+        }),
+    },
+    {
+      id: 'push-failed',
+      title: 'Header — push rejected',
+      about: 'When Git refuses, the notification says why and stays until it is closed. A push the remote rejects because it has commits main does not have yet asks for a pull first.',
+      source: 'src/repo/toolbar.rs',
+      render: () =>
+        C.FastGit({
+          topBar: topBar(),
+          tabStrip: tabStrip(),
+          body: commitSelected(),
+          overlays: `<div class="toasts">${C.Notification({ kind: 'error', title: 'Push failed', message: "origin/main has commits that main doesn't have yet. Pull them, then push again." })}</div>`,
+        }),
+    },
+    {
+      id: 'branch-dialog',
+      title: 'Header — create a branch',
+      about: 'Branch asks for a name, then creates the branch where HEAD is and checks it out. Create branch stays disabled while the name is empty, taken or refused by Git; Enter creates, Esc cancels.',
+      source: 'src/repo/branch_dialog.rs',
+      render: () =>
+        C.FastGit({
+          topBar: topBar(),
+          tabStrip: tabStrip(),
+          body: commitSelected(),
+          overlays: C.BranchDialog({ head: `main (${history.commits[0].id})`, value: 'feature/toolbar' }),
         }),
     },
     {

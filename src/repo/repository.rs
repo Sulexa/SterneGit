@@ -6,8 +6,9 @@ use std::{
 
 use gpui_kit::{Context, EventEmitter, SharedString};
 
+use super::operation::{self, Operated, Operation};
 use crate::{
-    git::{self, FileChange, History, PartAction, Repo, Scope, Side, WorkingChanges},
+    git::{self, FileChange, History, PartAction, PullMode, Repo, Scope, Side, WorkingChanges},
     ui::{Failure, Job, Load, run_in_background},
 };
 
@@ -15,6 +16,8 @@ pub(crate) enum RepositoryEvent {
     HistoryRead,
     ChangesRead,
     Committed,
+    Operated(Operated),
+    PullModeNotSaved(Failure),
 }
 
 #[derive(Clone)]
@@ -22,16 +25,22 @@ struct Opened {
     repo: Repo,
     history: Arc<History>,
     root: PathBuf,
+    pull_mode: PullMode,
+    has_stash: bool,
 }
 
 impl Opened {
     fn read(path: &Path) -> anyhow::Result<Self> {
         let (repo, history) = Repo::open(path)?;
         let root = resolve(repo.location());
+        let pull_mode = repo.pull_mode();
+        let has_stash = repo.has_stash();
         Ok(Self {
             repo,
             history: Arc::new(history),
             root,
+            pull_mode,
+            has_stash,
         })
     }
 }
@@ -53,7 +62,10 @@ pub(crate) struct Repository {
     fetch_failure: Option<Failure>,
     write: Job,
     committing: bool,
+    running: Option<Operation>,
     write_failure: Option<Failure>,
+    chosen_pull_mode: Option<PullMode>,
+    pull_mode_save: Job,
 }
 
 impl EventEmitter<RepositoryEvent> for Repository {}
@@ -71,7 +83,10 @@ impl Repository {
             fetch_failure: None,
             write: Job::default(),
             committing: false,
+            running: None,
             write_failure: None,
+            chosen_pull_mode: None,
+            pull_mode_save: Job::default(),
         };
         this.refresh(cx);
         this
@@ -127,6 +142,20 @@ impl Repository {
 
     pub(crate) fn is_committing(&self) -> bool {
         self.committing
+    }
+
+    pub(crate) fn running(&self) -> Option<Operation> {
+        self.running
+    }
+
+    pub(crate) fn has_stash(&self) -> bool {
+        self.opened.value().is_some_and(|opened| opened.has_stash)
+    }
+
+    pub(crate) fn pull_mode(&self) -> PullMode {
+        self.chosen_pull_mode
+            .or_else(|| self.opened.value().map(|opened| opened.pull_mode))
+            .unwrap_or_default()
     }
 
     pub(crate) fn staged_count(&self) -> usize {
@@ -203,7 +232,7 @@ impl Repository {
     }
 
     pub(crate) fn fetch(&mut self, cx: &mut Context<Self>) {
-        if self.fetch.is_running() {
+        if self.fetch.is_running() || self.running.is_some() {
             return;
         }
         let Some(repo) = self.repo().cloned() else {
@@ -307,6 +336,101 @@ impl Repository {
                         this.read_status(StatusCheck::Forced, cx);
                     }
                 }
+                cx.notify();
+            },
+        );
+        self.write.run(task);
+        cx.notify();
+    }
+
+    pub(crate) fn pull(&mut self, cx: &mut Context<Self>) {
+        let mode = self.pull_mode();
+        self.operate(
+            Operation::Pull,
+            move |repo| repo.pull(mode).map(|pulled| operation::pulled(&pulled)),
+            cx,
+        );
+    }
+
+    pub(crate) fn push(&mut self, cx: &mut Context<Self>) {
+        self.operate(
+            Operation::Push,
+            |repo| repo.push().map(|pushed| operation::pushed(&pushed)),
+            cx,
+        );
+    }
+
+    pub(crate) fn create_branch(&mut self, name: String, cx: &mut Context<Self>) {
+        self.operate(
+            Operation::Branch,
+            move |repo| {
+                repo.create_branch(&name)
+                    .map(|()| operation::branch_created(&name))
+            },
+            cx,
+        );
+    }
+
+    pub(crate) fn stash(&mut self, cx: &mut Context<Self>) {
+        self.operate(
+            Operation::Stash,
+            |repo| repo.stash().map(|()| operation::STASHED.into()),
+            cx,
+        );
+    }
+
+    pub(crate) fn pop_stash(&mut self, cx: &mut Context<Self>) {
+        self.operate(
+            Operation::Pop,
+            |repo| repo.pop_stash().map(|()| operation::POPPED.into()),
+            cx,
+        );
+    }
+
+    pub(crate) fn choose_pull_mode(&mut self, mode: PullMode, cx: &mut Context<Self>) {
+        let Some(repo) = self.repo().cloned() else {
+            return;
+        };
+        self.chosen_pull_mode = Some(mode);
+        let task = run_in_background(
+            cx,
+            move || repo.save_pull_mode(mode),
+            |this, result, cx| {
+                this.pull_mode_save.finish();
+                if let Err(error) = result {
+                    cx.emit(RepositoryEvent::PullModeNotSaved(Failure::git_reason(
+                        &error,
+                    )));
+                }
+            },
+        );
+        self.pull_mode_save.run(task);
+        cx.notify();
+    }
+
+    fn operate(
+        &mut self,
+        operation: Operation,
+        work: impl FnOnce(&Repo) -> anyhow::Result<SharedString> + Send + 'static,
+        cx: &mut Context<Self>,
+    ) {
+        if self.write.is_running() {
+            return;
+        }
+        let Some(repo) = self.repo().cloned() else {
+            return;
+        };
+        self.running = Some(operation);
+        self.status_read.cancel();
+        let task = run_in_background(
+            cx,
+            move || work(&repo),
+            move |this, result, cx| {
+                this.write.finish();
+                this.running = None;
+                let outcome = result.map_err(|error| operation::failure(&error));
+                cx.emit(RepositoryEvent::Operated(Operated { operation, outcome }));
+                this.refresh(cx);
                 cx.notify();
             },
         );

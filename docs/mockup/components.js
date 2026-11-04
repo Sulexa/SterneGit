@@ -16,6 +16,14 @@ const IconPaths = {
   folder: '<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>',
   list: '<path d="M3 5h.01"/><path d="M3 12h.01"/><path d="M3 19h.01"/><path d="M8 5h13"/><path d="M8 12h13"/><path d="M8 19h13"/>',
   'list-tree': '<path d="M8 5h13"/><path d="M13 12h8"/><path d="M13 19h8"/><path d="M3 10a2 2 0 0 0 2 2h3"/><path d="M3 5v12a2 2 0 0 0 2 2h3"/>',
+  'arrow-down-to-line': '<path d="M12 17V3"/><path d="m6 11 6 6 6-6"/><path d="M19 21H5"/>',
+  'arrow-up-from-line': '<path d="m18 9-6-6-6 6"/><path d="M12 3v14"/><path d="M5 21h14"/>',
+  'git-branch-plus': '<path d="M6 3v12"/><path d="M18 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/><path d="M6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/><path d="M15 6a9 9 0 0 0-9 9"/><path d="M18 15v6"/><path d="M21 18h-6"/>',
+  archive: '<rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/>',
+  'archive-restore': '<rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h2"/><path d="M20 8v11a2 2 0 0 1-2 2h-2"/><path d="m9 15 3-3 3 3"/><path d="M12 12v9"/>',
+  'circle-check': '<circle cx="12" cy="12" r="10"/><path d="m16 9-5.5 5.5L8 12"/>',
+  check: '<path d="M20 6 9 17l-5-5"/>',
+  'circle-x': '<circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/>',
   'window-minimize': '<path d="M4.8 11.2h14.4" stroke-width="1.6"/>',
   'window-maximize': '<rect width="14.4" height="14.4" x="4.8" y="4.8" rx="1.6" stroke-width="1.6"/>',
   'window-close': '<path d="M19.2 4.8 4.8 19.2" stroke-width="1.6"/><path d="m4.8 4.8 14.4 14.4" stroke-width="1.6"/>',
@@ -109,6 +117,28 @@ const Menus = {
   About: [['About FastGit', '']],
 };
 
+const PullModes = [
+  { key: 'merge', label: 'Fast-forward if possible', about: 'Merges when the branches have diverged' },
+  { key: 'ff-only', label: 'Fast-forward only', about: 'Stops when the branches have diverged' },
+  { key: 'rebase', label: 'Rebase', about: 'Replays your commits on top of the upstream ones' },
+  '-',
+  { key: 'fetch', label: 'Fetch only', about: 'Updates the remote branches, leaves yours alone' },
+];
+
+const pullMode = (key) => PullModes.find((mode) => mode.key === key);
+
+const ToolbarGroups = [
+  [
+    { key: 'pull', label: 'Pull', icon: 'arrow-down-to-line', tooltip: 'Pull: fast-forward if possible' },
+    { key: 'push', label: 'Push', icon: 'arrow-up-from-line', tooltip: 'Send your new commits to the upstream branch' },
+  ],
+  [{ key: 'branch', label: 'Branch', icon: 'git-branch-plus', tooltip: 'Create a branch where HEAD is and switch to it' }],
+  [
+    { key: 'stash', label: 'Stash', icon: 'archive', tooltip: 'Put every uncommitted change aside, untracked files included' },
+    { key: 'pop', label: 'Pop', icon: 'archive-restore', tooltip: 'Bring back the latest stash and drop it' },
+  ],
+];
+
 const Texts = {
   welcomeTitle: 'Open a Git repository',
   welcomeDescription: 'FastGit reads history straight from the repository on disk. Each repository opens in its own tab.',
@@ -136,6 +166,12 @@ const Texts = {
   deleteTitle: (name) => `Delete ${name}?`,
   deleteDescription: (path) => `${path} isn't tracked by Git, so it can't be brought back once deleted.`,
   pathCopied: 'Path copied',
+  branchTitle: 'Create a branch',
+  branchDescription: (head) => `It starts at ${head}, where HEAD is, and is checked out right away. Uncommitted changes stay as they are.`,
+  branchPlaceholder: 'Branch name',
+  branchExists: (name) => `There is already a branch named ${name}.`,
+  branchInvalid: "Git doesn't accept this name: no spaces, and none of ~ ^ : ? * [ \\ or ..",
+  createBranch: 'Create branch',
   historyLimit: 10000,
 };
 
@@ -751,9 +787,52 @@ const C = {
     return `<div data-c="RepoStatusBar" data-base="StatusBar" class="status-bar"><div class="ellipsis">${esc(summary)}</div><div class="right">${fetch}<div>${esc(position)}</div></div></div>`;
   },
 
-  RepoView({ body, left, middle, right, status }) {
+  ToolbarButton({ label, icon: iconName, disabled = false, loading = false, tooltip }) {
+    const classes = ['btn', 'ghost', 'toolbar-button', disabled && 'disabled'].filter(Boolean).join(' ');
+    const title = tooltip ? ` title="${esc(tooltip)}"` : '';
+    const glyph = loading ? icon('loader', 'md').replace('class="icon"', 'class="icon spinner"') : icon(iconName, 'md');
+    return `<span data-c="ToolbarButton" data-base="Button" class="${classes}"${title}>${glyph}<span>${esc(label)}</span></span>`;
+  },
+
+  PullButton({ mode = 'merge', disabled = false, loading = false, menuOpen = false, ready = true }) {
+    const button = C.ToolbarButton({ ...ToolbarGroups[0][0], tooltip: `Pull: ${pullMode(mode).label.toLowerCase()}`, disabled, loading });
+    const caretClasses = ['btn', 'ghost', 'caret', !ready && 'disabled'].filter(Boolean).join(' ');
+    const caret = `<span data-c="Button" class="${caretClasses}" title="Choose how Pull works">${icon('chevron-down', 'xs')}</span>`;
+    return `<span data-c="PullButton" class="toolbar-split${menuOpen ? ' open' : ''}">${button}${caret}</span>`;
+  },
+
+  PullModeMenu({ mode = 'merge', left = 0, top = 0, hot }) {
+    const rows = PullModes.map((item) =>
+      item === '-'
+        ? '<div class="separator"></div>'
+        : `<div class="item${item.key === hot ? ' hot' : ''}"><span class="check">${item.key === mode ? icon('check', 'sm') : ''}</span><span class="v label"><span>${esc(item.label)}</span><span class="about">${esc(item.about)}</span></span></div>`,
+    ).join('');
+    return `<div data-c="PullModeMenu" data-base="PopupMenu" class="menu pull-modes sm" style="left:${left}px;top:${top}px"><div class="heading">Pull mode</div>${rows}</div>`;
+  },
+
+  RepoToolbar({ ready = true, running, unavailable = ['pop'], mode = 'merge', menuOpen = false } = {}) {
+    const disabled = (key) => !ready || (running ? running !== key : unavailable.includes(key));
+    const render = (button) =>
+      button.key === 'pull'
+        ? C.PullButton({ mode, disabled: disabled('pull'), loading: running === 'pull', menuOpen, ready })
+        : C.ToolbarButton({ ...button, disabled: disabled(button.key), loading: running === button.key });
+    const groups = ToolbarGroups.map((group) => `<div class="group">${group.map(render).join('')}</div>`);
+    return `<div data-c="RepoToolbar" class="repo-toolbar">${groups.join('<div class="separator"></div>')}</div>`;
+  },
+
+  RepoView({ body, left, middle, right, status, toolbar = C.RepoToolbar() }) {
     const panes = body || `<div class="panes"><div class="pane left">${left}</div><div class="pane middle">${middle}</div><div class="pane right">${right}</div></div>`;
-    return `<div data-c="RepoView" class="repo-view"><div class="fill v">${panes}</div>${status}</div>`;
+    return `<div data-c="RepoView" class="repo-view">${toolbar}<div class="fill v">${panes}</div>${status}</div>`;
+  },
+
+  BranchDialog({ head, value = '', problem }) {
+    const field = C.Input({ value, placeholder: Texts.branchPlaceholder, focused: true });
+    const hint = problem ? `<div class="xs problem">${esc(problem)}</div>` : '';
+    const buttons =
+      C.Button({ label: 'Cancel', size: 'md' }) +
+      C.Button({ label: Texts.createBranch, variant: 'primary', size: 'md', disabled: !value || Boolean(problem) });
+    const close = `<span class="close">${icon('close', 'sm')}</span>`;
+    return `<div class="overlay"><div data-c="BranchDialog" data-base="Dialog" class="dialog">${close}<div class="base semibold">${esc(Texts.branchTitle)}</div><div class="sm muted">${esc(Texts.branchDescription(head))}</div><div class="v field">${field}${hint}</div><div class="footer stretch">${buttons}</div></div></div>`;
   },
 
   Menu({ items, left = 0, top = 0, hot, name = 'Menu' }) {
@@ -768,8 +847,11 @@ const C = {
     return `<div data-c="${name}" data-base="PopupMenu" class="menu sm" style="left:${length(left)};top:${length(top)}">${rows}</div>`;
   },
 
-  Notification({ message }) {
-    return `<div data-c="Notification" class="toast sm"><div class="message">${esc(message)}</div>${C.Button({ icon: 'close', variant: 'ghost' })}</div>`;
+  Notification({ message, title, kind }) {
+    const glyphs = { success: icon('circle-check', 'md', 'var(--green)'), error: icon('circle-x', 'md', 'var(--red)') };
+    const glyph = glyphs[kind] ? `<span class="kind">${glyphs[kind]}</span>` : '';
+    const heading = title ? `<div class="semibold">${esc(title)}</div>` : '';
+    return `<div data-c="Notification" class="toast sm">${glyph}<div class="message">${heading}${esc(message)}</div>${C.Button({ icon: 'close', variant: 'ghost' })}</div>`;
   },
 
   AlertDialog({ title, description, confirm }) {

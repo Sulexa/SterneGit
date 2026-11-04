@@ -1,3 +1,4 @@
+mod branch;
 mod command;
 mod commit;
 mod graph;
@@ -5,8 +6,11 @@ mod history;
 mod hunks;
 mod index;
 mod patch;
+mod pull_mode;
 mod refs;
+mod refusal;
 mod remote;
+mod stash;
 mod status;
 mod text;
 mod time;
@@ -20,6 +24,7 @@ use anyhow::{Context as _, Result};
 use gix::ThreadSafeRepository;
 use gpui_kit::SharedString;
 
+pub(crate) use branch::{NameProblem, new_branch_name};
 pub(crate) use commit::commit_message;
 pub(crate) use graph::{Edge, Row};
 #[cfg(test)]
@@ -28,7 +33,10 @@ pub(crate) use history::{Commit, HISTORY_LIMIT, History, short_id};
 pub(crate) use hunks::{Hunks, LineAt, LineSide, LineSpan, Part, PartAction};
 pub(crate) use index::Scope;
 pub(crate) use patch::FilePatch;
+pub(crate) use pull_mode::PullMode;
 pub(crate) use refs::{RefDigest, RefKind, RefLabel};
+pub(crate) use refusal::{Refusal, Tracking};
+pub(crate) use remote::{Pulled, Pushed};
 pub(crate) use status::{ChangeKind, FileChange, Side, WorkingChanges};
 
 const OBJECT_CACHE_BYTES: usize = 4 * 1024 * 1024;
@@ -151,6 +159,32 @@ pub(crate) mod scratch {
                 .open(scratch.dir.join(".git").join("config"))?
                 .write_all(CONFIG_THAT_IGNORES_THE_USERS.as_bytes())?;
             Ok(scratch)
+        }
+
+        pub(crate) fn bare(label: &str) -> Result<Self> {
+            let dir = std::env::temp_dir().join(format!("fastgit-{label}-{}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&dir);
+            std::fs::create_dir_all(&dir)?;
+            let scratch = Self { dir };
+            scratch.git(&["init", "--bare", "--quiet", "--template="])?;
+            Ok(scratch)
+        }
+
+        pub(crate) fn tracking(label: &str, origin: &ScratchRepo) -> Result<Self> {
+            let scratch = Self::new(label)?;
+            scratch.git(&["remote", "add", "origin", &origin.location()])?;
+            scratch.git(&["fetch", "--quiet", "origin"])?;
+            let upstream = format!("origin/{DEFAULT_BRANCH}");
+            scratch.git(&["checkout", "--quiet", "-B", DEFAULT_BRANCH, &upstream])?;
+            Ok(scratch)
+        }
+
+        pub(crate) fn location(&self) -> String {
+            self.dir.display().to_string()
+        }
+
+        pub(crate) fn head(&self) -> Result<String> {
+            Ok(self.git(&["rev-parse", "HEAD"])?.trim().to_owned())
         }
 
         pub(crate) fn git(&self, args: &[&str]) -> Result<String> {

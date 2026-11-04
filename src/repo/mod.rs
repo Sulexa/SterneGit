@@ -1,3 +1,4 @@
+mod branch_dialog;
 mod changes_list;
 mod commit_files;
 mod commit_form;
@@ -7,11 +8,13 @@ mod file_tree;
 mod history_list;
 mod hunk_actions;
 mod navigation;
+mod operation;
 mod patch_view;
 mod ref_tree;
 mod refs_list;
 mod repository;
 mod status_bar;
+mod toolbar;
 
 use std::{path::PathBuf, sync::Arc};
 
@@ -24,6 +27,7 @@ use gpui_kit::{
         WindowExt as _,
         button::{Button, ButtonVariant},
         diff::DiffFile,
+        notification::Notification,
         resizable::{h_resizable, resizable_panel},
         v_flex,
     },
@@ -32,19 +36,22 @@ use gpui_kit::{
 
 use crate::{
     actions::{CloseDiff, CopyHash, Fetch, NewerCommit, OlderCommit, Refresh},
-    git::{FileChange, HISTORY_LIMIT, History, Scope, Side, short_id},
+    git::{FileChange, HISTORY_LIMIT, History, PullMode, Scope, Side, short_id},
     ui::{self, Failure, FileView, Folded, Look as _, Notice, thousands},
 };
+use branch_dialog::open_branch_dialog;
 use changes_list::{ChangesList, SideFolds, SideScrolls, discard_question};
 use commit_form::CommitForm;
 use commit_panel::{CommitPanel, OpenCommitFile, copy_commit_hash};
 use file_diff_panel::{CloseFileDiff, FileDiffPanel};
 use history_list::HistoryList;
 use navigation::{OpenFile, Step, Target};
+use operation::Operation;
 use ref_tree::RefGroup;
 use refs_list::RefsList;
 pub(crate) use repository::{Repository, RepositoryEvent};
 use status_bar::RepoStatusBar;
+use toolbar::{RepoToolbar, ToolbarState, notification};
 
 pub(crate) struct RepoView {
     repository: Entity<Repository>,
@@ -68,10 +75,19 @@ impl RepoView {
         let commit_form = cx.new(|cx| CommitForm::new(repository.clone(), window, cx));
         let file_diff = cx.new(|cx| FileDiffPanel::new(repository.clone(), cx));
         let subscriptions = [
-            cx.subscribe(&repository, |this, _, event, cx| match event {
+            cx.subscribe_in(&repository, window, |this, _, event, window, cx| match event {
                 RepositoryEvent::HistoryRead => this.on_history_read(cx),
                 RepositoryEvent::ChangesRead => this.on_changes_read(cx),
                 RepositoryEvent::Committed => {}
+                RepositoryEvent::Operated(operated) => {
+                    window.push_notification(notification(operated), cx)
+                }
+                RepositoryEvent::PullModeNotSaved(failure) => window.push_notification(
+                    Notification::error(failure.message())
+                        .title("Couldn't save the pull mode")
+                        .autohide(false),
+                    cx,
+                ),
             }),
             cx.subscribe(&file_diff, |this, _, _: &CloseFileDiff, cx| {
                 this.close_file(cx)
@@ -305,6 +321,28 @@ impl RepoView {
         });
     }
 
+    fn run(&mut self, operation: Operation, window: &mut Window, cx: &mut Context<Self>) {
+        let repository = self.repository.clone();
+        match operation {
+            Operation::Branch => open_branch_dialog(repository, window, cx),
+            Operation::Pull => repository.update(cx, |repository, cx| repository.pull(cx)),
+            Operation::Push => repository.update(cx, |repository, cx| repository.push(cx)),
+            Operation::Stash => repository.update(cx, |repository, cx| repository.stash(cx)),
+            Operation::Pop => repository.update(cx, |repository, cx| repository.pop_stash(cx)),
+        }
+    }
+
+    fn toolbar(&self, cx: &mut Context<Self>) -> RepoToolbar {
+        RepoToolbar::new(ToolbarState::of(self.repository.read(cx)))
+            .on_run(cx.listener(|this, operation: &Operation, window, cx| {
+                this.run(*operation, window, cx)
+            }))
+            .on_pull_mode(cx.listener(|this, mode: &PullMode, _, cx| {
+                this.repository
+                    .update(cx, |repository, cx| repository.choose_pull_mode(*mode, cx))
+            }))
+    }
+
     fn render_body(&self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         let repository = self.repository.read(cx);
         let Some(history) = repository.history().cloned() else {
@@ -440,6 +478,7 @@ impl Render for RepoView {
             }))
             .on_action(cx.listener(|this, _: &CopyHash, window, cx| this.copy_hash(window, cx)))
             .on_action(cx.listener(|this, _: &CloseDiff, _, cx| this.close_file(cx)))
+            .child(self.toolbar(cx))
             .child(div().fill_height().child(self.render_body(window, cx)))
             .child(status_bar)
     }

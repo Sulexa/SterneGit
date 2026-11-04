@@ -60,6 +60,7 @@ pub(crate) fn short_id(id: ObjectId) -> SharedString {
 
 pub(crate) struct History {
     pub(crate) head_label: Option<SharedString>,
+    pub(crate) branch: Option<SharedString>,
     pub(crate) head_id: Option<ObjectId>,
     pub(crate) commits: Vec<Commit>,
     pub(crate) refs: Vec<RefLabel>,
@@ -82,6 +83,12 @@ impl Head {
             name: repo.head_name()?,
             id: repo.head_id().ok().map(|id| id.detach()),
         })
+    }
+
+    fn branch(&self) -> Option<SharedString> {
+        self.name
+            .as_ref()
+            .map(|name| decode(name.shorten()).into())
     }
 
     fn label(&self) -> Option<SharedString> {
@@ -138,6 +145,7 @@ impl History {
         }
         Self {
             head_label: head.label(),
+            branch: head.branch(),
             head_id: head.id,
             commits,
             refs,
