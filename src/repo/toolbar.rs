@@ -248,7 +248,7 @@ pub(crate) fn notification(operated: &Operated) -> Notification {
     match &operated.outcome {
         Ok(message) => Notification::success(message.clone()),
         Err(failure) => Notification::error(failure.message())
-            .title(operated.operation.failed())
+            .title(operated.failed.clone())
             .autohide(false),
     }
 }
@@ -283,7 +283,7 @@ fn tooltip(operation: Operation, mode: PullMode) -> SharedString {
     }
 }
 
-fn mode_label(mode: PullMode) -> &'static str {
+pub(super) fn mode_label(mode: PullMode) -> &'static str {
     match mode {
         PullMode::FastForwardIfPossible => "Fast-forward if possible",
         PullMode::FastForwardOnly => "Fast-forward only",

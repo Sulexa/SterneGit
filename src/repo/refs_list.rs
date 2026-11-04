@@ -5,13 +5,18 @@ use gpui_kit::{
     AnyElement, App, InteractiveElement as _, IntoElement, ParentElement as _, RenderOnce,
     SharedString, Styled as _, UniformListScrollHandle, Window,
     assets::IconName,
-    component::{ActiveTheme as _, Icon, Sizable as _, scroll::Scrollbar},
+    component::{
+        ActiveTheme as _, Icon, Sizable as _, menu::ContextMenuExt as _, scroll::Scrollbar,
+    },
     div,
     prelude::FluentBuilder as _,
     uniform_list,
 };
 
-use super::ref_tree::{RefGroup, RefTreeRow, last_segment, ref_tree};
+use super::{
+    branch_menu::BranchMenu,
+    ref_tree::{RefGroup, RefTreeRow, last_segment, ref_tree},
+};
 use crate::{
     git::{History, RefKind, RefLabel},
     ui::{Folded, Handler, SectionHeader, handler, list_row, tree_line},
@@ -25,6 +30,7 @@ pub(crate) struct RefsList {
     scroll: UniformListScrollHandle,
     on_reveal: Option<Handler<usize>>,
     on_toggle: Option<Handler<RefGroup>>,
+    branch_menu: Option<BranchMenu>,
 }
 
 impl RefsList {
@@ -40,7 +46,13 @@ impl RefsList {
             scroll,
             on_reveal: None,
             on_toggle: None,
+            branch_menu: None,
         }
+    }
+
+    pub(crate) fn branch_menu(mut self, menu: BranchMenu) -> Self {
+        self.branch_menu = Some(menu);
+        self
     }
 
     pub(crate) fn selected(mut self, commit: Option<ObjectId>) -> Self {
@@ -74,6 +86,7 @@ impl RenderOnce for RefsList {
             scroll,
             on_reveal,
             on_toggle,
+            branch_menu,
         } = self;
         div()
             .id("refs")
@@ -101,6 +114,7 @@ impl RenderOnce for RefsList {
                                 depth,
                                 selected,
                                 on_reveal.clone(),
+                                branch_menu.clone(),
                                 cx,
                             ),
                         })
@@ -182,9 +196,10 @@ fn ref_row(
     depth: usize,
     selected: Option<ObjectId>,
     on_reveal: Option<Handler<usize>>,
+    branch_menu: Option<BranchMenu>,
     cx: &App,
 ) -> AnyElement {
-    list_row(
+    let row = list_row(
         SharedString::from(format!("{:?}/{}", label.kind, label.name)),
         selected == Some(label.target),
     )
@@ -199,8 +214,15 @@ fn ref_row(
     ))
     .when_some(on_reveal, |row, on_reveal| {
         row.on_click(move |_, window, cx| on_reveal(&ix, window, cx))
-    })
-    .into_any_element()
+    });
+    match branch_menu.filter(|_| label.is_branch()) {
+        Some(branch_menu) => {
+            let right_clicked = label.clone();
+            row.context_menu(move |menu, _, _| branch_menu.build(menu, &right_clicked))
+                .into_any_element()
+        }
+        None => row.into_any_element(),
+    }
 }
 
 fn muted_icon(name: IconName, cx: &App) -> Icon {

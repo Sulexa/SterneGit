@@ -1,5 +1,13 @@
 use std::fmt;
 
+use gix::state::InProgress;
+
+const CHANGES_IN_THE_WAY: [&str; 3] = [
+    "You have unstaged changes",
+    "Your index contains uncommitted changes",
+    "would be overwritten by",
+];
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct Tracking {
     pub(crate) branch: String,
@@ -13,6 +21,7 @@ pub(crate) enum Refusal {
     NoRemote,
     NoRemoteToPushTo { branch: String },
     Diverged(Tracking),
+    CantFastForward(Tracking),
     RemoteAhead(Tracking),
     ChangesInTheWay,
     MergeStopped,
@@ -36,13 +45,17 @@ impl fmt::Display for Refusal {
                 f,
                 "{branch} and {upstream} have diverged, so {branch} can't fast-forward."
             ),
+            Refusal::CantFastForward(Tracking { branch, upstream }) => write!(
+                f,
+                "{branch} and {upstream} have diverged, so {branch} can't fast-forward. Check it out to merge or rebase."
+            ),
             Refusal::RemoteAhead(Tracking { branch, upstream }) => write!(
                 f,
                 "{upstream} has commits that {branch} doesn't have yet. Pull them, then push again."
             ),
             Refusal::ChangesInTheWay => write!(
                 f,
-                "Uncommitted changes are in the way: commit or stash them, then pull again."
+                "Uncommitted changes are in the way: commit or stash them, then try again."
             ),
             Refusal::MergeStopped => write!(
                 f,
@@ -61,3 +74,15 @@ impl fmt::Display for Refusal {
 }
 
 impl std::error::Error for Refusal {}
+
+pub(super) fn why_git_stopped(repo: &gix::Repository, error: anyhow::Error) -> anyhow::Error {
+    let message = error.to_string();
+    match repo.state() {
+        Some(InProgress::Merge) => Refusal::MergeStopped.into(),
+        Some(InProgress::Rebase | InProgress::RebaseInteractive) => Refusal::RebaseStopped.into(),
+        _ if CHANGES_IN_THE_WAY.iter().any(|why| message.contains(why)) => {
+            Refusal::ChangesInTheWay.into()
+        }
+        _ => error,
+    }
+}

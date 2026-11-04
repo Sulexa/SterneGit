@@ -8,7 +8,10 @@ use gpui_kit::{Context, EventEmitter, SharedString};
 
 use super::operation::{self, Operated, Operation};
 use crate::{
-    git::{self, FileChange, History, PartAction, PullMode, Repo, Scope, Side, WorkingChanges},
+    git::{
+        self, CheckedOut, FileChange, History, PartAction, PullMode, RefLabel, RemoteBranch, Repo,
+        Scope, Side, WorkingChanges,
+    },
     ui::{Failure, Job, Load, run_in_background},
 };
 
@@ -360,15 +363,122 @@ impl Repository {
         );
     }
 
-    pub(crate) fn create_branch(&mut self, name: String, cx: &mut Context<Self>) {
+    pub(crate) fn create_branch(
+        &mut self,
+        name: String,
+        start: Option<String>,
+        cx: &mut Context<Self>,
+    ) {
         self.operate(
             Operation::Branch,
             move |repo| {
-                repo.create_branch(&name)
+                repo.create_branch(&name, start.as_deref())
                     .map(|()| operation::branch_created(&name))
             },
             cx,
         );
+    }
+
+    pub(crate) fn check_out(&mut self, label: RefLabel, cx: &mut Context<Self>) {
+        let failed = operation::check_out_failed(label.local_name());
+        self.write_and_report(
+            None,
+            failed,
+            move |repo| {
+                let checked_out = match label.on_remote() {
+                    Some(remote) => repo.check_out_remote(&label.name, remote.branch)?,
+                    None => {
+                        repo.check_out(&label.name)?;
+                        CheckedOut::Existing(label.name.to_string())
+                    }
+                };
+                Ok(operation::checked_out(&checked_out))
+            },
+            cx,
+        );
+    }
+
+    pub(crate) fn pull_branch(&mut self, label: RefLabel, cx: &mut Context<Self>) {
+        if label.is_head {
+            return self.pull(cx);
+        }
+        self.operate(
+            Operation::Pull,
+            move |repo| {
+                repo.pull_branch(&label.name)
+                    .map(|pulled| operation::pulled(&pulled))
+            },
+            cx,
+        );
+    }
+
+    pub(crate) fn push_branch(&mut self, label: RefLabel, cx: &mut Context<Self>) {
+        if label.is_head {
+            return self.push(cx);
+        }
+        self.operate(
+            Operation::Push,
+            move |repo| {
+                repo.push_branch(&label.name)
+                    .map(|pushed| operation::pushed(&pushed))
+            },
+            cx,
+        );
+    }
+
+    pub(crate) fn merge(&mut self, label: RefLabel, cx: &mut Context<Self>) {
+        let Some((into, revision)) = self.checked_out_and_revision(&label) else {
+            return;
+        };
+        let from = label.name;
+        self.write_and_report(
+            None,
+            operation::merge_failed(&from, &into),
+            move |repo| {
+                repo.merge(&revision)
+                    .map(|merged| operation::merged(&from, &into, merged))
+            },
+            cx,
+        );
+    }
+
+    pub(crate) fn rebase_onto(&mut self, label: RefLabel, cx: &mut Context<Self>) {
+        let Some((branch, revision)) = self.checked_out_and_revision(&label) else {
+            return;
+        };
+        let onto = label.name;
+        self.write_and_report(
+            None,
+            operation::rebase_failed(&branch, &onto),
+            move |repo| {
+                repo.rebase_onto(&revision)
+                    .map(|rebased| operation::rebased(&branch, &onto, rebased))
+            },
+            cx,
+        );
+    }
+
+    pub(crate) fn delete_branch(&mut self, label: RefLabel, cx: &mut Context<Self>) {
+        self.write_and_report(
+            None,
+            operation::delete_failed(&label),
+            move |repo| {
+                match label.on_remote() {
+                    Some(RemoteBranch { remote, branch }) => {
+                        repo.delete_remote_branch(remote, branch)?
+                    }
+                    None => repo.delete_branch(&label.name)?,
+                }
+                Ok(operation::deleted(&label))
+            },
+            cx,
+        );
+    }
+
+    fn checked_out_and_revision(&self, label: &RefLabel) -> Option<(SharedString, String)> {
+        let history = self.history()?;
+        let checked_out = history.branch.clone()?;
+        Some((checked_out, label.revision(&history.refs)))
     }
 
     pub(crate) fn stash(&mut self, cx: &mut Context<Self>) {
@@ -414,13 +524,23 @@ impl Repository {
         work: impl FnOnce(&Repo) -> anyhow::Result<SharedString> + Send + 'static,
         cx: &mut Context<Self>,
     ) {
+        self.write_and_report(Some(operation), operation.failed().into(), work, cx);
+    }
+
+    fn write_and_report(
+        &mut self,
+        header_button: Option<Operation>,
+        failed: SharedString,
+        work: impl FnOnce(&Repo) -> anyhow::Result<SharedString> + Send + 'static,
+        cx: &mut Context<Self>,
+    ) {
         if self.write.is_running() {
             return;
         }
         let Some(repo) = self.repo().cloned() else {
             return;
         };
-        self.running = Some(operation);
+        self.running = header_button;
         self.status_read.cancel();
         let task = run_in_background(
             cx,
@@ -429,7 +549,7 @@ impl Repository {
                 this.write.finish();
                 this.running = None;
                 let outcome = result.map_err(|error| operation::failure(&error));
-                cx.emit(RepositoryEvent::Operated(Operated { operation, outcome }));
+                cx.emit(RepositoryEvent::Operated(Operated { failed, outcome }));
                 this.refresh(cx);
                 cx.notify();
             },

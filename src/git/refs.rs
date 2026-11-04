@@ -29,6 +29,14 @@ impl RefKind {
             _ => None,
         }
     }
+
+    fn namespace(self) -> &'static str {
+        match self {
+            RefKind::LocalBranch => "refs/heads/",
+            RefKind::RemoteBranch => "refs/remotes/",
+            RefKind::Tag => "refs/tags/",
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -37,6 +45,42 @@ pub(crate) struct RefLabel {
     pub(crate) kind: RefKind,
     pub(crate) target: ObjectId,
     pub(crate) is_head: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct RemoteBranch<'a> {
+    pub(crate) remote: &'a str,
+    pub(crate) branch: &'a str,
+}
+
+impl RefLabel {
+    pub(crate) fn is_branch(&self) -> bool {
+        matches!(self.kind, RefKind::LocalBranch | RefKind::RemoteBranch)
+    }
+
+    pub(crate) fn full_name(&self) -> String {
+        format!("{}{}", self.kind.namespace(), self.name)
+    }
+
+    pub(crate) fn on_remote(&self) -> Option<RemoteBranch<'_>> {
+        let (remote, branch) = self.name.split_once('/')?;
+        (self.kind == RefKind::RemoteBranch).then_some(RemoteBranch { remote, branch })
+    }
+
+    pub(crate) fn local_name(&self) -> &str {
+        self.on_remote().map_or(&self.name, |remote| remote.branch)
+    }
+
+    pub(crate) fn revision(&self, among: &[RefLabel]) -> String {
+        let shares_its_name = among
+            .iter()
+            .any(|other| other.kind != self.kind && other.name == self.name);
+        if shares_its_name {
+            self.full_name()
+        } else {
+            self.name.to_string()
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

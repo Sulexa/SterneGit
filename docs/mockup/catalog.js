@@ -5,7 +5,7 @@ const Catalog = (() => {
   const width = graphWidth(history.commits);
   const row = 736;
   const lanes = (graph, extra = {}) => () => C.GraphCell({ graph, ...extra });
-  const menuFrame = (menu) => `<div style="position:relative;width:240px;height:${(menu.match(/class="item/g).length + 1) * 28 + 8}px">${menu}</div>`;
+  const menuFrame = (menu, width = 240) => `<div style="position:relative;width:${width}px;height:${(menu.match(/class="item/g).length + 1) * 28 + 8}px">${menu}</div>`;
   const dialogFrame = (dialog) => `<div style="position:relative;width:520px;height:260px" class="mk-dialog-frame">${dialog}</div>`;
   const hunkFrame = (actions) => `<div class="diff" style="width:560px;flex:none"><div class="diff-line hunk"><span class="text">${esc(fileDiff.hunks[0].header)}</span>${actions}</div></div>`;
 
@@ -105,7 +105,11 @@ const Catalog = (() => {
             ['Error', () => C.Notification({ kind: 'error', title: 'Pull failed', message: 'main has no upstream branch to pull from.' })],
             ['Fast-forward refused', () => C.Notification({ kind: 'error', title: 'Pull failed', message: "main and origin/main have diverged, so main can't fast-forward. Choose Fast-forward if possible or Rebase in the Pull menu." })],
             ['Rebased', () => C.Notification({ kind: 'success', message: 'Rebased main onto origin/main' })],
-            ['Changes in the way', () => C.Notification({ kind: 'error', title: 'Pull failed', message: 'Uncommitted changes are in the way: commit or stash them, then pull again.' })],
+            ['Changes in the way', () => C.Notification({ kind: 'error', title: 'Pull failed', message: 'Uncommitted changes are in the way: commit or stash them, then try again.' })],
+            ['Merged', () => C.Notification({ kind: 'success', message: 'Merged feature/blame into main' })],
+            ['Checked out a remote branch', () => C.Notification({ kind: 'success', message: 'Switched to the new branch feature/diff-view, tracking origin/feature/diff-view' })],
+            ['Check-out blocked', () => C.Notification({ kind: 'error', title: "Couldn't check out feature/blame", message: 'Uncommitted changes are in the way: commit or stash them, then try again.' })],
+            ['Fast-forward refused on another branch', () => C.Notification({ kind: 'error', title: 'Pull failed', message: "feature/blame and origin/feature/blame have diverged, so feature/blame can't fast-forward. Check it out to merge or rebase." })],
           ],
         },
         {
@@ -399,20 +403,21 @@ const Catalog = (() => {
           name: 'BranchDialog',
           code: 'repo::branch_dialog::BranchDialog',
           source: 'src/repo/branch_dialog.rs',
-          about: 'Opened by Branch, as a kit dialog: Cancel and Create branch share the footer, and × closes it too. The name field has the focus; Create branch stays disabled while the name is empty, already a local branch, or one Git refuses, and the reason shows under the field. Enter creates, Esc cancels.',
+          about: 'Opened by Branch, or by Create branch here… in a BranchMenu, which starts the branch at that ref instead of HEAD. A kit dialog: Cancel and Create branch share the footer, and × closes it too. The name field has the focus; Create branch stays disabled while the name is empty, already a local branch, or one Git refuses, and the reason shows under the field. Enter creates, Esc cancels.',
           variants: [
             ['Empty', () => dialogFrame(C.BranchDialog({ head: `main (${commit(0).id})` }))],
             ['Typed', () => dialogFrame(C.BranchDialog({ head: `main (${commit(0).id})`, value: 'feature/toolbar' }))],
             ['Taken', () => dialogFrame(C.BranchDialog({ head: `main (${commit(0).id})`, value: 'topic/tabs', problem: Texts.branchExists('topic/tabs') }))],
             ['Refused by Git', () => dialogFrame(C.BranchDialog({ head: `main (${commit(0).id})`, value: 'my branch', problem: Texts.branchInvalid }))],
             ['Detached HEAD', () => dialogFrame(C.BranchDialog({ head: commit(3).id, value: 'fix/merge' }))],
+            ['From another ref', () => dialogFrame(C.BranchDialog({ from: `feature/blame (${commit(9).id})`, value: 'fix/blame-tabs' }))],
           ],
         },
         {
           name: 'RefsList',
           code: 'repo::refs_list::RefsList',
           source: 'src/repo/refs_list.rs',
-          about: 'Branches, remotes and tags, each section only when it has refs. Names are split at each slash into folders, in the order Git lists them; under Remotes the first folder is the remote. Sections and folders fold with a click. Clicking a ref selects its commit.',
+          about: 'Branches, remotes and tags, each section only when it has refs. Names are split at each slash into folders, in the order Git lists them; under Remotes the first folder is the remote. Sections and folders fold with a click. Clicking a ref selects its commit; right-clicking a branch opens its BranchMenu.',
           variants: [
             ['With a selection', () => C.RefsList({ refs: history.refs, selectedRow: 2, collapsed }), { w: 224, h: 480 }],
             ['Folders and sections folded', () => C.RefsList({ refs: history.refs, collapsed: ['local:feature', 'remote', 'tag'] }), { w: 224, h: 200 }],
@@ -440,6 +445,30 @@ const Catalog = (() => {
             ['Points at the selection, in a folder', () => C.RefRow({ label: ref('feature/diff-view'), name: 'diff-view', depth: 1, selected: true }), { w: 224 }],
             ['Remote branch', () => C.RefRow({ label: ref('origin/main'), name: 'main', depth: 1 }), { w: 224 }],
             ['Tag', () => C.RefRow({ label: ref('v0.2.0') }), { w: 224 }],
+          ],
+        },
+        {
+          name: 'BranchMenu',
+          code: 'repo::branch_menu::BranchMenu',
+          source: 'src/repo/branch_menu.rs',
+          about: 'The right-click menu of a local or remote branch in the RefsList, in groups: Check out; Pull and Push; Merge and Rebase with the checked-out branch; Create branch here…; Delete…. Items that cannot apply are left out: the checked-out branch has no Check out, Merge, Rebase or Delete, a remote branch has no Pull or Push, and a detached HEAD has no Merge or Rebase. Every item is disabled while Git writes; Pull and Push spin the header's button while they run. Check out on a remote branch switches to the local branch of the same name, or makes one that tracks it.',
+          variants: [
+            ['Another local branch', () => menuFrame(C.BranchMenu({ label: ref('feature/blame'), current: 'main' }), 280)],
+            ['Checked-out branch', () => menuFrame(C.BranchMenu({ label: ref('main'), current: 'main' }), 280)],
+            ['Remote branch', () => menuFrame(C.BranchMenu({ label: ref('origin/feature/diff-view'), current: 'main' }), 340)],
+            ['Detached HEAD', () => menuFrame(C.BranchMenu({ label: ref('feature/blame') }), 280)],
+          ],
+        },
+        {
+          name: 'DeleteBranchDialog',
+          code: 'repo::branch_menu::confirm_delete',
+          source: 'src/repo/branch_menu.rs',
+          about: 'An AlertDialog opened by Delete…. For a local branch it counts the commits no other branch or tag holds, among the history FastGit has read, and says they are lost, or that nothing is lost; when the branch is older than the history read, it says it can't tell. Delete then runs git branch -D. For a remote branch it says the branch goes for everyone, and Delete runs git push --delete. Cancel or Esc does nothing.',
+          variants: [
+            ['Commits only it holds', () => dialogFrame(C.DeleteBranchDialog({ label: ref('feature/blame'), only: 1 }))],
+            ['Merged', () => dialogFrame(C.DeleteBranchDialog({ label: ref('feature/stash') }))],
+            ['Older than the history read', () => dialogFrame(C.DeleteBranchDialog({ label: ref('feature/stash'), only: null }))],
+            ['Remote branch', () => dialogFrame(C.DeleteBranchDialog({ label: ref('origin/feature/diff-view') }))],
           ],
         },
         {

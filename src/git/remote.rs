@@ -1,20 +1,23 @@
 use anyhow::Result;
-use gix::{ObjectId, refs::FullName, remote::Direction, state::InProgress};
+use gix::{ObjectId, refs::FullName, remote::Direction};
 
 use super::{
     PullMode, Refusal, Repo, Tracking,
     command::{Exit, run, run_text},
+    refusal::why_git_stopped,
     text::decode,
 };
 
 const UPSTREAM_OF_HEAD: [&str; 3] = ["rev-parse", "--symbolic-full-name", "@{upstream}"];
+const UPSTREAM_FIELDS: &str =
+    "--format=%(refname)%09%(upstream)%09%(upstream:remotename)%09%(upstream:remoteref)";
+const FIELD_SEPARATOR: char = '\t';
+const BRANCHES: &str = "refs/heads/";
+const HEAD: &str = "HEAD";
 const FAST_FORWARD_IMPOSSIBLE: &str = "Not possible to fast-forward";
-const CHANGES_IN_THE_WAY: [&str; 2] = [
-    "cannot pull with rebase",
-    "would be overwritten by merge",
-];
 const PUSH_REJECTED: &str = "[rejected]";
 const REJECTED_FOR_MISSING_COMMITS: [&str; 2] = ["(fetch first)", "(non-fast-forward)"];
+const FETCH_REFUSED_TO_MOVE_BACK: &str = "(non-fast-forward)";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Fetched {
@@ -39,6 +42,12 @@ pub(crate) enum Pushed {
 struct Upstream {
     tracking: Tracking,
     reference: FullName,
+}
+
+struct ConfiguredUpstream {
+    upstream: Upstream,
+    remote: String,
+    merge: String,
 }
 
 impl Repo {
@@ -87,7 +96,7 @@ impl Repo {
         let repo = self.local();
         let branch = checked_out_branch(&repo)?;
         let Some(upstream) = self.upstream_of(&branch) else {
-            return self.push_without_upstream(&repo, &branch);
+            return self.push_without_upstream(&repo, &branch, HEAD);
         };
         let already_there = commit_of(&repo, &upstream.reference) == head_commit(&repo);
         run(&self.location, &["push", "--quiet"], Exit::Success)
@@ -99,7 +108,92 @@ impl Repo {
         })
     }
 
-    fn push_without_upstream(&self, repo: &gix::Repository, branch: &FullName) -> Result<Pushed> {
+    pub(crate) fn pull_branch(&self, branch: &str) -> Result<Pulled> {
+        let Some(configured) = self.configured_upstream(branch)? else {
+            return Err(Refusal::NoUpstream {
+                branch: branch.to_owned(),
+            }
+            .into());
+        };
+        let repo = self.local();
+        let local = branch_reference(branch)?;
+        let before = commit_of(&repo, &local);
+        let refspec = format!("{}:{}", configured.merge, local.as_bstr());
+        let tracking = configured.upstream.tracking;
+        if let Err(error) = run(
+            &self.location,
+            &fetch_that_reports_rejections(&configured.remote, &refspec),
+            Exit::Success,
+        ) {
+            return Err(if error.to_string().contains(FETCH_REFUSED_TO_MOVE_BACK) {
+                Refusal::CantFastForward(tracking).into()
+            } else {
+                error
+            });
+        }
+        Ok(if commit_of(&repo, &local) == before {
+            Pulled::UpToDate(tracking)
+        } else {
+            Pulled::BroughtIn(tracking)
+        })
+    }
+
+    pub(crate) fn push_branch(&self, branch: &str) -> Result<Pushed> {
+        let repo = self.local();
+        let local = branch_reference(branch)?;
+        let Some(configured) = self.configured_upstream(branch)? else {
+            let same_name_there = format!("{0}:{0}", local.as_bstr());
+            return self.push_without_upstream(&repo, &local, &same_name_there);
+        };
+        let upstream = configured.upstream;
+        let already_there = commit_of(&repo, &upstream.reference) == commit_of(&repo, &local);
+        let refspec = format!("{}:{}", local.as_bstr(), configured.merge);
+        run(
+            &self.location,
+            &["push", "--quiet", &configured.remote, &refspec],
+            Exit::Success,
+        )
+        .map_err(|error| refused_for_missing_commits(error, &upstream.tracking))?;
+        Ok(if already_there {
+            Pushed::AlreadyThere(upstream.tracking)
+        } else {
+            Pushed::Sent(upstream.tracking)
+        })
+    }
+
+    fn configured_upstream(&self, branch: &str) -> Result<Option<ConfiguredUpstream>> {
+        let local = branch_reference(branch)?;
+        let local_name = local.as_bstr().to_string();
+        let listed = run_text(
+            &self.location,
+            &["for-each-ref", UPSTREAM_FIELDS, &local_name],
+            Exit::Success,
+        )?;
+        let fields = listed.lines().find_map(|line| {
+            let mut fields = line.split(FIELD_SEPARATOR);
+            (fields.next()? == local_name).then_some(())?;
+            let reference = FullName::try_from(fields.next()?).ok()?;
+            Some((reference, fields.next()?, fields.next()?))
+        });
+        Ok(fields.map(|(reference, remote, merge)| ConfiguredUpstream {
+            upstream: Upstream {
+                tracking: Tracking {
+                    branch: branch.to_owned(),
+                    upstream: short_name(&reference),
+                },
+                reference,
+            },
+            remote: remote.to_owned(),
+            merge: merge.to_owned(),
+        }))
+    }
+
+    fn push_without_upstream(
+        &self,
+        repo: &gix::Repository,
+        branch: &FullName,
+        refspec: &str,
+    ) -> Result<Pushed> {
         let name = short_name(branch);
         let remote = match repo.remote_default_name(Direction::Push) {
             Some(remote) => remote.to_string(),
@@ -112,7 +206,7 @@ impl Repo {
         };
         run(
             &self.location,
-            &["push", "--quiet", "--set-upstream", &remote, "HEAD"],
+            &["push", "--quiet", "--set-upstream", &remote, refspec],
             Exit::Success,
         )
         .map_err(|error| refused_for_missing_commits(error, &tracking))?;
@@ -132,35 +226,36 @@ impl Repo {
     }
 
     fn why_the_pull_stopped(&self, error: anyhow::Error, tracking: Tracking) -> anyhow::Error {
-        let message = error.to_string();
-        match self.local().state() {
-            Some(InProgress::Merge) => Refusal::MergeStopped.into(),
-            Some(InProgress::Rebase | InProgress::RebaseInteractive) => {
-                Refusal::RebaseStopped.into()
-            }
-            _ if message.contains(FAST_FORWARD_IMPOSSIBLE) => Refusal::Diverged(tracking).into(),
-            _ if CHANGES_IN_THE_WAY.iter().any(|why| message.contains(why)) => {
-                Refusal::ChangesInTheWay.into()
-            }
-            _ => error,
+        let repo = self.local();
+        let nothing_in_progress = repo.state().is_none();
+        if nothing_in_progress && error.to_string().contains(FAST_FORWARD_IMPOSSIBLE) {
+            return Refusal::Diverged(tracking).into();
         }
+        why_git_stopped(&repo, error)
     }
 }
 
-fn checked_out_branch(repo: &gix::Repository) -> Result<FullName> {
+fn fetch_that_reports_rejections<'a>(remote: &'a str, refspec: &'a str) -> [&'a str; 3] {
+    ["fetch", remote, refspec]
+}
+
+pub(super) fn checked_out_branch(repo: &gix::Repository) -> Result<FullName> {
     repo.head_name()?.ok_or_else(|| Refusal::Detached.into())
 }
 
+pub(super) fn branch_reference(branch: &str) -> Result<FullName> {
+    Ok(FullName::try_from(format!("{BRANCHES}{branch}"))?)
+}
 
-fn short_name(name: &FullName) -> String {
+pub(super) fn short_name(name: &FullName) -> String {
     decode(name.as_ref().shorten())
 }
 
-fn head_commit(repo: &gix::Repository) -> Option<ObjectId> {
+pub(super) fn head_commit(repo: &gix::Repository) -> Option<ObjectId> {
     repo.head_id().ok().map(|id| id.detach())
 }
 
-fn commit_of(repo: &gix::Repository, name: &FullName) -> Option<ObjectId> {
+pub(super) fn commit_of(repo: &gix::Repository, name: &FullName) -> Option<ObjectId> {
     let mut reference = repo.find_reference(name.as_ref()).ok()?;
     reference.peel_to_commit().ok().map(|commit| commit.id)
 }
@@ -445,6 +540,100 @@ mod tests {
         assert_eq!(
             refusal(shared.push()),
             Refusal::RemoteAhead(main_tracking())
+        );
+        Ok(())
+    }
+
+    fn topic_tracking() -> Tracking {
+        Tracking {
+            branch: "topic".into(),
+            upstream: "origin/topic".into(),
+        }
+    }
+
+    fn with_topic_on_both_sides(label: &str) -> Result<Shared> {
+        let shared = Shared::new(label)?;
+        shared.theirs.git(&["switch", "--quiet", "--create=topic"])?;
+        shared
+            .theirs
+            .git(&["push", "--quiet", "--set-upstream", "origin", "topic"])?;
+        shared.ours.git(&["fetch", "--quiet", "origin"])?;
+        shared
+            .ours
+            .git(&["branch", "--quiet", "--track", "topic", "origin/topic"])?;
+        Ok(shared)
+    }
+
+    #[test]
+    fn pulling_a_branch_that_is_not_checked_out_fast_forwards_it() -> Result<()> {
+        let shared = with_topic_on_both_sides("pull-other")?;
+        let theirs = shared.they_push("on topic")?;
+        let before = shared.ours.head()?;
+        let (repo, _) = shared.ours.open()?;
+        assert_eq!(
+            repo.pull_branch("topic")?,
+            Pulled::BroughtIn(topic_tracking())
+        );
+        assert_eq!(shared.ours.git(&["rev-parse", "topic"])?.trim(), theirs);
+        assert_eq!(shared.ours.head()?, before);
+        assert_eq!(
+            repo.pull_branch("topic")?,
+            Pulled::UpToDate(topic_tracking())
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn a_branch_that_is_not_checked_out_only_fast_forwards() -> Result<()> {
+        let shared = with_topic_on_both_sides("pull-other-diverged")?;
+        shared.they_push("theirs")?;
+        shared.ours.git(&["switch", "--quiet", "topic"])?;
+        shared.ours.commit("mine")?;
+        let mine = shared.ours.head()?;
+        shared.ours.git(&["switch", "--quiet", "main"])?;
+        let (repo, _) = shared.ours.open()?;
+        assert_eq!(
+            refusal(repo.pull_branch("topic")),
+            Refusal::CantFastForward(topic_tracking())
+        );
+        assert_eq!(shared.ours.git(&["rev-parse", "topic"])?.trim(), mine);
+        shared.ours.git(&["branch", "lonely"])?;
+        assert_eq!(
+            refusal(repo.pull_branch("lonely")),
+            Refusal::NoUpstream {
+                branch: "lonely".into()
+            }
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn pushing_a_branch_that_is_not_checked_out_makes_its_upstream_then_updates_it()
+    -> Result<()> {
+        let shared = Shared::new("push-other")?;
+        shared.ours.git(&["switch", "--quiet", "--create=topic"])?;
+        shared.ours.commit("on topic")?;
+        shared.ours.git(&["switch", "--quiet", "main"])?;
+        let (repo, _) = shared.ours.open()?;
+        assert_eq!(repo.push_branch("topic")?, Pushed::Sent(topic_tracking()));
+        assert_eq!(
+            shared
+                .ours
+                .git(&["rev-parse", "--abbrev-ref", "topic@{upstream}"])?
+                .trim(),
+            "origin/topic"
+        );
+        assert_eq!(
+            repo.push_branch("topic")?,
+            Pushed::AlreadyThere(topic_tracking())
+        );
+        shared.ours.git(&["switch", "--quiet", "topic"])?;
+        shared.ours.commit("newer")?;
+        shared.ours.git(&["switch", "--quiet", "main"])?;
+        assert_eq!(repo.push_branch("topic")?, Pushed::Sent(topic_tracking()));
+        assert_eq!(
+            shared.origin.git(&["rev-parse", "topic"])?.trim(),
+            shared.ours.git(&["rev-parse", "topic"])?.trim()
         );
         Ok(())
     }

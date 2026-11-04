@@ -1,4 +1,5 @@
 mod branch_dialog;
+mod branch_menu;
 mod changes_list;
 mod commit_files;
 mod commit_form;
@@ -36,10 +37,11 @@ use gpui_kit::{
 
 use crate::{
     actions::{CloseDiff, CopyHash, Fetch, NewerCommit, OlderCommit, Refresh},
-    git::{FileChange, HISTORY_LIMIT, History, PullMode, Scope, Side, short_id},
+    git::{FileChange, HISTORY_LIMIT, History, PullMode, RefLabel, Scope, Side, short_id},
     ui::{self, Failure, FileView, Folded, Look as _, Notice, thousands},
 };
 use branch_dialog::open_branch_dialog;
+use branch_menu::{BranchAction, BranchMenu, confirm_delete};
 use changes_list::{ChangesList, SideFolds, SideScrolls, discard_question};
 use commit_form::CommitForm;
 use commit_panel::{CommitPanel, OpenCommitFile, copy_commit_hash};
@@ -324,11 +326,43 @@ impl RepoView {
     fn run(&mut self, operation: Operation, window: &mut Window, cx: &mut Context<Self>) {
         let repository = self.repository.clone();
         match operation {
-            Operation::Branch => open_branch_dialog(repository, window, cx),
+            Operation::Branch => open_branch_dialog(repository, None, window, cx),
             Operation::Pull => repository.update(cx, |repository, cx| repository.pull(cx)),
             Operation::Push => repository.update(cx, |repository, cx| repository.push(cx)),
             Operation::Stash => repository.update(cx, |repository, cx| repository.stash(cx)),
             Operation::Pop => repository.update(cx, |repository, cx| repository.pop_stash(cx)),
+        }
+    }
+
+    fn act_on_branch(
+        &mut self,
+        label: RefLabel,
+        action: BranchAction,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let repository = self.repository.clone();
+        match action {
+            BranchAction::CheckOut => {
+                repository.update(cx, |repository, cx| repository.check_out(label, cx))
+            }
+            BranchAction::Pull => {
+                repository.update(cx, |repository, cx| repository.pull_branch(label, cx))
+            }
+            BranchAction::Push => {
+                repository.update(cx, |repository, cx| repository.push_branch(label, cx))
+            }
+            BranchAction::Merge => {
+                repository.update(cx, |repository, cx| repository.merge(label, cx))
+            }
+            BranchAction::Rebase => {
+                repository.update(cx, |repository, cx| repository.rebase_onto(label, cx))
+            }
+            BranchAction::BranchHere => {
+                let start = (!label.is_head).then_some(label);
+                open_branch_dialog(repository, start, window, cx)
+            }
+            BranchAction::Delete => confirm_delete(repository, label, window, cx),
         }
     }
 
@@ -407,8 +441,20 @@ impl RepoView {
     }
 
     fn refs_list(&self, history: Arc<History>, cx: &mut Context<Self>) -> RefsList {
+        let repository = self.repository.read(cx);
+        let branch_menu = BranchMenu::new(
+            history.branch.clone(),
+            repository.pull_mode(),
+            repository.is_writing(),
+        )
+        .on_action(cx.listener(
+            |this, (label, action): &(RefLabel, BranchAction), window, cx| {
+                this.act_on_branch(label.clone(), *action, window, cx)
+            },
+        ));
         RefsList::new(history, &self.folded_refs, self.refs_scroll.clone())
             .selected(self.target.commit())
+            .branch_menu(branch_menu)
             .on_reveal(cx.listener(|this, ix: &usize, window, cx| this.reveal_ref(*ix, window, cx)))
             .on_toggle(
                 cx.listener(|this, group: &RefGroup, _, cx| {

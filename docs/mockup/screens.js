@@ -44,6 +44,7 @@ const Screens = (() => {
     });
 
   const firstUnstaged = changes.unstaged[0];
+  const ref = (name) => history.refs.find((label) => label.name === name);
 
   return [
     {
@@ -291,6 +292,58 @@ const Screens = (() => {
           tabStrip: tabStrip(),
           body: commitSelected(),
           overlays: C.BranchDialog({ head: `main (${history.commits[0].id})`, value: 'feature/toolbar' }),
+        }),
+    },
+    {
+      id: 'branch-menu',
+      title: 'Right-click on a branch',
+      about: "A right-click on a branch in the left list opens its menu where the pointer is, without selecting its commit. Here feature/blame is not checked out, so it offers Check out, Pull, Push, Merge it into main or Rebase main onto it, Create branch here… and Delete…. Pull is fast-forward only, because Git can't merge into or rebase a branch that isn't checked out. The checked-out branch offers Pull with the header's pull mode, Push and Create branch here…. A remote branch offers Check out, Merge, Rebase, Create branch here… and Delete from its remote. With a detached HEAD there is no Merge or Rebase. Tags and folders have no menu. Each action runs like the header buttons: one Git write at a time, then a notification; Pull and Push spin the header's button while they run.",
+      source: 'src/repo/branch_menu.rs',
+      render: () =>
+        C.FastGit({
+          topBar: topBar(),
+          tabStrip: tabStrip(),
+          body: commitSelected(),
+          overlays: C.BranchMenu({ label: ref('feature/blame'), current: history.head, left: 92, top: 188, hot: Texts.merge('feature/blame', history.head) }),
+        }),
+    },
+    {
+      id: 'branch-from-ref',
+      title: 'Create a branch from another ref',
+      about: 'Create branch here… opens the same dialog as the header’s Branch, but the new branch starts at the ref that was right-clicked. It is checked out right away; uncommitted changes come along unless they clash with it, and then Git refuses and says why.',
+      source: 'src/repo/branch_dialog.rs',
+      render: () =>
+        C.FastGit({
+          topBar: topBar(),
+          tabStrip: tabStrip(),
+          body: commitSelected(),
+          overlays: C.BranchDialog({ from: `feature/blame (${history.commits[ref('feature/blame').row].id})`, value: 'fix/blame-tabs' }),
+        }),
+    },
+    {
+      id: 'delete-branch',
+      title: 'Delete a branch',
+      about: 'Delete… always asks first. The question counts the commits that no other branch or tag holds and says they are lost; when there are none it says nothing is lost. Delete then removes the branch, merged or not. A remote branch is deleted on its remote, after a question that says everyone who uses it loses it.',
+      source: 'src/repo/branch_menu.rs',
+      render: () =>
+        C.FastGit({
+          topBar: topBar(),
+          tabStrip: tabStrip(),
+          body: commitSelected(),
+          overlays: C.DeleteBranchDialog({ label: ref('feature/blame'), only: 1 }),
+        }),
+    },
+    {
+      id: 'merged',
+      title: 'Branch merged',
+      about: 'Check out, Merge, Rebase and Delete say what they did in a notification. A merge that stops on conflicts, or a check-out that uncommitted changes would overwrite, explains what to do in an error notification instead.',
+      source: 'src/repo/operation.rs',
+      render: () =>
+        C.FastGit({
+          topBar: topBar(),
+          tabStrip: tabStrip(),
+          body: commitSelected(),
+          overlays: `<div class="toasts">${C.Notification({ kind: 'success', message: 'Merged feature/blame into main' })}</div>`,
         }),
     },
     {

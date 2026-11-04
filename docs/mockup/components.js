@@ -168,6 +168,22 @@ const Texts = {
   pathCopied: 'Path copied',
   branchTitle: 'Create a branch',
   branchDescription: (head) => `It starts at ${head}, where HEAD is, and is checked out right away. Uncommitted changes stay as they are.`,
+  branchFromDescription: (start) => `It starts at ${start} and is checked out right away. Uncommitted changes come along unless they clash with it.`,
+  checkOut: (name) => `Check out ${name}`,
+  pullWithMode: (mode) => `Pull (${mode.toLowerCase()})`,
+  pullFastForward: 'Pull (fast-forward only)',
+  push: 'Push',
+  merge: (from, into) => `Merge ${from} into ${into}`,
+  rebase: (branch, onto) => `Rebase ${branch} onto ${onto}`,
+  branchHere: 'Create branch here…',
+  deleteBranch: (name) => `Delete ${name}…`,
+  deleteRemoteBranch: (name, remote) => `Delete ${name} from ${remote}…`,
+  deleteBranchTitle: (name) => `Delete ${name}?`,
+  deleteMerged: (name) => `Every commit of ${name} is on another branch or tag too, so nothing is lost.`,
+  deleteUnmerged: (name, n) => `${counted(n, 'commit is', 'commits are')} on no other branch or tag. Deleting ${name} loses ${n === 1 ? 'it' : 'them'}.`,
+  deleteUncounted: (name) => `${name} points to a commit older than the newest ${thousands(Texts.historyLimit)} shown, so FastGit can't tell whether deleting it loses any commits.`,
+  deleteRemoteTitle: (name, remote) => `Delete ${name} from ${remote}?`,
+  deleteRemoteDescription: (name, remote) => `The branch is removed from ${remote} for everyone who uses it. A local ${name}, if you have one, stays.`,
   branchPlaceholder: 'Branch name',
   branchExists: (name) => `There is already a branch named ${name}.`,
   branchInvalid: "Git doesn't accept this name: no spaces, and none of ~ ^ : ? * [ \\ or ..",
@@ -344,6 +360,25 @@ function fileMenuItems({ change, side }) {
   const discard = labels.discards && change.kind !== 'U' && [change.kind === '?' ? 'Delete file…' : 'Discard changes…', ''];
   const onDisk = change.kind !== 'D' && [['Open file', ''], ['Show in folder', '']];
   return [[labels.fileTooltip, ''], discard, '-', ...(onDisk || []), ['Copy path', '']].filter(Boolean);
+}
+
+function remoteParts(name) {
+  const [remote, ...rest] = name.split('/');
+  return { remote, branch: rest.join('/') };
+}
+
+function branchMenuItems({ label, current, mode = 'merge' }) {
+  const remote = label.kind === 'remote' && remoteParts(label.name);
+  const checkedOut = Boolean(label.head);
+  const item = (text) => [text, ''];
+  const groups = [
+    !checkedOut && [item(Texts.checkOut(remote ? remote.branch : label.name))],
+    !remote && [item(checkedOut ? Texts.pullWithMode(pullMode(mode).label) : Texts.pullFastForward), item(Texts.push)],
+    current && !checkedOut && [item(Texts.merge(label.name, current)), item(Texts.rebase(current, label.name))],
+    [item(Texts.branchHere)],
+    !checkedOut && [item(remote ? Texts.deleteRemoteBranch(remote.branch, remote.remote) : Texts.deleteBranch(label.name))],
+  ].filter(Boolean);
+  return groups.flatMap((group, ix) => (ix ? ['-', ...group] : group));
 }
 
 const C = {
@@ -825,14 +860,28 @@ const C = {
     return `<div data-c="RepoView" class="repo-view">${toolbar}<div class="fill v">${panes}</div>${status}</div>`;
   },
 
-  BranchDialog({ head, value = '', problem }) {
+  BranchMenu({ label, current, mode, left = 0, top = 0, hot }) {
+    return C.Menu({ items: branchMenuItems({ label, current, mode }), left, top, hot, name: 'BranchMenu' });
+  },
+
+  DeleteBranchDialog({ label, only = 0 }) {
+    if (label.kind === 'remote') {
+      const { remote, branch } = remoteParts(label.name);
+      return C.AlertDialog({ title: Texts.deleteRemoteTitle(branch, remote), description: Texts.deleteRemoteDescription(branch, remote), confirm: 'Delete', name: 'DeleteBranchDialog' });
+    }
+    const description = only === null ? Texts.deleteUncounted(label.name) : only ? Texts.deleteUnmerged(label.name, only) : Texts.deleteMerged(label.name);
+    return C.AlertDialog({ title: Texts.deleteBranchTitle(label.name), description, confirm: 'Delete', name: 'DeleteBranchDialog' });
+  },
+
+  BranchDialog({ head, from, value = '', problem }) {
     const field = C.Input({ value, placeholder: Texts.branchPlaceholder, focused: true });
     const hint = problem ? `<div class="xs problem">${esc(problem)}</div>` : '';
     const buttons =
       C.Button({ label: 'Cancel', size: 'md' }) +
       C.Button({ label: Texts.createBranch, variant: 'primary', size: 'md', disabled: !value || Boolean(problem) });
     const close = `<span class="close">${icon('close', 'sm')}</span>`;
-    return `<div class="overlay"><div data-c="BranchDialog" data-base="Dialog" class="dialog">${close}<div class="base semibold">${esc(Texts.branchTitle)}</div><div class="sm muted">${esc(Texts.branchDescription(head))}</div><div class="v field">${field}${hint}</div><div class="footer stretch">${buttons}</div></div></div>`;
+    const description = from ? Texts.branchFromDescription(from) : Texts.branchDescription(head);
+    return `<div class="overlay"><div data-c="BranchDialog" data-base="Dialog" class="dialog">${close}<div class="base semibold">${esc(Texts.branchTitle)}</div><div class="sm muted">${esc(description)}</div><div class="v field">${field}${hint}</div><div class="footer stretch">${buttons}</div></div></div>`;
   },
 
   Menu({ items, left = 0, top = 0, hot, name = 'Menu' }) {
@@ -854,11 +903,12 @@ const C = {
     return `<div data-c="Notification" class="toast sm">${glyph}<div class="message">${heading}${esc(message)}</div>${C.Button({ icon: 'close', variant: 'ghost' })}</div>`;
   },
 
-  AlertDialog({ title, description, confirm }) {
+  AlertDialog({ title, description, confirm, name = 'AlertDialog' }) {
     const buttons = confirm
       ? C.Button({ label: 'Cancel', size: 'md' }) + C.Button({ label: confirm, variant: 'danger', size: 'md' })
       : C.Button({ label: 'OK', variant: 'primary', size: 'md' });
-    return `<div class="overlay"><div data-c="AlertDialog" class="dialog"><div class="base semibold">${esc(title)}</div><div class="sm muted">${esc(description)}</div><div class="footer">${buttons}</div></div></div>`;
+    const base = name === 'AlertDialog' ? '' : ' data-base="AlertDialog"';
+    return `<div class="overlay"><div data-c="${name}"${base} class="dialog"><div class="base semibold">${esc(title)}</div><div class="sm muted">${esc(description)}</div><div class="footer">${buttons}</div></div></div>`;
   },
 
   DiscardDialog({ change }) {

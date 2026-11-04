@@ -1,7 +1,7 @@
 use gpui_kit::SharedString;
 
 use crate::{
-    git::{Pulled, Pushed, Refusal, Tracking},
+    git::{CheckedOut, Merged, Pulled, Pushed, Rebased, RefLabel, Refusal, RemoteBranch, Tracking},
     ui::Failure,
 };
 
@@ -41,7 +41,7 @@ impl Operation {
 }
 
 pub(crate) struct Operated {
-    pub(crate) operation: Operation,
+    pub(crate) failed: SharedString,
     pub(crate) outcome: Result<SharedString, Failure>,
 }
 
@@ -75,6 +75,53 @@ pub(crate) fn branch_created(name: &str) -> SharedString {
     format!("Switched to the new branch {name}").into()
 }
 
+pub(crate) fn checked_out(checked_out: &CheckedOut) -> SharedString {
+    match checked_out {
+        CheckedOut::Existing(branch) => format!("Switched to {branch}").into(),
+        CheckedOut::Tracking(Tracking { branch, upstream }) => {
+            format!("Switched to the new branch {branch}, tracking {upstream}").into()
+        }
+    }
+}
+
+pub(crate) fn merged(from: &str, into: &str, merged: Merged) -> SharedString {
+    match merged {
+        Merged::UpToDate => format!("{into} already has every commit of {from}").into(),
+        Merged::FastForwarded => format!("Fast-forwarded {into} to {from}").into(),
+        Merged::WithMergeCommit => format!("Merged {from} into {into}").into(),
+    }
+}
+
+pub(crate) fn rebased(branch: &str, onto: &str, rebased: Rebased) -> SharedString {
+    match rebased {
+        Rebased::UpToDate => format!("{branch} is already on top of {onto}").into(),
+        Rebased::Replayed => format!("Rebased {branch} onto {onto}").into(),
+    }
+}
+
+pub(crate) fn deleted(label: &RefLabel) -> SharedString {
+    match label.on_remote() {
+        Some(RemoteBranch { remote, branch }) => format!("Deleted {branch} from {remote}").into(),
+        None => format!("Deleted {}", label.name).into(),
+    }
+}
+
+pub(crate) fn check_out_failed(branch: &str) -> SharedString {
+    format!("Couldn't check out {branch}").into()
+}
+
+pub(crate) fn merge_failed(from: &str, into: &str) -> SharedString {
+    format!("Couldn't merge {from} into {into}").into()
+}
+
+pub(crate) fn rebase_failed(branch: &str, onto: &str) -> SharedString {
+    format!("Couldn't rebase {branch} onto {onto}").into()
+}
+
+pub(crate) fn delete_failed(label: &RefLabel) -> SharedString {
+    format!("Couldn't delete {}", label.name).into()
+}
+
 pub(crate) fn failure(error: &anyhow::Error) -> Failure {
     let failure = Failure::git_reason(error);
     match error.downcast_ref::<Refusal>() {
@@ -85,8 +132,11 @@ pub(crate) fn failure(error: &anyhow::Error) -> Failure {
 
 #[cfg(test)]
 mod tests {
-    use super::{failure, pulled, pushed};
-    use crate::git::{Pulled, Pushed, Refusal, Tracking};
+    use super::{checked_out, deleted, failure, merged, pulled, pushed, rebased};
+    use crate::git::{
+        CheckedOut, Merged, Pulled, Pushed, Rebased, RefKind, RefLabel, Refusal, Tracking,
+        fixtures::id,
+    };
 
     fn main_tracking() -> Tracking {
         Tracking {
@@ -125,5 +175,54 @@ mod tests {
         );
         let git = anyhow::anyhow!("hint: see git help\nfatal: could not read from remote");
         assert_eq!(failure(&git).message(), "fatal: could not read from remote");
+    }
+
+    #[test]
+    fn branch_actions_name_both_branches_in_the_order_git_moves_them() {
+        assert_eq!(
+            merged("feature/blame", "main", Merged::WithMergeCommit),
+            "Merged feature/blame into main"
+        );
+        assert_eq!(
+            merged("feature/blame", "main", Merged::FastForwarded),
+            "Fast-forwarded main to feature/blame"
+        );
+        assert_eq!(
+            merged("feature/blame", "main", Merged::UpToDate),
+            "main already has every commit of feature/blame"
+        );
+        assert_eq!(
+            rebased("main", "feature/blame", Rebased::Replayed),
+            "Rebased main onto feature/blame"
+        );
+        assert_eq!(
+            checked_out(&CheckedOut::Tracking(Tracking {
+                branch: "feature/diff-view".into(),
+                upstream: "origin/feature/diff-view".into()
+            })),
+            "Switched to the new branch feature/diff-view, tracking origin/feature/diff-view"
+        );
+        assert_eq!(
+            checked_out(&CheckedOut::Existing("feature/blame".into())),
+            "Switched to feature/blame"
+        );
+    }
+
+    #[test]
+    fn deleting_a_remote_branch_names_its_remote() {
+        let label = |name: &str, kind| RefLabel {
+            name: name.to_owned().into(),
+            kind,
+            target: id(1),
+            is_head: false,
+        };
+        assert_eq!(
+            deleted(&label("origin/feature/x", RefKind::RemoteBranch)),
+            "Deleted feature/x from origin"
+        );
+        assert_eq!(
+            deleted(&label("feature/x", RefKind::LocalBranch)),
+            "Deleted feature/x"
+        );
     }
 }

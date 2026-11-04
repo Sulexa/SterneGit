@@ -17,7 +17,7 @@ use gpui_kit::{
 
 use super::repository::Repository;
 use crate::{
-    git::{History, NameProblem, new_branch_name, short_id},
+    git::{History, NameProblem, RefLabel, new_branch_name, short_id},
     ui::Look as _,
 };
 
@@ -80,23 +80,34 @@ impl Render for BranchForm {
 
 pub(crate) fn open_branch_dialog(
     repository: Entity<Repository>,
+    start: Option<RefLabel>,
     window: &mut Window,
     cx: &mut App,
 ) {
     let Some(history) = repository.read(cx).history().cloned() else {
         return;
     };
-    let description = format!(
-        "It starts at {}, where HEAD is, and is checked out right away. \
-         Uncommitted changes stay as they are.",
-        starting_point(&history)
-    );
+    let description = match &start {
+        None => format!(
+            "It starts at {}, where HEAD is, and is checked out right away. \
+             Uncommitted changes stay as they are.",
+            starting_point(&history)
+        ),
+        Some(label) => format!(
+            "It starts at {} ({}) and is checked out right away. \
+             Uncommitted changes come along unless they clash with it.",
+            label.name,
+            short_id(label.target)
+        ),
+    };
+    let start = start.map(|label| label.revision(&history.refs));
     let form = cx.new(|cx| BranchForm::new(history, window, cx));
     let name = form.read(cx).name.clone();
     window.open_dialog(cx, move |dialog, _, cx| {
         let ready = form.read(cx).checked(cx).is_ok();
         let form_on_ok = form.clone();
         let repository = repository.clone();
+        let start = start.clone();
         dialog
             .title(TITLE)
             .w(px(WIDTH))
@@ -118,7 +129,9 @@ pub(crate) fn open_branch_dialog(
                 let Ok(name) = form_on_ok.read(cx).checked(cx) else {
                     return false;
                 };
-                repository.update(cx, |repository, cx| repository.create_branch(name, cx));
+                repository.update(cx, |repository, cx| {
+                    repository.create_branch(name, start.clone(), cx)
+                });
                 true
             })
     });
