@@ -74,6 +74,7 @@ pub(crate) struct History {
     /// stays the same, so does everything shown.
     pub(crate) state: u64,
     repo: ThreadSafeRepository,
+    has_work_tree: bool,
     /// Where `git` runs: the work tree, or the Git directory of a bare repository.
     location: PathBuf,
 }
@@ -95,6 +96,7 @@ pub(crate) fn load(path: &Path) -> Result<History> {
     // next digest, so the change is read again rather than missed.
     let state = ref_state(&repo)?;
 
+    let has_work_tree = repo.workdir().is_some();
     let location = repo.workdir().unwrap_or_else(|| repo.git_dir());
     // A repository found from "." would otherwise be named ".".
     let location = std::path::absolute(location).unwrap_or_else(|_| location.to_owned());
@@ -201,6 +203,7 @@ pub(crate) fn load(path: &Path) -> Result<History> {
         elapsed: started.elapsed(),
         state,
         repo: repo.into_sync(),
+        has_work_tree,
         location,
     })
 }
@@ -277,6 +280,252 @@ impl History {
     }
 }
 
+/// How a file differs on one side of the index.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ChangeKind {
+    Added,
+    Modified,
+    Deleted,
+    Renamed,
+    Copied,
+    /// Not tracked yet.
+    Untracked,
+    /// Unmerged: both sides of a merge changed it.
+    Conflicted,
+}
+
+impl ChangeKind {
+    /// The letter `git status` shows for it.
+    pub(crate) fn letter(self) -> &'static str {
+        match self {
+            ChangeKind::Added => "A",
+            ChangeKind::Modified => "M",
+            ChangeKind::Deleted => "D",
+            ChangeKind::Renamed => "R",
+            ChangeKind::Copied => "C",
+            ChangeKind::Untracked => "?",
+            ChangeKind::Conflicted => "U",
+        }
+    }
+
+    fn from_code(code: u8) -> Option<Self> {
+        Some(match code {
+            b'A' => ChangeKind::Added,
+            b'M' | b'T' => ChangeKind::Modified,
+            b'D' => ChangeKind::Deleted,
+            b'R' => ChangeKind::Renamed,
+            b'C' => ChangeKind::Copied,
+            _ => return None,
+        })
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct FileChange {
+    /// Relative to the work tree, with `/` separators.
+    pub(crate) path: SharedString,
+    /// Where a renamed or copied file came from.
+    pub(crate) original: Option<SharedString>,
+    pub(crate) kind: ChangeKind,
+}
+
+/// Which side of the index a change is on.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Side {
+    /// In the work tree, not yet in the index.
+    Unstaged,
+    /// In the index, ready to commit.
+    Staged,
+}
+
+/// The uncommitted changes, from `git status`.
+#[derive(Default, Debug)]
+pub(crate) struct WorkingChanges {
+    pub(crate) unstaged: Vec<FileChange>,
+    pub(crate) staged: Vec<FileChange>,
+    /// A digest of the status and of each changed file's size and time, so an
+    /// edit to a file that was already modified still changes it.
+    pub(crate) digest: u64,
+}
+
+impl WorkingChanges {
+    pub(crate) fn is_empty(&self) -> bool {
+        self.unstaged.is_empty() && self.staged.is_empty()
+    }
+
+    pub(crate) fn files(&self, side: Side) -> &[FileChange] {
+        match side {
+            Side::Unstaged => &self.unstaged,
+            Side::Staged => &self.staged,
+        }
+    }
+
+    pub(crate) fn find(&self, side: Side, path: &str) -> Option<&FileChange> {
+        self.files(side).iter().find(|change| change.path == path)
+    }
+}
+
+/// Parses `git status --porcelain=v1 -z`.
+fn parse_status(output: &[u8]) -> WorkingChanges {
+    let mut changes = WorkingChanges::default();
+    let mut entries = output.split(|&byte| byte == 0).filter(|entry| !entry.is_empty());
+    while let Some(entry) = entries.next() {
+        if entry.len() < 4 {
+            continue;
+        }
+        let (index, worktree) = (entry[0], entry[1]);
+        let path: SharedString = entry[3..].to_str_lossy().into_owned().into();
+        // A rename or copy in the index is followed by the path it came from.
+        let original = matches!(index, b'R' | b'C')
+            .then(|| entries.next())
+            .flatten()
+            .map(|path| SharedString::from(path.to_str_lossy().into_owned()));
+        let conflicted = matches!(
+            (index, worktree),
+            (b'U', _) | (_, b'U') | (b'A', b'A') | (b'D', b'D')
+        );
+        if conflicted {
+            changes.unstaged.push(FileChange { path, original: None, kind: ChangeKind::Conflicted });
+            continue;
+        }
+        if index == b'?' {
+            changes.unstaged.push(FileChange { path, original: None, kind: ChangeKind::Untracked });
+            continue;
+        }
+        if let Some(kind) = ChangeKind::from_code(index) {
+            changes.staged.push(FileChange { path: path.clone(), original, kind });
+        }
+        if let Some(kind) = ChangeKind::from_code(worktree) {
+            changes.unstaged.push(FileChange { path, original: None, kind });
+        }
+    }
+    let by_path = |a: &FileChange, b: &FileChange| a.path.as_str().cmp(b.path.as_str());
+    changes.unstaged.sort_by(by_path);
+    changes.staged.sort_by(by_path);
+    changes
+}
+
+impl History {
+    /// Whether the repository has a work tree, and so changes to stage.
+    pub(crate) fn has_work_tree(&self) -> bool {
+        self.has_work_tree
+    }
+
+    /// Returns a job that reads the uncommitted changes, to run off the UI thread.
+    pub(crate) fn status_job(&self) -> impl FnOnce() -> Result<WorkingChanges> + Send + 'static {
+        let location = self.location.clone();
+        move || {
+            let output = git_bytes(
+                &location,
+                &["status", "--porcelain=v1", "-z", "--untracked-files=all", "--find-renames"],
+                false,
+            )?;
+            let mut changes = parse_status(&output);
+            let mut hasher = DefaultHasher::new();
+            output.hash(&mut hasher);
+            // `git status` reads the same for a file edited twice; its size and
+            // time don't.
+            for change in &changes.unstaged {
+                if let Ok(metadata) = std::fs::metadata(location.join(change.path.as_str())) {
+                    metadata.len().hash(&mut hasher);
+                    metadata.modified().ok().hash(&mut hasher);
+                }
+            }
+            changes.digest = hasher.finish();
+            Ok(changes)
+        }
+    }
+
+    /// Returns a job that reads one changed file's patch on one side of the index.
+    pub(crate) fn change_diff_job(
+        &self,
+        change: FileChange,
+        side: Side,
+    ) -> impl FnOnce() -> Result<Vec<DiffFile>> + Send + 'static {
+        let location = self.location.clone();
+        move || {
+            let path = change.path.as_str();
+            if change.kind == ChangeKind::Conflicted {
+                // Git's combined diff has three sides; the markers in the file
+                // show the same conflict.
+                let bytes = std::fs::read(location.join(path))
+                    .with_context(|| format!("Couldn't read {path}"))?;
+                let text = String::from_utf8_lossy(&bytes);
+                let file = DiffFile::parse_conflicts(path, &text)
+                    .unwrap_or_else(|_| DiffFile::unchanged(path, &text));
+                return Ok(vec![file]);
+            }
+            let mut args = vec![
+                "diff",
+                "--no-color",
+                "--no-ext-diff",
+                "--no-textconv",
+                "--src-prefix=a/",
+                "--dst-prefix=b/",
+            ];
+            if change.kind == ChangeKind::Untracked {
+                // Compared with nothing, an untracked file is all additions. The
+                // exit code is 1 whenever the two differ.
+                args.extend(["--no-index", "--", "/dev/null", path]);
+            } else {
+                if side == Side::Staged {
+                    args.extend(["--cached", "--find-renames"]);
+                }
+                args.extend(["--", path]);
+                args.extend(change.original.as_deref());
+            }
+            let patch = git_bytes(&location, &args, change.kind == ChangeKind::Untracked)?;
+            let patch = String::from_utf8_lossy(&patch);
+            DiffFile::parse(&patch).map_err(|error| anyhow!("{error}"))
+        }
+    }
+
+    /// Returns a job that stages `changes`, or every change when it is empty.
+    pub(crate) fn stage_job(
+        &self,
+        changes: Vec<FileChange>,
+    ) -> impl FnOnce() -> Result<()> + Send + 'static {
+        let location = self.location.clone();
+        move || {
+            // `-A` stages deletions too; literal pathspecs keep `*` in a name literal.
+            let mut args = vec!["--literal-pathspecs", "add", "-A", "--"];
+            args.extend(changes.iter().map(|change| change.path.as_str()));
+            git(&location, &args).map(drop)
+        }
+    }
+
+    /// Returns a job that unstages `changes`, or every change when it is empty.
+    pub(crate) fn unstage_job(
+        &self,
+        changes: Vec<FileChange>,
+    ) -> impl FnOnce() -> Result<()> + Send + 'static {
+        let repo = self.repo.clone();
+        let location = self.location.clone();
+        move || {
+            let has_head = repo.to_thread_local().head_id().is_ok();
+            // Before the first commit there's nothing to reset to: the index
+            // entries are dropped instead.
+            let mut args = if has_head {
+                vec!["--literal-pathspecs", "reset", "--quiet", "--"]
+            } else {
+                vec!["--literal-pathspecs", "rm", "--cached", "-r", "--quiet", "--"]
+            };
+            if changes.is_empty() {
+                if !has_head {
+                    args.push(".");
+                }
+            } else {
+                for change in &changes {
+                    args.push(change.path.as_str());
+                    // Unstaging a rename restores the old path in the index too.
+                    args.extend(change.original.as_deref());
+                }
+            }
+            git(&location, &args).map(drop)
+        }
+    }
+}
+
 /// Digests HEAD and every ref's name and target, without peeling or reading
 /// any object.
 fn ref_state(repo: &gix::Repository) -> Result<u64> {
@@ -295,6 +544,13 @@ fn ref_state(repo: &gix::Repository) -> Result<u64> {
 }
 
 fn git(location: &Path, args: &[&str]) -> Result<String> {
+    let output = git_bytes(location, args, false)?;
+    String::from_utf8(output).map_err(|_| anyhow!("Git's output isn't UTF-8."))
+}
+
+/// Runs Git and returns what it printed. With `differ_ok`, exit code 1 means
+/// "the files differ", as `git diff --no-index` reports it, not failure.
+fn git_bytes(location: &Path, args: &[&str], differ_ok: bool) -> Result<Vec<u8>> {
     let mut command = Command::new("git");
     command.arg("--no-pager").arg("-C").arg(location).args(args);
     // Nothing can answer a prompt: Git fails instead of waiting for a password.
@@ -310,10 +566,11 @@ fn git(location: &Path, args: &[&str]) -> Result<String> {
     let output = command
         .output()
         .context("Couldn't run git. Is it installed and on PATH?")?;
-    if !output.status.success() {
+    let differs = differ_ok && output.status.code() == Some(1);
+    if !output.status.success() && !differs {
         bail!("{}", String::from_utf8_lossy(&output.stderr).trim());
     }
-    String::from_utf8(output.stdout).map_err(|_| anyhow!("Git's output isn't UTF-8."))
+    Ok(output.stdout)
 }
 
 /// Orders commits newest first while keeping every child above its parents,
@@ -426,6 +683,68 @@ mod tests {
         assert_ne!(digest()?, after_commit, "a new branch is a new ref");
         // A repository without remotes fetches nothing.
         assert!(!history.fetch_job()()?);
+        let _ = std::fs::remove_dir_all(&dir);
+        Ok(())
+    }
+
+    #[test]
+    fn status_splits_staged_and_unstaged_changes() {
+        let status = parse_status(b"MM both.rs\0R  new.rs\0old.rs\0?? fresh.txt\0UU clash.rs\0 D gone.rs\0");
+        let paths = |files: &[FileChange]| {
+            files.iter().map(|f| (f.path.to_string(), f.kind)).collect::<Vec<_>>()
+        };
+        assert_eq!(
+            paths(&status.staged),
+            [("both.rs".into(), ChangeKind::Modified), ("new.rs".into(), ChangeKind::Renamed)]
+        );
+        assert_eq!(status.staged[1].original.as_deref(), Some("old.rs"));
+        assert_eq!(
+            paths(&status.unstaged),
+            [
+                ("both.rs".into(), ChangeKind::Modified),
+                ("clash.rs".into(), ChangeKind::Conflicted),
+                ("fresh.txt".into(), ChangeKind::Untracked),
+                ("gone.rs".into(), ChangeKind::Deleted),
+            ]
+        );
+    }
+
+    #[test]
+    fn files_stage_unstage_and_diff() -> Result<()> {
+        let dir = std::env::temp_dir().join(format!("fastgit-stage-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir)?;
+        let run = |args: &[&str]| git(&dir, args);
+        run(&["init", "--quiet"])?;
+        // Before the first commit, unstaging can't reset to HEAD.
+        std::fs::write(dir.join("a.txt"), "one\n")?;
+        let history = load(&dir)?;
+        let status = || history.status_job()();
+        let untracked = status()?.unstaged[0].clone();
+        assert_eq!(untracked.kind, ChangeKind::Untracked);
+        let diff = history.change_diff_job(untracked.clone(), Side::Unstaged)()?;
+        assert_eq!(diff[0].additions(), 1);
+        history.stage_job(vec![untracked.clone()])()?;
+        assert_eq!(status()?.staged[0].kind, ChangeKind::Added);
+        history.unstage_job(vec![])()?;
+        assert!(status()?.staged.is_empty());
+
+        history.stage_job(vec![])()?;
+        run(&[
+            "-c", "user.name=Test", "-c", "user.email=test@example.com",
+            "commit", "--quiet", "-m", "first",
+        ])?;
+        std::fs::write(dir.join("a.txt"), "one\ntwo\n")?;
+        let before = status()?;
+        let modified = before.unstaged[0].clone();
+        assert_eq!(modified.kind, ChangeKind::Modified);
+        history.stage_job(vec![modified.clone()])()?;
+        let staged = status()?;
+        assert_ne!(staged.digest, before.digest);
+        let diff = history.change_diff_job(staged.staged[0].clone(), Side::Staged)()?;
+        assert_eq!((diff[0].additions(), diff[0].deletions()), (1, 0));
+        history.unstage_job(vec![modified])()?;
+        assert!(status()?.staged.is_empty());
         let _ = std::fs::remove_dir_all(&dir);
         Ok(())
     }

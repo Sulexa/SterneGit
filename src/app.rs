@@ -33,6 +33,7 @@ mod commands {
             Fetch,
             OpenRepository,
             CopyHash,
+            CloseDiff,
             CloseTab,
             NextTab,
             PreviousTab,
@@ -67,6 +68,7 @@ pub(crate) fn init(cx: &mut App) {
             CopyHash,
             Some("FastGit"),
         ),
+        KeyBinding::new("escape", CloseDiff, Some("FastGit")),
         KeyBinding::new(primary("cmd-w", "ctrl-w"), CloseTab, Some("FastGit")),
         KeyBinding::new("ctrl-tab", NextTab, Some("FastGit")),
         KeyBinding::new("ctrl-shift-tab", PreviousTab, Some("FastGit")),
@@ -84,6 +86,7 @@ pub(crate) fn init(cx: &mut App) {
         Menu::new("View").items([
             MenuItem::action("Refresh", Refresh),
             MenuItem::action("Fetch All Remotes", Fetch),
+            MenuItem::action("Close File Diff", CloseDiff),
             MenuItem::separator(),
             MenuItem::action("Newer Commit", NewerCommit),
             MenuItem::action("Older Commit", OlderCommit),

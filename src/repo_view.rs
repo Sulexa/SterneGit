@@ -1,5 +1,9 @@
 //! One open repository: refs on the left, the commit graph in the middle, and
 //! the selected commit's message and diff on the right.
+//!
+//! Uncommitted changes sit in a row above the graph. Selecting it lists the
+//! unstaged and staged files on the right, and opening one of them compares it
+//! in the middle, side by side or unified.
 
 use std::{
     path::{Path, PathBuf},
@@ -10,7 +14,8 @@ use std::{
 use gix::ObjectId;
 use gpui_kit::assets::IconName;
 use gpui_kit::component::{
-    ActiveTheme as _, Icon, Sizable as _, StyledExt as _, WindowExt as _,
+    ActiveTheme as _, Disableable as _, Icon, Selectable as _, Sizable as _, StyledExt as _,
+    WindowExt as _,
     button::{Button, ButtonVariants as _},
     diff::{Diff, DiffMode, DiffState},
     h_flex,
@@ -30,9 +35,12 @@ use gpui_kit::{
 };
 
 use crate::{
-    app::{CopyHash, Fetch, NewerCommit, OlderCommit, Refresh},
+    app::{CloseDiff, CopyHash, Fetch, NewerCommit, OlderCommit, Refresh},
     graph::{Edge, Row},
-    repository::{self, CommitDetails, HISTORY_LIMIT, History, RefKind, RefLabel},
+    repository::{
+        self, ChangeKind, CommitDetails, FileChange, HISTORY_LIMIT, History, RefKind, RefLabel,
+        Side, WorkingChanges,
+    },
 };
 
 /// The height of every list row. The graph is painted row by row, so its lines
@@ -52,6 +60,25 @@ const ID_WIDTH: Pixels = px(56.);
 enum SidebarRow {
     Header(RefKind, usize),
     Ref(usize),
+}
+
+#[derive(Clone, Copy)]
+enum ChangeRow {
+    Header(Side, usize),
+    File(Side, usize),
+}
+
+/// The changed file compared in the middle pane.
+#[derive(Clone, PartialEq, Eq)]
+struct OpenChange {
+    side: Side,
+    path: SharedString,
+}
+
+enum ChangeDiff {
+    Loading,
+    Ready { files: usize, additions: usize, deletions: usize },
+    Failed(SharedString),
 }
 
 enum Details {
@@ -94,14 +121,37 @@ pub(crate) struct RepoView {
     _details_task: Task<()>,
     _check_task: Task<()>,
     _fetch_task: Task<()>,
+    /// The uncommitted changes, once read.
+    changes: Option<Arc<WorkingChanges>>,
+    change_rows: Arc<Vec<ChangeRow>>,
+    /// Whether the uncommitted changes are selected instead of a commit.
+    showing_changes: bool,
+    open_change: Option<OpenChange>,
+    change_diff: ChangeDiff,
+    change_diff_state: Entity<DiffState>,
+    change_diff_revision: usize,
+    status_revision: usize,
+    checking_status: bool,
+    /// Whether a stage or unstage is running.
+    staging: bool,
+    staging_error: Option<SharedString>,
+    changes_scroll: UniformListScrollHandle,
+    _status_task: Task<()>,
+    _change_diff_task: Task<()>,
+    _staging_task: Task<()>,
     _subscriptions: Vec<Subscription>,
 }
 
 impl RepoView {
     pub(crate) fn new(path: PathBuf, cx: &mut Context<Self>) -> Self {
         let diff = cx.new(|cx| DiffState::new([], cx).with_mode(DiffMode::Unified));
+        // Side by side by default: a working change is read as a comparison.
+        let change_diff_state = cx.new(|cx| DiffState::new([], cx).with_mode(DiffMode::Split));
         let history_focus = cx.focus_handle().tab_stop(true);
-        let subscriptions = vec![cx.observe(&diff, |_, _, cx| cx.notify())];
+        let subscriptions = vec![
+            cx.observe(&diff, |_, _, cx| cx.notify()),
+            cx.observe(&change_diff_state, |_, _, cx| cx.notify()),
+        ];
         let mut this = Self {
             path,
             root: None,
@@ -125,6 +175,21 @@ impl RepoView {
             _details_task: Task::ready(()),
             _check_task: Task::ready(()),
             _fetch_task: Task::ready(()),
+            changes: None,
+            change_rows: Arc::default(),
+            showing_changes: false,
+            open_change: None,
+            change_diff: ChangeDiff::Loading,
+            change_diff_state,
+            change_diff_revision: 0,
+            status_revision: 0,
+            checking_status: false,
+            staging: false,
+            staging_error: None,
+            changes_scroll: UniformListScrollHandle::new(),
+            _status_task: Task::ready(()),
+            _change_diff_task: Task::ready(()),
+            _staging_task: Task::ready(()),
             _subscriptions: subscriptions,
         };
         this.refresh(cx);
@@ -164,14 +229,190 @@ impl RepoView {
     }
 
     fn selected_commit(&self) -> Option<&repository::Commit> {
+        if self.showing_changes {
+            return None;
+        }
         self.history.as_ref()?.commits.get(self.selected?)
+    }
+
+    fn has_changes(&self) -> bool {
+        self.changes.as_ref().is_some_and(|changes| !changes.is_empty())
+    }
+
+    /// Reads the uncommitted changes again. Unless `force`d, a read already
+    /// running or a stage in progress makes this one unnecessary.
+    fn check_status(&mut self, force: bool, cx: &mut Context<Self>) {
+        let Some(history) = &self.history else { return };
+        if !history.has_work_tree() || (!force && (self.checking_status || self.staging)) {
+            return;
+        }
+        let job = history.status_job();
+        self.status_revision += 1;
+        let revision = self.status_revision;
+        self.checking_status = true;
+        self._status_task = cx.spawn(async move |this, cx| {
+            let result = cx.background_spawn(async move { job() }).await;
+            let _ = this.update(cx, |this, cx| {
+                if this.status_revision != revision {
+                    return;
+                }
+                this.checking_status = false;
+                // A failed read changes nothing; the next one tries again.
+                if let Ok(changes) = result {
+                    this.install_status(changes, cx);
+                }
+            });
+        });
+    }
+
+    fn install_status(&mut self, changes: WorkingChanges, cx: &mut Context<Self>) {
+        if self.changes.as_ref().is_some_and(|shown| shown.digest == changes.digest) {
+            return;
+        }
+        let mut rows = Vec::new();
+        for side in [Side::Unstaged, Side::Staged] {
+            let files = changes.files(side);
+            rows.push(ChangeRow::Header(side, files.len()));
+            rows.extend((0..files.len()).map(|ix| ChangeRow::File(side, ix)));
+        }
+        self.change_rows = Arc::new(rows);
+        // With nothing else to show, show the changes.
+        if self.selected.is_none() && !changes.is_empty() {
+            self.showing_changes = true;
+        }
+        let changes = Arc::new(changes);
+        self.changes = Some(changes.clone());
+        // The open file follows its change: staged in full, it moves sides.
+        if let Some(open) = self.open_change.clone() {
+            let other = match open.side {
+                Side::Unstaged => Side::Staged,
+                Side::Staged => Side::Unstaged,
+            };
+            let found = [open.side, other].into_iter().find_map(|side| {
+                changes.find(side, &open.path).map(|change| (side, change.clone()))
+            });
+            match found {
+                Some((side, change)) => self.load_change(side, change, cx),
+                None => self.close_change(cx),
+            }
+        }
+        cx.notify();
+    }
+
+    fn select_changes(&mut self, cx: &mut Context<Self>) {
+        if !self.showing_changes {
+            self.showing_changes = true;
+            cx.notify();
+        }
+    }
+
+    /// Compares a changed file in the middle pane.
+    fn open_change(&mut self, side: Side, change: FileChange, cx: &mut Context<Self>) {
+        self.showing_changes = true;
+        self.load_change(side, change, cx);
+    }
+
+    fn load_change(&mut self, side: Side, change: FileChange, cx: &mut Context<Self>) {
+        let Some(history) = &self.history else { return };
+        let open = OpenChange { side, path: change.path.clone() };
+        // Reading the same file again keeps the old patch up until the new one
+        // is ready, so an edit doesn't flash a spinner.
+        let job = history.change_diff_job(change, side);
+        if self.open_change.as_ref() != Some(&open) {
+            self.change_diff = ChangeDiff::Loading;
+            self.change_diff_state.update(cx, |state, cx| state.set_files([], cx));
+        }
+        self.open_change = Some(open);
+        self.change_diff_revision += 1;
+        let revision = self.change_diff_revision;
+        self._change_diff_task = cx.spawn(async move |this, cx| {
+            let result = cx.background_spawn(async move { job() }).await;
+            let _ = this.update(cx, |this, cx| {
+                if this.change_diff_revision != revision {
+                    return;
+                }
+                this.change_diff = match result {
+                    Ok(files) => {
+                        let (additions, deletions) = files.iter().fold((0, 0), |(a, d), file| {
+                            (a + file.additions(), d + file.deletions())
+                        });
+                        let count = files.len();
+                        this.change_diff_state.update(cx, |state, cx| state.set_files(files, cx));
+                        ChangeDiff::Ready { files: count, additions, deletions }
+                    }
+                    Err(error) => ChangeDiff::Failed(format!("{error:#}").into()),
+                };
+                cx.notify();
+            });
+        });
+        cx.notify();
+    }
+
+    fn close_change(&mut self, cx: &mut Context<Self>) {
+        if self.open_change.take().is_some() {
+            self.change_diff_revision += 1;
+            self._change_diff_task = Task::ready(());
+            self.change_diff_state.update(cx, |state, cx| state.set_files([], cx));
+            cx.notify();
+        }
+    }
+
+    fn set_change_mode(&mut self, mode: DiffMode, cx: &mut Context<Self>) {
+        self.change_diff_state.update(cx, |state, cx| state.set_mode(mode, cx));
+    }
+
+    /// Stages (or, from the staged side, unstages) `changes`, or every change
+    /// on that side when it is empty.
+    fn stage(&mut self, side: Side, changes: Vec<FileChange>, cx: &mut Context<Self>) {
+        let Some(history) = &self.history else { return };
+        if self.staging {
+            return;
+        }
+        let job: Box<dyn FnOnce() -> anyhow::Result<()> + Send> = match side {
+            Side::Unstaged => Box::new(history.stage_job(changes)),
+            Side::Staged => Box::new(history.unstage_job(changes)),
+        };
+        self.staging = true;
+        self.staging_error = None;
+        // A status read meanwhile could show the files half moved.
+        self.status_revision += 1;
+        self.checking_status = false;
+        self._staging_task = cx.spawn(async move |this, cx| {
+            let result = cx.background_spawn(async move { job() }).await;
+            let _ = this.update(cx, |this, cx| {
+                this.staging = false;
+                if let Err(error) = result {
+                    let message = format!("{error:#}");
+                    let reason = message.lines().rfind(|line| !line.trim().is_empty());
+                    this.staging_error =
+                        Some(reason.unwrap_or("unknown error").trim().to_owned().into());
+                }
+                this.check_status(true, cx);
+                cx.notify();
+            });
+        });
+        cx.notify();
+    }
+
+    /// Stages or unstages the file open in the middle pane.
+    fn stage_open_change(&mut self, cx: &mut Context<Self>) {
+        let Some(open) = self.open_change.clone() else { return };
+        let change = self.changes.as_ref().and_then(|changes| changes.find(open.side, &open.path));
+        if let Some(change) = change.cloned() {
+            self.stage(open.side, vec![change], cx);
+        }
     }
 
     /// Reads the history again. The current one stays on screen until the new
     /// one is ready, and the selection survives when its commit still exists.
     pub(crate) fn refresh(&mut self, cx: &mut Context<Self>) {
         let path = self.path.clone();
-        let previous = self.selected_commit().map(|commit| commit.id);
+        let previous = self
+            .history
+            .as_ref()
+            .zip(self.selected)
+            .and_then(|(history, row)| history.commits.get(row))
+            .map(|commit| commit.id);
         self.history_revision += 1;
         let revision = self.history_revision;
         self.loading = true;
@@ -186,7 +427,10 @@ impl RepoView {
                 }
                 this.loading = false;
                 match result {
-                    Ok(history) => this.install_history(history, previous, cx),
+                    Ok(history) => {
+                        this.install_history(history, previous, cx);
+                        this.check_status(true, cx);
+                    }
                     Err(error) => {
                         this.history = None;
                         this.root = None;
@@ -205,6 +449,7 @@ impl RepoView {
     /// Reads the history again only if HEAD or a ref moved since it was read:
     /// a commit, checkout or fetch made outside FastGit.
     pub(crate) fn check_for_changes(&mut self, cx: &mut Context<Self>) {
+        self.check_status(false, cx);
         if self.loading || self.checking {
             return;
         }
@@ -284,7 +529,12 @@ impl RepoView {
     fn select(&mut self, row: usize, cx: &mut Context<Self>) {
         let Some(history) = self.history.clone() else { return };
         let Some(commit) = history.commits.get(row) else { return };
+        let was_showing_changes = std::mem::take(&mut self.showing_changes);
         if self.selected == Some(row) {
+            if was_showing_changes {
+                self.history_scroll.scroll_to_item(row, ScrollStrategy::Nearest);
+                cx.notify();
+            }
             return;
         }
         self.selected = Some(row);
@@ -344,7 +594,18 @@ impl RepoView {
         let Some(count) = self.history.as_ref().map(|history| history.commits.len()) else {
             return;
         };
+        if self.showing_changes {
+            if delta > 0 && count > 0 {
+                self.select(0, cx);
+            }
+            return;
+        }
         if count == 0 {
+            return;
+        }
+        // Above the newest commit are the uncommitted changes.
+        if delta < 0 && self.selected == Some(0) && self.has_changes() {
+            self.select_changes(cx);
             return;
         }
         let row = self
@@ -375,6 +636,7 @@ impl RepoView {
     }
 
     pub(crate) fn copy_hash(&self, window: &mut Window, cx: &mut Context<Self>) {
+        // With the changes selected there's no commit to copy.
         if let Some(commit) = self.selected_commit() {
             cx.write_to_clipboard(ClipboardItem::new_string(commit.id.to_string()));
             window.push_notification("Commit hash copied", cx);
@@ -400,13 +662,21 @@ impl RepoView {
             .child(
                 resizable_panel()
                     .size_range(rem * 30. ..rem * 400.)
-                    .child(self.render_history(&history, cx)),
+                    .child(if self.open_change.is_some() {
+                        self.render_change_diff(cx)
+                    } else {
+                        self.render_history(&history, cx)
+                    }),
             )
             .child(
                 resizable_panel()
                     .size(rem * 30.)
                     .size_range(rem * 22. ..rem * 90.)
-                    .child(self.render_details(&history, cx)),
+                    .child(if self.showing_changes {
+                        self.render_changes(cx)
+                    } else {
+                        self.render_details(&history, cx)
+                    }),
             )
             .into_any_element()
     }
@@ -468,13 +738,17 @@ impl RepoView {
 
     fn render_history(&self, history: &Arc<History>, cx: &mut Context<Self>) -> AnyElement {
         let history = history.clone();
-        let selected = self.selected;
+        let selected = self.selected.filter(|_| !self.showing_changes);
         let owner = cx.entity().downgrade();
         let style = RowStyle::new(cx);
-        div()
+        let wip = self.changes.as_ref().filter(|changes| !changes.is_empty()).map(|changes| {
+            wip_row(changes, self.showing_changes, &style, owner.clone(), cx)
+        });
+        let list = div()
             .id("history")
             .relative()
-            .size_full()
+            .flex_1()
+            .w_full()
             .min_h_0()
             .track_focus(&self.history_focus)
             .key_context("History")
@@ -510,7 +784,213 @@ impl RepoView {
                 .size_full()
                 .track_scroll(&self.history_scroll),
             )
-            .child(Scrollbar::vertical(&self.history_scroll))
+            .child(Scrollbar::vertical(&self.history_scroll));
+        v_flex()
+            .size_full()
+            .min_h_0()
+            .children(wip)
+            .child(list)
+            .into_any_element()
+    }
+
+    /// The unstaged and staged files, each with a button to move it across.
+    fn render_changes(&self, cx: &mut Context<Self>) -> AnyElement {
+        let Some(changes) = self.changes.clone() else {
+            return loading_state("Reading changes…");
+        };
+        let muted = cx.theme().muted_foreground;
+        let header = v_flex()
+            .flex_none()
+            .px_4()
+            .py_3()
+            .gap_1()
+            .border_b_1()
+            .border_color(cx.theme().border)
+            .child(div().text_base().font_medium().child("Uncommitted changes"))
+            .child(div().text_xs().text_color(muted).child(format!(
+                "{} unstaged · {} staged",
+                thousands(changes.unstaged.len()),
+                thousands(changes.staged.len())
+            )))
+            .when_some(self.staging_error.clone(), |this, error| {
+                this.child(div().text_xs().text_color(cx.theme().red).child(error))
+            });
+        if changes.is_empty() {
+            return v_flex()
+                .size_full()
+                .child(header)
+                .child(centered_message("No uncommitted changes.", cx))
+                .into_any_element();
+        }
+        let rows = self.change_rows.clone();
+        let open = self.open_change.clone();
+        let staging = self.staging;
+        let owner = cx.entity().downgrade();
+        let list = div()
+            .id("changes")
+            .relative()
+            .flex_1()
+            .min_h_0()
+            .child(
+                uniform_list("change-list", rows.len(), move |range, _, cx| {
+                    range
+                        .map(|ix| match rows[ix] {
+                            ChangeRow::Header(side, count) => {
+                                change_header(side, count, staging, owner.clone(), cx)
+                            }
+                            ChangeRow::File(side, ix) => {
+                                let change = &changes.files(side)[ix];
+                                let selected = open
+                                    .as_ref()
+                                    .is_some_and(|open| open.side == side && open.path == change.path);
+                                change_row(change, side, selected, staging, owner.clone(), cx)
+                            }
+                        })
+                        .collect::<Vec<_>>()
+                })
+                .size_full()
+                .track_scroll(&self.changes_scroll),
+            )
+            .child(Scrollbar::vertical(&self.changes_scroll));
+        v_flex()
+            .size_full()
+            .min_w_0()
+            .min_h_0()
+            .child(header)
+            .child(list)
+            .into_any_element()
+    }
+
+    /// One changed file compared with what it was, in the middle pane.
+    fn render_change_diff(&self, cx: &mut Context<Self>) -> AnyElement {
+        let Some(open) = self.open_change.clone() else {
+            return div().into_any_element();
+        };
+        let muted = cx.theme().muted_foreground;
+        let change = self.changes.as_ref().and_then(|changes| changes.find(open.side, &open.path));
+        let kind = change.map_or(ChangeKind::Modified, |change| change.kind);
+        let original = change.and_then(|change| change.original.clone());
+        let mode = self.change_diff_state.read(cx).mode();
+        let stats = match &self.change_diff {
+            ChangeDiff::Ready { additions, deletions, .. } => Some((*additions, *deletions)),
+            _ => None,
+        };
+        let (action_label, action_icon, action_tip) = match open.side {
+            Side::Unstaged => ("Stage", IconName::Plus, "Stage this file"),
+            Side::Staged => ("Unstage", IconName::Minus, "Unstage this file"),
+        };
+        let toolbar = h_flex()
+            .flex_none()
+            .w_full()
+            .min_w_0()
+            .h(px(40.))
+            .px_3()
+            .gap_2()
+            .border_b_1()
+            .border_color(cx.theme().border)
+            .child(kind_badge(kind, cx))
+            .child(
+                div()
+                    .min_w_0()
+                    .truncate()
+                    .text_sm()
+                    .font_family(cx.theme().mono_font_family.clone())
+                    .child(match &original {
+                        Some(original) => SharedString::from(format!("{original} → {}", open.path)),
+                        None => open.path.clone(),
+                    }),
+            )
+            .child(
+                div()
+                    .flex_none()
+                    .text_xs()
+                    .text_color(muted)
+                    .child(match open.side {
+                        Side::Unstaged => "unstaged",
+                        Side::Staged => "staged",
+                    }),
+            )
+            .when_some(stats, |this, (additions, deletions)| {
+                this.child(
+                    div()
+                        .flex_none()
+                        .text_xs()
+                        .text_color(cx.theme().green)
+                        .child(format!("+{}", thousands(additions))),
+                )
+                .child(
+                    div()
+                        .flex_none()
+                        .text_xs()
+                        .text_color(cx.theme().red)
+                        .child(format!("−{}", thousands(deletions))),
+                )
+            })
+            .child(div().flex_1())
+            .child(
+                Button::new("diff-split")
+                    .ghost()
+                    .xsmall()
+                    .icon(IconName::Columns2)
+                    .label("Split")
+                    .selected(mode == DiffMode::Split)
+                    .tooltip("Compare side by side")
+                    .on_click(cx.listener(|this, _, _, cx| this.set_change_mode(DiffMode::Split, cx))),
+            )
+            .child(
+                Button::new("diff-unified")
+                    .ghost()
+                    .xsmall()
+                    .icon(IconName::Rows2)
+                    .label("Unified")
+                    .selected(mode == DiffMode::Unified)
+                    .tooltip("Show changes in one column")
+                    .on_click(
+                        cx.listener(|this, _, _, cx| this.set_change_mode(DiffMode::Unified, cx)),
+                    ),
+            )
+            .child(
+                Button::new("diff-stage")
+                    .xsmall()
+                    .icon(action_icon)
+                    .label(action_label)
+                    .tooltip(action_tip)
+                    .disabled(self.staging || change.is_none())
+                    .on_click(cx.listener(|this, _, _, cx| this.stage_open_change(cx))),
+            )
+            .child(
+                Button::new("diff-close")
+                    .ghost()
+                    .xsmall()
+                    .icon(IconName::Close)
+                    .tooltip_with_action("Back to the graph", &CloseDiff, Some("FastGit"))
+                    .on_click(cx.listener(|this, _, _, cx| this.close_change(cx))),
+            );
+        let content = match &self.change_diff {
+            ChangeDiff::Loading => loading_state("Reading changes…"),
+            ChangeDiff::Failed(error) => v_flex()
+                .size_full()
+                .p_4()
+                .gap_2()
+                .child(div().font_medium().child("Couldn't compare this file"))
+                .child(div().text_sm().text_color(muted).child(error.clone()))
+                .into_any_element(),
+            ChangeDiff::Ready { files: 0, .. } => centered_message(
+                "No changes to show: only line endings or file mode differ.",
+                cx,
+            ),
+            ChangeDiff::Ready { .. } => Diff::new(&self.change_diff_state)
+                .line_number(true)
+                .soft_wrap(true)
+                .header_visible(false)
+                .into_any_element(),
+        };
+        v_flex()
+            .size_full()
+            .min_w_0()
+            .min_h_0()
+            .child(toolbar)
+            .child(div().flex_1().min_h_0().child(content))
             .into_any_element()
     }
 
@@ -712,6 +1192,7 @@ impl Render for RepoView {
             .on_action(cx.listener(|this, _: &Refresh, _, cx| this.refresh(cx)))
             .on_action(cx.listener(|this, _: &Fetch, _, cx| this.fetch(cx)))
             .on_action(cx.listener(|this, _: &CopyHash, window, cx| this.copy_hash(window, cx)))
+            .on_action(cx.listener(|this, _: &CloseDiff, _, cx| this.close_change(cx)))
             .child(div().flex_1().min_h_0().child(self.render_body(window, cx)))
             .child(self.render_status_bar(cx))
     }
@@ -939,6 +1420,224 @@ fn commit_row(
         )
         .on_click(move |_, _, cx| {
             let _ = owner.update(cx, |this, cx| this.select(row, cx));
+        })
+        .into_any_element()
+}
+
+/// The row above the graph that stands for the uncommitted changes.
+fn wip_row(
+    changes: &WorkingChanges,
+    selected: bool,
+    style: &RowStyle,
+    owner: WeakEntity<RepoView>,
+    cx: &App,
+) -> AnyElement {
+    let color = style.muted;
+    let mut summary = Vec::new();
+    if !changes.unstaged.is_empty() {
+        summary.push(format!("{} unstaged", thousands(changes.unstaged.len())));
+    }
+    if !changes.staged.is_empty() {
+        summary.push(format!("{} staged", thousands(changes.staged.len())));
+    }
+    ListItem::new("wip")
+        .selected(selected)
+        .flex_none()
+        .w_full()
+        .h(ROW_HEIGHT)
+        .py_0()
+        .pl_0()
+        .pr_3()
+        .border_b_1()
+        .border_color(cx.theme().border)
+        .child(
+            h_flex()
+                .h(ROW_HEIGHT)
+                .w_full()
+                .min_w_0()
+                .gap_3()
+                .child(
+                    div().flex_none().w(LANE_WIDTH + px(6.)).h(ROW_HEIGHT).child(
+                        canvas(
+                            |_, _, _| {},
+                            move |bounds, (), window, _| {
+                                // A hollow node: nothing is committed yet.
+                                let center =
+                                    point(bounds.left() + LANE_WIDTH * 0.5, bounds.center().y);
+                                window.paint_quad(
+                                    fill(
+                                        Bounds::centered_at(
+                                            center,
+                                            size(NODE_RADIUS * 2., NODE_RADIUS * 2.),
+                                        ),
+                                        transparent_black(),
+                                    )
+                                    .corner_radii(NODE_RADIUS)
+                                    .border_widths(px(1.5))
+                                    .border_color(color),
+                                );
+                            },
+                        )
+                        .size_full(),
+                    ),
+                )
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .truncate()
+                        .text_sm()
+                        .italic()
+                        .child("Uncommitted changes"),
+                )
+                .child(
+                    div()
+                        .flex_none()
+                        .text_xs()
+                        .text_color(style.muted)
+                        .child(summary.join(" · ")),
+                ),
+        )
+        .on_click(move |_, _, cx| {
+            let _ = owner.update(cx, |this, cx| this.select_changes(cx));
+        })
+        .into_any_element()
+}
+
+fn kind_color(kind: ChangeKind, cx: &App) -> Hsla {
+    let theme = cx.theme();
+    match kind {
+        ChangeKind::Added | ChangeKind::Untracked => theme.green,
+        ChangeKind::Deleted => theme.red,
+        ChangeKind::Modified => theme.yellow,
+        ChangeKind::Renamed | ChangeKind::Copied => theme.blue,
+        ChangeKind::Conflicted => theme.magenta,
+    }
+}
+
+fn kind_badge(kind: ChangeKind, cx: &App) -> AnyElement {
+    let color = kind_color(kind, cx);
+    div()
+        .flex_none()
+        .w(px(18.))
+        .h(px(18.))
+        .flex()
+        .items_center()
+        .justify_center()
+        .rounded(px(4.))
+        .bg(color.opacity(0.18))
+        .text_xs()
+        .font_semibold()
+        .font_family(cx.theme().mono_font_family.clone())
+        .text_color(color)
+        .child(kind.letter())
+        .into_any_element()
+}
+
+fn change_header(
+    side: Side,
+    count: usize,
+    staging: bool,
+    owner: WeakEntity<RepoView>,
+    cx: &App,
+) -> AnyElement {
+    let (label, button, icon) = match side {
+        Side::Unstaged => ("Unstaged files", "Stage all", IconName::Plus),
+        Side::Staged => ("Staged files", "Unstage all", IconName::Minus),
+    };
+    h_flex()
+        .w_full()
+        .h(ROW_HEIGHT)
+        .px_3()
+        .gap_2()
+        .text_xs()
+        .font_medium()
+        .text_color(cx.theme().muted_foreground)
+        .child(format!("{label} ({})", thousands(count)))
+        .child(div().flex_1())
+        .child(
+            Button::new(SharedString::from(format!("all-{side:?}")))
+                .ghost()
+                .xsmall()
+                .icon(icon)
+                .label(button)
+                .disabled(staging || count == 0)
+                .on_click(move |_, _, cx| {
+                    let _ = owner.update(cx, |this, cx| this.stage(side, Vec::new(), cx));
+                }),
+        )
+        .into_any_element()
+}
+
+fn change_row(
+    change: &FileChange,
+    side: Side,
+    selected: bool,
+    staging: bool,
+    owner: WeakEntity<RepoView>,
+    cx: &App,
+) -> AnyElement {
+    let (name, folder) = match change.path.rsplit_once('/') {
+        Some((folder, name)) => (name.to_owned(), Some(folder.to_owned())),
+        None => (change.path.to_string(), None),
+    };
+    let (icon, tip) = match side {
+        Side::Unstaged => (IconName::Plus, "Stage file"),
+        Side::Staged => (IconName::Minus, "Unstage file"),
+    };
+    let id = format!("{side:?}/{}", change.path);
+    let open_owner = owner.clone();
+    let open_change = change.clone();
+    let stage_change = change.clone();
+    ListItem::new(SharedString::from(id.clone()))
+        .selected(selected)
+        .w_full()
+        .h(ROW_HEIGHT)
+        .py_0()
+        .pl_3()
+        .pr_1()
+        .child(
+            h_flex()
+                .w_full()
+                .min_w_0()
+                .gap_2()
+                .child(kind_badge(change.kind, cx))
+                .child(
+                    h_flex()
+                        .flex_1()
+                        .min_w_0()
+                        .gap_1p5()
+                        .overflow_hidden()
+                        .child(div().flex_none().max_w_full().truncate().text_sm().child(name))
+                        .when_some(folder, |this, folder| {
+                            this.child(
+                                div()
+                                    .min_w_0()
+                                    .truncate()
+                                    .text_xs()
+                                    .text_color(cx.theme().muted_foreground)
+                                    .child(folder),
+                            )
+                        }),
+                )
+                .child(
+                    Button::new(SharedString::from(format!("stage/{id}")))
+                        .ghost()
+                        .xsmall()
+                        .icon(icon)
+                        .tooltip(tip)
+                        .disabled(staging)
+                        .on_click(move |_, _, cx| {
+                            // The row underneath would open the file too.
+                            cx.stop_propagation();
+                            let change = stage_change.clone();
+                            let _ = owner.update(cx, |this, cx| this.stage(side, vec![change], cx));
+                        }),
+                ),
+        )
+        .on_click(move |_, _, cx| {
+            let change = open_change.clone();
+            let _ = open_owner.update(cx, |this, cx| this.open_change(side, change, cx));
         })
         .into_any_element()
 }

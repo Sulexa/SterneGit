@@ -4,8 +4,8 @@ A lightweight Git client for Linux, macOS and Windows, written in
 Rust with [GPUI](https://www.gpui.rs/) (through [gpui-kit](https://github.com/longbridge/gpui-kit))
 and [gitoxide](https://github.com/GitoxideLabs/gitoxide).
 
-This is the first prototype: it browses history. It doesn't stage, commit, push or
-show uncommitted changes yet.
+This is an early prototype: it browses history and stages uncommitted changes. It
+doesn't commit or push yet.
 
 ## Run
 
@@ -33,10 +33,19 @@ xkbcommon, Vulkan, fontconfig).
 | Ctrl+O (Cmd+O) | Open a repository |
 | Ctrl+R (Cmd+R) | Refresh, keeping the selected commit |
 | Ctrl+Shift+C (Cmd+Shift+C) | Copy the selected commit's full hash |
+| Esc | Close the open file comparison |
 | Ctrl+W (Cmd+W) | Close the current tab |
 | Ctrl+Tab / Ctrl+Shift+Tab | Switch to the next / previous tab |
 
 Click a branch, remote branch or tag in the sidebar to jump to its commit.
+
+When the work tree has changes, an **Uncommitted changes** row sits above the
+graph. Select it (or press ↑ from the newest commit) to list the unstaged and
+staged files. Click a file to compare it with its previous version in the middle
+pane, side by side (**Split**) or in one column (**Unified**). The **+** / **−**
+next to each file, **Stage all** / **Unstage all**, and the button above the
+comparison move files between the two lists. Edits made outside FastGit show up
+within a few seconds.
 
 Each repository opens in its own tab under the top bar; **+** opens another one.
 Every action is also in the File, Edit, View and About menus of the top bar
@@ -47,7 +56,9 @@ Every action is also in the File, Edit, View and About menus of the top bar
 - `src/repository.rs` reads refs and history with gix inside the process, so a
   refresh starts no processes however large the history is. The newest 10,000
   commits are read. Selecting a commit runs one `git show` for its patch, so rename
-  detection and the patch itself match what Git prints in a terminal.
+  detection and the patch itself match what Git prints in a terminal. Uncommitted
+  changes come from `git status`, each file's comparison from `git diff`, and
+  staging from `git add` / `git reset`.
 - `src/graph.rs` assigns each commit a lane and works out the line pieces that
   cross each row. It has unit tests.
 - `src/app.rs` is the window: the top bar with its menus, a tab per open

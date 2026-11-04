@@ -17,7 +17,7 @@ const USAGE: &str = "Usage: fastgit [--check] [repository]";
 
 // gpui-kit's default bundle carries only the icons its own components use.
 // Embed the few extra ones FastGit draws rather than the whole Lucide catalog.
-gpui_kit::assets::icon_assets!(GitIcons, [GitBranch, GitMerge, Cloud, Tag]);
+gpui_kit::assets::icon_assets!(GitIcons, [GitBranch, GitMerge, Cloud, Tag, Columns2, Rows2]);
 
 struct Assets;
 
