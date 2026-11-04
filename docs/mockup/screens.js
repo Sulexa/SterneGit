@@ -1,5 +1,5 @@
 const Screens = (() => {
-  const { history, collapsed, changes, commitDetails, commitFileDiff, fileDiff, tabs } = Sample;
+  const { history, collapsed, changes, draft, commitDetails, commitFileDiff, fileDiff, tabs } = Sample;
   const selected = 2;
   const position = (row) => `Commit ${thousands(row + 1)} of ${thousands(history.total)}`;
 
@@ -120,13 +120,25 @@ const Screens = (() => {
     {
       id: 'uncommitted',
       title: 'Uncommitted changes',
-      about: 'The Uncommitted changes row is selected. The right pane lists unstaged and staged files, each with a button that moves it to the other list.',
+      about: 'The Uncommitted changes row is selected. The right pane starts with the commit message, its description and the Commit button, then the staged files, then the unstaged files at the bottom. Each file has a button that moves it to the other list. Commit stays disabled until there is a message and at least one staged file.',
       source: 'src/repo/changes_list.rs',
       render: () =>
         C.FastGit({
           topBar: topBar(),
           tabStrip: tabStrip(),
           body: repo({ wipSelected: true, right: C.ChangesList({ changes }) }),
+        }),
+    },
+    {
+      id: 'commit-ready',
+      title: 'Uncommitted changes — ready to commit',
+      about: 'A message and a description are typed and two files are staged, so Commit is enabled and names how many files it commits. Ctrl+Enter commits from either field.',
+      source: 'src/repo/changes_list.rs',
+      render: () =>
+        C.FastGit({
+          topBar: topBar(),
+          tabStrip: tabStrip(),
+          body: repo({ wipSelected: true, right: C.ChangesList({ changes, draft: { ...draft, focus: 'description' } }) }),
         }),
     },
     {

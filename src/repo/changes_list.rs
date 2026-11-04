@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
 use gpui_kit::{
-    AnyElement, App, InteractiveElement as _, IntoElement, ParentElement as _, RenderOnce,
+    AnyElement, AnyView, App, InteractiveElement as _, IntoElement, ParentElement as _, RenderOnce,
     SharedString, Styled as _, UniformListScrollHandle, Window,
     component::{
-        ActiveTheme as _, Disableable as _, Sizable as _, StyledExt as _,
+        ActiveTheme as _, Disableable as _, Sizable as _,
         button::{Button, ButtonVariants as _},
         scroll::Scrollbar,
         v_flex,
@@ -17,19 +17,33 @@ use gpui_kit::{
 use super::navigation::OpenFile;
 use crate::{
     git::{FileChange, Scope, Side, WorkingChanges},
-    ui::{
-        self, Handler, Look as _, SectionHeader, SectionRow, Sections, SideUi as _, file_row,
-        handler, thousands,
-    },
+    ui::{self, Handler, Look as _, SectionHeader, SideUi as _, file_row, handler, thousands},
 };
+
+const SIDES_TOP_DOWN: [Side; 2] = [Side::Staged, Side::Unstaged];
+
+#[derive(Clone, Default)]
+pub(crate) struct SideScrolls {
+    unstaged: UniformListScrollHandle,
+    staged: UniformListScrollHandle,
+}
+
+impl SideScrolls {
+    fn of(&self, side: Side) -> &UniformListScrollHandle {
+        match side {
+            Side::Unstaged => &self.unstaged,
+            Side::Staged => &self.staged,
+        }
+    }
+}
 
 #[derive(IntoElement)]
 pub(crate) struct ChangesList {
     changes: Option<Arc<WorkingChanges>>,
+    form: AnyView,
     open: Option<OpenFile>,
     writing: bool,
-    failure: Option<SharedString>,
-    scroll: UniformListScrollHandle,
+    scrolls: SideScrolls,
     on_open: Option<Handler<(Side, FileChange)>>,
     on_move: Option<Handler<(Side, Scope)>>,
 }
@@ -37,14 +51,15 @@ pub(crate) struct ChangesList {
 impl ChangesList {
     pub(crate) fn new(
         changes: Option<Arc<WorkingChanges>>,
-        scroll: UniformListScrollHandle,
+        form: impl Into<AnyView>,
+        scrolls: SideScrolls,
     ) -> Self {
         Self {
             changes,
+            form: form.into(),
             open: None,
             writing: false,
-            failure: None,
-            scroll,
+            scrolls,
             on_open: None,
             on_move: None,
         }
@@ -55,9 +70,8 @@ impl ChangesList {
         self
     }
 
-    pub(crate) fn writing(mut self, writing: bool, failure: Option<SharedString>) -> Self {
+    pub(crate) fn writing(mut self, writing: bool) -> Self {
         self.writing = writing;
-        self.failure = failure;
         self
     }
 
@@ -76,77 +90,82 @@ impl ChangesList {
         self.on_move = Some(handler(callback));
         self
     }
-}
 
-impl RenderOnce for ChangesList {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
-        let Self {
-            changes,
-            open,
-            writing,
-            failure,
-            scroll,
-            on_open,
-            on_move,
-        } = self;
-        let Some(changes) = changes else {
-            return ui::loading("Reading changes…");
+    fn side_section(&self, side: Side, changes: &Arc<WorkingChanges>, cx: &App) -> AnyElement {
+        let count = changes.files(side).len();
+        let content = if count == 0 {
+            ui::hint(side.labels().empty, cx)
+        } else {
+            self.side_list(side, count, changes.clone())
         };
-        let muted = cx.theme().muted_foreground;
-        let header = v_flex()
-            .flex_none()
-            .px_4()
-            .py_3()
-            .gap_1()
-            .border_b_1()
-            .border_color(cx.theme().border)
-            .child(div().base_text().font_medium().child("Uncommitted changes"))
-            .child(div().xs_text().text_color(muted).child(format!(
-                "{} unstaged · {} staged",
-                thousands(changes.unstaged.len()),
-                thousands(changes.staged.len())
-            )))
-            .when_some(failure, |this, failure| {
-                this.child(div().xs_text().text_color(cx.theme().red).child(failure))
-            });
-        if changes.is_empty() {
-            return v_flex()
-                .size_full()
-                .child(header)
-                .child(ui::hint("No uncommitted changes.", cx))
-                .into_any_element();
-        }
-        let sections = Sections::new([
-            (Side::Unstaged, changes.unstaged.len()),
-            (Side::Staged, changes.staged.len()),
-        ]);
-        let list = div()
-            .id("changes")
-            .relative()
+        v_flex()
             .fill_height()
+            .when(side == Side::Unstaged, |this| {
+                this.border_t_1().border_color(cx.theme().border)
+            })
+            .child(side_header(side, count, self.writing, self.on_move.clone()))
+            .child(div().fill_height().child(content))
+            .into_any_element()
+    }
+
+    fn side_list(&self, side: Side, count: usize, changes: Arc<WorkingChanges>) -> AnyElement {
+        let scroll = self.scrolls.of(side).clone();
+        let open = self.open.clone();
+        let writing = self.writing;
+        let on_open = self.on_open.clone();
+        let on_move = self.on_move.clone();
+        div()
+            .id(("changes", side as usize))
+            .relative()
+            .size_full()
             .child(
-                uniform_list("change-list", sections.rows(), move |range, _, cx| {
-                    range
-                        .filter_map(|ix| sections.row(ix))
-                        .map(|row| match row {
-                            SectionRow::Header(side, count) => {
-                                side_header(side, count, writing, on_move.clone())
-                            }
-                            SectionRow::Item(side, ix) => {
-                                let change = &changes.files(side)[ix];
+                uniform_list(
+                    ("change-list", side as usize),
+                    count,
+                    move |range, _, cx| {
+                        let files = changes.files(side);
+                        range
+                            .filter_map(|ix| files.get(ix))
+                            .map(|change| {
                                 let selected = open.as_ref().is_some_and(|open| {
                                     open.side == side && open.path == change.path
                                 });
                                 change_row(change, side, selected, writing, &on_open, &on_move, cx)
-                            }
-                        })
-                        .collect::<Vec<_>>()
-                })
+                            })
+                            .collect::<Vec<_>>()
+                    },
+                )
                 .size_full()
                 .track_scroll(&scroll),
             )
-            .child(Scrollbar::vertical(&scroll));
-        v_flex().pane().child(header).child(list).into_any_element()
+            .child(Scrollbar::vertical(&scroll))
+            .into_any_element()
+    }
+}
+
+impl RenderOnce for ChangesList {
+    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+        let Some(changes) = self.changes.clone() else {
+            return ui::loading("Reading changes…");
+        };
+        let lists = if changes.is_empty() {
+            vec![
+                div()
+                    .fill_height()
+                    .child(ui::hint("No uncommitted changes.", cx))
+                    .into_any_element(),
+            ]
+        } else {
+            SIDES_TOP_DOWN
+                .iter()
+                .map(|&side| self.side_section(side, &changes, cx))
+                .collect()
+        };
+        v_flex()
+            .pane()
+            .child(self.form)
+            .children(lists)
+            .into_any_element()
     }
 }
 

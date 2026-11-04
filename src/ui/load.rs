@@ -10,8 +10,16 @@ impl Failure {
 
     pub(crate) fn git_reason(error: &anyhow::Error) -> Self {
         let message = format!("{error:#}");
-        let reason = message.lines().rfind(|line| !line.trim().is_empty());
-        Self(reason.unwrap_or("unknown error").trim().to_owned().into())
+        let lines = || {
+            message
+                .lines()
+                .map(str::trim)
+                .filter(|line| !line.is_empty())
+        };
+        let reason = lines()
+            .rfind(|line| line.starts_with("fatal:") || line.starts_with("error:"))
+            .or_else(|| lines().next_back());
+        Self(reason.unwrap_or("unknown error").to_owned().into())
     }
 
     pub(crate) fn message(&self) -> SharedString {
@@ -154,7 +162,23 @@ mod tests {
             Failure::git_reason(&error).message(),
             "fatal: Authentication failed"
         );
+        let hook = anyhow::anyhow!("Checking style\n  src/main.rs: tabs found\n");
+        assert_eq!(
+            Failure::git_reason(&hook).message(),
+            "src/main.rs: tabs found"
+        );
         let empty = anyhow::anyhow!("  \n");
         assert_eq!(Failure::git_reason(&empty).message(), "unknown error");
+    }
+
+    #[test]
+    fn git_reasons_prefer_the_fatal_line_to_the_advice_after_it() {
+        let error = anyhow::anyhow!(
+            "fatal: Unable to create '.git/index.lock': File exists.\n\nAnother git process seems to be running.\nremove the file manually to continue.\n"
+        );
+        assert_eq!(
+            Failure::git_reason(&error).message(),
+            "fatal: Unable to create '.git/index.lock': File exists."
+        );
     }
 }

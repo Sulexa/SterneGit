@@ -1,4 +1,5 @@
 mod command;
+mod commit;
 mod graph;
 mod history;
 mod index;
@@ -18,6 +19,7 @@ use anyhow::{Context as _, Result};
 use gix::ThreadSafeRepository;
 use gpui_kit::SharedString;
 
+pub(crate) use commit::commit_message;
 pub(crate) use graph::{Edge, Row};
 #[cfg(test)]
 pub(crate) use history::fixtures;

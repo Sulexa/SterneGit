@@ -1,5 +1,6 @@
 mod changes_list;
 mod commit_files;
+mod commit_form;
 mod commit_panel;
 mod file_diff_panel;
 mod history_list;
@@ -32,7 +33,8 @@ use crate::{
     git::{FileChange, HISTORY_LIMIT, History, Scope, Side, short_id},
     ui::{self, Failure, Look as _, Notice, thousands},
 };
-use changes_list::ChangesList;
+use changes_list::{ChangesList, SideScrolls};
+use commit_form::CommitForm;
 use commit_panel::{CommitPanel, OpenCommitFile, copy_commit_hash};
 use file_diff_panel::{CloseFileDiff, FileDiffPanel};
 use history_list::HistoryList;
@@ -47,23 +49,26 @@ pub(crate) struct RepoView {
     target: Target,
     folded: Folded,
     commit_panel: Entity<CommitPanel>,
+    commit_form: Entity<CommitForm>,
     file_diff: Entity<FileDiffPanel>,
     middle_focus: FocusHandle,
     history_scroll: UniformListScrollHandle,
     refs_scroll: UniformListScrollHandle,
-    changes_scroll: UniformListScrollHandle,
+    changes_scrolls: SideScrolls,
     _subscriptions: [Subscription; 3],
 }
 
 impl RepoView {
-    pub(crate) fn new(path: PathBuf, cx: &mut Context<Self>) -> Self {
+    pub(crate) fn new(path: PathBuf, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let repository = cx.new(|cx| Repository::new(path, cx));
         let commit_panel = cx.new(|_| CommitPanel::new());
+        let commit_form = cx.new(|cx| CommitForm::new(repository.clone(), window, cx));
         let file_diff = cx.new(|cx| FileDiffPanel::new(repository.clone(), cx));
         let subscriptions = [
             cx.subscribe(&repository, |this, _, event, cx| match event {
                 RepositoryEvent::HistoryRead => this.on_history_read(cx),
                 RepositoryEvent::ChangesRead => this.on_changes_read(cx),
+                RepositoryEvent::Committed => {}
             }),
             cx.subscribe(&file_diff, |this, _, _: &CloseFileDiff, cx| {
                 this.close_file(cx)
@@ -77,11 +82,12 @@ impl RepoView {
             target: Target::Nothing,
             folded: Folded::default(),
             commit_panel,
+            commit_form,
             file_diff,
             middle_focus: cx.focus_handle().tab_stop(true),
             history_scroll: UniformListScrollHandle::new(),
             refs_scroll: UniformListScrollHandle::new(),
-            changes_scroll: UniformListScrollHandle::new(),
+            changes_scrolls: SideScrolls::default(),
             _subscriptions: subscriptions,
         }
     }
@@ -358,20 +364,21 @@ impl RepoView {
 
     fn changes_list(&self, open: Option<OpenFile>, cx: &mut Context<Self>) -> ChangesList {
         let repository = self.repository.read(cx);
-        ChangesList::new(repository.changes().cloned(), self.changes_scroll.clone())
-            .open(open)
-            .writing(
-                repository.is_writing(),
-                repository.write_failure().map(Failure::message),
-            )
-            .on_open(
-                cx.listener(|this, (side, change): &(Side, FileChange), _, cx| {
-                    this.open_working_file(*side, change.clone(), cx)
-                }),
-            )
-            .on_move(cx.listener(|this, (side, scope): &(Side, Scope), _, cx| {
-                this.move_files(*side, scope.clone(), cx)
-            }))
+        ChangesList::new(
+            repository.changes().cloned(),
+            self.commit_form.clone(),
+            self.changes_scrolls.clone(),
+        )
+        .open(open)
+        .writing(repository.is_writing())
+        .on_open(
+            cx.listener(|this, (side, change): &(Side, FileChange), _, cx| {
+                this.open_working_file(*side, change.clone(), cx)
+            }),
+        )
+        .on_move(cx.listener(|this, (side, scope): &(Side, Scope), _, cx| {
+            this.move_files(*side, scope.clone(), cx)
+        }))
     }
 }
 

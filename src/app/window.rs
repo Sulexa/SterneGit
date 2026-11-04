@@ -120,7 +120,7 @@ impl FastGit {
     }
 
     fn new_tab(&mut self, path: PathBuf, window: &mut Window, cx: &mut Context<Self>) -> RepoTab {
-        let view = cx.new(|cx| RepoView::new(path, cx));
+        let view = cx.new(|cx| RepoView::new(path, window, cx));
         let repository = view.read(cx).repository().clone();
         let title_follows_repository = cx.observe_in(&repository, window, |this, _, window, cx| {
             this.update_title(window, cx);

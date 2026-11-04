@@ -212,11 +212,16 @@ const Sample = (() => {
     ],
   };
 
+  const draft = {
+    message: 'Show conflicted files in the changes list',
+    description: 'git status marks them UU. The list gives them a U badge\nand the comparison shows the file with its markers.',
+  };
+
   const tabs = [
     { name: 'fastgit', state: 'ready' },
     { name: 'website', state: 'ready' },
     { name: 'linux', state: 'reading' },
   ];
 
-  return { history, collapsed, changes, commitDetails, commitFileDiff, fileDiff, tabs };
+  return { history, collapsed, changes, draft, commitDetails, commitFileDiff, fileDiff, tabs };
 })();

@@ -14,6 +14,7 @@ use crate::{
 pub(crate) enum RepositoryEvent {
     HistoryRead,
     ChangesRead,
+    Committed,
 }
 
 #[derive(Clone)]
@@ -51,6 +52,7 @@ pub(crate) struct Repository {
     last_fetch: Option<Instant>,
     fetch_failure: Option<Failure>,
     write: Job,
+    committing: bool,
     write_failure: Option<Failure>,
 }
 
@@ -68,6 +70,7 @@ impl Repository {
             last_fetch: None,
             fetch_failure: None,
             write: Job::default(),
+            committing: false,
             write_failure: None,
         };
         this.refresh(cx);
@@ -120,6 +123,16 @@ impl Repository {
 
     pub(crate) fn is_writing(&self) -> bool {
         self.write.is_running()
+    }
+
+    pub(crate) fn is_committing(&self) -> bool {
+        self.committing
+    }
+
+    pub(crate) fn staged_count(&self) -> usize {
+        self.changes
+            .as_ref()
+            .map_or(0, |changes| changes.staged.len())
     }
 
     pub(crate) fn write_failure(&self) -> Option<&Failure> {
@@ -237,6 +250,39 @@ impl Repository {
                     this.write_failure = Some(Failure::git_reason(&error));
                 }
                 this.read_status(StatusCheck::Forced, cx);
+                cx.notify();
+            },
+        );
+        self.write.run(task);
+        cx.notify();
+    }
+
+    pub(crate) fn commit(&mut self, message: String, cx: &mut Context<Self>) {
+        if self.write.is_running() || self.staged_count() == 0 {
+            return;
+        }
+        let Some(repo) = self.repo().cloned() else {
+            return;
+        };
+        self.write_failure = None;
+        self.committing = true;
+        self.status_read.cancel();
+        let task = run_in_background(
+            cx,
+            move || repo.commit(&message),
+            |this, result, cx| {
+                this.write.finish();
+                this.committing = false;
+                match result {
+                    Ok(()) => {
+                        cx.emit(RepositoryEvent::Committed);
+                        this.refresh(cx);
+                    }
+                    Err(error) => {
+                        this.write_failure = Some(Failure::git_reason(&error));
+                        this.read_status(StatusCheck::Forced, cx);
+                    }
+                }
                 cx.notify();
             },
         );

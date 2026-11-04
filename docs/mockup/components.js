@@ -105,6 +105,12 @@ const Texts = {
   fileFailed: "Couldn't compare this file",
   fileEmpty: 'No changes to show: only line endings or file mode differ.',
   noChanges: 'No uncommitted changes.',
+  commitMessage: 'Commit message',
+  commitDescription: 'Description',
+  committing: 'Committing…',
+  commitTooltip: 'Commit the staged files  Ctrl+Enter',
+  nothingStaged: 'Stage files to commit them.',
+  nothingUnstaged: 'Every change is staged.',
   aboutDescription: 'A lightweight Git client for Linux, macOS and Windows, built with GPUI and gitoxide.',
   historyLimit: 10000,
 };
@@ -215,12 +221,29 @@ function pairLines(lines) {
 }
 
 const C = {
-  Button({ label, icon: iconName, variant = 'default', size = 'xs', selected = false, disabled = false, tooltip }) {
+  Button({ label, icon: iconName, variant = 'default', size = 'xs', selected = false, disabled = false, loading = false, tooltip }) {
     const classes = ['btn', variant, size, selected && 'selected', disabled && 'disabled', !label && 'icon-only']
       .filter(Boolean)
       .join(' ');
     const title = tooltip ? ` title="${esc(tooltip)}"` : '';
-    return `<span data-c="Button" class="${classes}"${title}>${iconName ? icon(iconName, size === 'xs' ? 'xs' : 'sm') : ''}${label ? `<span>${esc(label)}</span>` : ''}</span>`;
+    const glyphSize = size === 'xs' ? 'xs' : 'sm';
+    const glyph = loading
+      ? icon('loader', glyphSize).replace('class="icon"', 'class="icon spinner"')
+      : iconName
+        ? icon(iconName, glyphSize)
+        : '';
+    return `<span data-c="Button" class="${classes}"${title}>${glyph}${label ? `<span>${esc(label)}</span>` : ''}</span>`;
+  },
+
+  Input({ value = '', placeholder = '', lines = 1, focused = false, disabled = false }) {
+    const multiLine = lines > 1;
+    const classes = ['input', multiLine && 'multi-line', focused && 'focused', disabled && 'disabled'].filter(Boolean).join(' ');
+    const height = multiLine ? ` style="height:${lines * 20 + 17}px"` : '';
+    const caret = focused ? '<span class="caret"></span>' : '';
+    const text = value
+      ? `<span class="${multiLine ? 'fill' : 'ellipsis'}">${esc(value)}${caret}</span>`
+      : `${caret}<span class="placeholder">${esc(placeholder)}</span>`;
+    return `<div data-c="Input" class="${classes}"${height}>${text}</div>`;
   },
 
   Spinner({ size = 'md' } = {}) {
@@ -491,28 +514,39 @@ const C = {
     return C.FileRow({ kind: change.kind, path: change.path, selected, trailing, name: 'ChangeRow' });
   },
 
-  ChangesList({ changes, open, writing = false, failure }) {
+  CommitForm({ message = '', description = '', focus, staged = 0, committing = false, writing = false, failure }) {
+    const busy = committing || writing;
+    const ready = !busy && staged > 0 && message.trim() !== '';
+    const label = committing ? Texts.committing : staged ? `Commit ${counted(staged, 'file', 'files')}` : 'Commit';
+    return (
+      `<div data-c="CommitForm" class="commit-form">` +
+      C.Input({ value: message, placeholder: Texts.commitMessage, focused: focus === 'message', disabled: committing }) +
+      C.Input({ value: description, placeholder: Texts.commitDescription, lines: 4, focused: focus === 'description', disabled: committing }) +
+      C.Button({ label, variant: 'primary', size: 'md', disabled: !ready && !committing, loading: committing, tooltip: Texts.commitTooltip }) +
+      (failure ? `<div class="failure xs">${esc(failure)}</div>` : '') +
+      `</div>`
+    );
+  },
+
+  ChangesList({ changes, open, draft = {}, committing = false, writing = false, failure }) {
     if (!changes) return `<div data-c="ChangesList" class="changes">${C.Loading({ message: Texts.readingChanges })}</div>`;
-    const header =
-      `<div class="panel-header">` +
-      `<div class="base medium">Uncommitted changes</div>` +
-      `<div class="xs muted">${thousands(changes.unstaged.length)} unstaged · ${thousands(changes.staged.length)} staged</div>` +
-      (failure ? `<div class="xs" style="color:var(--red)">${esc(failure)}</div>` : '') +
-      `</div>`;
+    const busy = writing || committing;
+    const form = C.CommitForm({ ...draft, staged: changes.staged.length, committing, writing, failure });
     if (!changes.unstaged.length && !changes.staged.length) {
-      return `<div data-c="ChangesList" class="changes">${header}${C.Hint({ message: Texts.noChanges })}</div>`;
+      return `<div data-c="ChangesList" class="changes">${form}<div class="fill v">${C.Hint({ message: Texts.noChanges })}</div></div>`;
     }
-    const section = (side) => {
+    const section = (side, empty) => {
       const files = changes[side];
       const labels = SideLabels[side];
-      const action = C.Button({ label: labels.all, icon: labels.icon, variant: 'ghost', disabled: writing || !files.length });
+      const action = C.Button({ label: labels.all, icon: labels.icon, variant: 'ghost', disabled: busy || !files.length });
       const head = C.SectionHeader({ title: `${labels.files} (${thousands(files.length)})`, action });
       const rows = files
-        .map((change) => C.ChangeRow({ change, side, writing, selected: !!open && open.side === side && open.path === change.path }))
+        .map((change) => C.ChangeRow({ change, side, writing: busy, selected: !!open && open.side === side && open.path === change.path }))
         .join('');
-      return head + rows;
+      const body = files.length ? `<div class="fill">${rows}</div>` : C.Hint({ message: empty });
+      return `<div class="change-section">${head}${body}</div>`;
     };
-    return `<div data-c="ChangesList" class="changes">${header}<div class="fill">${section('unstaged')}${section('staged')}</div></div>`;
+    return `<div data-c="ChangesList" class="changes">${form}${section('staged', Texts.nothingStaged)}${section('unstaged', Texts.nothingUnstaged)}</div>`;
   },
 
   FileDiffPanel({ diff, mode = 'split', state = 'ready', writing = false, reason = '' }) {
