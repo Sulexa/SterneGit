@@ -23,6 +23,11 @@ To time how long reading a repository takes, without opening a window:
 cargo run -- --check path/to/repository
 ```
 
+On Windows, `scripts/build-and-relaunch.ps1` builds a release and copies it to
+`build/fastgit.exe`, which Git ignores, replacing the previous copy. If that copy
+is running, it's closed and started again on the new build. Nothing happens when
+the build hasn't changed.
+
 On Linux, building needs the same system packages Zed needs (Wayland or X11,
 xkbcommon, Vulkan, fontconfig).
 
