@@ -48,7 +48,7 @@ pub(crate) struct RepoView {
     folded: Folded,
     commit_panel: Entity<CommitPanel>,
     file_diff: Entity<FileDiffPanel>,
-    history_focus: FocusHandle,
+    middle_focus: FocusHandle,
     history_scroll: UniformListScrollHandle,
     refs_scroll: UniformListScrollHandle,
     changes_scroll: UniformListScrollHandle,
@@ -78,7 +78,7 @@ impl RepoView {
             folded: Folded::default(),
             commit_panel,
             file_diff,
-            history_focus: cx.focus_handle().tab_stop(true),
+            middle_focus: cx.focus_handle().tab_stop(true),
             history_scroll: UniformListScrollHandle::new(),
             refs_scroll: UniformListScrollHandle::new(),
             changes_scroll: UniformListScrollHandle::new(),
@@ -91,7 +91,7 @@ impl RepoView {
     }
 
     pub(crate) fn focus_handle(&self) -> FocusHandle {
-        self.history_focus.clone()
+        self.middle_focus.clone()
     }
 
     pub(crate) fn copy_hash(&self, window: &mut Window, cx: &mut Context<Self>) {
@@ -290,7 +290,11 @@ impl RepoView {
             )
             .child(resizable_panel().size_range(rem * 30. ..rem * 400.).child(
                 if self.target.has_open_file() {
-                    self.file_diff.clone().into_any_element()
+                    div()
+                        .pane()
+                        .track_focus(&self.middle_focus)
+                        .child(self.file_diff.clone())
+                        .into_any_element()
                 } else {
                     self.history_list(history, cx).into_any_element()
                 },
@@ -343,7 +347,7 @@ impl RepoView {
         let changes = self.repository.read(cx).changes().cloned();
         HistoryList::new(
             history,
-            self.history_focus.clone(),
+            self.middle_focus.clone(),
             self.history_scroll.clone(),
         )
         .selected(self.target.commit())
