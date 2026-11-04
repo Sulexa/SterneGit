@@ -10,7 +10,7 @@ use gpui_kit::SharedString;
 
 use super::text::decode;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) enum RefKind {
     LocalBranch,
     RemoteBranch,

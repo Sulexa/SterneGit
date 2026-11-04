@@ -333,13 +333,24 @@
 }
 
 .section-header > .title { flex: 1; }
+.section-header.foldable { gap: 6px; }
 
 .refs {
   height: 100%;
   background: var(--sidebar);
 }
 
-.ref-row { gap: 8px; }
+.tree-row { gap: 6px; }
+
+.twisty {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  display: flex;
+  color: var(--muted);
+}
+
+.tree-group.collapsed > .tree-children { display: none; }
 
 .ref-badge {
   flex: none;
@@ -389,7 +400,6 @@
 }
 
 .commit-row {
-  padding-left: 0;
   gap: 12px;
 }
 
@@ -408,7 +418,6 @@
 
 .uncommitted-row {
   flex: none;
-  padding-left: 0;
   gap: 12px;
   border-bottom: 1px solid var(--border);
 }

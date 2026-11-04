@@ -158,8 +158,7 @@ fn commit_row(
     let labels: Vec<&RefLabel> = history.labels_on(&commit.id).collect();
     let color = palette.lane(graph_row.node_lane);
     list_row(SharedString::from(commit.id.to_string()), selected)
-        .pl_0()
-        .pr_3()
+        .px_3()
         .child(
             h_flex()
                 .h(ROW_HEIGHT)
@@ -248,8 +247,7 @@ fn uncommitted_row(
     }
     list_row("wip", selected)
         .flex_none()
-        .pl_0()
-        .pr_3()
+        .px_3()
         .border_b_1()
         .border_color(cx.theme().border)
         .child(

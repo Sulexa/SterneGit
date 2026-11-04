@@ -1,6 +1,7 @@
 const Catalog = (() => {
-  const { history, changes, commitDetails, fileDiff, tabs } = Sample;
+  const { history, collapsed, changes, commitDetails, fileDiff, tabs } = Sample;
   const commit = (ix) => history.commits[ix];
+  const ref = (name) => history.refs.find((label) => label.name === name);
   const width = graphWidth(history.commits);
   const row = 736;
   const lanes = (graph, extra = {}) => () => C.GraphCell({ graph, ...extra });
@@ -122,9 +123,11 @@ const Catalog = (() => {
           name: 'SectionHeader',
           code: 'ui::SectionHeader',
           source: 'src/ui/rows.rs',
-          about: 'A muted 28 px title with an optional count and an optional action on the right.',
+          about: 'A muted 28 px title with an optional count and an optional action on the right. A section that folds gets a chevron in front: down while open, right while folded.',
           variants: [
-            ['With a count', () => C.SectionHeader({ title: 'Branches', count: 3 }), { w: 224 }],
+            ['With a count', () => C.SectionHeader({ title: 'Branches', count: 5 }), { w: 224 }],
+            ['Open', () => C.SectionHeader({ title: 'Branches', count: 5, open: true }), { w: 224 }],
+            ['Folded', () => C.SectionHeader({ title: 'Tags', count: 2, open: false }), { w: 224 }],
             ['With an action', () => C.SectionHeader({ title: 'Unstaged files (4)', action: C.Button({ label: 'Stage all', icon: 'plus', variant: 'ghost' }) }), { w: 480 }],
           ],
         },
@@ -174,7 +177,7 @@ const Catalog = (() => {
           name: 'GraphCell',
           code: 'ui::graph_cell',
           source: 'src/ui/graph_cell.rs',
-          about: 'One row of the commit graph: 12 px per lane plus 6 px, lines 2 px, nodes 4.5 px, merges at 70 %, a ring around HEAD.',
+          about: 'One row of the commit graph: 12 px per lane with a 6 px margin on each side, so the HEAD ring is never cut. Lines 2 px, nodes 4.5 px, merges at 70 %, a ring around HEAD.',
           variants: [
             ['HEAD, first commit', lanes([0, 1, 'O0'], { head: true }), { zoom: 2 }],
             ['On a straight lane', lanes([0, 1, 'I0 O0']), { zoom: 2 }],
@@ -288,19 +291,34 @@ const Catalog = (() => {
           name: 'RefsList',
           code: 'repo::refs_list::RefsList',
           source: 'src/repo/refs_list.rs',
-          about: 'Branches, remotes and tags, each section only when it has refs. Clicking a ref selects its commit.',
-          variants: [['With a selection', () => C.RefsList({ refs: history.refs, selectedRow: 2 }), { w: 224, h: 340 }]],
+          about: 'Branches, remotes and tags, each section only when it has refs. Names are split at each slash into folders, in the order Git lists them; under Remotes the first folder is the remote. Sections and folders fold with a click. Clicking a ref selects its commit.',
+          variants: [
+            ['With a selection', () => C.RefsList({ refs: history.refs, selectedRow: 2, collapsed }), { w: 224, h: 480 }],
+            ['Folders and sections folded', () => C.RefsList({ refs: history.refs, collapsed: ['local:feature', 'remote', 'tag'] }), { w: 224, h: 200 }],
+          ],
+        },
+        {
+          name: 'RefFolderRow',
+          code: 'repo::refs_list::folder_row',
+          source: 'src/repo/refs_list.rs',
+          about: 'One part of ref names before a slash, such as feature in feature/diff-view. A chevron shows whether it is open; a click folds or unfolds it. The remote at the top of Remotes shows a cloud instead of a folder. Indented 18 px per level.',
+          variants: [
+            ['Open', () => C.RefFolderRow({ name: 'feature', kind: 'local' }), { w: 224 }],
+            ['Folded', () => C.RefFolderRow({ name: 'topic', kind: 'local', open: false }), { w: 224 }],
+            ['Remote', () => C.RefFolderRow({ name: 'origin', kind: 'remote' }), { w: 224 }],
+            ['Inside a remote', () => C.RefFolderRow({ name: 'feature', kind: 'remote', depth: 1 }), { w: 224 }],
+          ],
         },
         {
           name: 'RefRow',
           code: 'repo::refs_list::ref_row',
           source: 'src/repo/refs_list.rs',
-          about: 'Icon by kind, the name in bold for the checked-out branch.',
+          about: 'Icon by kind, then the last part of the name, in bold for the checked-out branch. An empty chevron slot keeps it lined up with the folders beside it; indented 18 px per folder.',
           variants: [
-            ['Checked-out branch', () => C.RefRow({ label: history.refs[1] }), { w: 224 }],
-            ['Points at the selection', () => C.RefRow({ label: history.refs[0], selected: true }), { w: 224 }],
-            ['Remote', () => C.RefRow({ label: history.refs[4] }), { w: 224 }],
-            ['Tag', () => C.RefRow({ label: history.refs[6] }), { w: 224 }],
+            ['Checked-out branch', () => C.RefRow({ label: ref('main') }), { w: 224 }],
+            ['Points at the selection, in a folder', () => C.RefRow({ label: ref('feature/diff-view'), name: 'diff-view', depth: 1, selected: true }), { w: 224 }],
+            ['Remote branch', () => C.RefRow({ label: ref('origin/main'), name: 'main', depth: 1 }), { w: 224 }],
+            ['Tag', () => C.RefRow({ label: ref('v0.2.0') }), { w: 224 }],
           ],
         },
         {
@@ -314,7 +332,7 @@ const Catalog = (() => {
           name: 'CommitRow',
           code: 'repo::history_list::commit_row',
           source: 'src/repo/history_list.rs',
-          about: 'Graph, up to three ref badges (then +n), subject, author 120 px, date 104 px, short id 56 px.',
+          about: 'The same 12 px left padding as every row, then the graph, up to three ref badges (then +n), subject, author 120 px, date 104 px, short id 56 px.',
           variants: [
             ['HEAD with refs', () => C.CommitRow({ commit: commit(0), width }), { w: row }],
             ['Selected', () => C.CommitRow({ commit: commit(2), width, selected: true }), { w: row }],
@@ -401,7 +419,7 @@ const Catalog = (() => {
 
   function commitSelectedBody() {
     return C.RepoView({
-      left: C.RefsList({ refs: history.refs, selectedRow: 2 }),
+      left: C.RefsList({ refs: history.refs, selectedRow: 2, collapsed }),
       middle: C.HistoryList({ history, selectedRow: 2, changes }),
       right: C.CommitPanel({ commit: commit(2), details: commitDetails }),
       status: C.RepoStatusBar({ summary: historySummary(history), position: 'Commit 3 of 1,284' }),

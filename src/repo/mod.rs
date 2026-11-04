@@ -4,6 +4,7 @@ mod file_diff_panel;
 mod history_list;
 mod navigation;
 mod patch_view;
+mod ref_tree;
 mod refs_list;
 mod repository;
 mod status_bar;
@@ -34,6 +35,7 @@ use commit_panel::{CommitPanel, copy_commit_hash};
 use file_diff_panel::{CloseFileDiff, FileDiffPanel};
 use history_list::HistoryList;
 use navigation::{OpenFile, Step, Target};
+use ref_tree::{Folded, RefGroup};
 use refs_list::RefsList;
 pub(crate) use repository::{Repository, RepositoryEvent};
 use status_bar::RepoStatusBar;
@@ -41,6 +43,7 @@ use status_bar::RepoStatusBar;
 pub(crate) struct RepoView {
     repository: Entity<Repository>,
     target: Target,
+    folded: Folded,
     commit_panel: Entity<CommitPanel>,
     file_diff: Entity<FileDiffPanel>,
     history_focus: FocusHandle,
@@ -67,6 +70,7 @@ impl RepoView {
         Self {
             repository,
             target: Target::Nothing,
+            folded: Folded::default(),
             commit_panel,
             file_diff,
             history_focus: cx.focus_handle().tab_stop(true),
@@ -229,6 +233,11 @@ impl RepoView {
         }
     }
 
+    fn toggle_fold(&mut self, group: RefGroup, cx: &mut Context<Self>) {
+        self.folded.toggle(group);
+        cx.notify();
+    }
+
     fn move_files(&mut self, from: Side, scope: Scope, cx: &mut Context<Self>) {
         self.repository
             .update(cx, |repository, cx| repository.move_across(from, scope, cx));
@@ -293,9 +302,12 @@ impl RepoView {
     }
 
     fn refs_list(&self, history: Arc<History>, cx: &mut Context<Self>) -> RefsList {
-        RefsList::new(history, self.refs_scroll.clone())
+        RefsList::new(history, &self.folded, self.refs_scroll.clone())
             .selected(self.target.commit())
             .on_reveal(cx.listener(|this, ix: &usize, window, cx| this.reveal_ref(*ix, window, cx)))
+            .on_toggle(
+                cx.listener(|this, group: &RefGroup, _, cx| this.toggle_fold(group.clone(), cx)),
+            )
     }
 
     fn history_list(&self, history: Arc<History>, cx: &mut Context<Self>) -> HistoryList {

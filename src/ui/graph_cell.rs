@@ -25,7 +25,11 @@ pub(crate) fn graph_width<'a>(visible: impl IntoIterator<Item = &'a Row>) -> Pix
         .max()
         .unwrap_or(1)
         .clamp(1, MAX_VISIBLE_LANES);
-    LANE_WIDTH * lanes as f32 + GRAPH_MARGIN
+    LANE_WIDTH * lanes as f32 + GRAPH_MARGIN * 2.
+}
+
+fn lane_x(bounds: &Bounds<Pixels>, lane: u16) -> Pixels {
+    bounds.left() + GRAPH_MARGIN + LANE_WIDTH * (lane as f32 + 0.5)
 }
 
 pub(crate) fn graph_cell(
@@ -41,8 +45,8 @@ pub(crate) fn graph_cell(
 }
 
 pub(crate) fn uncommitted_cell(color: Hsla) -> impl IntoElement {
-    cell(LANE_WIDTH + GRAPH_MARGIN, move |bounds, window| {
-        let center = point(bounds.left() + LANE_WIDTH * 0.5, bounds.center().y);
+    cell(LANE_WIDTH + GRAPH_MARGIN * 2., move |bounds, window| {
+        let center = point(lane_x(&bounds, 0), bounds.center().y);
         paint_ring(window, center, NODE_RADIUS, color);
     })
 }
@@ -67,7 +71,7 @@ fn paint_row(
     bounds: Bounds<Pixels>,
     window: &mut Window,
 ) {
-    let x = |lane: u16| bounds.left() + LANE_WIDTH * (lane as f32 + 0.5);
+    let x = |lane: u16| lane_x(&bounds, lane);
     let color = |lane: u16| lanes[lane as usize % LANE_COLORS];
     let (top, middle, bottom) = (bounds.top(), bounds.center().y, bounds.bottom());
     let node = row.node_lane;

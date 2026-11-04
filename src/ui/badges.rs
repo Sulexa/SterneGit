@@ -15,7 +15,7 @@ const LABEL_FILL: f32 = 0.14;
 const LABEL_BORDER: f32 = 0.6;
 const CHANGE_FILL: f32 = 0.18;
 
-pub(crate) fn ref_icon(kind: RefKind) -> IconName {
+fn ref_icon(kind: RefKind) -> IconName {
     match kind {
         RefKind::LocalBranch => IconName::GitBranch,
         RefKind::RemoteBranch => IconName::Cloud,

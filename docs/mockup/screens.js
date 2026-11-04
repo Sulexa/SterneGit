@@ -1,5 +1,5 @@
 const Screens = (() => {
-  const { history, changes, commitDetails, fileDiff, tabs } = Sample;
+  const { history, collapsed, changes, commitDetails, fileDiff, tabs } = Sample;
   const selected = 2;
   const position = (row) => `Commit ${thousands(row + 1)} of ${thousands(history.total)}`;
 
@@ -8,7 +8,7 @@ const Screens = (() => {
 
   const repo = ({ middle, right, selectedRow = null, wipSelected = false, status = {} }) =>
     C.RepoView({
-      left: C.RefsList({ refs: history.refs, selectedRow }),
+      left: C.RefsList({ refs: history.refs, selectedRow, collapsed }),
       middle: middle || C.HistoryList({ history, selectedRow, changes, wipSelected }),
       right,
       status: C.RepoStatusBar({
@@ -87,7 +87,7 @@ const Screens = (() => {
     {
       id: 'history',
       title: 'History — commit selected',
-      about: 'The main screen. Refs on the left, the commit graph in the middle, the selected commit with its patch on the right. The refs pointing at the selected commit are highlighted too.',
+      about: 'The main screen. Refs on the left, split into folders at each slash, the commit graph in the middle, the selected commit with its patch on the right. The refs pointing at the selected commit are highlighted too. Click a section or a folder to fold it.',
       source: 'src/repo/mod.rs',
       render: () => C.FastGit({ topBar: topBar(), tabStrip: tabStrip(), body: commitSelected() }),
     },

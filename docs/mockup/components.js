@@ -11,12 +11,20 @@ const IconPaths = {
   'triangle-alert': '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
   loader: '<path d="M21 12a9 9 0 1 1-6.219-8.56"/>',
   'chevron-down': '<path d="m6 9 6 6 6-6"/>',
+  'chevron-right': '<path d="m9 18 6-6-6-6"/>',
+  folder: '<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>',
   'window-minimize': '<path d="M6 12h12"/>',
   'window-maximize': '<rect width="12" height="12" x="6" y="6" rx="1"/>',
   'window-close': '<path d="M17 7 7 17"/><path d="m7 7 10 10"/>',
 };
 
 const IconSizes = { xs: 12, sm: 14, md: 16, lg: 24 };
+
+const LaneWidth = 12;
+
+const GraphMargin = 6;
+
+const laneX = (lane) => GraphMargin + LaneWidth * (lane + 0.5);
 
 const LaneColors = ['var(--blue)', 'var(--magenta)', 'var(--green)', 'var(--yellow)', 'var(--cyan)', 'var(--red)'];
 
@@ -31,6 +39,14 @@ const ChangeColors = {
 };
 
 const RefIcons = { local: 'git-branch', remote: 'cloud', tag: 'tag' };
+
+const TreeIcons = {
+  local: { top: 'folder', folder: 'folder', ref: 'git-branch' },
+  remote: { top: 'cloud', folder: 'folder', ref: 'git-branch' },
+  tag: { top: 'folder', folder: 'folder', ref: 'tag' },
+};
+
+const TreeIndent = 18;
 
 const RefSections = [
   ['local', 'Branches'],
@@ -124,11 +140,37 @@ function highlight(code) {
 
 function graphWidth(rows) {
   const lanes = Math.min(32, Math.max(1, ...rows.map((commit) => commit.graph[1])));
-  return lanes * 12 + 6;
+  return lanes * LaneWidth + 2 * GraphMargin;
 }
 
 function graphEdges(spec) {
   return spec.split(' ').filter(Boolean).map((token) => ({ kind: token[0], lane: Number(token.slice(1)) }));
+}
+
+function refTree(labels) {
+  const root = [];
+  for (const label of labels) {
+    const parts = label.name.split('/');
+    let level = root;
+    parts.slice(0, -1).forEach((part, depth) => {
+      let folder = level.find((node) => node.children && node.name === part);
+      if (!folder) {
+        folder = { name: part, path: parts.slice(0, depth + 1).join('/'), children: [] };
+        level.push(folder);
+      }
+      level = folder.children;
+    });
+    level.push({ name: parts[parts.length - 1], label });
+  }
+  return root;
+}
+
+function twisty(open) {
+  return `<span class="twisty">${open === null ? '' : icon(open ? 'chevron-down' : 'chevron-right', 'xs')}</span>`;
+}
+
+function treeGroup(open, header, children) {
+  return `<div class="tree-group${open ? '' : ' collapsed'}">${header}<div class="tree-children">${children}</div></div>`;
 }
 
 function summarize(changes) {
@@ -230,9 +272,10 @@ const C = {
     return `<div data-c="${name}"${base} class="list-row${selected ? ' selected' : ''}${extraClass ? ` ${extraClass}` : ''}">${content}</div>`;
   },
 
-  SectionHeader({ title, count, action }) {
+  SectionHeader({ title, count, action, open }) {
+    const foldable = open !== undefined;
     const shownCount = count === undefined ? '' : `<span>${thousands(count)}</span>`;
-    return `<div data-c="SectionHeader" class="section-header"><span class="title ellipsis">${esc(title)}</span>${shownCount}${action || ''}</div>`;
+    return `<div data-c="SectionHeader" class="section-header${foldable ? ' foldable' : ''}">${foldable ? twisty(open) : ''}<span class="title ellipsis">${esc(title)}</span>${shownCount}${action || ''}</div>`;
   },
 
   RefBadge({ name, kind, head = false, color = LaneColors[0] }) {
@@ -253,8 +296,8 @@ const C = {
 
   GraphCell({ graph, merge = false, head = false, width }) {
     const [node, lanes, spec] = graph;
-    const w = width || lanes * 12 + 6;
-    const x = (lane) => 12 * (lane + 0.5);
+    const w = width || lanes * LaneWidth + 2 * GraphMargin;
+    const x = laneX;
     const color = (lane) => LaneColors[lane % LaneColors.length];
     const paths = graphEdges(spec).map(({ kind, lane }) => {
       const d =
@@ -276,7 +319,8 @@ const C = {
   },
 
   UncommittedCell() {
-    return `<span data-c="UncommittedCell" class="graph-cell none" style="width:18px"><svg width="18" height="28" viewBox="0 0 18 28"><circle cx="6" cy="14" r="4.5" fill="none" style="stroke:var(--muted)" stroke-width="1.5"/></svg></span>`;
+    const w = LaneWidth + 2 * GraphMargin;
+    return `<span data-c="UncommittedCell" class="graph-cell none" style="width:${w}px"><svg width="${w}" height="28" viewBox="0 0 ${w} 28"><circle cx="${laneX(0)}" cy="14" r="4.5" fill="none" style="stroke:var(--muted)" stroke-width="1.5"/></svg></span>`;
   },
 
   Loading({ message }) {
@@ -295,16 +339,32 @@ const C = {
     return `<div data-c="Notice" class="notice">${icon('git-merge', 'lg', 'var(--muted)')}<div class="lg medium">${esc(title)}</div><div class="description sm muted">${esc(description)}</div>${action}</div>`;
   },
 
-  RefRow({ label, selected = false }) {
-    const content = `<div class="h fill ref-row">${icon(RefIcons[label.kind], 'sm', 'var(--muted)')}<div class="fill ellipsis sm${label.head ? ' semibold' : ''}">${esc(label.name)}</div></div>`;
+  RefRow({ label, name = label.name, depth = 0, selected = false }) {
+    const content = `<div class="h fill tree-row" style="padding-left:${depth * TreeIndent}px">${twisty(null)}${icon(TreeIcons[label.kind].ref, 'sm', 'var(--muted)')}<div class="fill ellipsis sm${label.head ? ' semibold' : ''}">${esc(name)}</div></div>`;
     return C.ListRow({ content, selected, name: 'RefRow' });
   },
 
-  RefsList({ refs, selectedRow }) {
+  RefFolderRow({ name, kind, depth = 0, open = true }) {
+    const shape = depth === 0 ? TreeIcons[kind].top : TreeIcons[kind].folder;
+    const content = `<div class="h fill tree-row" style="padding-left:${depth * TreeIndent}px">${twisty(open)}${icon(shape, 'sm', 'var(--muted)')}<div class="fill ellipsis sm">${esc(name)}</div></div>`;
+    return C.ListRow({ content, name: 'RefFolderRow' });
+  },
+
+  RefsList({ refs, selectedRow, collapsed = [] }) {
+    const closed = new Set(collapsed);
+    const nodes = (kind, list, depth) =>
+      list
+        .map((node) => {
+          if (!node.children) return C.RefRow({ label: node.label, name: node.name, depth, selected: node.label.row === selectedRow });
+          const open = !closed.has(`${kind}:${node.path}`);
+          return treeGroup(open, C.RefFolderRow({ name: node.name, kind, depth, open }), nodes(kind, node.children, depth + 1));
+        })
+        .join('');
     const sections = RefSections.map(([kind, title]) => {
       const items = refs.filter((label) => label.kind === kind);
       if (!items.length) return '';
-      return C.SectionHeader({ title, count: items.length }) + items.map((label) => C.RefRow({ label, selected: label.row === selectedRow })).join('');
+      const open = !closed.has(kind);
+      return treeGroup(open, C.SectionHeader({ title, count: items.length, open }), nodes(kind, refTree(items), 0));
     });
     return `<div data-c="RefsList" class="refs">${sections.join('')}</div>`;
   },

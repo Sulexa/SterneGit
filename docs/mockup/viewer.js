@@ -247,8 +247,18 @@ const Viewer = (() => {
     if (next) location.hash = `#/screen/${next.id}`;
   };
 
+  const fold = (event) => {
+    if (event.target.closest('.mk-outline')) return;
+    const header = event.target.closest('.tree-group > :first-child');
+    if (!header) return;
+    const open = !header.parentElement.classList.toggle('collapsed');
+    const chevron = header.querySelector('.twisty');
+    if (chevron) chevron.innerHTML = icon(open ? 'chevron-down' : 'chevron-right', 'xs');
+  };
+
   const start = () => {
     document.body.appendChild(tag);
+    document.getElementById('mk-main').addEventListener('click', fold);
     window.addEventListener('hashchange', render);
     window.addEventListener('resize', fit);
     window.addEventListener('keydown', (event) => {

@@ -29,10 +29,10 @@ const Sample = (() => {
     { subject: "Merge branch 'topic/tabs'", author: 'Alex Martin', date: '2026-11-03 17:05', graph: [0, 3, 'I0 P1 O0 O2'], merge: true },
     { subject: 'Add Split and Unified toggles', author: 'Sam Lee', date: '2026-11-03 15:20', graph: [1, 3, 'P0 I1 O1 P2'] },
     { subject: 'Keep one tab per repository', author: 'Robin Chen', date: '2026-11-03 11:47', graph: [2, 3, 'P0 P1 I2 O2'], refs: [['topic/tabs', 'local']] },
-    { subject: 'Add a menu top bar', author: 'Alex Martin', date: '2026-11-02 20:13', graph: [0, 3, 'I0 O0 P1 P2'], refs: [['v0.2.0', 'tag']] },
+    { subject: 'Add a menu top bar', author: 'Alex Martin', date: '2026-11-02 20:13', graph: [0, 3, 'I0 O0 P1 P2'], refs: [['upstream/main', 'remote'], ['v0.2.0', 'tag']] },
     { subject: 'Open each repository in its own tab', author: 'Robin Chen', date: '2026-11-02 16:58', graph: [2, 3, 'P0 P1 I2 O0'] },
-    { subject: 'Fetch remotes and pick up outside changes', author: 'Alex Martin', date: '2026-11-02 10:04', graph: [0, 2, 'I0 O0 P1'] },
-    { subject: 'Parse git diff output into hunks', author: 'Sam Lee', date: '2026-11-01 22:36', graph: [1, 2, 'P0 I1 O0'] },
+    { subject: 'Fetch remotes and pick up outside changes', author: 'Alex Martin', date: '2026-11-02 10:04', graph: [0, 2, 'I0 O0 P1'], refs: [['feature/stash', 'local'], ['origin/feature/stash', 'remote']] },
+    { subject: 'Parse git diff output into hunks', author: 'Sam Lee', date: '2026-11-01 22:36', graph: [1, 2, 'P0 I1 O0'], refs: [['feature/blame', 'local']] },
     { subject: 'Add read-only commit graph prototype', author: 'Alex Martin', date: '2026-11-01 14:09', graph: [0, 1, 'I0 O0'], refs: [['v0.1.0', 'tag']] },
     ...linear.map((subject, ix) => ({
       subject,
@@ -43,14 +43,20 @@ const Sample = (() => {
   ].map((commit, ix) => ({ ...commit, id: hex(ix + 7), refs: commit.refs || [] }));
 
   const refs = [
+    { name: 'feature/blame', kind: 'local', row: 9 },
     { name: 'feature/diff-view', kind: 'local', row: 2 },
+    { name: 'feature/stash', kind: 'local', row: 8 },
     { name: 'main', kind: 'local', row: 0, head: true },
     { name: 'topic/tabs', kind: 'local', row: 5 },
     { name: 'origin/feature/diff-view', kind: 'remote', row: 2 },
+    { name: 'origin/feature/stash', kind: 'remote', row: 8 },
     { name: 'origin/main', kind: 'remote', row: 0 },
+    { name: 'upstream/main', kind: 'remote', row: 6 },
     { name: 'v0.1.0', kind: 'tag', row: 10 },
     { name: 'v0.2.0', kind: 'tag', row: 6 },
   ];
+
+  const collapsed = ['remote:upstream'];
 
   const history = {
     name: 'fastgit',
@@ -183,5 +189,5 @@ const Sample = (() => {
     { name: 'linux', state: 'reading' },
   ];
 
-  return { history, changes, commitDetails, fileDiff, tabs };
+  return { history, collapsed, changes, commitDetails, fileDiff, tabs };
 })();
