@@ -24,7 +24,10 @@ impl OpenFile {
 pub(crate) enum Target {
     #[default]
     Nothing,
-    Commit(ObjectId),
+    Commit {
+        id: ObjectId,
+        open: Option<SharedString>,
+    },
     WorkingTree {
         open: Option<OpenFile>,
     },
@@ -37,17 +40,30 @@ pub(crate) enum Step {
 }
 
 impl Target {
+    pub(crate) fn at_commit(id: ObjectId) -> Self {
+        Target::Commit { id, open: None }
+    }
+
     pub(crate) fn commit(&self) -> Option<ObjectId> {
         match self {
-            Target::Commit(id) => Some(*id),
+            Target::Commit { id, .. } => Some(*id),
             Target::Nothing | Target::WorkingTree { .. } => None,
         }
     }
 
-    pub(crate) fn open_file(&self) -> Option<&OpenFile> {
+    pub(crate) fn has_open_file(&self) -> bool {
         match self {
-            Target::WorkingTree { open } => open.as_ref(),
-            Target::Nothing | Target::Commit(_) => None,
+            Target::Commit { open, .. } => open.is_some(),
+            Target::WorkingTree { open } => open.is_some(),
+            Target::Nothing => false,
+        }
+    }
+
+    pub(crate) fn close_file(&mut self) -> bool {
+        match self {
+            Target::Commit { open, .. } => open.take().is_some(),
+            Target::WorkingTree { open } => open.take().is_some(),
+            Target::Nothing => false,
         }
     }
 
@@ -67,8 +83,8 @@ impl Target {
                 head_or_working_tree(history)
             }
             Target::WorkingTree { .. } => self.clone(),
-            Target::Commit(id) if history.row_of(id).is_some() => self.clone(),
-            Target::Commit(_) => commit_or_nothing(history.newest()),
+            Target::Commit { id, .. } if history.row_of(id).is_some() => self.clone(),
+            Target::Commit { .. } => commit_or_nothing(history.newest()),
             Target::Nothing => commit_or_nothing(head_or_newest(history)),
         }
     }
@@ -89,9 +105,9 @@ impl Target {
     pub(crate) fn step(&self, step: Step, history: &History, has_changes: bool) -> Option<Target> {
         let newest = history.newest()?;
         match (self, step) {
-            (Target::WorkingTree { .. }, Step::Older) => Some(Target::Commit(newest)),
+            (Target::WorkingTree { .. }, Step::Older) => Some(Target::at_commit(newest)),
             (Target::WorkingTree { .. }, Step::Newer) => None,
-            (Target::Commit(id), Step::Newer) if *id == newest && has_changes => {
+            (Target::Commit { id, .. }, Step::Newer) if *id == newest && has_changes => {
                 Some(Target::WorkingTree { open: None })
             }
             _ => {
@@ -103,14 +119,14 @@ impl Target {
                     Step::Newer => row.saturating_sub(1),
                     Step::Older => (row + 1).min(history.commits.len() - 1),
                 };
-                Some(Target::Commit(history.commits[row].id))
+                Some(Target::at_commit(history.commits[row].id))
             }
         }
     }
 }
 
 fn commit_or_nothing(id: Option<ObjectId>) -> Target {
-    id.map_or(Target::Nothing, Target::Commit)
+    id.map_or(Target::Nothing, Target::at_commit)
 }
 
 fn head_or_newest(history: &History) -> Option<ObjectId> {
@@ -121,7 +137,7 @@ fn head_or_newest(history: &History) -> Option<ObjectId> {
 }
 
 fn head_or_working_tree(history: &History) -> Target {
-    head_or_newest(history).map_or(Target::WorkingTree { open: None }, Target::Commit)
+    head_or_newest(history).map_or(Target::WorkingTree { open: None }, Target::at_commit)
 }
 
 fn clean_at_shown_head(changes: &WorkingChanges, history: &History) -> bool {
@@ -160,6 +176,17 @@ mod tests {
         }
     }
 
+    fn at(byte: u8) -> Target {
+        Target::at_commit(id(byte))
+    }
+
+    fn open_in(byte: u8, path: &str) -> Target {
+        Target::Commit {
+            id: id(byte),
+            open: Some(path.to_owned().into()),
+        }
+    }
+
     fn open(side: Side, path: &str) -> Target {
         Target::WorkingTree {
             open: Some(OpenFile {
@@ -172,19 +199,13 @@ mod tests {
     #[test]
     fn the_first_read_selects_head() {
         let history = linear_history(&[3, 2, 1], Some(2));
-        assert_eq!(
-            Target::Nothing.after_history_read(&history, None),
-            Target::Commit(id(2))
-        );
+        assert_eq!(Target::Nothing.after_history_read(&history, None), at(2));
     }
 
     #[test]
     fn without_head_the_first_read_selects_the_newest_commit() {
         let history = linear_history(&[3, 2, 1], None);
-        assert_eq!(
-            Target::Nothing.after_history_read(&history, None),
-            Target::Commit(id(3))
-        );
+        assert_eq!(Target::Nothing.after_history_read(&history, None), at(3));
     }
 
     #[test]
@@ -199,19 +220,13 @@ mod tests {
     #[test]
     fn a_reload_keeps_the_selected_commit_while_it_exists() {
         let history = linear_history(&[4, 3, 2, 1], Some(4));
-        assert_eq!(
-            Target::Commit(id(2)).after_history_read(&history, None),
-            Target::Commit(id(2))
-        );
+        assert_eq!(at(2).after_history_read(&history, None), at(2));
     }
 
     #[test]
     fn a_reload_falls_back_to_the_newest_commit_when_the_selected_one_is_gone() {
         let history = linear_history(&[4, 3], Some(3));
-        assert_eq!(
-            Target::Commit(id(9)).after_history_read(&history, None),
-            Target::Commit(id(4))
-        );
+        assert_eq!(at(9).after_history_read(&history, None), at(4));
     }
 
     #[test]
@@ -229,7 +244,7 @@ mod tests {
         let target = open(Side::Unstaged, "a.rs");
         assert_eq!(
             target.after_history_read(&history, Some(&clean_at(3))),
-            Target::Commit(id(3))
+            at(3)
         );
     }
 
@@ -250,13 +265,10 @@ mod tests {
     #[test]
     fn a_selected_commit_stays_when_the_working_tree_becomes_clean() {
         let history = linear_history(&[2, 1], Some(2));
+        assert_eq!(at(1).after_changes_read(&clean_at(2), &history), at(1));
         assert_eq!(
-            Target::Commit(id(1)).after_changes_read(&clean_at(2), &history),
-            Target::Commit(id(1))
-        );
-        assert_eq!(
-            Target::Commit(id(1)).after_history_read(&history, Some(&clean_at(2))),
-            Target::Commit(id(1))
+            at(1).after_history_read(&history, Some(&clean_at(2))),
+            at(1)
         );
     }
 
@@ -265,7 +277,7 @@ mod tests {
         let history = linear_history(&[3, 2, 1], Some(2));
         assert_eq!(
             open(Side::Staged, "a.rs").after_changes_read(&clean_at(2), &history),
-            Target::Commit(id(2))
+            at(2)
         );
     }
 
@@ -281,7 +293,7 @@ mod tests {
         let fresh = linear_history(&[3, 2, 1], Some(3));
         assert_eq!(
             waiting.after_history_read(&fresh, Some(&clean_at(3))),
-            Target::Commit(id(3))
+            at(3)
         );
     }
 
@@ -300,7 +312,7 @@ mod tests {
         let clean = changes(&[], &[]);
         assert_eq!(
             open(Side::Unstaged, "a.rs").after_changes_read(&clean, &history),
-            Target::Commit(id(3))
+            at(3)
         );
     }
 
@@ -346,13 +358,10 @@ mod tests {
     fn stepping_newer_from_the_newest_commit_selects_the_changes() {
         let history = linear_history(&[2, 1], Some(2));
         assert_eq!(
-            Target::Commit(id(2)).step(Step::Newer, &history, true),
+            at(2).step(Step::Newer, &history, true),
             Some(Target::WorkingTree { open: None })
         );
-        assert_eq!(
-            Target::Commit(id(2)).step(Step::Newer, &history, false),
-            Some(Target::Commit(id(2)))
-        );
+        assert_eq!(at(2).step(Step::Newer, &history, false), Some(at(2)));
     }
 
     #[test]
@@ -360,7 +369,7 @@ mod tests {
         let history = linear_history(&[2, 1], Some(1));
         assert_eq!(
             open(Side::Unstaged, "a.rs").step(Step::Older, &history, true),
-            Some(Target::Commit(id(2)))
+            Some(at(2))
         );
         assert_eq!(
             open(Side::Unstaged, "a.rs").step(Step::Newer, &history, true),
@@ -371,22 +380,65 @@ mod tests {
     #[test]
     fn steps_stop_at_both_ends() {
         let history = linear_history(&[3, 2, 1], Some(3));
+        assert_eq!(at(1).step(Step::Older, &history, false), Some(at(1)));
+        assert_eq!(at(3).step(Step::Newer, &history, false), Some(at(3)));
+        assert_eq!(at(2).step(Step::Older, &history, false), Some(at(1)));
+        assert_eq!(at(2).step(Step::Newer, &history, false), Some(at(3)));
+    }
+
+    #[test]
+    fn a_reload_keeps_the_file_open_in_the_selected_commit() {
+        let history = linear_history(&[3, 2, 1], Some(3));
+        let target = open_in(2, "a.rs");
+        assert_eq!(target.after_history_read(&history, None), target);
         assert_eq!(
-            Target::Commit(id(1)).step(Step::Older, &history, false),
-            Some(Target::Commit(id(1)))
+            target.after_history_read(&history, Some(&clean_at(3))),
+            target
+        );
+    }
+
+    #[test]
+    fn a_file_open_in_a_commit_that_is_gone_closes_with_it() {
+        let history = linear_history(&[4, 3], Some(4));
+        assert_eq!(open_in(9, "a.rs").after_history_read(&history, None), at(4));
+    }
+
+    #[test]
+    fn new_changes_leave_the_file_open_in_a_commit_alone() {
+        let history = linear_history(&[2, 1], Some(2));
+        let target = open_in(1, "a.rs");
+        assert_eq!(
+            target.after_changes_read(&dirty_at(2, &["a.rs"], &[]), &history),
+            target
+        );
+    }
+
+    #[test]
+    fn stepping_away_from_a_commit_closes_its_open_file() {
+        let history = linear_history(&[3, 2, 1], Some(3));
+        assert_eq!(
+            open_in(2, "a.rs").step(Step::Older, &history, false),
+            Some(at(1))
         );
         assert_eq!(
-            Target::Commit(id(3)).step(Step::Newer, &history, false),
-            Some(Target::Commit(id(3)))
+            open_in(3, "a.rs").step(Step::Newer, &history, true),
+            Some(Target::WorkingTree { open: None })
         );
-        assert_eq!(
-            Target::Commit(id(2)).step(Step::Older, &history, false),
-            Some(Target::Commit(id(1)))
-        );
-        assert_eq!(
-            Target::Commit(id(2)).step(Step::Newer, &history, false),
-            Some(Target::Commit(id(3)))
-        );
+    }
+
+    #[test]
+    fn closing_the_file_keeps_what_is_selected() {
+        let mut in_commit = open_in(2, "a.rs");
+        assert!(in_commit.has_open_file());
+        assert!(in_commit.close_file());
+        assert_eq!(in_commit, at(2));
+        assert!(!in_commit.has_open_file());
+        assert!(!in_commit.close_file());
+
+        let mut in_working_tree = open(Side::Staged, "a.rs");
+        assert!(in_working_tree.close_file());
+        assert_eq!(in_working_tree, Target::WorkingTree { open: None });
+        assert!(!Target::Nothing.close_file());
     }
 
     #[test]

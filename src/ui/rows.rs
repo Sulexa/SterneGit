@@ -9,10 +9,12 @@ use gpui_kit::{
 };
 
 use super::{
+    badges::change_badge,
     handler::{Handler, handler},
     look::Look as _,
     text::thousands,
 };
+use crate::git::ChangeKind;
 
 pub(crate) const ROW_HEIGHT: Pixels = px(28.);
 
@@ -22,6 +24,52 @@ pub(crate) fn list_row(id: impl Into<ElementId>, selected: bool) -> ListItem {
         .w_full()
         .h(ROW_HEIGHT)
         .py_0()
+}
+
+pub(crate) fn file_row(
+    id: impl Into<ElementId>,
+    kind: ChangeKind,
+    path: &str,
+    selected: bool,
+    trailing: impl IntoElement,
+    cx: &App,
+) -> ListItem {
+    let (name, folder) = match path.rsplit_once('/') {
+        Some((folder, name)) => (name.to_owned(), Some(folder.to_owned())),
+        None => (path.to_owned(), None),
+    };
+    list_row(id, selected).pl_3().pr_1().child(
+        h_flex()
+            .w_full()
+            .min_w_0()
+            .gap_2()
+            .child(change_badge(kind, cx))
+            .child(
+                h_flex()
+                    .flex_1()
+                    .min_w_0()
+                    .gap_1p5()
+                    .overflow_hidden()
+                    .child(
+                        div()
+                            .flex_none()
+                            .max_w_full()
+                            .truncate()
+                            .sm_text()
+                            .child(name),
+                    )
+                    .when_some(folder, |this, folder| {
+                        this.child(
+                            div()
+                                .ellipsis()
+                                .xs_text()
+                                .text_color(cx.theme().muted_foreground)
+                                .child(folder),
+                        )
+                    }),
+            )
+            .child(trailing),
+    )
 }
 
 pub(crate) fn fold_icon(open: bool) -> Icon {

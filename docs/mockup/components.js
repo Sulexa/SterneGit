@@ -267,9 +267,10 @@ const C = {
     return `<div data-c="TabStrip" data-base="TabBar" class="tab-strip"><div class="tabs">${items}</div><div class="suffix">${open}</div></div>`;
   },
 
-  ListRow({ content, selected = false, extraClass = '', name = 'ListRow' }) {
-    const base = name === 'ListRow' ? '' : ' data-base="ListRow"';
-    return `<div data-c="${name}"${base} class="list-row${selected ? ' selected' : ''}${extraClass ? ` ${extraClass}` : ''}">${content}</div>`;
+  ListRow({ content, selected = false, extraClass = '', name = 'ListRow', base }) {
+    const shownBase = base || (name === 'ListRow' ? '' : 'ListRow');
+    const baseAttribute = shownBase ? ` data-base="${shownBase}"` : '';
+    return `<div data-c="${name}"${baseAttribute} class="list-row${selected ? ' selected' : ''}${extraClass ? ` ${extraClass}` : ''}">${content}</div>`;
   },
 
   SectionHeader({ title, count, action, open }) {
@@ -430,7 +431,7 @@ const C = {
     return `<div data-c="DiffView" data-base="Diff" class="diff">${files.map(file).join('')}</div>`;
   },
 
-  CommitPanel({ commit, details, state = 'ready', reason = '' }) {
+  CommitPanel({ commit, details, state = 'ready', reason = '', open }) {
     if (!commit || state === 'none') return `<div data-c="CommitPanel" class="commit-panel">${C.Hint({ message: Texts.selectCommit })}</div>`;
     const ready = state === 'ready' || state === 'empty';
     const files = state === 'empty' ? [] : details.files;
@@ -459,18 +460,35 @@ const C = {
           ? C.Failure({ title: Texts.commitFailed, reason })
           : state === 'empty'
             ? C.Hint({ message: Texts.commitEmpty })
-            : C.DiffView({ files, mode: 'unified' });
+            : C.CommitFiles({ files, open });
     return `<div data-c="CommitPanel" class="commit-panel">${header}<div class="fill v">${content}</div></div>`;
   },
 
-  ChangeRow({ change, side, selected = false, writing = false }) {
-    const [name, folder] = splitPath(change.path);
-    const labels = SideLabels[side];
+  FileRow({ kind, path, selected = false, trailing = '', name = 'FileRow' }) {
+    const [file, folder] = splitPath(path);
     const content =
-      C.ChangeBadge({ kind: change.kind }) +
-      `<div class="path"><div class="none ellipsis sm" style="max-width:100%">${esc(name)}</div>${folder ? `<div class="ellipsis xs muted">${esc(folder)}</div>` : ''}</div>` +
-      C.Button({ icon: labels.icon, variant: 'ghost', disabled: writing, tooltip: labels.fileTooltip });
-    return C.ListRow({ content, selected, extraClass: 'change-row', name: 'ChangeRow' });
+      C.ChangeBadge({ kind }) +
+      `<div class="path"><div class="none ellipsis sm" style="max-width:100%">${esc(file)}</div>${folder ? `<div class="ellipsis xs muted">${esc(folder)}</div>` : ''}</div>` +
+      trailing;
+    return C.ListRow({ content, selected, extraClass: 'file-row', name, base: name === 'FileRow' ? 'ListRow' : 'FileRow' });
+  },
+
+  CommitFileRow({ file, selected = false }) {
+    const counts = file.binary
+      ? '<div class="counts xs muted">binary</div>'
+      : `<div class="counts xs">${C.Additions({ count: file.additions })}${C.Deletions({ count: file.deletions })}</div>`;
+    return C.FileRow({ kind: file.kind, path: file.path, selected, trailing: counts, name: 'CommitFileRow' });
+  },
+
+  CommitFiles({ files, open }) {
+    const rows = files.map((file) => C.CommitFileRow({ file, selected: file.path === open })).join('');
+    return `<div data-c="CommitFiles" class="commit-files">${rows}</div>`;
+  },
+
+  ChangeRow({ change, side, selected = false, writing = false }) {
+    const labels = SideLabels[side];
+    const trailing = C.Button({ icon: labels.icon, variant: 'ghost', disabled: writing, tooltip: labels.fileTooltip });
+    return C.FileRow({ kind: change.kind, path: change.path, selected, trailing, name: 'ChangeRow' });
   },
 
   ChangesList({ changes, open, writing = false, failure }) {
@@ -498,7 +516,9 @@ const C = {
   },
 
   FileDiffPanel({ diff, mode = 'split', state = 'ready', writing = false, reason = '' }) {
-    const labels = SideLabels[diff.side];
+    const labels = diff.commit ? null : SideLabels[diff.side];
+    const shownState = diff.commit ? `in ${diff.commit}` : labels.state;
+    const moveButton = labels ? C.Button({ label: labels.verb, icon: labels.icon, disabled: writing, tooltip: labels.openFileTooltip }) : '';
     const path = diff.change.original ? `${diff.change.original} → ${diff.change.path}` : diff.change.path;
     const stats = state === 'ready' || state === 'empty'
       ? C.Additions({ count: state === 'empty' ? 0 : diff.additions, extraClass: 'none xs' }) + C.Deletions({ count: state === 'empty' ? 0 : diff.deletions, extraClass: 'none xs' })
@@ -507,12 +527,12 @@ const C = {
       `<div class="diff-toolbar">` +
       C.ChangeBadge({ kind: diff.change.kind }) +
       `<div class="ellipsis sm mono">${esc(path)}</div>` +
-      `<div class="none xs muted">${labels.state}</div>` +
+      `<div class="none xs muted">${esc(shownState)}</div>` +
       stats +
       `<div class="fill"></div>` +
       C.Button({ label: 'Split', icon: 'columns-2', variant: 'ghost', selected: mode === 'split', tooltip: 'Compare side by side' }) +
       C.Button({ label: 'Unified', icon: 'rows-2', variant: 'ghost', selected: mode === 'unified', tooltip: 'Show changes in one column' }) +
-      C.Button({ label: labels.verb, icon: labels.icon, disabled: writing, tooltip: labels.openFileTooltip }) +
+      moveButton +
       C.Button({ icon: 'close', variant: 'ghost', tooltip: 'Back to the graph  Esc' }) +
       `</div>`;
     const content =

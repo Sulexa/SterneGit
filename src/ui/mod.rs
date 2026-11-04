@@ -17,7 +17,7 @@ pub(crate) use load::{Failure, Job, Load, run_in_background};
 pub(crate) use look::Look;
 pub(crate) use notice::{Notice, failure, hint, loading};
 pub(crate) use palette::Palette;
-pub(crate) use rows::{ROW_HEIGHT, SectionHeader, fold_icon, list_row};
+pub(crate) use rows::{ROW_HEIGHT, SectionHeader, file_row, fold_icon, list_row};
 pub(crate) use sections::{SectionRow, Sections};
 pub(crate) use side::SideUi;
 pub(crate) use text::{commit_subject, counted, thousands};

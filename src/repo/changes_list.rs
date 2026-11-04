@@ -6,7 +6,6 @@ use gpui_kit::{
     component::{
         ActiveTheme as _, Disableable as _, Sizable as _, StyledExt as _,
         button::{Button, ButtonVariants as _},
-        h_flex,
         scroll::Scrollbar,
         v_flex,
     },
@@ -19,8 +18,8 @@ use super::navigation::OpenFile;
 use crate::{
     git::{FileChange, Scope, Side, WorkingChanges},
     ui::{
-        self, Handler, Look as _, SectionHeader, SectionRow, Sections, SideUi as _, change_badge,
-        handler, list_row, thousands,
+        self, Handler, Look as _, SectionHeader, SectionRow, Sections, SideUi as _, file_row,
+        handler, thousands,
     },
 };
 
@@ -184,64 +183,32 @@ fn change_row(
     on_move: &Option<Handler<(Side, Scope)>>,
     cx: &App,
 ) -> AnyElement {
-    let (name, folder) = match change.path.rsplit_once('/') {
-        Some((folder, name)) => (name.to_owned(), Some(folder.to_owned())),
-        None => (change.path.to_string(), None),
-    };
     let labels = side.labels();
     let id = format!("{side:?}/{}", change.path);
     let moved = (side, Scope::Files(vec![change.clone()]));
     let opened = (side, change.clone());
-    list_row(SharedString::from(id.clone()), selected)
-        .pl_3()
-        .pr_1()
-        .child(
-            h_flex()
-                .w_full()
-                .min_w_0()
-                .gap_2()
-                .child(change_badge(change.kind, cx))
-                .child(
-                    h_flex()
-                        .flex_1()
-                        .min_w_0()
-                        .gap_1p5()
-                        .overflow_hidden()
-                        .child(
-                            div()
-                                .flex_none()
-                                .max_w_full()
-                                .truncate()
-                                .sm_text()
-                                .child(name),
-                        )
-                        .when_some(folder, |this, folder| {
-                            this.child(
-                                div()
-                                    .ellipsis()
-                                    .xs_text()
-                                    .text_color(cx.theme().muted_foreground)
-                                    .child(folder),
-                            )
-                        }),
-                )
-                .child(
-                    Button::new(SharedString::from(format!("stage/{id}")))
-                        .ghost()
-                        .xsmall()
-                        .icon(labels.icon)
-                        .tooltip(labels.file_tooltip)
-                        .disabled(writing)
-                        .when_some(on_move.clone(), |button, on_move| {
-                            button.on_click(move |_, window, cx| {
-                                cx.stop_propagation();
-                                on_move(&moved, window, cx)
-                            })
-                        }),
-                ),
-        )
-        .when_some(on_open.clone(), |row, on_open| {
-            row.on_click(move |_, window, cx| on_open(&opened, window, cx))
-        })
-        .into_any_element()
+    let move_button = Button::new(SharedString::from(format!("stage/{id}")))
+        .ghost()
+        .xsmall()
+        .icon(labels.icon)
+        .tooltip(labels.file_tooltip)
+        .disabled(writing)
+        .when_some(on_move.clone(), |button, on_move| {
+            button.on_click(move |_, window, cx| {
+                cx.stop_propagation();
+                on_move(&moved, window, cx)
+            })
+        });
+    file_row(
+        SharedString::from(id),
+        change.kind,
+        &change.path,
+        selected,
+        move_button,
+        cx,
+    )
+    .when_some(on_open.clone(), |row, on_open| {
+        row.on_click(move |_, window, cx| on_open(&opened, window, cx))
+    })
+    .into_any_element()
 }

@@ -1,5 +1,5 @@
 const Catalog = (() => {
-  const { history, collapsed, changes, commitDetails, fileDiff, tabs } = Sample;
+  const { history, collapsed, changes, commitDetails, commitFileDiff, fileDiff, tabs } = Sample;
   const commit = (ix) => history.commits[ix];
   const ref = (name) => history.refs.find((label) => label.name === name);
   const width = graphWidth(history.commits);
@@ -96,9 +96,9 @@ const Catalog = (() => {
           name: 'DiffView',
           code: 'gpui_kit::diff::Diff',
           source: 'src/repo/patch_view.rs',
-          about: 'The kit\'s diff with line numbers and soft wrap, without its own border. Unified with file headers for a commit; split or unified without the header for one file. The kit draws the file headers (a fold button, the path, the line counts) and the grey hunk headers.',
+          about: 'The kit\'s diff with line numbers and soft wrap, without its own border, showing one file without its header: the FileDiffPanel toolbar names the file instead. The kit draws the grey hunk headers.',
           variants: [
-            ['Unified with file headers (commit)', () => `<div class="v" style="width:480px;height:420px">${C.DiffView({ files: commitDetails.files.slice(1), mode: 'unified' })}</div>`],
+            ['Unified without header (one file)', () => `<div class="v" style="width:480px;height:420px">${C.DiffView({ files: commitDetails.files.slice(0, 1), mode: 'unified', header: false })}</div>`],
             ['Split without header (one file)', () => `<div class="v" style="width:736px;height:420px">${C.DiffView({ files: [{ path: fileDiff.change.path, additions: 9, deletions: 1, hunks: fileDiff.hunks }], mode: 'split', header: false })}</div>`],
           ],
         },
@@ -113,10 +113,21 @@ const Catalog = (() => {
           name: 'ListRow',
           code: 'ui::list_row',
           source: 'src/ui/rows.rs',
-          about: 'A 28 px selectable row. RefRow, CommitRow, UncommittedRow and ChangeRow are all built on it.',
+          about: 'A 28 px selectable row. RefRow, CommitRow, UncommittedRow and FileRow are all built on it.',
           variants: [
             ['Normal', () => C.ListRow({ content: '<span class="sm">A row</span>' }), { w: 320 }],
             ['Selected', () => C.ListRow({ content: '<span class="sm">A selected row</span>', selected: true }), { w: 320 }],
+          ],
+        },
+        {
+          name: 'FileRow',
+          code: 'ui::file_row',
+          source: 'src/ui/rows.rs',
+          about: 'A ListRow for one file: status letter, file name, folder in muted text, then whatever its list puts on the right. ChangeRow and CommitFileRow are built on it.',
+          variants: [
+            ['Plain', () => C.FileRow({ kind: 'M', path: 'src/git/patch.rs' }), { w: 480 }],
+            ['Selected', () => C.FileRow({ kind: 'A', path: 'src/repo/commit_files.rs', selected: true }), { w: 480 }],
+            ['At the root', () => C.FileRow({ kind: 'M', path: 'Cargo.toml' }), { w: 480 }],
           ],
         },
         {
@@ -355,13 +366,36 @@ const Catalog = (() => {
           name: 'CommitPanel',
           code: 'repo::commit_panel::CommitPanel',
           source: 'src/repo/commit_panel.rs',
-          about: 'Subject, body (140 px at most), author and date, short id and parents, Copy hash, file and line counts, then the patch.',
+          about: 'Subject, body (140 px at most), author and date, short id and parents, Copy hash, file and line counts, then the files the commit changes. Clicking a file compares it in the middle pane.',
           variants: [
-            ['Ready', () => C.CommitPanel({ commit: commit(2), details: commitDetails }), { w: 480, h: 560 }],
+            ['Ready', () => C.CommitPanel({ commit: commit(2), details: commitDetails }), { w: 480, h: 420 }],
+            ['A file open', () => C.CommitPanel({ commit: commit(2), details: commitDetails, open: commitFileDiff.change.path }), { w: 480, h: 420 }],
             ['Reading', () => C.CommitPanel({ commit: commit(2), details: commitDetails, state: 'loading' }), { w: 480, h: 260 }],
             ['Failed', () => C.CommitPanel({ commit: commit(2), details: commitDetails, state: 'failed', reason: 'stream did not contain valid UTF-8' }), { w: 480, h: 260 }],
             ['No file changed', () => C.CommitPanel({ commit: commit(3), details: { body: '', parents: ['b47d0a8', 'e1c55f2'], files: [] }, state: 'empty' }), { w: 480, h: 260 }],
             ['Nothing selected', () => C.CommitPanel({}), { w: 480, h: 160 }],
+          ],
+        },
+        {
+          name: 'CommitFiles',
+          code: 'repo::commit_files::CommitFiles',
+          source: 'src/repo/commit_files.rs',
+          about: 'Every file the commit changes, in patch order, in a virtual list. The open file is highlighted.',
+          variants: [
+            ['Files', () => C.CommitFiles({ files: commitDetails.files }), { w: 480, h: 180 }],
+            ['One open', () => C.CommitFiles({ files: commitDetails.files, open: commitFileDiff.change.path }), { w: 480, h: 180 }],
+          ],
+        },
+        {
+          name: 'CommitFileRow',
+          code: 'repo::commit_files::commit_file_row',
+          source: 'src/repo/commit_files.rs',
+          about: 'A FileRow with the lines the commit adds and removes in that file, or "binary".',
+          variants: [
+            ['Modified', () => C.CommitFileRow({ file: commitDetails.files[0] }), { w: 480 }],
+            ['Open', () => C.CommitFileRow({ file: commitDetails.files[0], selected: true }), { w: 480 }],
+            ['Added', () => C.CommitFileRow({ file: commitDetails.files[1] }), { w: 480 }],
+            ['Binary, deleted', () => C.CommitFileRow({ file: commitDetails.files[3] }), { w: 480 }],
           ],
         },
         {
@@ -380,7 +414,7 @@ const Catalog = (() => {
           name: 'ChangeRow',
           code: 'repo::changes_list::change_row',
           source: 'src/repo/changes_list.rs',
-          about: 'Status letter, file name, folder in muted text, and a + or − that moves the file to the other list.',
+          about: 'A FileRow with a + or − that moves the file to the other list.',
           variants: [
             ['Unstaged', () => C.ChangeRow({ change: changes.unstaged[0], side: 'unstaged' }), { w: 480 }],
             ['Open', () => C.ChangeRow({ change: changes.unstaged[1], side: 'unstaged', selected: true }), { w: 480 }],
@@ -392,8 +426,9 @@ const Catalog = (() => {
           name: 'FileDiffPanel',
           code: 'repo::file_diff_panel::FileDiffPanel',
           source: 'src/repo/file_diff_panel.rs',
-          about: 'A 40 px toolbar (status, path, side, counts, Split / Unified, Stage or Unstage, close) over the comparison.',
+          about: 'A 40 px toolbar (status, path, side or commit, counts, Split / Unified, Stage or Unstage, close) over the comparison. A file from a commit says which commit and has no Stage button.',
           variants: [
+            ['From a commit', () => C.FileDiffPanel({ diff: commitFileDiff, mode: 'split' }), { w: row, h: 420 }],
             ['Split', () => C.FileDiffPanel({ diff: fileDiff, mode: 'split' }), { w: row, h: 420 }],
             ['Unified', () => C.FileDiffPanel({ diff: fileDiff, mode: 'unified' }), { w: row, h: 420 }],
             ['Renamed, staged', () => C.FileDiffPanel({ diff: { ...fileDiff, side: 'staged', change: changes.staged[1] }, state: 'empty' }), { w: row, h: 160 }],

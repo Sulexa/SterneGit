@@ -87,6 +87,7 @@ const Sample = (() => {
     files: [
       {
         path: 'src/repo/file_diff_panel.rs',
+        kind: 'M',
         additions: 31,
         deletions: 4,
         hunks: [
@@ -116,7 +117,16 @@ const Sample = (() => {
         ],
       },
       {
+        path: 'src/repo/commit_files.rs',
+        kind: 'A',
+        additions: 98,
+        deletions: 0,
+        hunks: [],
+      },
+      {
         path: 'src/repo/patch_view.rs',
+        kind: 'R',
+        original: 'src/repo/diff_view.rs',
         additions: 12,
         deletions: 6,
         hunks: [
@@ -133,7 +143,16 @@ const Sample = (() => {
         ],
       },
       {
+        path: 'docs/mockup/history.png',
+        kind: 'D',
+        binary: true,
+        additions: 0,
+        deletions: 0,
+        hunks: [],
+      },
+      {
         path: 'Cargo.toml',
+        kind: 'M',
         additions: 5,
         deletions: 2,
         hunks: [
@@ -149,6 +168,16 @@ const Sample = (() => {
         ],
       },
     ],
+  };
+
+  const commitFile = commitDetails.files[0];
+
+  const commitFileDiff = {
+    change: { kind: commitFile.kind, path: commitFile.path },
+    commit: commits[2].id,
+    additions: commitFile.additions,
+    deletions: commitFile.deletions,
+    hunks: commitFile.hunks,
   };
 
   const fileDiff = {
@@ -189,5 +218,5 @@ const Sample = (() => {
     { name: 'linux', state: 'reading' },
   ];
 
-  return { history, collapsed, changes, commitDetails, fileDiff, tabs };
+  return { history, collapsed, changes, commitDetails, commitFileDiff, fileDiff, tabs };
 })();

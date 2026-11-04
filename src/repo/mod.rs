@@ -1,4 +1,5 @@
 mod changes_list;
+mod commit_files;
 mod commit_panel;
 mod file_diff_panel;
 mod history_list;
@@ -19,6 +20,7 @@ use gpui_kit::{
     component::{
         WindowExt as _,
         button::Button,
+        diff::DiffFile,
         resizable::{h_resizable, resizable_panel},
         v_flex,
     },
@@ -27,11 +29,11 @@ use gpui_kit::{
 
 use crate::{
     actions::{CloseDiff, CopyHash, Fetch, NewerCommit, OlderCommit, Refresh},
-    git::{FileChange, HISTORY_LIMIT, History, Scope, Side},
+    git::{FileChange, HISTORY_LIMIT, History, Scope, Side, short_id},
     ui::{self, Failure, Look as _, Notice, thousands},
 };
 use changes_list::ChangesList;
-use commit_panel::{CommitPanel, copy_commit_hash};
+use commit_panel::{CommitPanel, OpenCommitFile, copy_commit_hash};
 use file_diff_panel::{CloseFileDiff, FileDiffPanel};
 use history_list::HistoryList;
 use navigation::{OpenFile, Step, Target};
@@ -50,13 +52,13 @@ pub(crate) struct RepoView {
     history_scroll: UniformListScrollHandle,
     refs_scroll: UniformListScrollHandle,
     changes_scroll: UniformListScrollHandle,
-    _subscriptions: [Subscription; 2],
+    _subscriptions: [Subscription; 3],
 }
 
 impl RepoView {
     pub(crate) fn new(path: PathBuf, cx: &mut Context<Self>) -> Self {
         let repository = cx.new(|cx| Repository::new(path, cx));
-        let commit_panel = cx.new(CommitPanel::new);
+        let commit_panel = cx.new(|_| CommitPanel::new());
         let file_diff = cx.new(|cx| FileDiffPanel::new(repository.clone(), cx));
         let subscriptions = [
             cx.subscribe(&repository, |this, _, event, cx| match event {
@@ -65,6 +67,9 @@ impl RepoView {
             }),
             cx.subscribe(&file_diff, |this, _, _: &CloseFileDiff, cx| {
                 this.close_file(cx)
+            }),
+            cx.subscribe(&commit_panel, |this, _, OpenCommitFile(file), cx| {
+                this.open_commit_file(file.clone(), cx)
             }),
         ];
         Self {
@@ -103,7 +108,7 @@ impl RepoView {
             None => Target::Nothing,
         };
         match surviving {
-            Target::Commit(id) => self.show_commit(id, cx),
+            Target::Commit { id, .. } => self.show_commit(id, cx),
             Target::Nothing => {
                 self.target = Target::Nothing;
                 self.commit_panel.update(cx, |panel, cx| panel.clear(cx));
@@ -125,24 +130,29 @@ impl RepoView {
         };
         let target = self.target.after_changes_read(&changes, &history);
         match target {
-            Target::Commit(id) if self.target != target => self.show_commit(id, cx),
-            target => {
-                self.target = target;
-                let followed = self.target.open_file().and_then(|file| {
+            Target::Commit { id, .. } if self.target.commit() != Some(id) => {
+                self.show_commit(id, cx)
+            }
+            Target::WorkingTree { open } => {
+                let followed = open.as_ref().and_then(|file| {
                     let change = changes.find(file.side, &file.path)?;
                     Some((file.side, change.clone()))
                 });
+                self.target = Target::WorkingTree { open };
                 self.file_diff.update(cx, |panel, cx| match followed {
-                    Some((side, change)) => panel.open(&repo, change, side, cx),
+                    Some((side, change)) => panel.open_working_file(&repo, change, side, cx),
                     None => panel.close(cx),
                 });
             }
+            target => self.target = target,
         }
         cx.notify();
     }
 
     fn select_commit(&mut self, id: ObjectId, cx: &mut Context<Self>) {
-        if self.target != Target::Commit(id) {
+        if self.target.commit() == Some(id) {
+            self.close_file(cx);
+        } else {
             self.show_commit(id, cx);
         }
     }
@@ -157,8 +167,10 @@ impl RepoView {
         let Some(row) = history.row_of(&id) else {
             return;
         };
-        self.target = Target::Commit(id);
-        self.file_diff.update(cx, |panel, cx| panel.close(cx));
+        if self.target.commit() != Some(id) {
+            self.target = Target::at_commit(id);
+            self.file_diff.update(cx, |panel, cx| panel.close(cx));
+        }
         self.commit_panel
             .update(cx, |panel, cx| panel.show(&repo, &history.commits[row], cx));
         self.history_scroll
@@ -168,12 +180,13 @@ impl RepoView {
 
     fn select_working_tree(&mut self, cx: &mut Context<Self>) {
         if !self.target.is_working_tree() {
+            self.close_file(cx);
             self.target = Target::WorkingTree { open: None };
             cx.notify();
         }
     }
 
-    fn open_file(&mut self, side: Side, change: FileChange, cx: &mut Context<Self>) {
+    fn open_working_file(&mut self, side: Side, change: FileChange, cx: &mut Context<Self>) {
         let Some(repo) = self.repository.read(cx).repo().cloned() else {
             return;
         };
@@ -183,15 +196,30 @@ impl RepoView {
                 path: change.path.clone(),
             }),
         };
+        self.file_diff.update(cx, |panel, cx| {
+            panel.open_working_file(&repo, change, side, cx)
+        });
+        cx.notify();
+    }
+
+    fn open_commit_file(&mut self, file: DiffFile, cx: &mut Context<Self>) {
+        let Target::Commit { id, open } = &mut self.target else {
+            return;
+        };
+        let path = file.path().clone();
+        *open = Some(path.clone());
+        let short_id = short_id(*id);
+        self.commit_panel
+            .update(cx, |panel, cx| panel.mark_open(Some(path), cx));
         self.file_diff
-            .update(cx, |panel, cx| panel.open(&repo, change, side, cx));
+            .update(cx, |panel, cx| panel.open_commit_file(short_id, file, cx));
         cx.notify();
     }
 
     fn close_file(&mut self, cx: &mut Context<Self>) {
-        if let Target::WorkingTree { open } = &mut self.target
-            && open.take().is_some()
-        {
+        if self.target.close_file() {
+            self.commit_panel
+                .update(cx, |panel, cx| panel.mark_open(None, cx));
             self.file_diff.update(cx, |panel, cx| panel.close(cx));
             cx.notify();
         }
@@ -203,7 +231,7 @@ impl RepoView {
             return;
         };
         match self.target.step(step, history, repository.has_changes()) {
-            Some(Target::Commit(id)) => self.select_commit(id, cx),
+            Some(Target::Commit { id, .. }) => self.select_commit(id, cx),
             Some(Target::WorkingTree { .. }) => self.select_working_tree(cx),
             Some(Target::Nothing) | None => {}
         }
@@ -261,9 +289,10 @@ impl RepoView {
                     .child(self.refs_list(history.clone(), cx)),
             )
             .child(resizable_panel().size_range(rem * 30. ..rem * 400.).child(
-                match self.target.open_file() {
-                    Some(_) => self.file_diff.clone().into_any_element(),
-                    None => self.history_list(history, cx).into_any_element(),
+                if self.target.has_open_file() {
+                    self.file_diff.clone().into_any_element()
+                } else {
+                    self.history_list(history, cx).into_any_element()
                 },
             ))
             .child(
@@ -274,7 +303,7 @@ impl RepoView {
                         Target::WorkingTree { open } => {
                             self.changes_list(open.clone(), cx).into_any_element()
                         }
-                        Target::Commit(_) => self.commit_panel.clone().into_any_element(),
+                        Target::Commit { .. } => self.commit_panel.clone().into_any_element(),
                         Target::Nothing => ui::hint("Select a commit to see its changes.", cx),
                     }),
             )
@@ -333,7 +362,7 @@ impl RepoView {
             )
             .on_open(
                 cx.listener(|this, (side, change): &(Side, FileChange), _, cx| {
-                    this.open_file(*side, change.clone(), cx)
+                    this.open_working_file(*side, change.clone(), cx)
                 }),
             )
             .on_move(cx.listener(|this, (side, scope): &(Side, Scope), _, cx| {

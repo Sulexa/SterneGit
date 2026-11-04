@@ -1,11 +1,11 @@
 use gpui_kit::{
-    AnyElement, App, IntoElement, Styled as _, Window,
-    component::diff::{Diff, DiffFile},
+    AnyElement, App, IntoElement, SharedString, Window,
+    component::diff::{DiffFile, DiffFileStatus},
     div,
 };
 
 use crate::{
-    git::FilePatch,
+    git::{ChangeKind, FilePatch},
     ui::{self, Load},
 };
 
@@ -56,7 +56,7 @@ pub(crate) fn patch_content<T>(
     load: &Load<T>,
     stats: impl Fn(&T) -> PatchStats,
     texts: &PatchTexts,
-    diff: Diff,
+    ready: impl FnOnce(&T) -> AnyElement,
     cx: &App,
 ) -> AnyElement {
     match load {
@@ -66,8 +66,24 @@ pub(crate) fn patch_content<T>(
         Load::Refreshing { value, .. } | Load::Ready(value) if stats(value).files == 0 => {
             ui::hint(texts.empty, cx)
         }
-        Load::Refreshing { .. } | Load::Ready(_) => diff.border_0().into_any_element(),
+        Load::Refreshing { value, .. } | Load::Ready(value) => ready(value),
     }
+}
+
+pub(crate) fn change_kind(file: &DiffFile) -> ChangeKind {
+    match file.status() {
+        DiffFileStatus::Added => ChangeKind::Added,
+        DiffFileStatus::Deleted => ChangeKind::Deleted,
+        DiffFileStatus::Renamed => ChangeKind::Renamed,
+        DiffFileStatus::Copied => ChangeKind::Copied,
+        DiffFileStatus::Conflicted => ChangeKind::Conflicted,
+        _ => ChangeKind::Modified,
+    }
+}
+
+pub(crate) fn renamed_from(file: &DiffFile) -> Option<&SharedString> {
+    file.original_path()
+        .filter(|original| *original != file.path())
 }
 
 pub(crate) fn parse_patch(patch: &str) -> anyhow::Result<Vec<DiffFile>> {
@@ -88,7 +104,7 @@ pub(crate) fn file_patch_files(patch: FilePatch) -> anyhow::Result<Vec<DiffFile>
 mod tests {
     use anyhow::Result;
 
-    use super::{PatchStats, file_patch_files, parse_patch};
+    use super::{PatchStats, change_kind, file_patch_files, parse_patch, renamed_from};
     use crate::git::{
         ChangeKind, Side,
         scratch::{DEFAULT_BRANCH, ScratchRepo},
@@ -140,6 +156,80 @@ two
         let files = parse_patch(&patch)?;
         assert_eq!(files[0].path().as_str(), "café.txt");
         assert_eq!(counts(PatchStats::of(&files)), (1, 1, 0));
+        Ok(())
+    }
+
+    #[test]
+    fn each_file_of_a_commit_says_how_it_changed() -> Result<()> {
+        let scratch = ScratchRepo::new("commit-files")?;
+        scratch.write(
+            "kept.txt",
+            "one
+two
+three
+four
+five
+",
+        )?;
+        scratch.write(
+            "moved.txt",
+            "a
+b
+c
+d
+e
+f
+",
+        )?;
+        scratch.write(
+            "gone.txt", "bye
+",
+        )?;
+        scratch.git(&["add", "."])?;
+        scratch.commit("first")?;
+        scratch.write(
+            "kept.txt",
+            "one
+two
+3
+four
+five
+",
+        )?;
+        scratch.git(&["mv", "moved.txt", "renamed.txt"])?;
+        scratch.git(&["rm", "--quiet", "gone.txt"])?;
+        scratch.write(
+            "new.txt", "hello
+",
+        )?;
+        scratch.git(&["add", "."])?;
+        scratch.commit("second")?;
+        let (repo, history) = scratch.open()?;
+        let files = parse_patch(&repo.commit_details(history.commits[0].id)?.patch)?;
+        let mut shown: Vec<_> = files
+            .iter()
+            .map(|file| {
+                (
+                    file.path().to_string(),
+                    change_kind(file),
+                    renamed_from(file).map(ToString::to_string),
+                )
+            })
+            .collect();
+        shown.sort_by(|a, b| a.0.cmp(&b.0));
+        assert_eq!(
+            shown,
+            [
+                ("gone.txt".to_owned(), ChangeKind::Deleted, None),
+                ("kept.txt".to_owned(), ChangeKind::Modified, None),
+                ("new.txt".to_owned(), ChangeKind::Added, None),
+                (
+                    "renamed.txt".to_owned(),
+                    ChangeKind::Renamed,
+                    Some("moved.txt".to_owned())
+                ),
+            ]
+        );
         Ok(())
     }
 

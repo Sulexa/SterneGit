@@ -1,12 +1,14 @@
+use std::sync::Arc;
+
 use gix::ObjectId;
 use gpui_kit::{
-    App, AppContext as _, ClipboardItem, Context, Entity, InteractiveElement as _, IntoElement,
+    App, ClipboardItem, Context, EventEmitter, InteractiveElement as _, IntoElement,
     ParentElement as _, Render, SharedString, StatefulInteractiveElement as _, Styled as _,
-    Subscription, Window,
+    UniformListScrollHandle, Window,
     component::{
         ActiveTheme as _, Sizable as _, StyledExt as _, WindowExt as _,
         button::{Button, ButtonVariants as _},
-        diff::{Diff, DiffFile, DiffMode, DiffState},
+        diff::DiffFile,
         h_flex, v_flex,
     },
     div,
@@ -14,7 +16,10 @@ use gpui_kit::{
     px,
 };
 
-use super::patch_view::{PatchStats, PatchTexts, RedrawAfterMeasuring, parse_patch, patch_content};
+use super::{
+    commit_files::CommitFiles,
+    patch_view::{PatchStats, PatchTexts, parse_patch, patch_content},
+};
 use crate::{
     actions::{CopyHash, WINDOW_CONTEXT},
     git::{Commit, Repo, short_id},
@@ -29,27 +34,28 @@ const TEXTS: PatchTexts = PatchTexts {
 
 struct Summary {
     body: SharedString,
+    files: Arc<[DiffFile]>,
     stats: PatchStats,
 }
+
+pub(crate) struct OpenCommitFile(pub(crate) DiffFile);
 
 pub(crate) struct CommitPanel {
     commit: Option<Commit>,
     details: Load<Summary>,
-    diff: Entity<DiffState>,
-    redraw_after_measuring: RedrawAfterMeasuring,
-    _diff_changed: Subscription,
+    open: Option<SharedString>,
+    files_scroll: UniformListScrollHandle,
 }
 
+impl EventEmitter<OpenCommitFile> for CommitPanel {}
+
 impl CommitPanel {
-    pub(crate) fn new(cx: &mut Context<Self>) -> Self {
-        let diff = cx.new(|cx| DiffState::new([], cx).with_mode(DiffMode::Unified));
-        let diff_changed = cx.observe(&diff, |_, _, cx| cx.notify());
+    pub(crate) fn new() -> Self {
         Self {
             commit: None,
             details: Load::Idle,
-            diff,
-            redraw_after_measuring: RedrawAfterMeasuring::default(),
-            _diff_changed: diff_changed,
+            open: None,
+            files_scroll: UniformListScrollHandle::new(),
         }
     }
 
@@ -61,8 +67,11 @@ impl CommitPanel {
         if already_shown && self.details.failure().is_none() {
             return;
         }
+        if !already_shown {
+            self.open = None;
+            self.files_scroll = UniformListScrollHandle::new();
+        }
         self.commit = Some(commit.clone());
-        self.diff.update(cx, |state, cx| state.set_files([], cx));
         let repo = repo.clone();
         let id = commit.id;
         let task = run_in_background(
@@ -72,13 +81,11 @@ impl CommitPanel {
                 Ok((details.body, parse_patch(&details.patch)?))
             },
             |this, result: anyhow::Result<(SharedString, Vec<DiffFile>)>, cx| {
-                let summary = result.map(|(body, files)| {
-                    let stats = PatchStats::of(&files);
-                    this.diff.update(cx, |state, cx| state.set_files(files, cx));
-                    this.redraw_after_measuring.files_changed();
-                    Summary { body, stats }
-                });
-                this.details.finish(summary);
+                this.details.finish(result.map(|(body, files)| Summary {
+                    body,
+                    stats: PatchStats::of(&files),
+                    files: files.into(),
+                }));
                 cx.notify();
             },
         );
@@ -89,8 +96,15 @@ impl CommitPanel {
     pub(crate) fn clear(&mut self, cx: &mut Context<Self>) {
         self.commit = None;
         self.details.clear();
-        self.diff.update(cx, |state, cx| state.set_files([], cx));
+        self.open = None;
         cx.notify();
+    }
+
+    pub(crate) fn mark_open(&mut self, path: Option<SharedString>, cx: &mut Context<Self>) {
+        if self.open != path {
+            self.open = path;
+            cx.notify();
+        }
     }
 }
 
@@ -100,17 +114,23 @@ pub(crate) fn copy_commit_hash(id: ObjectId, window: &mut Window, cx: &mut App) 
 }
 
 impl Render for CommitPanel {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        self.redraw_after_measuring.request(window);
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let Some(commit) = self.commit.clone() else {
             return ui::hint("Select a commit to see its changes.", cx);
         };
         let muted = cx.theme().muted_foreground;
+        let on_open =
+            cx.listener(|_, file: &DiffFile, _, cx| cx.emit(OpenCommitFile(file.clone())));
         let content = patch_content(
             &self.details,
             |summary| summary.stats,
             &TEXTS,
-            Diff::new(&self.diff).line_number(true).soft_wrap(true),
+            |summary| {
+                CommitFiles::new(summary.files.clone(), self.files_scroll.clone())
+                    .open(self.open.clone())
+                    .on_open(on_open)
+                    .into_any_element()
+            },
             cx,
         );
         let body = self

@@ -1,5 +1,5 @@
 const Screens = (() => {
-  const { history, collapsed, changes, commitDetails, fileDiff, tabs } = Sample;
+  const { history, collapsed, changes, commitDetails, commitFileDiff, fileDiff, tabs } = Sample;
   const selected = 2;
   const position = (row) => `Commit ${thousands(row + 1)} of ${thousands(history.total)}`;
 
@@ -23,6 +23,13 @@ const Screens = (() => {
       selectedRow: selected,
       right: C.CommitPanel({ commit: history.commits[selected], details: commitDetails }),
       status,
+    });
+
+  const commitFileComparison = () =>
+    repo({
+      selectedRow: selected,
+      middle: C.FileDiffPanel({ diff: commitFileDiff, mode: 'split' }),
+      right: C.CommitPanel({ commit: history.commits[selected], details: commitDetails, open: commitFileDiff.change.path }),
     });
 
   const openFile = { side: fileDiff.side, path: fileDiff.change.path };
@@ -87,9 +94,16 @@ const Screens = (() => {
     {
       id: 'history',
       title: 'History — commit selected',
-      about: 'The main screen. Refs on the left, split into folders at each slash, the commit graph in the middle, the selected commit with its patch on the right. The refs pointing at the selected commit are highlighted too. Click a section or a folder to fold it.',
+      about: 'The main screen. Refs on the left, split into folders at each slash, the commit graph in the middle, the selected commit and the files it changes on the right. The refs pointing at the selected commit are highlighted too. Click a section or a folder to fold it.',
       source: 'src/repo/mod.rs',
       render: () => C.FastGit({ topBar: topBar(), tabStrip: tabStrip(), body: commitSelected() }),
+    },
+    {
+      id: 'commit-file',
+      title: 'Commit file comparison',
+      about: "A file was clicked in the selected commit's file list. The middle pane swaps the graph for a comparison of that file with the commit's first parent; the file stays highlighted on the right, another click opens another file, and Esc or × goes back to the graph.",
+      source: 'src/repo/file_diff_panel.rs',
+      render: () => C.FastGit({ topBar: topBar(), tabStrip: tabStrip(), body: commitFileComparison() }),
     },
     {
       id: 'nothing-selected',

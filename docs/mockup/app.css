@@ -490,13 +490,26 @@
   white-space: pre-line;
 }
 
-.change-row {
+.file-row {
   gap: 8px;
   padding-left: 12px;
   padding-right: 4px;
 }
 
-.change-row > .path {
+.file-row > .counts {
+  flex: none;
+  display: flex;
+  gap: 6px;
+  padding-right: 8px;
+}
+
+.commit-files {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.file-row > .path {
   flex: 1;
   min-width: 0;
   display: flex;
