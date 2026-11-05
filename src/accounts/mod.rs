@@ -7,7 +7,7 @@ mod secrets;
 pub(crate) use access::access_for_repo;
 #[cfg(test)]
 pub(crate) use account::fixtures;
-pub(crate) use account::{Account, AccountId, TokenScheme, is_header_name};
+pub(crate) use account::{Account, AccountId, SignInMethod, TokenScheme, is_header_name};
 pub(crate) use book::AccountBook;
 pub(crate) use helper::answer_git;
 #[cfg(test)]

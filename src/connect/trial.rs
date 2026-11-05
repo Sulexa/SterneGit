@@ -8,15 +8,14 @@ use std::{
 use fastgit_protocol::{
     Cassette, Exchange,
     ops::{self, Op, Visit},
-    speaks_same_major,
 };
 use serde_json::Value;
 
-use super::{CallError, Forge, Greeting, Outcome, ReplayHost, Started, Stop, check_answer};
+use super::{
+    CallError, Forge, Greeting, Outcome, ReplayHost, Started, Stop, check_answer,
+    manifest::{MANIFEST_FILE, Manifest},
+};
 use crate::net::services::ConnectorId;
-
-const MANIFEST: &str = "connector.json";
-const ABI_VERSION: u64 = 1;
 
 pub(crate) struct Trial {
     pub(crate) id: ConnectorId,
@@ -60,12 +59,6 @@ impl Played {
         let answered = !matches!(self.answer, Err(CallError::Stopped(_) | CallError::Net(_)));
         answered && self.unplayed.is_empty() && self.matches_expected() != Some(false)
     }
-}
-
-struct Manifest {
-    id: ConnectorId,
-    version: String,
-    module: String,
 }
 
 pub(crate) fn try_connector(folder: &Path, cassette: Option<&Path>) -> Result<Trial, String> {
@@ -142,34 +135,9 @@ fn play(
 }
 
 fn read_manifest(folder: &Path) -> Result<Manifest, String> {
-    let path = folder.join(MANIFEST);
-    let text = fs::read_to_string(&path)
-        .map_err(|error| format!("Can't read {}: {error}", path.display()))?;
-    let manifest: Value = serde_json::from_str(&text)
-        .map_err(|error| format!("{} isn't JSON: {error}", path.display()))?;
-    let field = |name: &str| manifest.get(name).and_then(Value::as_str);
-    let id = field("id").ok_or_else(|| format!("{} names no id", path.display()))?;
-    let module = field("module")
-        .filter(|module| is_plain_file_name(module))
-        .ok_or_else(|| format!("{} names no module file beside it", path.display()))?;
-    let interface = |name: &str| manifest.get("interface").and_then(|interface| interface.get(name));
-    if interface("abi").and_then(Value::as_u64) != Some(ABI_VERSION) {
-        return Err(format!(
-            "{} doesn't ask for ABI {ABI_VERSION}, the only one this FastGit offers",
-            path.display()
-        ));
-    }
-    if !interface("protocol").and_then(Value::as_str).is_some_and(speaks_same_major) {
-        return Err(format!(
-            "{} asks for a protocol this FastGit doesn't speak",
-            path.display()
-        ));
-    }
-    Ok(Manifest {
-        id: ConnectorId(id.to_owned()),
-        version: field("version").unwrap_or("without a version").to_owned(),
-        module: module.to_owned(),
-    })
+    let path = folder.join(MANIFEST_FILE);
+    let bytes = fs::read(&path).map_err(|error| format!("Can't read {}: {error}", path.display()))?;
+    Manifest::parse(&bytes).map_err(|problem| format!("{}: {problem}", path.display()))
 }
 
 fn read_cassette(path: &Path) -> Result<Cassette, String> {
@@ -177,12 +145,6 @@ fn read_cassette(path: &Path) -> Result<Cassette, String> {
         .map_err(|error| format!("Can't read {}: {error}", path.display()))?;
     serde_json::from_str(&text)
         .map_err(|error| format!("{} isn't a cassette: {error}", path.display()))
-}
-
-fn is_plain_file_name(name: &str) -> bool {
-    Path::new(name)
-        .file_name()
-        .is_some_and(|file_name| file_name == name)
 }
 
 #[cfg(test)]
@@ -195,7 +157,7 @@ mod tests {
     use serde_json::{Value, json};
 
     use super::try_connector;
-    use crate::connect::{CallError, Stop, fakes::two_faced};
+    use crate::connect::{CallError, Stop, fakes::two_faced, manifest::samples};
 
     const IDENTITY: &str = r#"{"ok":{"login":"octo","name":null,"avatar_url":null,"scopes":[]}}"#;
 
@@ -209,10 +171,7 @@ mod tests {
     }
 
     fn manifest() -> Value {
-        json!({
-            "id": "fake", "name": "Fake", "version": "0.0.1", "module": "fake.wasm",
-            "interface": { "abi": 1, "protocol": "1.0" }
-        })
+        samples::minimal("fake")
     }
 
     fn cassette(folder: &Path, output: Value) -> PathBuf {

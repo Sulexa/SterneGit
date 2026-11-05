@@ -1,12 +1,15 @@
-use std::{path::PathBuf, sync::Arc, time::Duration};
+use std::{
+    io::{Read as _, Write as _},
+    path::{Path, PathBuf},
+    process::{Child, Command, Stdio},
+    sync::{Arc, Mutex, MutexGuard, PoisonError},
+    thread,
+    time::Duration,
+};
 
 use futures::{
     FutureExt as _,
     future::{BoxFuture, Either, select},
-};
-use smol::{
-    io::AsyncWriteExt as _,
-    process::{Command, Stdio},
 };
 use url::Url;
 
@@ -17,6 +20,8 @@ use super::{
 };
 
 const NO_CURL: &str = "Install curl to use accounts";
+const CURL_VANISHED: &str = "curl stopped without answering";
+const WORKER_NAME: &str = "curl";
 const ONLY_TEXT_BODIES: &str = "Only text can be sent to a server";
 const CONNECT_TIMEOUT_SECONDS: u64 = 15;
 const LARGEST_BODY_BYTES: usize = 32 * 1024 * 1024;
@@ -72,14 +77,48 @@ impl Transport for Curl {
     ) -> BoxFuture<'static, Result<ApiResponse, NetError>> {
         let program = self.program.clone();
         let proxies = self.proxies.clone();
+        let process = Arc::new(Mutex::new(CurlProcess::default()));
+        let (answer, answered) = smol::channel::bounded(1);
+        let worker = Arc::clone(&process);
+        let spawned = thread::Builder::new().name(WORKER_NAME.to_owned()).spawn(move || {
+            let proxy = proxies.curl_options(&outgoing.url);
+            let result = config_for(&outgoing, &proxy)
+                .and_then(|config| run_curl(&program, &config, &worker));
+            let _ = answer.send_blocking(result);
+        });
         async move {
-            let url = outgoing.url.clone();
-            let proxy = smol::unblock(move || proxies.curl_options(&url)).await;
-            let config = config_for(&outgoing, &proxy)?;
-            run_curl(program, config, cancel).await
+            let _stop = StopOnDrop(process);
+            spawned.map_err(|error| NetError::NoTransport(error.to_string()))?;
+            match select(Box::pin(answered.recv()), Box::pin(cancel.cancelled())).await {
+                Either::Left((Ok(result), _)) => result,
+                Either::Left((Err(_), _)) => Err(NetError::Unreachable(CURL_VANISHED.to_owned())),
+                Either::Right(_) => Err(NetError::Cancelled),
+            }
         }
         .boxed()
     }
+}
+
+#[derive(Default)]
+struct CurlProcess {
+    stopped: bool,
+    child: Option<Child>,
+}
+
+struct StopOnDrop(Arc<Mutex<CurlProcess>>);
+
+impl Drop for StopOnDrop {
+    fn drop(&mut self) {
+        let mut process = lock(&self.0);
+        process.stopped = true;
+        if let Some(child) = &mut process.child {
+            let _ = child.kill();
+        }
+    }
+}
+
+fn lock(process: &Mutex<CurlProcess>) -> MutexGuard<'_, CurlProcess> {
+    process.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
 fn config_for(outgoing: &Outgoing, proxy: &[String]) -> Result<String, NetError> {
@@ -136,38 +175,48 @@ pub(super) fn quoted(value: &str) -> String {
     quoted
 }
 
-async fn run_curl(program: PathBuf, config: String, cancel: Cancel) -> Result<ApiResponse, NetError> {
-    let mut command = Command::new(&program);
+fn run_curl(program: &Path, config: &str, process: &Mutex<CurlProcess>) -> Result<ApiResponse, NetError> {
+    let no_curl = || NetError::NoTransport(NO_CURL.to_owned());
+    let mut command = Command::new(program);
     command
         .args(["-q", "--config", "-"])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .kill_on_drop(true);
+        .stderr(Stdio::piped());
     detach(&mut command);
-    let mut child = command
-        .spawn()
-        .map_err(|_| NetError::NoTransport(NO_CURL.to_owned()))?;
-    let mut stdin = child
-        .stdin
-        .take()
-        .ok_or_else(|| NetError::NoTransport(NO_CURL.to_owned()))?;
-    let exchange = async move {
-        stdin.write_all(config.as_bytes()).await?;
-        stdin.close().await?;
-        drop(stdin);
-        child.output().await
-    };
-    let output = match select(Box::pin(exchange), Box::pin(cancel.cancelled())).await {
-        Either::Left((output, _)) => {
-            output.map_err(|error| NetError::Unreachable(error.to_string()))?
+    let (mut stdin, mut stdout, mut stderr) = {
+        let mut process = lock(process);
+        if process.stopped {
+            return Err(NetError::Cancelled);
         }
-        Either::Right(_) => return Err(NetError::Cancelled),
+        let mut child = command.spawn().map_err(|_| no_curl())?;
+        let pipes = (child.stdin.take(), child.stdout.take(), child.stderr.take());
+        process.child = Some(child);
+        match pipes {
+            (Some(stdin), Some(stdout), Some(stderr)) => (stdin, stdout, stderr),
+            _ => return Err(no_curl()),
+        }
     };
-    match output.status.code() {
-        Some(0) => parse_response(&output.stdout),
-        Some(code) => Err(failure(code, &output.stderr)),
-        None => Err(NetError::Cancelled),
+    let complaints = thread::spawn(move || {
+        let mut complaints = Vec::new();
+        let _ = stderr.read_to_end(&mut complaints);
+        complaints
+    });
+    let written = stdin.write_all(config.as_bytes());
+    drop(stdin);
+    let mut printed = Vec::new();
+    let read = stdout.read_to_end(&mut printed);
+    let complaints = complaints.join().unwrap_or_default();
+    let exit = lock(process).child.as_mut().map(Child::wait);
+    match exit.and_then(Result::ok).and_then(|status| status.code()) {
+        Some(0) => {
+            written
+                .and(read)
+                .map_err(|error| NetError::Unreachable(error.to_string()))?;
+            parse_response(&printed)
+        }
+        Some(code) if !lock(process).stopped => Err(failure(code, &complaints)),
+        _ => Err(NetError::Cancelled),
     }
 }
 
@@ -238,7 +287,7 @@ fn system_curl() -> PathBuf {
 
 #[cfg(windows)]
 fn detach(command: &mut Command) {
-    use smol::process::windows::CommandExt as _;
+    use std::os::windows::process::CommandExt as _;
     command.creation_flags(DETACHED_PROCESS);
 }
 

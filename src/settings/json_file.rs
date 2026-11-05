@@ -40,7 +40,6 @@ impl JsonFile {
         }
     }
 
-    #[cfg_attr(not(test), expect(dead_code))]
     pub(crate) fn write(&self, fields: &Fields) -> io::Result<()> {
         if let Some(folder) = self.path.parent() {
             std::fs::create_dir_all(folder)?;
@@ -51,7 +50,6 @@ impl JsonFile {
         std::fs::rename(&unfinished, &self.path)
     }
 
-    #[cfg_attr(not(test), expect(dead_code))]
     pub(crate) fn update(&self, change: impl FnOnce(&mut Fields)) -> io::Result<()> {
         let mut fields = self.read();
         change(&mut fields);

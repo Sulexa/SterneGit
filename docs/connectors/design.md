@@ -21,7 +21,7 @@ Chosen on 2026-11-05. This is the reference for building connectors and drawing 
 | Sign-in | Device flow by default; a pasted token; or the token Git Credential Manager holds, after the user agrees. |
 | Tokens | In the OS credential store, under FastGit's own names. FastGit is git's credential helper for the remotes its accounts cover. |
 | SSH | One ed25519 key per account, set per repository with `core.sshCommand`. `~/.ssh/config` is never edited. |
-| Size | No cap; reported. Measured after milestone 2: +1.89 MB of exe before the new screens (engine 1.36 MB, decoding every answer 0.27 MB, `serde_path_to_error` 0.26 MB). |
+| Size | No cap; reported. Measured after milestone 2: +1.89 MB of exe before the new screens (engine 1.36 MB, decoding every answer 0.27 MB, `serde_path_to_error` 0.26 MB). Milestone 3: +0.29 MB more (discovery 0.18 MB, the network layer 0.11 MB). |
 | SDK docs | The SDK is comment-free like the rest of FastGit, documented in `docs/connectors/authoring.md`. |
 
 ## Words
@@ -125,17 +125,21 @@ A connector is a folder named after its id, holding `connector.json` and the mod
   - macOS: `~/Library/Application Support/FastGit/connectors/`
   - Linux: `$XDG_DATA_HOME/fastgit/connectors/`
 - A folder whose name differs from its manifest's `id` is refused.
+- A folder in the bundled folder that the exe doesn't pin is treated as installed.
 
 **Pinning.**
 - `src/connect/bundled.rs` embeds each bundled connector's `dist/SHA256SUMS` with `include_str!`.
-- At launch FastGit hashes the bundled files, about 2 ms for 0.6 MB. Matching files are pre-approved; anything else is treated as installed, with the standing `Modified`.
-- A `cargo test` checks that every `SHA256SUMS` matches its `dist/` files.
+- At launch FastGit hashes `connector.json` and the module it names, about 2 ms for 0.6 MB, and later compiles the very bytes it hashed. Matching files are pre-approved; anything else is treated as installed, with the standing `Modified`.
+- A `cargo test` checks that every `SHA256SUMS` matches its `dist/` files, and that every `connectors/*/dist` has a pin.
+- `.gitattributes` marks `connectors/*/dist/**` as `-text`: with `core.autocrlf`, a checkout would otherwise rewrite `connector.json` with CRLF and break its hash.
 
 **Grants.**
 - `connectors.json` records each connector id's version, file hashes and grant: endpoint origins, image origins, remote hosts, sign-in URLs, features.
 - A connector asking for nothing beyond its grant starts. A new version or new hashes within the grant are recorded, and the connector shows as `Updated` until the user opens its entry.
 - Anything beyond the grant waits, and the approval screen lists only the additions.
-- **Same id as a bundled connector:** an installed connector replaces the bundled one only after an approval saying so, which is how an author tests a new GitHub connector. Accounts are keyed by connector id and keep working.
+- **Same id as a bundled connector:** an installed connector replaces the bundled one only after an approval saying so, which is how an author tests a new GitHub connector. Until then it waits, marked `replaces_bundled`, and the bundled one keeps running. The approval stores `replaces_bundled: true`, and from then on the bundled one isn't listed. Accounts are keyed by connector id and keep working.
+- **The file:** `connectors.json` holds `{"version": 1, "connectors": [{"id", "version", "files": {name: sha256}, "grant", "updated", "replaces_bundled"}]}`. Bundled connectors matching their pins need no entry. Entries and fields FastGit can't read survive rewrites.
+- **The grant** lists strings exactly as the manifest writes them, templates included (`{server}/api/v3/`, `{server.host}`): the approval covers any server the user types for that service.
 - **Two connectors claiming one server** is fine: the approval mentions the existing claim, and FastGit asks once per remote owner which account to use.
 
 **Standing.**
@@ -385,14 +389,14 @@ The engine maps the ABI onto it:
 
 - **Programs:** `%SystemRoot%\System32\curl.exe`, `/usr/bin/curl` on macOS, `curl` from `PATH` on Linux.
 - **How it runs:** with exactly `-q --config -`. The request, including the token, goes to stdin, never into arguments.
-- **Process:** `DETACHED_PROCESS` on Windows, through `smol::process` with `kill_on_drop(true)`.
+- **Process:** `DETACHED_PROCESS` on Windows, run by `std::process` on a worker thread that also reads the proxy settings. The request's future kills curl when it's cancelled or dropped. `smol::process` and `smol::unblock` did the same for 204 KB more, measured at milestone 3, since nothing else in FastGit links async-process or the blocking pool.
 - **Proxies and certificates:**
   - `git config --get-urlmatch http <origin>` supplies `proxy`, `proxy-anyauth`, `cacert`, `ssl-no-revoke` and `insecure`.
   - curl reads `https_proxy`, `ALL_PROXY` and `NO_PROXY` itself, as git does.
   - System proxies are ignored, as git ignores them.
 - **Exit codes:** 28 is `Timeout`; 6 and 7 `Unreachable`; 35 and 60 `Tls`; 5 and 97 `Proxy`.
 - **No curl on Linux:** "Install curl to use accounts".
-- **Cost:** +34 KB of exe and no memory in FastGit, but about 110 ms per request (495 ms for the first). Independent calls run in parallel.
+- **Cost:** about 110 ms per request (495 ms for the first), and no memory in FastGit. Independent calls run in parallel. The probe measured +34 KB of exe; in FastGit the gateway, policy and curl transport together cost about 114 KB once milestone 3 made them reachable.
 - **Upgrade path, also the Linux fallback:** git's own libcurl loaded at run time, +20 KB and 23 ms per request.
 - The config syntax and escaping are in host-services.md, section 1.
 
@@ -491,19 +495,24 @@ ssh -i '<key>' -o IdentitiesOnly=yes -o 'UserKnownHostsFile="<fastgit known_host
 ## 8. Inside FastGit
 
 ```rust
+pub(crate) struct ConnectorFolders { pub(crate) bundled: Option<PathBuf>, pub(crate) source: Option<PathBuf>, pub(crate) installed: Option<PathBuf> }
 pub(crate) struct Catalog { connectors: Vec<Connector>, approvals: Approvals }
-pub(crate) struct Connector { manifest: Arc<Manifest>, origin: Origin, standing: Standing, started: Option<Arc<Started>> }
+pub(crate) struct Connector { pub(crate) id: ConnectorId, pub(crate) folder: PathBuf, pub(crate) origin: Origin,
+    pub(crate) manifest: Option<Arc<Manifest>>, pub(crate) standing: Standing, pub(crate) replaces_bundled: bool,
+    pub(crate) started: Option<Arc<Started>>, files: Hashes, module: Option<Vec<u8>> }
 pub(crate) enum Origin { Bundled, Installed }
 pub(crate) struct Claim { pub(crate) connector: ConnectorId, pub(crate) service: String, pub(crate) repo: RepoRef, pub(crate) accounts: Vec<AccountId> }
 
 impl Catalog {
     pub(crate) fn discover(folders: &ConnectorFolders, approvals: Approvals) -> Self;
-    pub(crate) fn approve(&mut self, id: &ConnectorId) -> &Grant;
-    pub(crate) fn claims(&self, remote_url: &str, accounts: &[AccountView]) -> Vec<Claim>;
+    pub(crate) fn start(&mut self, host: &Arc<dyn HostServices>);
+    pub(crate) fn approve(&mut self, id: &ConnectorId) -> io::Result<Option<Grant>>;
+    pub(crate) fn seen(&mut self, id: &ConnectorId) -> io::Result<()>;
+    pub(crate) fn claims(&self, remote_url: &str, book: &AccountBook) -> Vec<Claim>;
 }
 
 impl Started {
-    pub(crate) fn start(manifest: Arc<Manifest>, module: &[u8]) -> Result<Self, Stop>;
+    pub(crate) fn start(id: ConnectorId, wasm: &[u8], host: Arc<dyn HostServices>) -> Result<(Self, Greeting), Stop>;
 }
 
 #[derive(Clone)]
@@ -523,7 +532,14 @@ impl Forge {
 One method per operation, each built on one private `ask(op, input)`.
 
 - **`ui/load.rs`** gains `run_async_in_background`, the async twin of `run_in_background`. It runs a `Send` future on the background executor and hands the result back on the foreground.
-- **`Catalog`, the started connectors and the accounts** live in a GPUI `Global`, set in `app::run`. The first frame doesn't wait for them.
+- **`Catalog`, the started connectors and the accounts** live in a GPUI `Global`, `app::connectors::Connectors`, set in `app::run` after the window opens. The first frame doesn't wait for them: one background task reads `accounts.json` and `connectors.json`, discovers, then starts.
+- **`Connector.module`** keeps the hashed bytes only until they're compiled, so a waiting connector starts from the bytes the user approved.
+- **Claims:**
+  - Only started connectors claim, and matching runs no connector code.
+  - A remote is normalized first (scp form, `ssh://` with a port, user info, `.git`), then matched against each service's `remotes`; the first pattern that fits wins.
+  - A literal host lists every account of that connector and service; `{field.host}` lists the accounts whose server has that host.
+  - When several accounts fit, the owner choice remembered in `accounts.json` narrows them to one.
+  - A claim may list no account: the tab can then offer to sign in.
 - **`Repository`:**
   - gains `hosted: Option<Forge>` from `Catalog::claims`, plus `pulls`, `pull` and `threads` as `Load`s, and `review` and `merge` as `Job`s;
   - when a remote matches accounts in two connectors, or two accounts on one server, the tab asks once and `accounts.json` remembers;
@@ -534,6 +550,7 @@ One method per operation, each built on one private `ask(op, input)`.
 
 ## 9. The GitHub connector
 
+- **Built in milestone 3:** `connectors/github/` with `account.who_am_i` (`GET /user`, scopes from `X-OAuth-Scopes`) and the error mapping below in `refusal.rs`, replayed from three cassettes. Its manifest lists the pasted token and Git Credential Manager's token; the device flow joins it once the OAuth App's client ID exists. Version 0.1.0, 257,272 bytes of wasm, most of it serde.
 - **REST covers:**
   - lists, using `per_page=100` and the `Link` `rel="next"` URL as the cursor, checked to stay on the API endpoint;
   - repositories (`/user/repos` with `affiliation`, and search with `user:` and `org:` qualifiers);
@@ -631,6 +648,8 @@ Gitea needs no FastGit change and should be about 700–900 lines.
    - starting at launch;
    - `scripts/build-connectors.ps1`;
    - `build-and-relaunch.ps1` mirroring `connectors/*/dist` into `build/connectors/`.
+
+   Built, with remote claims and a first GitHub connector (who-am-I) to pin. Approving, `seen` and claims are tested but have no caller until the screens of milestone 4.
 4. **Accounts and repositories,** mockup first:
    - the screens in section 11 up to SSH keys;
    - the device flow, which needs the OAuth App's client ID;
@@ -644,6 +663,7 @@ Gitea needs no FastGit change and should be about 700–900 lines.
 ## 14. Open items
 
 - **Your step, before milestone 4:** register the FastGit OAuth App on GitHub with "Enable Device Flow" ticked. Its client ID goes in `connector.json`.
+- **Before milestone 4:** account ids are `<connector>:<host>:<user id>`, but `Identity` carries no user id. It needs an `id`, which GitHub's `/user` returns.
 - **Unverified:**
   - whether macOS curl trusts roots added to the Keychain;
   - whether curl is present on minimal Linux installs;
@@ -655,6 +675,11 @@ Gitea needs no FastGit change and should be about 700–900 lines.
   - without checking answers against their types, +1,355,264 B: wasmi, the engine, `--connector-test` and the envelope;
   - typed answers decoded by plain serde, +271,360 B; `serde_path_to_error` on top of them, +259,584 B;
   - a test connector built with the SDK: 202,446 B of wasm, started in 4.7–5.7 ms, 256 KiB of memory after a call; an endless loop stopped after 50 slices in 0.41 s, a memory hog at 64 MiB in 30 ms.
+- **Measured at milestone 3,** against milestone 2's release build (39,391,232 B):
+  - +293,376 B (+0.74%) in all: about 179 KB for manifests, grants, pins, the catalog, `sha2` and starting at launch, and about 114 KB for the gateway and curl transport, which nothing reached before;
+  - with the transport still on `smol::process`, it was +497,664 B;
+  - memory over three launches each, opening FastGit's own repository: 149.2 MB of private bytes before, 150.5 MB after, ±1.5 MB from run to run;
+  - the GitHub connector: 257,272 B of wasm, started in 6.5 ms, `hello` in 3.0 ms and `who_am_i` in 1.8 ms on a replayed cassette.
 - **Later:**
   - avatars, fetched in batches through curl into a cache and drawn with `img(path)`;
   - libcurl at run time;

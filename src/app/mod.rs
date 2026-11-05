@@ -1,3 +1,4 @@
+mod connectors;
 mod saved_tabs;
 mod tab_strip;
 mod tabs;
@@ -46,6 +47,7 @@ pub(crate) fn run(path: Option<PathBuf>) {
         })
         .expect("failed to open the FastGit window");
         cx.activate(true);
+        connectors::start_connectors(cx);
     });
 }
 

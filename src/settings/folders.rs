@@ -9,6 +9,7 @@ const PRODUCT: &str = "fastgit";
 pub(crate) enum Folder {
     Config,
     State,
+    Data,
     #[cfg(not(windows))]
     Session,
 }
@@ -21,7 +22,9 @@ impl Folder {
     #[cfg(windows)]
     fn path_from(self, var: &dyn Fn(&str) -> Option<OsString>) -> Option<PathBuf> {
         match self {
-            Folder::Config | Folder::State => Some(absolute(var("APPDATA"))?.join(PRODUCT)),
+            Folder::Config | Folder::State | Folder::Data => {
+                Some(absolute(var("APPDATA"))?.join(PRODUCT))
+            }
         }
     }
 
@@ -29,7 +32,7 @@ impl Folder {
     fn path_from(self, var: &dyn Fn(&str) -> Option<OsString>) -> Option<PathBuf> {
         let base = match self {
             Folder::Session => absolute(var("TMPDIR"))?,
-            Folder::Config | Folder::State => {
+            Folder::Config | Folder::State | Folder::Data => {
                 absolute(var("HOME"))?.join("Library/Application Support")
             }
         };
@@ -42,6 +45,7 @@ impl Folder {
         let base = match self {
             Folder::Config => absolute(var("XDG_CONFIG_HOME")).or_else(|| in_home(".config"))?,
             Folder::State => absolute(var("XDG_STATE_HOME")).or_else(|| in_home(".local/state"))?,
+            Folder::Data => absolute(var("XDG_DATA_HOME")).or_else(|| in_home(".local/share"))?,
             Folder::Session => absolute(var("XDG_RUNTIME_DIR"))?,
         };
         Some(base.join(PRODUCT))
@@ -68,11 +72,12 @@ mod tests {
 
     #[cfg(windows)]
     #[test]
-    fn settings_and_saved_tabs_live_in_roaming_app_data() {
+    fn settings_saved_tabs_and_installed_connectors_live_in_roaming_app_data() {
         let vars = with(&[("APPDATA", r"C:\Users\me\AppData\Roaming")]);
         let roaming = PathBuf::from(r"C:\Users\me\AppData\Roaming\FastGit");
         assert_eq!(Folder::Config.path_from(&vars), Some(roaming.clone()));
-        assert_eq!(Folder::State.path_from(&vars), Some(roaming));
+        assert_eq!(Folder::State.path_from(&vars), Some(roaming.clone()));
+        assert_eq!(Folder::Data.path_from(&vars), Some(roaming));
     }
 
     #[cfg(windows)]
@@ -92,6 +97,10 @@ mod tests {
         assert_eq!(
             Folder::State.path_from(&vars),
             Some(PathBuf::from("/home/me/.local/state/fastgit"))
+        );
+        assert_eq!(
+            Folder::Data.path_from(&vars),
+            Some(PathBuf::from("/home/me/.local/share/fastgit"))
         );
         assert_eq!(
             Folder::Session.path_from(&vars),

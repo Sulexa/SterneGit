@@ -71,7 +71,7 @@ impl TokenScheme {
         (self.header_name().to_owned(), value)
     }
 
-    fn from_json(value: &Value) -> Option<Self> {
+    pub(crate) fn from_json(value: &Value) -> Option<Self> {
         let text = |name: &str| value.get(name)?.as_str();
         match text("kind")? {
             "bearer" => Some(TokenScheme::Bearer),
@@ -121,7 +121,7 @@ impl SignInMethod {
         }
     }
 
-    fn named(name: &str) -> Option<Self> {
+    pub(crate) fn named(name: &str) -> Option<Self> {
         [
             SignInMethod::Device,
             SignInMethod::PastedToken,

@@ -1,0 +1,18 @@
+{
+  "op": "account.who_am_i",
+  "account": {
+    "id": "github:github.com:583231",
+    "login": "octocat",
+    "endpoints": { "api": "https://api.github.com/", "graphql": "https://api.github.com/graphql", "web": "https://github.com/" }
+  },
+  "exchanges": [
+    {
+      "method": "GET",
+      "url": "https://api.github.com/user",
+      "status": 401,
+      "headers": [["content-type", "application/json; charset=utf-8"]],
+      "body": { "message": "Bad credentials", "documentation_url": "https://docs.github.com/rest", "status": "401" }
+    }
+  ],
+  "output": { "err": { "kind": "signed_out" } }
+}

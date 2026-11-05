@@ -1,0 +1,51 @@
+{
+  "interface": { "abi": 1, "protocol": "1.0" },
+  "id": "github",
+  "name": "GitHub",
+  "version": "0.1.0",
+  "module": "github.wasm",
+  "features": [],
+  "ssh_key_type": "ed25519",
+  "services": [
+    {
+      "id": "github.com",
+      "label": "GitHub",
+      "git_user": "x-access-token",
+      "endpoints": {
+        "api": "https://api.github.com/",
+        "graphql": "https://api.github.com/graphql",
+        "web": "https://github.com/"
+      },
+      "token_endpoints": ["api", "graphql"],
+      "images": ["https://avatars.githubusercontent.com/"],
+      "remotes": [{ "hosts": ["github.com", "ssh.github.com"], "path": "{owner}/{name}" }],
+      "sign_in": [
+        {
+          "method": "pasted_token",
+          "token": { "kind": "bearer" },
+          "create_url": "{web}settings/tokens/new?scopes=repo,read:org,write:public_key,workflow&description=FastGit"
+        },
+        { "method": "git_credential", "token": { "kind": "bearer" } }
+      ]
+    },
+    {
+      "id": "enterprise",
+      "label": "GitHub Enterprise Server",
+      "git_user": "x-access-token",
+      "fields": [
+        { "id": "server", "label": "Server address", "kind": "url", "example": "https://github.example.com" }
+      ],
+      "endpoints": {
+        "api": "{server}/api/v3/",
+        "graphql": "{server}/api/graphql",
+        "web": "{server}/"
+      },
+      "token_endpoints": ["api", "graphql"],
+      "remotes": [{ "hosts": ["{server.host}"], "path": "{owner}/{name}" }],
+      "sign_in": [
+        { "method": "pasted_token", "token": { "kind": "bearer" }, "create_url": "{web}settings/tokens/new" },
+        { "method": "git_credential", "token": { "kind": "bearer" } }
+      ]
+    }
+  ]
+}

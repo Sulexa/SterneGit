@@ -17,6 +17,27 @@ function Write-Report([string] $message) {
     else { Write-Output $message }
 }
 
+function Sync-BundledConnectors {
+    $mirror = Join-Path $buildDir 'connectors'
+    $bundled = @()
+    foreach ($crate in Get-ChildItem (Join-Path $root 'connectors') -Directory) {
+        $dist = Join-Path $crate.FullName 'dist'
+        if (-not (Test-Path (Join-Path $dist 'connector.json'))) { continue }
+        $bundled += $crate.Name
+        $into = Join-Path $mirror $crate.Name
+        New-Item -ItemType Directory -Force $into | Out-Null
+        Get-ChildItem $into -File |
+            Where-Object { -not (Test-Path (Join-Path $dist $_.Name)) } |
+            Remove-Item -Force
+        Copy-Item (Join-Path $dist '*') $into -Force
+    }
+    if (Test-Path $mirror) {
+        Get-ChildItem $mirror -Directory |
+            Where-Object { $bundled -notcontains $_.Name } |
+            Remove-Item -Recurse -Force
+    }
+}
+
 function Get-CompilerErrors([object[]] $log) {
     $lines = @($log | ForEach-Object { "$_" })
     $start = 0
@@ -43,6 +64,8 @@ if ($exitCode -ne 0) {
     Write-Report "$summary`n$errors"
     if ($hook) { exit 0 } else { exit 1 }
 }
+
+Sync-BundledConnectors
 
 if ((Test-Path $installed) -and ((Get-FileHash $fresh).Hash -eq (Get-FileHash $installed).Hash)) {
     if (-not $hook) { Write-Report 'build\fastgit.exe is already the latest build.' }
