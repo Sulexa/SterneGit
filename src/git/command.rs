@@ -7,7 +7,7 @@ use std::{
 
 use anyhow::{Context as _, Result, bail};
 
-use super::text::decode;
+use super::{access::Access, text::decode};
 
 pub(crate) const READ_ONLY: &str = "--no-optional-locks";
 const NO_EDITOR: &str = ":";
@@ -26,6 +26,19 @@ pub(crate) fn run<A: AsRef<OsStr>>(location: &Path, args: &[A], exit: Exit) -> R
 
 pub(crate) fn run_text<A: AsRef<OsStr>>(location: &Path, args: &[A], exit: Exit) -> Result<String> {
     Ok(decode(&run(location, args, exit)?))
+}
+
+pub(crate) fn run_with_access<A: AsRef<OsStr>>(
+    location: &Path,
+    access: &Access,
+    args: &[A],
+    exit: Exit,
+) -> Result<Vec<u8>> {
+    let mut all = access.config_args();
+    all.extend(args.iter().map(|arg| arg.as_ref().to_owned()));
+    let mut command = git(location, &all);
+    command.envs(access.environment());
+    checked(command.output().context(GIT_MISSING)?, exit)
 }
 
 pub(crate) fn run_with_input<A: AsRef<OsStr>>(

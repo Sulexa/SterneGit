@@ -1,9 +1,11 @@
+use std::ffi::OsStr;
+
 use anyhow::Result;
 use gix::{ObjectId, refs::FullName, remote::Direction};
 
 use super::{
     Carried, PullMode, Refusal, Repo, Tracking,
-    command::{Exit, run, run_text},
+    command::{Exit, run_text, run_with_access},
     merge::{AUTOSTASH, Ran},
     text::decode,
 };
@@ -20,6 +22,7 @@ const REJECTED_FOR_MISSING_COMMITS: [&str; 2] = ["(fetch first)", "(non-fast-for
 const REJECTED_FOR_A_MOVED_LEASE: &str = "(stale info)";
 const FETCH_REFUSED_TO_MOVE_BACK: &str = "(non-fast-forward)";
 const COUNT_EACH_SIDE: [&str; 3] = ["rev-list", "--left-right", "--count"];
+const REMOTE_URL_KEYS: &str = r"^remote\..*url$";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Fetched {
@@ -82,11 +85,7 @@ impl Repo {
         if self.local().remote_names().is_empty() {
             return Ok(Fetched::NoRemotes);
         }
-        run(
-            &self.location,
-            &["fetch", "--all", "--prune", "--quiet"],
-            Exit::Success,
-        )?;
+        self.reach(&["fetch", "--all", "--prune", "--quiet"])?;
         Ok(Fetched::AllRemotes)
     }
 
@@ -130,7 +129,7 @@ impl Repo {
             return self.push_without_upstream(&repo, &branch, HEAD);
         };
         let already_there = commit_of(&repo, &upstream.reference) == head_commit(&repo);
-        if let Err(error) = run(&self.location, &["push", "--quiet"], Exit::Success) {
+        if let Err(error) = self.reach(&["push", "--quiet"]) {
             return self.behind_or(error, &upstream.tracking.branch);
         }
         Ok(if already_there {
@@ -152,11 +151,7 @@ impl Repo {
         let before = commit_of(&repo, &local);
         let refspec = format!("{}:{}", configured.merge, local.as_bstr());
         let tracking = configured.upstream.tracking;
-        if let Err(error) = run(
-            &self.location,
-            &fetch_that_reports_rejections(&configured.remote, &refspec),
-            Exit::Success,
-        ) {
+        if let Err(error) = self.reach(&fetch_that_reports_rejections(&configured.remote, &refspec)) {
             return Err(if error.to_string().contains(FETCH_REFUSED_TO_MOVE_BACK) {
                 Refusal::CantFastForward(tracking).into()
             } else {
@@ -180,11 +175,7 @@ impl Repo {
         let upstream = configured.upstream;
         let already_there = commit_of(&repo, &upstream.reference) == commit_of(&repo, &local);
         let refspec = format!("{}:{}", local.as_bstr(), configured.merge);
-        if let Err(error) = run(
-            &self.location,
-            &["push", "--quiet", &configured.remote, &refspec],
-            Exit::Success,
-        ) {
+        if let Err(error) = self.reach(&["push", "--quiet", &configured.remote, &refspec]) {
             return self.behind_or(error, branch);
         }
         Ok(if already_there {
@@ -205,11 +196,7 @@ impl Repo {
         let lease = format!("--force-with-lease={}:{}", configured.merge, behind.upstream_at);
         let refspec = format!("{}:{}", branch_reference(branch)?.as_bstr(), configured.merge);
         let tracking = configured.upstream.tracking;
-        match run(
-            &self.location,
-            &["push", "--quiet", &lease, &configured.remote, &refspec],
-            Exit::Success,
-        ) {
+        match self.reach(&["push", "--quiet", &lease, &configured.remote, &refspec]) {
             Ok(_) => Ok(Pushed::Forced(tracking)),
             Err(error) if error.to_string().contains(REJECTED_FOR_A_MOVED_LEASE) => {
                 Err(Refusal::UpstreamMoved(tracking).into())
@@ -249,11 +236,7 @@ impl Repo {
         let Some(configured) = self.configured_upstream(branch)? else {
             return Err(error);
         };
-        run(
-            &self.location,
-            &["fetch", "--quiet", &configured.remote],
-            Exit::Success,
-        )?;
+        self.reach(&["fetch", "--quiet", &configured.remote])?;
         let repo = self.local();
         let local = branch_reference(branch)?;
         let upstream = configured.upstream;
@@ -319,19 +302,35 @@ impl Repo {
             upstream: format!("{remote}/{name}"),
             branch: name,
         };
-        run(
-            &self.location,
-            &["push", "--quiet", "--set-upstream", &remote, refspec],
-            Exit::Success,
-        )
-        .map_err(|error| {
-            if rejected_for_missing_commits(&error) {
-                Refusal::RemoteAhead(tracking.clone()).into()
-            } else {
-                error
-            }
-        })?;
+        self.reach(&["push", "--quiet", "--set-upstream", &remote, refspec])
+            .map_err(|error| {
+                if rejected_for_missing_commits(&error) {
+                    Refusal::RemoteAhead(tracking.clone()).into()
+                } else {
+                    error
+                }
+            })?;
         Ok(Pushed::Sent(tracking))
+    }
+
+    pub(crate) fn remote_urls(&self) -> Vec<String> {
+        run_text(
+            &self.location,
+            &["config", "--get-regexp", REMOTE_URL_KEYS],
+            Exit::SuccessOrDifference,
+        )
+        .map(|listed| {
+            listed
+                .lines()
+                .filter_map(|line| line.split_once(' '))
+                .map(|(_, url)| url.trim().to_owned())
+                .collect()
+        })
+        .unwrap_or_default()
+    }
+
+    fn reach<A: AsRef<OsStr>>(&self, args: &[A]) -> Result<Vec<u8>> {
+        run_with_access(&self.location, &self.access, args, Exit::Success)
     }
 
     fn upstream_of(&self, branch: &FullName) -> Option<Upstream> {

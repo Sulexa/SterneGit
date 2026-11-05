@@ -11,9 +11,10 @@ use super::{
     stash_menu::StashAction,
 };
 use crate::{
+    accounts,
     git::{
-        self, Behind, CheckedOut, FileChange, History, PartAction, PullMode, RefLabel,
-        RemoteBranch, Repo, Scope, Side, Stash, Underway, Version, WorkingChanges,
+        self, Attendance, Behind, CheckedOut, FileChange, History, PartAction, PullMode,
+        RefLabel, RemoteBranch, Repo, Scope, Side, Stash, Underway, Version, WorkingChanges,
     },
     ui::{Failure, Job, Load, run_in_background},
 };
@@ -251,11 +252,15 @@ impl Repository {
             .last_fetch
             .is_none_or(|started| started.elapsed() >= age)
         {
-            self.fetch(cx);
+            self.fetch_as(Attendance::Unattended, cx);
         }
     }
 
     pub(crate) fn fetch(&mut self, cx: &mut Context<Self>) {
+        self.fetch_as(Attendance::Attended, cx);
+    }
+
+    fn fetch_as(&mut self, attendance: Attendance, cx: &mut Context<Self>) {
         if self.fetch.is_running() || self.running.is_some() {
             return;
         }
@@ -265,7 +270,7 @@ impl Repository {
         self.last_fetch = Some(Instant::now());
         let task = run_in_background(
             cx,
-            move || repo.fetch(),
+            move || reaching(repo, attendance).fetch(),
             |this, result, cx| {
                 this.fetch.finish();
                 match result {
@@ -649,7 +654,7 @@ impl Repository {
         self.status_read.cancel();
         let task = run_in_background(
             cx,
-            move || work(&repo),
+            move || work(&reaching(repo, Attendance::Attended)),
             move |this, result, cx| {
                 this.write.finish();
                 this.running = None;
@@ -702,4 +707,9 @@ impl Repository {
 
 fn resolve(path: &Path) -> PathBuf {
     std::fs::canonicalize(path).unwrap_or_else(|_| path.to_owned())
+}
+
+fn reaching(repo: Repo, attendance: Attendance) -> Repo {
+    let access = accounts::access_for_repo(&repo, attendance);
+    repo.with_access(access)
 }

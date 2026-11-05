@@ -3,6 +3,8 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use crate::settings::Folder;
+
 const FILE_NAME: &str = "tabs";
 
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -82,30 +84,7 @@ impl SavedTabs {
 }
 
 fn file() -> Option<PathBuf> {
-    Some(folder()?.join(FILE_NAME))
-}
-
-#[cfg(windows)]
-fn folder() -> Option<PathBuf> {
-    Some(absolute_var("APPDATA")?.join("FastGit"))
-}
-
-#[cfg(target_os = "macos")]
-fn folder() -> Option<PathBuf> {
-    Some(absolute_var("HOME")?.join("Library/Application Support/FastGit"))
-}
-
-#[cfg(all(unix, not(target_os = "macos")))]
-fn folder() -> Option<PathBuf> {
-    let state = absolute_var("XDG_STATE_HOME")
-        .or_else(|| Some(absolute_var("HOME")?.join(".local/state")))?;
-    Some(state.join("fastgit"))
-}
-
-fn absolute_var(name: &str) -> Option<PathBuf> {
-    std::env::var_os(name)
-        .map(PathBuf::from)
-        .filter(|path| path.is_absolute())
+    Some(Folder::State.path()?.join(FILE_NAME))
 }
 
 #[cfg(test)]

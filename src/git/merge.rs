@@ -3,7 +3,7 @@ use gix::ObjectId;
 
 use super::{
     Carried, Repo,
-    command::{Exit, run},
+    command::{Exit, run_with_access},
     refusal::why_git_stopped,
     remote::{checked_out_branch, head_commit},
 };
@@ -71,7 +71,7 @@ impl Repo {
     }
 
     pub(super) fn run_until_stopped(&self, args: &[&str]) -> Result<Ran> {
-        match run(&self.location, args, Exit::Success) {
+        match run_with_access(&self.location, &self.access, args, Exit::Success) {
             Ok(_) => Ok(Ran::Through),
             Err(_) if self.underway().is_some() => Ok(Ran::Stopped),
             Err(error) => Err(why_git_stopped(error)),

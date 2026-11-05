@@ -1,7 +1,9 @@
+mod access;
 mod branch;
 mod command;
 mod commit;
 mod context;
+mod credential;
 mod facts;
 mod file_history;
 mod graph;
@@ -22,6 +24,8 @@ mod status;
 mod text;
 mod time;
 mod underway;
+#[cfg_attr(not(test), expect(dead_code))]
+pub(crate) mod url_settings;
 mod version;
 
 use std::{
@@ -33,9 +37,11 @@ use anyhow::{Context as _, Result};
 use gix::ThreadSafeRepository;
 use gpui_kit::SharedString;
 
+pub(crate) use access::{Access, Attendance, CredentialScope, GIT_CREDENTIAL_FLAG};
 pub(crate) use branch::{CheckedOut, NameProblem, new_branch_name};
 pub(crate) use command::without_console_window;
 pub(crate) use commit::commit_message;
+pub(crate) use credential::{CredentialAnswer, CredentialRequest};
 pub(crate) use facts::DifftoolTarget;
 pub(crate) use file_history::{FileCommit, LineCounts};
 pub(crate) use graph::{Edge, Row};
@@ -67,6 +73,7 @@ pub(crate) struct Repo {
     location: PathBuf,
     name: SharedString,
     has_work_tree: bool,
+    access: Access,
 }
 
 impl Repo {
@@ -88,7 +95,12 @@ impl Repo {
             location,
             name,
             has_work_tree,
+            access: Access::default(),
         }
+    }
+
+    pub(crate) fn with_access(self, access: Access) -> Self {
+        Self { access, ..self }
     }
 
     pub(crate) fn name(&self) -> SharedString {

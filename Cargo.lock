@@ -1773,11 +1773,17 @@ name = "fastgit"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "base64 0.22.1",
  "cpal",
+ "futures",
  "gix",
  "gpui-kit",
  "image",
+ "serde_json",
+ "smol",
  "symphonia",
+ "url",
+ "windows 0.62.2",
 ]
 
 [[package]]
