@@ -273,6 +273,9 @@ fn uncommitted_row(
     cx: &App,
 ) -> AnyElement {
     let mut summary = Vec::new();
+    if !changes.conflicted.is_empty() {
+        summary.push(format!("{} conflicted", thousands(changes.conflicted.len())));
+    }
     if !changes.unstaged.is_empty() {
         summary.push(format!("{} unstaged", thousands(changes.unstaged.len())));
     }

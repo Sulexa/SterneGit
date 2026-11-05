@@ -7,13 +7,13 @@ use std::{
 use gpui_kit::{Context, EventEmitter, SharedString};
 
 use super::{
-    operation::{self, Operated, Operation, Outcome},
+    operation::{self, Finish, Operated, Operation, Outcome},
     stash_menu::StashAction,
 };
 use crate::{
     git::{
         self, CheckedOut, FileChange, History, PartAction, PullMode, RefLabel, RemoteBranch, Repo,
-        Scope, Side, Stash, WorkingChanges,
+        Scope, Side, Stash, Underway, Version, WorkingChanges,
     },
     ui::{Failure, Job, Load, run_in_background},
 };
@@ -69,6 +69,7 @@ pub(crate) struct Repository {
     write: Job,
     committing: bool,
     running: Option<Operation>,
+    finishing: Option<Finish>,
     write_failure: Option<Failure>,
     chosen_pull_mode: Option<PullMode>,
     pull_mode_save: Job,
@@ -90,6 +91,7 @@ impl Repository {
             write: Job::default(),
             committing: false,
             running: None,
+            finishing: None,
             write_failure: None,
             chosen_pull_mode: None,
             pull_mode_save: Job::default(),
@@ -154,6 +156,14 @@ impl Repository {
 
     pub(crate) fn running(&self) -> Option<Operation> {
         self.running
+    }
+
+    pub(crate) fn finishing(&self) -> Option<Finish> {
+        self.finishing
+    }
+
+    pub(crate) fn underway(&self) -> Option<&Underway> {
+        self.changes.as_ref()?.underway.as_ref()
     }
 
     pub(crate) fn has_stash(&self) -> bool {
@@ -361,7 +371,7 @@ impl Repository {
         let mode = self.pull_mode();
         self.operate(
             Operation::Pull,
-            move |repo| repo.pull(mode).map(|pulled| operation::pulled(&pulled)),
+            move |repo| repo.pull(mode).map(operation::pulled_back),
             cx,
         );
     }
@@ -488,6 +498,47 @@ impl Repository {
         );
     }
 
+    pub(crate) fn finish_underway(&mut self, finish: Finish, cx: &mut Context<Self>) {
+        let Some(underway) = self.underway().cloned() else {
+            return;
+        };
+        if self.write.is_running() {
+            return;
+        }
+        self.finishing = Some(finish);
+        self.write_and_report(
+            None,
+            operation::finish_failed(&underway, finish),
+            move |repo| match finish {
+                Finish::Continue => repo
+                    .continue_underway()
+                    .map(|continued| operation::continued(&underway, continued)),
+                Finish::Abort => repo
+                    .abort_underway()
+                    .map(|carried| operation::aborted(&underway, carried)),
+            },
+            cx,
+        );
+    }
+
+    pub(crate) fn resolve(&mut self, change: FileChange, text: Vec<u8>, cx: &mut Context<Self>) {
+        self.write_and_report(
+            None,
+            operation::resolve_failed(&change.path),
+            move |repo| repo.resolve(&change, &text).map(|()| Outcome::Quiet),
+            cx,
+        );
+    }
+
+    pub(crate) fn keep(&mut self, change: FileChange, version: Version, cx: &mut Context<Self>) {
+        self.write_and_report(
+            None,
+            operation::resolve_failed(&change.path),
+            move |repo| repo.keep(&change, version).map(|()| Outcome::Quiet),
+            cx,
+        );
+    }
+
     fn checked_out_and_revision(&self, label: &RefLabel) -> Option<(SharedString, String)> {
         let history = self.history()?;
         let checked_out = history.branch.clone()?;
@@ -588,6 +639,7 @@ impl Repository {
             move |this, result, cx| {
                 this.write.finish();
                 this.running = None;
+                this.finishing = None;
                 let outcome = result
                     .map(Into::into)
                     .map_err(|error| operation::failure(&error));

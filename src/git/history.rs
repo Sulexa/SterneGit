@@ -19,6 +19,7 @@ use super::{
     stash::{Stash, stash_ids_newest_first, stash_name},
     text::decode,
     time::format_time,
+    underway::rebased_branch,
 };
 
 pub(crate) const HISTORY_LIMIT: usize = 10_000;
@@ -107,6 +108,7 @@ pub(crate) struct History {
 struct Head {
     name: Option<FullName>,
     id: Option<ObjectId>,
+    rebasing: Option<String>,
 }
 
 impl Head {
@@ -114,6 +116,7 @@ impl Head {
         Ok(Self {
             name: repo.head_name()?,
             id: repo.head_id().ok().map(|id| id.detach()),
+            rebasing: rebased_branch(repo),
         })
     }
 
@@ -125,6 +128,7 @@ impl Head {
 
     fn label(&self) -> Option<SharedString> {
         match (&self.name, self.id) {
+            _ if let Some(branch) = &self.rebasing => Some(format!("rebasing {branch}").into()),
             (Some(name), _) => Some(decode(name.shorten()).into()),
             (None, Some(id)) => Some(format!("detached at {}", short_id(id)).into()),
             (None, None) => None,
@@ -402,6 +406,7 @@ pub(crate) mod fixtures {
             Head {
                 name: None,
                 id: head.map(id),
+                rebasing: None,
             },
             commits,
             Vec::new(),

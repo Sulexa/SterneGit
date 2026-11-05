@@ -48,6 +48,7 @@ pub(crate) struct ToolbarState {
     has_commit: bool,
     has_changes: bool,
     has_stash: bool,
+    underway: bool,
     pull_mode: PullMode,
 }
 
@@ -62,17 +63,19 @@ impl ToolbarState {
             has_commit: history.is_some_and(|history| history.head_id.is_some()),
             has_changes: repository.has_changes(),
             has_stash: repository.has_stash(),
+            underway: repository.underway().is_some(),
             pull_mode: repository.pull_mode(),
         }
     }
 
     fn enabled(&self, operation: Operation) -> bool {
+        let settled = !self.underway;
         let possible = match operation {
-            Operation::Pull => self.on_branch || self.pull_mode == PullMode::FetchOnly,
-            Operation::Push => self.on_branch && self.has_commit,
+            Operation::Pull => settled && (self.on_branch || self.pull_mode == PullMode::FetchOnly),
+            Operation::Push => settled && self.on_branch && self.has_commit,
             Operation::Branch => self.has_commit,
-            Operation::Stash => self.has_changes && self.has_commit,
-            Operation::Pop => self.has_stash,
+            Operation::Stash => settled && self.has_changes && self.has_commit,
+            Operation::Pop => settled && self.has_stash,
         };
         self.open && !self.busy && possible
     }
@@ -244,16 +247,17 @@ fn pull_mode_menu(
         .item(item(PullMode::FetchOnly))
 }
 
-pub(crate) fn notification(operated: &Operated) -> Notification {
-    match &operated.outcome {
+pub(crate) fn notification(operated: &Operated) -> Option<Notification> {
+    Some(match &operated.outcome {
         Ok(Outcome::Done(message)) => Notification::success(message.clone()),
         Ok(Outcome::Warning { title, message }) => Notification::warning(message.clone())
             .title(title.clone())
             .autohide(false),
+        Ok(Outcome::Stopped | Outcome::Quiet) => return None,
         Err(failure) => Notification::error(failure.message())
             .title(operated.failed.clone())
             .autohide(false),
-    }
+    })
 }
 
 fn button_id(operation: Operation) -> &'static str {

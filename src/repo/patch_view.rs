@@ -284,7 +284,7 @@ five
         let (repo, _) = scratch.open()?;
         let conflicted = repo
             .status()?
-            .unstaged
+            .conflicted
             .into_iter()
             .find(|change| change.kind == ChangeKind::Conflicted)
             .expect("a.txt is conflicted");

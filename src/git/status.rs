@@ -14,6 +14,7 @@ use super::{
     Repo,
     command::{Exit, READ_ONLY, run},
     text::{decode, os_name},
+    underway::{Underway, underway_in},
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -119,13 +120,14 @@ impl StatusDigest {
         head: Option<ObjectId>,
         index: &Path,
         work_tree: &Path,
-        unstaged: &[FileChange],
+        changes: &WorkingChanges,
     ) -> Self {
         let mut hasher = DefaultHasher::new();
         status.hash(&mut hasher);
         head.hash(&mut hasher);
+        changes.underway.hash(&mut hasher);
         hash_size_and_modified_time(index, &mut hasher);
-        for change in unstaged {
+        for change in changes.conflicted.iter().chain(&changes.unstaged) {
             hash_size_and_modified_time(&work_tree.join(change.exact_path()), &mut hasher);
         }
         Self(hasher.finish())
@@ -141,15 +143,17 @@ fn hash_size_and_modified_time(path: &Path, hasher: &mut DefaultHasher) {
 
 #[derive(Default, Debug)]
 pub(crate) struct WorkingChanges {
+    pub(crate) conflicted: Vec<FileChange>,
     pub(crate) unstaged: Vec<FileChange>,
     pub(crate) staged: Vec<FileChange>,
     pub(crate) head: Option<ObjectId>,
+    pub(crate) underway: Option<Underway>,
     pub(crate) digest: StatusDigest,
 }
 
 impl WorkingChanges {
     pub(crate) fn is_empty(&self) -> bool {
-        self.unstaged.is_empty() && self.staged.is_empty()
+        self.conflicted.is_empty() && self.unstaged.is_empty() && self.staged.is_empty()
     }
 
     pub(crate) fn files(&self, side: Side) -> &[FileChange] {
@@ -160,8 +164,9 @@ impl WorkingChanges {
     }
 
     pub(crate) fn file_count(&self) -> usize {
-        self.unstaged
+        self.conflicted
             .iter()
+            .chain(&self.unstaged)
             .chain(&self.staged)
             .map(|change| change.path.as_ref())
             .collect::<HashSet<&str>>()
@@ -169,7 +174,18 @@ impl WorkingChanges {
     }
 
     pub(crate) fn find(&self, side: Side, path: &str) -> Option<&FileChange> {
-        self.files(side).iter().find(|change| change.path == path)
+        let conflicted = match side {
+            Side::Unstaged => self.conflicted.as_slice(),
+            Side::Staged => &[],
+        };
+        conflicted
+            .iter()
+            .chain(self.files(side))
+            .find(|change| change.path == path)
+    }
+
+    pub(crate) fn is_conflicted(&self, path: &str) -> bool {
+        self.conflicted.iter().any(|change| change.path == path)
     }
 }
 
@@ -191,12 +207,13 @@ impl Repo {
         let head_after_status = local.head_id().ok().map(|id| id.detach());
         let mut changes = parse_status(&output);
         changes.head = head_after_status;
+        changes.underway = underway_in(&local);
         changes.digest = StatusDigest::of(
             &output,
             head_after_status,
             &local.index_path(),
             &self.location,
-            &changes.unstaged,
+            &changes,
         );
         Ok(changes)
     }
@@ -222,7 +239,7 @@ fn parse_status(output: &[u8]) -> WorkingChanges {
         );
         if conflicted {
             changes
-                .unstaged
+                .conflicted
                 .push(FileChange::new(path, None, ChangeKind::Conflicted));
             continue;
         }
@@ -242,6 +259,7 @@ fn parse_status(output: &[u8]) -> WorkingChanges {
         }
     }
     let by_path = |a: &FileChange, b: &FileChange| a.path.as_str().cmp(b.path.as_str());
+    changes.conflicted.sort_by(by_path);
     changes.unstaged.sort_by(by_path);
     changes.staged.sort_by(by_path);
     changes
@@ -279,10 +297,13 @@ mod tests {
         );
         assert_eq!(status.staged[1].original_path.as_deref(), Some("old.rs"));
         assert_eq!(
+            paths(&status.conflicted),
+            [("clash.rs".into(), ChangeKind::Conflicted)]
+        );
+        assert_eq!(
             paths(&status.unstaged),
             [
                 ("both.rs".into(), ChangeKind::Modified),
-                ("clash.rs".into(), ChangeKind::Conflicted),
                 ("fresh.txt".into(), ChangeKind::Untracked),
                 ("gone.rs".into(), ChangeKind::Deleted),
             ]

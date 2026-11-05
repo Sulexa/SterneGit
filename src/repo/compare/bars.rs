@@ -210,12 +210,22 @@ impl RenderOnce for FileBar {
 #[derive(IntoElement)]
 pub(crate) struct ChangeStepper {
     position: Option<Position>,
+    noun: &'static str,
     on_step: Handler<Direction>,
 }
 
 impl ChangeStepper {
     pub(crate) fn new(position: Option<Position>, on_step: Handler<Direction>) -> Self {
-        Self { position, on_step }
+        Self {
+            position,
+            noun: "Change",
+            on_step,
+        }
+    }
+
+    pub(crate) fn noun(mut self, noun: &'static str) -> Self {
+        self.noun = noun;
+        self
     }
 }
 
@@ -223,7 +233,8 @@ impl RenderOnce for ChangeStepper {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let text = match self.position {
             Some(position) => format!(
-                "Change {} of {}",
+                "{} {} of {}",
+                self.noun,
                 thousands(position.index + 1),
                 thousands(position.count)
             ),

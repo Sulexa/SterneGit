@@ -1,6 +1,8 @@
 const Catalog = (() => {
   const { history, stashed, collapsed, changes, partlyStaged, commitDetails, commitFileDiff, fileHistory, fileDiff, stagedHunkDiff, selectedLines, tabs } = Sample;
   const { slimeDiff, crownIcon, introDiff, themeDiff, modelDiff } = Sample;
+  const { rebase, merge, rebaseChanges, rebaseOneLeft, rebaseResolved, statusConflicts, slimeConflict } = Sample;
+  const { statusMerged } = Sample;
   const pane = { w: 736, h: 600 };
   const barFrame = (bar, width = 736) => `<div class="v" style="width:${width}px;position:relative;height:${bar.includes('ViewOptionsMenu') ? 300 : 40}px">${bar}</div>`;
   const commit = (ix) => history.commits[ix];
@@ -44,6 +46,16 @@ const Catalog = (() => {
             ['Ghost, selected', () => C.Button({ label: 'Split', icon: 'columns-2', variant: 'ghost', selected: true })],
             ['Ghost, icon only', () => C.Button({ icon: 'close', variant: 'ghost' })],
             ['Disabled', () => C.Button({ label: 'Stage all', icon: 'plus', variant: 'ghost', disabled: true })],
+          ],
+        },
+        {
+          name: 'Checkbox',
+          code: 'gpui_kit::checkbox::Checkbox',
+          source: 'src/repo/merge_editor.rs',
+          about: 'The kit’s checkbox at its small size: a 14 px box with a 12 px label, filled with the primary color and a check while ticked.',
+          variants: [
+            ['Not ticked', () => C.Checkbox({ label: 'Accept current' })],
+            ['Ticked', () => C.Checkbox({ label: 'Accept incoming', checked: true })],
           ],
         },
         {
@@ -108,7 +120,10 @@ const Catalog = (() => {
             ['Error', () => C.Notification({ kind: 'error', title: 'Pull failed', message: 'main has no upstream branch to pull from.' })],
             ['Fast-forward refused', () => C.Notification({ kind: 'error', title: 'Pull failed', message: "main and origin/main have diverged, so main can't fast-forward. Choose Fast-forward if possible or Rebase in the Pull menu." })],
             ['Rebased', () => C.Notification({ kind: 'success', message: 'Rebased main onto origin/main' })],
-            ['Changes in the way', () => C.Notification({ kind: 'error', title: 'Pull failed', message: 'Uncommitted changes are in the way: commit or stash them, then try again.' })],
+            ['Rebase aborted', () => C.Notification({ kind: 'success', message: 'Aborted the rebase: main is back where it was' })],
+            ['Merge aborted', () => C.Notification({ kind: 'success', message: 'Aborted the merge: main is back where it was' })],
+            ['Rebased, changes left to resolve', () => C.Notification({ kind: 'warning', title: 'Rebased main onto origin/main', message: 'Your uncommitted changes conflict with the rebased main: resolve the conflicted files. The stash keeps a copy of them.' })],
+            ['Continue failed', () => C.Notification({ kind: 'error', title: "Couldn't continue the rebase", message: 'error: could not apply 3f2a91c... Show conflicted files in the changes list' })],
             ['Merged', () => C.Notification({ kind: 'success', message: 'Merged feature/blame into main' })],
             ['Checked out a remote branch', () => C.Notification({ kind: 'success', message: 'Switched to the new branch feature/diff-view, tracking origin/feature/diff-view' })],
             ['Check-out with conflicting changes', () => C.Notification({ kind: 'warning', title: 'Switched to feature/blame', message: 'Your uncommitted changes conflict with feature/blame: resolve the conflicted files. The stash keeps a copy of them.' })],
@@ -389,6 +404,20 @@ const Catalog = (() => {
             ['Detached HEAD', () => C.RepoToolbar({ unavailable: ['pull', 'push', 'pop'] }), { w: 1000 }],
             ['Pull running', () => C.RepoToolbar({ running: 'pull' }), { w: 1000 }],
             ['Repository not read yet', () => C.RepoToolbar({ ready: false }), { w: 1000 }],
+            ['Rebase or merge stopped', () => C.RepoToolbar({ unavailable: ['pull', 'push', 'stash', 'pop'] }), { w: 1000 }],
+          ],
+        },
+        {
+          name: 'OperationBar',
+          code: 'repo::operation_bar::OperationBar',
+          source: 'src/repo/operation_bar.rs',
+          about: 'A 40 px bar under the RepoToolbar, only while a rebase or a merge waits, whether FastGit or a terminal started it. It names the branches and, for a rebase, which commit of how many stopped. While files conflict it is tinted yellow and counts them in magenta, and Continue or Commit merge stays disabled; once none are left it turns green. Abort puts the branch back where it was and brings back the changes stashed out of the way. While one of the two runs it spins and the other waits.',
+          variants: [
+            ['Rebase stopped', () => C.OperationBar({ operation: rebase, conflicts: 2 }), { w: 940 }],
+            ['Rebase ready to continue', () => C.OperationBar({ operation: rebase }), { w: 940 }],
+            ['Continuing', () => C.OperationBar({ operation: rebase, running: 'continue' }), { w: 940 }],
+            ['Merge stopped', () => C.OperationBar({ operation: merge, conflicts: 1 }), { w: 940 }],
+            ['Merge ready to commit', () => C.OperationBar({ operation: merge }), { w: 940 }],
           ],
         },
         {
@@ -634,7 +663,7 @@ const Catalog = (() => {
           name: 'ChangesList',
           code: 'repo::changes_list::ChangesList',
           source: 'src/repo/changes_list.rs',
-          about: 'The CommitForm on top, then the number of changed files with the FileViewToggle, then the staged files, then the unstaged files at the bottom. The two lists share the space below equally and each has a Stage all / Unstage all action. As a tree, each list has its own folders, which stay folded while the changes are read again, and a folder row moves every file under it to the other list. A failed git add / reset / commit shows in red under the Commit button.',
+          about: 'The CommitForm on top, then the number of changed files with the FileViewToggle, then the staged files, then the unstaged files at the bottom. The two lists share the space below equally and each has a Stage all / Unstage all action. As a tree, each list has its own folders, which stay folded while the changes are read again, and a folder row moves every file under it to the other list. A failed git add / reset / commit shows in red under the Commit button. While files conflict they get a Conflicts section of their own on top, as tall as its rows, with no button to move them: Mark resolved in the FileBar does that. While a rebase or a merge waits, the CommitForm is hidden, because the OperationBar finishes it.',
           variants: [
             ['With files', () => C.ChangesList({ changes, open: { side: 'unstaged', path: 'src/git/patch.rs' } }), { w: 480, h: 640 }],
             ['As a tree', () => C.ChangesList({ changes, open: { side: 'unstaged', path: 'src/git/patch.rs' }, view: 'tree' }), { w: 480, h: 680 }],
@@ -644,6 +673,9 @@ const Catalog = (() => {
             ['Everything staged', () => C.ChangesList({ changes: { unstaged: [], staged: [...changes.staged, ...changes.unstaged] } }), { w: 480, h: 560 }],
             ['Part of a file staged', () => C.ChangesList({ changes: partlyStaged, open: { side: 'unstaged', path: 'src/git/patch.rs' } }), { w: 480, h: 640 }],
             ['Writing failed', () => C.ChangesList({ changes, failure: "fatal: Unable to create '.git/index.lock': File exists." }), { w: 480, h: 660 }],
+            ['Rebase stopped on conflicts', () => C.ChangesList({ changes: rebaseChanges, open: { side: 'conflicted', path: statusConflicts.change.path }, operation: rebase }), { w: 480, h: 480 }],
+            ['One conflicted file left', () => C.ChangesList({ changes: rebaseOneLeft, operation: rebase }), { w: 480, h: 480 }],
+            ['Every conflict resolved', () => C.ChangesList({ changes: rebaseResolved, operation: rebase }), { w: 480, h: 400 }],
             ['Clean', () => C.ChangesList({ changes: { unstaged: [], staged: [] } }), { w: 480, h: 320 }],
             ['Reading', () => C.ChangesList({}), { w: 480, h: 160 }],
           ],
@@ -665,12 +697,13 @@ const Catalog = (() => {
           name: 'ChangeRow',
           code: 'repo::changes_list::change_row',
           source: 'src/repo/changes_list.rs',
-          about: 'A FileRow with a + or − that moves the file to the other list. A right-click opens its FileMenu.',
+          about: 'A FileRow with a + or − that moves the file to the other list; a conflicted file has none. A right-click opens its FileMenu.',
           variants: [
             ['Unstaged', () => C.ChangeRow({ change: changes.unstaged[0], side: 'unstaged' }), { w: 480 }],
             ['Open', () => C.ChangeRow({ change: changes.unstaged[1], side: 'unstaged', selected: true }), { w: 480 }],
             ['In a tree', () => C.ChangeRow({ change: changes.unstaged[1], side: 'unstaged', depth: 1 }), { w: 480 }],
             ['Staged', () => C.ChangeRow({ change: changes.staged[0], side: 'staged' }), { w: 480 }],
+            ['Conflicted', () => C.ChangeRow({ change: statusConflicts.change, side: 'conflicted' }), { w: 480 }],
             ['While writing', () => C.ChangeRow({ change: changes.unstaged[2], side: 'unstaged', writing: true }), { w: 480 }],
             ['Right-clicked', () => `<div style="height:200px">${C.ChangeRow({ change: changes.unstaged[0], side: 'unstaged', menu: C.FileMenu({ change: changes.unstaged[0], side: 'unstaged', left: 168, top: 16 }) })}</div>`, { w: 480 }],
           ],
@@ -765,11 +798,14 @@ const Catalog = (() => {
           name: 'FileBar',
           code: 'repo::file_diff_panel::FileBar',
           source: 'src/repo/file_diff_panel.rs',
-          about: 'The 40 px bar on top: status letter, path (old → new for a rename), LFS when Git LFS stores the file, the side or the commit, then a short summary: line counts for text, size or length for the rest. On the right: Stage or Unstage for a working file, the button that gives the comparison the whole window, and ×. With the whole window, ‹ and › move through the changed files.',
+          about: 'The 40 px bar on top: status letter, path (old → new for a rename), LFS when Git LFS stores the file, the side or the commit, then a short summary: line counts for text, size or length for the rest. On the right: Stage or Unstage for a working file, the button that gives the comparison the whole window, and ×. A conflicted text file counts the conflicts resolved in the result and has Mark resolved instead, enabled and primary once no markers are left; a conflicted file of another kind has Keep current and Keep incoming. With the whole window, ‹ and › move through the changed files.',
           variants: [
             ['Working text file', () => barFrame(C.FileBar({ diff: fileDiff }))],
             ['From a commit', () => barFrame(C.FileBar({ diff: commitFileDiff }))],
             ['Video, whole window', () => barFrame(C.FileBar({ diff: introDiff, expanded: true, filePosition: [5, 7] }), 900)],
+            ['Conflicted text file', () => barFrame(C.FileBar({ diff: statusConflicts }))],
+            ['Every conflict resolved', () => barFrame(C.FileBar({ diff: statusMerged }))],
+            ['Conflicted picture', () => barFrame(C.FileBar({ diff: slimeConflict }))],
           ],
         },
         {
@@ -782,6 +818,7 @@ const Catalog = (() => {
             ['Picture', () => barFrame(C.ViewBar({ kind: 'image', mode: 'difference', changes: { current: 1, total: 3 }, zoom: { percent: 1800 } }))],
             ['Sound', () => barFrame(C.ViewBar({ kind: 'audio', mode: 'split', changes: { current: 2, total: 3 } }))],
             ['Text, options open', () => barFrame(C.ViewBar({ kind: 'text', mode: 'split', changes: { current: 1, total: 3 }, menuOpen: true, hot: 'whitespace' }))],
+            ['Conflicted file', () => barFrame(C.ViewBar({ kind: 'conflict', changes: { current: 1, total: 2, noun: 'Conflict' } }))],
           ],
         },
         {
@@ -833,6 +870,16 @@ const Catalog = (() => {
           variants: [
             ['Before', () => `<div style="position:relative;width:240px;height:42px">${C.VersionTag({ side: 'before', from: 'HEAD' })}</div>`],
             ['After, heard', () => `<div style="position:relative;width:240px;height:42px">${C.VersionTag({ side: 'after', from: 'Working copy', hearing: true })}</div>`],
+          ],
+        },
+        {
+          name: 'MergeEditor',
+          code: 'repo::merge_editor::MergeEditor',
+          source: 'src/repo/merge_editor.rs',
+          about: 'How a conflicted text file opens in the FileDiffPanel. The top half is the kit’s split diff of the current version (green) against the incoming one (blue), read-only: each conflict gets one hunk, whose header row holds an Accept current and an Accept incoming Checkbox and starts three lines above the conflict; longer runs of shared lines fold. Ticking both keeps the current lines first. The bottom half, under a draggable divider, is the result: the kit’s code editor holding the working file, without folds. An unresolved conflict still shows its markers; the kit fills the text of each part with its color and marks it in the gutter: magenta for markers, green and blue for the sides, yellow for lines typed by hand, which also disables that conflict’s checkboxes. The result header counts the conflicts left; Start over puts the markers back. Stepping through the conflicts scrolls both halves.',
+          variants: [
+            ['Nothing chosen yet', () => `<div class="v" style="width:736px;height:620px">${C.MergeEditor({ merge: statusConflicts })}</div>`],
+            ['Resolved, partly by hand', () => `<div class="v" style="width:1100px;height:620px">${C.MergeEditor({ merge: statusMerged })}</div>`],
           ],
         },
         {

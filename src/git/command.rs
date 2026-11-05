@@ -10,6 +10,7 @@ use anyhow::{Context as _, Result, bail};
 use super::text::decode;
 
 pub(crate) const READ_ONLY: &str = "--no-optional-locks";
+const NO_EDITOR: &str = ":";
 const GIT_MISSING: &str = "Couldn't run git. Is it installed and on PATH?";
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -61,7 +62,10 @@ fn checked(output: Output, exit: Exit) -> Result<Vec<u8>> {
 }
 
 fn never_prompt(command: &mut Command) {
-    command.env("GIT_TERMINAL_PROMPT", "0").stdin(Stdio::null());
+    command
+        .env("GIT_TERMINAL_PROMPT", "0")
+        .env("GIT_EDITOR", NO_EDITOR)
+        .stdin(Stdio::null());
 }
 
 #[cfg(windows)]

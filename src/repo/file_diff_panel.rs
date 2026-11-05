@@ -18,7 +18,9 @@ use gpui_kit::{
         menu::{ContextMenuExt as _, DropdownMenu as _, PopupMenuItem},
         v_flex,
     },
-    div, px,
+    div,
+    prelude::FluentBuilder as _,
+    px,
 };
 
 use super::{
@@ -30,6 +32,7 @@ use super::{
         text_options_menu,
     },
     hunk_actions::{HunkActions, Offers, Pressed, line_at, line_span},
+    merge_editor::MergeEditor,
     navigation::OpenFile,
     patch_view::{
         PatchStats, PatchTexts, RedrawAfterMeasuring, change_kind, parse_patch, patch_content,
@@ -38,8 +41,8 @@ use super::{
 };
 use crate::{
     git::{
-        ChangeKind, DifftoolTarget, FileChange, FilePatch, Hunks, Part, PartAction, Repo, Revision,
-        Scope, Side, Whitespace,
+        ChangeKind, Conflicted, DifftoolTarget, FileChange, FilePatch, Hunks, Part, PartAction,
+        Repo, Revision, Scope, Side, Version as Kept, Whitespace,
     },
     media::{
         Backdrop, MediaKind, Picture, Sound, VideoFacts, extension, ffmpeg_installed, media_kind,
@@ -60,6 +63,18 @@ pub(crate) enum FileDiffEvent {
     Close,
     WholeWindow,
     StepFile(Direction),
+    Resolve(FileChange, Resolution),
+}
+
+pub(crate) enum Resolution {
+    Text(Vec<u8>),
+    Keep(Kept),
+}
+
+enum Merging {
+    Reading,
+    Read(FileChange, String),
+    Open(Entity<MergeEditor>),
 }
 
 enum Compared {
@@ -137,6 +152,9 @@ pub(crate) struct FileDiffPanel {
     place: FilePlace,
     whitespace: Whitespace,
     redraw_after_measuring: RedrawAfterMeasuring,
+    merging: Option<Merging>,
+    merge_read: Job,
+    merge_observer: Option<Subscription>,
     _subscriptions: [Subscription; 2],
 }
 
@@ -172,6 +190,9 @@ impl FileDiffPanel {
             place: FilePlace::default(),
             whitespace: options.whitespace(),
             redraw_after_measuring: RedrawAfterMeasuring::default(),
+            merging: None,
+            merge_read: Job::default(),
+            merge_observer: None,
             _subscriptions: subscriptions,
         }
     }
@@ -201,6 +222,11 @@ impl FileDiffPanel {
                 .changes()
                 .is_some_and(|changes| changes.find(Side::Staged, &change.path).is_some());
         let reload = matches!(&self.compared, Some(Compared::WorkingFile(shown)) if *shown == file);
+        if change.kind == ChangeKind::Conflicted {
+            self.open_conflict(repo, change, file, reload, cx);
+            return;
+        }
+        self.leave_merge();
         if let Some(view) = media_view(&change.path) {
             let request = working_request(view, &change, side, staged_too);
             self.compared = Some(Compared::WorkingFile(file));
@@ -262,6 +288,201 @@ impl FileDiffPanel {
         cx.notify();
     }
 
+    fn open_conflict(
+        &mut self,
+        repo: &Repo,
+        change: FileChange,
+        file: OpenFile,
+        reload: bool,
+        cx: &mut Context<Self>,
+    ) {
+        self.compared = Some(Compared::WorkingFile(file));
+        if reload
+            && let Some(Merging::Open(editor)) = &self.merging
+            && editor.read(cx).is_touched()
+        {
+            return;
+        }
+        let keep_shown = reload && matches!(self.merging, Some(Merging::Open(_)));
+        if !keep_shown {
+            self.leave_media(cx);
+            self.rereading.cancel();
+            self.parts = None;
+            self.stepped = None;
+            self.patch.clear();
+            self.diff.update(cx, |state, cx| state.set_files([], cx));
+            self.merging = Some(Merging::Reading);
+        }
+        let reading = repo.clone();
+        let repo = repo.clone();
+        let task = run_in_background(
+            cx,
+            move || reading.read_conflicted(change.exact_path()).map(|read| (change, read)),
+            move |this, result, cx| {
+                this.merge_read.finish();
+                match result {
+                    Ok((change, Conflicted::Text(text))) => {
+                        this.merging = Some(Merging::Read(change, text));
+                    }
+                    Ok((change, Conflicted::Versions { current, incoming })) => {
+                        this.leave_merge();
+                        let request = conflict_request(&change, current, incoming);
+                        this.open_media(&repo, request, reload, cx);
+                    }
+                    Err(error) => {
+                        this.leave_merge();
+                        this.patch = Load::Failed(ui::Failure::git_reason(&error));
+                    }
+                }
+                cx.notify();
+            },
+        );
+        self.merge_read.run(task);
+        cx.notify();
+    }
+
+    fn leave_merge(&mut self) {
+        self.merging = None;
+        self.merge_observer = None;
+        self.merge_read.cancel();
+    }
+
+    fn merge_editor(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Option<Entity<MergeEditor>> {
+        if let Some(Merging::Read(change, text)) = &self.merging {
+            let (change, text) = (change.clone(), text.clone());
+            let editor = cx.new(|cx| MergeEditor::new(change, &text, window, cx));
+            self.merge_observer = Some(cx.observe(&editor, |_, _, cx| cx.notify()));
+            self.merging = Some(Merging::Open(editor));
+        }
+        match &self.merging {
+            Some(Merging::Open(editor)) => Some(editor.clone()),
+            _ => None,
+        }
+    }
+
+    fn render_merge(&mut self, heading: Heading, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+        let editor = self.merge_editor(window, cx);
+        let writing = self.repository.read(cx).is_writing();
+        let (resolved, facts, position) = match &editor {
+            Some(editor) => {
+                let editor = editor.read(cx);
+                let facts = format!(
+                    "{} of {} resolved",
+                    editor.resolved_count(),
+                    ui::counted(editor.total(), "conflict", "conflicts")
+                );
+                (editor.is_resolved(), Some(facts), editor.position())
+            }
+            None => (false, None, None),
+        };
+        let mark = Button::new("mark-resolved")
+            .xsmall()
+            .icon(IconName::Check)
+            .label("Mark resolved")
+            .when(resolved, |button| button.primary())
+            .tooltip(if resolved {
+                "Save the result and stage the file"
+            } else {
+                "Resolve every conflict in the result first"
+            })
+            .disabled(writing || !resolved || editor.is_none())
+            .on_click(cx.listener(|this, _, _, cx| this.mark_resolved(cx)));
+        let muted = cx.theme().muted_foreground;
+        let mut file_bar = self.file_bar(heading, Some(mark.into_any_element()), cx);
+        if let Some(facts) = facts {
+            file_bar = file_bar.facts(div().text_color(muted).child(facts).into_any_element());
+        }
+        let view_bar = ViewBar::new()
+            .stepper(
+                ChangeStepper::new(
+                    position,
+                    handler(cx.listener(|this, direction: &Direction, window, cx| {
+                        this.step_change(*direction, window, cx)
+                    })),
+                )
+                .noun("Conflict"),
+            )
+            .tool(
+                Button::new("text-options")
+                    .ghost()
+                    .xsmall()
+                    .icon(IconName::Ellipsis)
+                    .tooltip("View options")
+                    .dropdown_menu_with_anchor(Anchor::TopRight, |menu, _, cx| {
+                        text_options_menu(menu, cx)
+                    }),
+            );
+        let content = match editor {
+            Some(editor) => editor.into_any_element(),
+            None => ui::loading("Reading the conflicts…"),
+        };
+        v_flex()
+            .pane()
+            .child(file_bar)
+            .child(view_bar)
+            .child(div().fill_height().child(content))
+            .into_any_element()
+    }
+
+    fn mark_resolved(&mut self, cx: &mut Context<Self>) {
+        let Some(Merging::Open(editor)) = &self.merging else {
+            return;
+        };
+        let editor = editor.read(cx);
+        if !editor.is_resolved() {
+            return;
+        }
+        let event = FileDiffEvent::Resolve(
+            editor.change().clone(),
+            Resolution::Text(editor.resolved_bytes()),
+        );
+        cx.emit(event);
+    }
+
+    fn keep(&mut self, version: Kept, cx: &mut Context<Self>) {
+        let Some(Compared::WorkingFile(open)) = &self.compared else {
+            return;
+        };
+        let change = self
+            .repository
+            .read(cx)
+            .changes()
+            .and_then(|changes| changes.find(open.side, &open.path))
+            .cloned();
+        if let Some(change) = change {
+            cx.emit(FileDiffEvent::Resolve(change, Resolution::Keep(version)));
+        }
+    }
+
+    fn keep_buttons(&self, cx: &mut Context<Self>) -> AnyElement {
+        let writing = self.repository.read(cx).is_writing();
+        let keep = |id: &'static str, label: &'static str, tooltip: &'static str, version: Kept, cx: &mut Context<Self>| {
+            Button::new(id)
+                .xsmall()
+                .label(label)
+                .tooltip(tooltip)
+                .disabled(writing)
+                .on_click(cx.listener(move |this, _, _, cx| this.keep(version, cx)))
+        };
+        h_flex()
+            .gap_1()
+            .child(keep(
+                "keep-current",
+                "Keep current",
+                "Stage the current version of the file",
+                Kept::Current,
+                cx,
+            ))
+            .child(keep(
+                "keep-incoming",
+                "Keep incoming",
+                "Stage the incoming version of the file",
+                Kept::Incoming,
+                cx,
+            ))
+            .into_any_element()
+    }
+
     pub(crate) fn open_commit_file(
         &mut self,
         id: ObjectId,
@@ -270,6 +491,7 @@ impl FileDiffPanel {
         file: DiffFile,
         cx: &mut Context<Self>,
     ) {
+        self.leave_merge();
         let view = media_view(file.path()).or_else(|| file.is_binary().then_some(MediaView::Other));
         if let Some(view) = view {
             let reload = self.shows_commit_file(id, file.path());
@@ -304,6 +526,7 @@ impl FileDiffPanel {
     pub(crate) fn close(&mut self, cx: &mut Context<Self>) {
         if self.compared.take().is_some() {
             self.leave_media(cx);
+            self.leave_merge();
             self.parts = None;
             self.pressed = None;
             self.stepped = None;
@@ -314,7 +537,12 @@ impl FileDiffPanel {
         }
     }
 
-    pub(crate) fn step_change(&mut self, direction: Direction, cx: &mut Context<Self>) {
+    pub(crate) fn step_change(&mut self, direction: Direction, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(Merging::Open(editor)) = &self.merging {
+            let editor = editor.clone();
+            editor.update(cx, |editor, cx| editor.step(direction, window, cx));
+            return;
+        }
         match self.media.value() {
             Some(Media::Pictures(view)) => {
                 let view = view.clone();
@@ -1035,8 +1263,8 @@ impl FileDiffPanel {
             )
             .stepper(ChangeStepper::new(
                 position,
-                handler(cx.listener(|this, direction: &Direction, _, cx| {
-                    this.step_change(*direction, cx)
+                handler(cx.listener(|this, direction: &Direction, window, cx| {
+                    this.step_change(*direction, window, cx)
                 })),
             ))
             .tool(
@@ -1064,8 +1292,20 @@ impl Render for FileDiffPanel {
                     .changes()
                     .and_then(|changes| changes.find(open.side, &open.path))
                     .cloned();
-                let button = self.move_button(open, change.is_some(), cx);
-                (working_heading(open, change), Some(button))
+                let listed = change.is_some();
+                let conflicted = change
+                    .as_ref()
+                    .is_some_and(|change| change.kind == ChangeKind::Conflicted);
+                let heading = working_heading(open, change);
+                if self.merging.is_some() {
+                    return self.render_merge(heading, window, cx);
+                }
+                let button = if conflicted {
+                    self.keep_buttons(cx)
+                } else {
+                    self.move_button(open, listed, cx)
+                };
+                (heading, Some(button))
             }
             Some(Compared::CommitFile { short_id, file, .. }) => {
                 (commit_heading(short_id, file), None)
@@ -1436,13 +1676,39 @@ fn spread_working(repo: &Repo, patch: FilePatch, change: &FileChange, side: Side
 }
 
 fn working_heading(open: &OpenFile, change: Option<FileChange>) -> Heading {
+    let kind = change
+        .as_ref()
+        .map_or(ChangeKind::Modified, |change| change.kind);
+    let state = if kind == ChangeKind::Conflicted {
+        "conflicted"
+    } else {
+        open.side.labels().state
+    };
     Heading {
-        kind: change
-            .as_ref()
-            .map_or(ChangeKind::Modified, |change| change.kind),
+        kind,
         path: open.path.clone(),
         original: change.and_then(|change| change.original_path),
-        state: open.side.labels().state.into(),
+        state: state.into(),
+    }
+}
+
+fn conflict_request(change: &FileChange, current: bool, incoming: bool) -> MediaRequest {
+    let side = |present: bool, version: Kept| {
+        present.then(|| VersionSource {
+            revision: Revision::Conflict(version),
+            path: change.exact_path().to_owned(),
+        })
+    };
+    MediaRequest {
+        view: media_view(&change.path).unwrap_or(MediaView::Other),
+        sides: Sides {
+            before: side(current, Kept::Current),
+            after: side(incoming, Kept::Incoming),
+        },
+        sources: ["Current".into(), "Incoming".into()],
+        extension: extension(&change.path),
+        difftool: None,
+        path: change.exact_path().to_owned(),
     }
 }
 

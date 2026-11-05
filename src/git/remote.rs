@@ -2,9 +2,9 @@ use anyhow::Result;
 use gix::{ObjectId, refs::FullName, remote::Direction};
 
 use super::{
-    PullMode, Refusal, Repo, Tracking,
+    Carried, PullMode, Refusal, Repo, Tracking,
     command::{Exit, run, run_text},
-    refusal::why_git_stopped,
+    merge::{AUTOSTASH, Ran},
     text::decode,
 };
 
@@ -31,6 +31,7 @@ pub(crate) enum Pulled {
     UpToDate(Tracking),
     BroughtIn(Tracking),
     Rebased(Tracking),
+    Stopped(Tracking),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -63,10 +64,10 @@ impl Repo {
         Ok(Fetched::AllRemotes)
     }
 
-    pub(crate) fn pull(&self, mode: PullMode) -> Result<Pulled> {
+    pub(crate) fn pull(&self, mode: PullMode) -> Result<(Pulled, Carried)> {
         let Some(how) = mode.pull_args() else {
             return match self.fetch()? {
-                Fetched::AllRemotes => Ok(Pulled::Fetched),
+                Fetched::AllRemotes => Ok((Pulled::Fetched, Carried::Along)),
                 Fetched::NoRemotes => Err(Refusal::NoRemote.into()),
             };
         };
@@ -79,17 +80,21 @@ impl Repo {
             .into());
         };
         let before = head_commit(&repo);
-        let mut args = vec!["pull", "--quiet", "--no-edit"];
+        let stash = self.latest_stash();
+        let mut args = vec!["pull", "--quiet", "--no-edit", AUTOSTASH];
         args.extend(how);
-        if let Err(error) = run(&self.location, &args, Exit::Success) {
-            return Err(self.why_the_pull_stopped(error, upstream.tracking));
-        }
         let tracking = upstream.tracking;
-        Ok(match (head_commit(&repo) == before, mode) {
+        match self.run_until_stopped(&args) {
+            Ok(Ran::Stopped) => return Ok((Pulled::Stopped(tracking), Carried::Along)),
+            Ok(Ran::Through) => {}
+            Err(error) => return Err(diverged_or(error, tracking)),
+        }
+        let pulled = match (head_commit(&repo) == before, mode) {
             (true, _) => Pulled::UpToDate(tracking),
             (false, PullMode::Rebase) => Pulled::Rebased(tracking),
             (false, _) => Pulled::BroughtIn(tracking),
-        })
+        };
+        Ok((pulled, self.carried_since(stash)))
     }
 
     pub(crate) fn push(&self) -> Result<Pushed> {
@@ -224,14 +229,13 @@ impl Repo {
             reference,
         })
     }
+}
 
-    fn why_the_pull_stopped(&self, error: anyhow::Error, tracking: Tracking) -> anyhow::Error {
-        let repo = self.local();
-        let nothing_in_progress = repo.state().is_none();
-        if nothing_in_progress && error.to_string().contains(FAST_FORWARD_IMPOSSIBLE) {
-            return Refusal::Diverged(tracking).into();
-        }
-        why_git_stopped(&repo, error)
+fn diverged_or(error: anyhow::Error, tracking: Tracking) -> anyhow::Error {
+    if error.to_string().contains(FAST_FORWARD_IMPOSSIBLE) {
+        Refusal::Diverged(tracking).into()
+    } else {
+        error
     }
 }
 
@@ -278,7 +282,7 @@ mod tests {
     use anyhow::Result;
 
     use super::{Fetched, Pulled, Pushed};
-    use crate::git::{PullMode, Refusal, Tracking, scratch::ScratchRepo};
+    use crate::git::{Carried, PullMode, Refusal, Tracking, scratch::ScratchRepo};
 
     struct Shared {
         origin: ScratchRepo,
@@ -318,6 +322,10 @@ mod tests {
         }
 
         fn pull(&self, mode: PullMode) -> Result<Pulled> {
+            self.pull_carrying(mode).map(|(pulled, _)| pulled)
+        }
+
+        fn pull_carrying(&self, mode: PullMode) -> Result<(Pulled, Carried)> {
             self.ours.open()?.0.pull(mode)
         }
 
@@ -430,37 +438,46 @@ mod tests {
     }
 
     #[test]
-    fn a_pull_stopped_by_conflicts_says_how_to_finish_it() -> Result<()> {
+    fn a_pull_that_conflicts_stops_for_the_conflicts_to_be_resolved() -> Result<()> {
         let merging = Shared::new("pull-merge-conflict")?;
         merging.both_change("shared.txt")?;
         assert_eq!(
-            refusal(merging.pull(PullMode::FastForwardIfPossible)),
-            Refusal::MergeStopped
+            merging.pull(PullMode::FastForwardIfPossible)?,
+            Pulled::Stopped(main_tracking())
         );
         let rebasing = Shared::new("pull-rebase-conflict")?;
         rebasing.both_change("shared.txt")?;
         assert_eq!(
-            refusal(rebasing.pull(PullMode::Rebase)),
-            Refusal::RebaseStopped
+            rebasing.pull(PullMode::Rebase)?,
+            Pulled::Stopped(main_tracking())
         );
+        assert!(rebasing.ours.open()?.0.underway().is_some());
         Ok(())
     }
 
     #[test]
-    fn uncommitted_changes_in_the_way_of_a_pull_ask_for_a_commit_or_a_stash() -> Result<()> {
-        let shared = Shared::new("pull-changes-in-the-way")?;
-        shared.theirs.write("shared.txt", "one\n")?;
-        shared.theirs.git(&["add", "shared.txt"])?;
-        shared.they_push("add shared.txt")?;
-        shared.pull(PullMode::FastForwardOnly)?;
-        shared.theirs.write("shared.txt", "theirs\n")?;
-        shared.theirs.git(&["add", "shared.txt"])?;
-        shared.they_push("theirs")?;
-        shared.ours.write("shared.txt", "draft\n")?;
+    fn uncommitted_changes_are_put_aside_for_a_pull_and_brought_back() -> Result<()> {
         for mode in [PullMode::FastForwardIfPossible, PullMode::Rebase] {
+            let shared = Shared::new(&format!("pull-autostash-{mode:?}"))?;
+            shared.theirs.write("shared.txt", "one\n")?;
+            shared.theirs.git(&["add", "shared.txt"])?;
+            shared.they_push("add shared.txt")?;
+            shared.pull(PullMode::FastForwardOnly)?;
+            shared.theirs.write("shared.txt", "theirs\n")?;
+            shared.theirs.git(&["add", "shared.txt"])?;
+            shared.they_push("theirs")?;
+            shared.ours.write("other.txt", "draft\n")?;
+            shared.ours.git(&["add", "other.txt"])?;
+            shared.ours.commit("Add other.txt")?;
+            shared.ours.write("other.txt", "more\n")?;
+            assert_eq!(shared.pull_carrying(mode)?.1, Carried::Along, "{mode:?}");
+            shared.theirs.write("shared.txt", "theirs again\n")?;
+            shared.theirs.git(&["add", "shared.txt"])?;
+            shared.they_push("again")?;
+            shared.ours.write("shared.txt", "draft\n")?;
             assert_eq!(
-                refusal(shared.pull(mode)),
-                Refusal::ChangesInTheWay,
+                shared.pull_carrying(mode)?.1,
+                Carried::WithConflicts,
                 "{mode:?}"
             );
         }

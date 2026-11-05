@@ -110,6 +110,39 @@ const SideLabels = {
     icon: 'minus',
     discards: false,
   },
+  conflicted: {
+    files: 'Conflicts',
+    state: 'conflicted',
+    verb: 'Mark resolved',
+    openFileTooltip: 'Save the result and stage the file',
+    icon: 'check',
+    discards: false,
+  },
+};
+
+const ConflictTexts = {
+  title: { current: 'Current', incoming: 'Incoming' },
+  accept: { current: 'Accept current', incoming: 'Accept incoming' },
+  acceptTooltip: { current: 'Put these lines in the result', incoming: 'Put these lines in the result, after the current ones when both are ticked' },
+  result: 'Result',
+  hint: 'Tick a side above, or edit here',
+  left: (n) => `${counted(n, 'conflict', 'conflicts')} left`,
+  startOver: 'Start over',
+  startOverTooltip: 'Put the conflict markers back and forget every choice and edit',
+  byHand: 'Edited by hand in the result: Start over to choose again',
+  keep: { current: 'Keep current', incoming: 'Keep incoming' },
+  keepTooltip: { current: 'Stage the current version of the file', incoming: 'Stage the incoming version of the file' },
+};
+
+const OperationTexts = {
+  rebase: (op) => `Rebasing ${op.branch} onto ${op.onto}`,
+  merge: (op) => `Merging ${op.from} into ${op.into}`,
+  abort: { rebase: 'Abort rebase', merge: 'Abort merge' },
+  abortTooltip: { rebase: 'Put the branch back where it was before the rebase', merge: 'Put the branch back where it was before the merge' },
+  go: { rebase: 'Continue', merge: 'Commit merge' },
+  goTooltip: { rebase: 'Commit the resolved changes and replay the next commits', merge: 'Commit the merge with its usual message' },
+  waiting: (n) => `Resolve the ${counted(n, 'conflicted file', 'conflicted files')} first`,
+  noConflicts: 'No conflicts left',
 };
 
 const lineCount = (n) => counted(n, 'line', 'lines');
@@ -173,6 +206,7 @@ const CompareModes = {
     { key: 'split', label: 'Split', icon: 'columns-2', tooltip: 'Compare side by side' },
     { key: 'unified', label: 'Unified', icon: 'rows-2', tooltip: 'Show changes in one column' },
   ],
+  conflict: [],
   image: PictureModes,
   video: PictureModes,
   audio: [
@@ -634,6 +668,7 @@ function treeGroup(open, header, children) {
 
 function summarize(changes) {
   return [
+    changes.conflicted?.length && `${thousands(changes.conflicted.length)} conflicted`,
     changes.unstaged.length && `${thousands(changes.unstaged.length)} unstaged`,
     changes.staged.length && `${thousands(changes.staged.length)} staged`,
   ]
@@ -699,7 +734,8 @@ function fileMenuItems({ change, side }) {
   const labels = SideLabels[side];
   const discard = labels.discards && change.kind !== 'U' && [change.kind === '?' ? 'Delete file…' : 'Discard changes…', ''];
   const committed = change.kind !== '?' && change.kind !== 'A' && [Texts.fileHistory, ''];
-  return menuGroups([[[labels.fileTooltip, ''], discard], [committed], placeItems(change.kind)]);
+  const move = labels.fileTooltip && [labels.fileTooltip, ''];
+  return menuGroups([[move, discard], [committed], placeItems(change.kind)]);
 }
 
 function commitFileMenuItems({ file }) {
@@ -744,6 +780,11 @@ const C = {
         : '';
     const mark = dot ? `<span class="version-dot ${dot}"></span>` : '';
     return `<span data-c="Button" class="${classes}"${title}>${glyph}${mark}${label ? `<span>${esc(label)}</span>` : ''}</span>`;
+  },
+
+  Checkbox({ label, checked = false, disabled = false, tooltip }) {
+    const title = tooltip ? ` title="${esc(tooltip)}"` : '';
+    return `<span data-c="Checkbox" class="checkbox${checked ? ' checked' : ''}${disabled ? ' disabled' : ''}"${title}><span class="box">${checked ? icon('check', 'xs') : ''}</span><span>${esc(label)}</span></span>`;
   },
 
   Input({ value = '', placeholder = '', lines = 1, focused = false, disabled = false }) {
@@ -963,7 +1004,7 @@ const C = {
 
   HistoryList({ history, selectedRow, changes, wipSelected = false }) {
     const width = graphWidth(history.commits);
-    const wip = changes && (changes.unstaged.length || changes.staged.length) ? C.UncommittedRow({ changes, selected: wipSelected }) : '';
+    const wip = changes && (changes.conflicted?.length || changes.unstaged.length || changes.staged.length) ? C.UncommittedRow({ changes, selected: wipSelected }) : '';
     const rows = history.commits.map((commit, ix) => C.CommitRow({ commit, selected: ix === selectedRow, width })).join('');
     const thumb = Math.max(20, Math.round((28 / history.total) * 800));
     return `<div data-c="HistoryList" class="history v">${wip}<div class="fill" style="position:relative;overflow:hidden">${rows}<div class="scrollbar" style="top:2px;height:${thumb}px"></div></div></div>`;
@@ -1120,7 +1161,8 @@ const C = {
 
   ChangeRow({ change, side, depth, selected = false, writing = false, menu = '' }) {
     const labels = SideLabels[side];
-    const trailing = C.Button({ icon: labels.icon, variant: 'ghost', disabled: writing, tooltip: labels.fileTooltip }) + menu;
+    const move = labels.fileTooltip ? C.Button({ icon: labels.icon, variant: 'ghost', disabled: writing, tooltip: labels.fileTooltip }) : '';
+    const trailing = move + menu;
     return C.FileRow({ kind: change.kind, path: change.path, depth, selected, trailing, name: 'ChangeRow' });
   },
 
@@ -1138,20 +1180,21 @@ const C = {
     );
   },
 
-  ChangesList({ changes, open, pointed, draft = {}, committing = false, writing = false, failure, view = 'list', collapsed = [] }) {
+  ChangesList({ changes, open, pointed, draft = {}, committing = false, writing = false, failure, view = 'list', collapsed = [], operation }) {
     if (!changes) return `<div data-c="ChangesList" class="changes">${C.Loading({ message: Texts.readingChanges })}</div>`;
     const busy = writing || committing;
-    const form = C.CommitForm({ ...draft, staged: changes.staged.length, committing, writing, failure });
-    if (!changes.unstaged.length && !changes.staged.length) {
+    const form = operation ? '' : C.CommitForm({ ...draft, staged: changes.staged.length, committing, writing, failure });
+    const conflicted = changes.conflicted || [];
+    if (!conflicted.length && !changes.unstaged.length && !changes.staged.length) {
       return `<div data-c="ChangesList" class="changes">${form}<div class="fill v">${C.Hint({ message: Texts.noChanges })}</div></div>`;
     }
-    const changed = new Set([...changes.staged, ...changes.unstaged].map((change) => change.path)).size;
+    const changed = new Set([...conflicted, ...changes.staged, ...changes.unstaged].map((change) => change.path)).size;
     const bar = `<div class="changes-bar">${C.SectionHeader({ title: counted(changed, 'changed file', 'changed files'), action: C.FileViewToggle({ view }) })}</div>`;
     const foldedIn = (side) => new Set(collapsed.filter((key) => key.startsWith(`${side}:`)).map((key) => key.slice(side.length + 1)));
     const section = (side, empty) => {
       const files = changes[side];
       const labels = SideLabels[side];
-      const action = C.Button({ label: labels.all, icon: labels.icon, variant: 'ghost', disabled: busy || !files.length });
+      const action = labels.all ? C.Button({ label: labels.all, icon: labels.icon, variant: 'ghost', disabled: busy || !files.length }) : '';
       const head = C.SectionHeader({ title: `${labels.files} (${thousands(files.length)})`, action });
       const at = (place, change) => !!place && place.side === side && place.path === change.path;
       const row = (change, depth) =>
@@ -1170,18 +1213,31 @@ const C = {
           ? fileTreeRows(fileTree(files), { collapsed: foldedIn(side), file: row, folder })
           : files.map((change) => row(change)).join('');
       const body = files.length ? `<div class="fill">${rows}</div>` : C.Hint({ message: empty });
-      return `<div class="change-section">${head}${body}</div>`;
+      return `<div class="change-section${side === 'conflicted' ? ' conflicts' : ''}">${head}${body}</div>`;
     };
-    return `<div data-c="ChangesList" class="changes">${form}${bar}${section('staged', Texts.nothingStaged)}${section('unstaged', Texts.nothingUnstaged)}</div>`;
+    const conflicts = conflicted.length ? section('conflicted') : '';
+    return `<div data-c="ChangesList" class="changes">${form}${bar}${conflicts}${section('staged', Texts.nothingStaged)}${section('unstaged', Texts.nothingUnstaged)}</div>`;
   },
 
   FileBar({ diff, state = 'ready', writing = false, expanded = false, filePosition }) {
     const labels = diff.commit ? null : SideLabels[diff.side];
     const shownState = diff.commit ? `in ${diff.commit}` : labels.state;
-    const moveButton = labels ? C.Button({ label: labels.verb, icon: labels.icon, disabled: writing, tooltip: labels.openFileTooltip }) : '';
+    const conflicted = diff.side === 'conflicted';
+    const total = conflicted && diff.parts ? diff.parts.filter((part) => part.conflict).length : 0;
+    const chosen = conflicted && diff.resolutions ? diff.resolutions.filter(Boolean).length : 0;
+    const keep = (side) => C.Button({ label: ConflictTexts.keep[side], disabled: writing, tooltip: ConflictTexts.keepTooltip[side] });
+    const moveButton = !labels
+      ? ''
+      : conflicted && !diff.parts
+        ? keep('current') + keep('incoming')
+        : conflicted
+          ? C.Button({ label: labels.verb, icon: labels.icon, variant: chosen === total ? 'primary' : 'default', disabled: writing || chosen < total, tooltip: chosen < total ? 'Resolve every conflict in the result first' : labels.openFileTooltip })
+          : C.Button({ label: labels.verb, icon: labels.icon, disabled: writing, tooltip: labels.openFileTooltip });
     const path = diff.change.original ? `${diff.change.original} → ${diff.change.path}` : diff.change.path;
     const text = !diff.kind || diff.kind === 'text';
-    const facts = !text
+    const facts = diff.parts
+      ? `<div class="none xs muted">${chosen} of ${counted(total, 'conflict', 'conflicts')} resolved</div>`
+      : !text
       ? `<div class="none xs muted">${esc(diff.facts)}</div>`
       : state === 'ready' || state === 'empty'
         ? C.Additions({ count: state === 'empty' ? 0 : diff.additions, extraClass: 'none xs' }) + C.Deletions({ count: state === 'empty' ? 0 : diff.deletions, extraClass: 'none xs' })
@@ -1208,8 +1264,133 @@ const C = {
     );
   },
 
-  ChangeStepper({ current, total }) {
-    const text = total ? `Change ${thousands(current)} of ${thousands(total)}` : 'No changes';
+  MergeEditor({ merge }) {
+    const resolutions = merge.resolutions || [];
+    const lead = 3;
+    const shownRows = 15;
+    const row = (no, text, classes = '', { plain = false, caret = false, tint = false } = {}) => {
+      const content = (plain ? esc(text) : highlight(text)) + (caret ? '<span class="caret"></span>' : '');
+      return `<div class="diff-line${classes ? ` ${classes}` : ''}"><span class="number">${no}</span><span class="sign"></span><span class="text">${tint ? `<span class="tint">${content}</span>` : content}</span></div>`;
+    };
+    const blank = '<div class="diff-line blank"><span class="number"></span><span class="sign"></span><span class="text"></span></div>';
+    const fold = (n) =>
+      n > 0
+        ? `<div class="diff-line fold">${C.Button({ icon: n > FoldLimit ? 'chevrons-up-down' : 'chevron-down', label: counted(n, 'unchanged line', 'unchanged lines'), variant: 'ghost', tooltip: Texts.expandLines(n) })}</div>`
+        : '';
+    const pick = (index) => {
+      const chosen = resolutions[index];
+      const byHand = !!(chosen && chosen.edited);
+      const boxes = ['current', 'incoming']
+        .map((side) =>
+          C.Checkbox({
+            label: ConflictTexts.accept[side],
+            checked: !!chosen && chosen.take.includes(side),
+            disabled: byHand,
+            tooltip: byHand ? ConflictTexts.byHand : ConflictTexts.acceptTooltip[side],
+          }),
+        )
+        .join('');
+      return { html: `<div class="diff-line conflict-head"><span class="fill"></span>${boxes}</div>`, head: index };
+    };
+    const at = { current: 1, incoming: 1, result: 1 };
+    const versions = [];
+    const result = [];
+    let index = -1;
+    let headed = -1;
+    const last = merge.parts.length - 1;
+    merge.parts.forEach((part, partIndex) => {
+      if (part.conflict) {
+        index += 1;
+        if (headed < index) {
+          versions.push(pick(index));
+          headed = index;
+        }
+        const { current, incoming } = part.conflict;
+        for (let ix = 0; ix < Math.max(current.length, incoming.length); ix++) {
+          const left = ix < current.length ? row(at.current++, current[ix], 'conflicted current') : blank;
+          const right = ix < incoming.length ? row(at.incoming++, incoming[ix], 'conflicted incoming') : blank;
+          versions.push({ html: `<div class="diff-split-row">${left}${right}</div>` });
+        }
+        const chosen = resolutions[index];
+        const first = result.length;
+        if (!chosen) {
+          result.push({ html: row(at.result++, `<<<<<<< ${merge.labels.current}`, 'marker', { plain: true, tint: true }) });
+          current.forEach((text) => result.push({ html: row(at.result++, text, 'conflicted current', { tint: true }) }));
+          result.push({ html: row(at.result++, '=======', 'marker', { plain: true, tint: true }) });
+          incoming.forEach((text) => result.push({ html: row(at.result++, text, 'conflicted incoming', { tint: true }) }));
+          result.push({ html: row(at.result++, `>>>>>>> ${merge.labels.incoming}`, 'marker', { plain: true, tint: true }) });
+        } else {
+          const lines = chosen.edited || chosen.take.flatMap((side) => part.conflict[side].map((text) => [side, text]));
+          lines.forEach(([origin, text], ix) =>
+            result.push({ html: row(at.result++, text, `conflicted ${chosen.edited ? 'edited' : origin}`, { caret: chosen.caret === ix, tint: true }) }),
+          );
+        }
+        result[first].starts = index;
+        return;
+      }
+      const head = part.head || [];
+      const tail = part.tail || [];
+      const hidden = part.hidden || 0;
+      const total = head.length + hidden + tail.length;
+      const textAt = (k) => (k < head.length ? head[k] : k >= total - tail.length ? tail[k - (total - tail.length)] : null);
+      const line = (k) => {
+        const text = textAt(k);
+        return { html: `<div class="diff-split-row">${row(at.current + k, text)}${row(at.incoming + k, text)}</div>` };
+      };
+      const range = (from, to) => Array.from({ length: Math.max(0, to - from) }, (_, k) => from + k);
+      if (partIndex === 0) {
+        versions.push(pick(0));
+        headed = 0;
+        versions.push({ html: fold(total - lead) });
+        range(total - lead, total).forEach((k) => versions.push(line(k)));
+      } else if (partIndex === last) {
+        range(0, Math.min(lead, total)).forEach((k) => versions.push(line(k)));
+        versions.push({ html: fold(total - lead) });
+      } else {
+        range(0, lead).forEach((k) => versions.push(line(k)));
+        versions.push({ html: fold(total - 2 * lead) });
+        versions.push(pick(index + 1));
+        headed = index + 1;
+        range(total - lead, total).forEach((k) => versions.push(line(k)));
+      }
+      for (let k = 0; k < total; k++) {
+        const text = textAt(k);
+        result.push(text === null ? { hidden: true } : { html: row(at.result + k, text) });
+      }
+      at.current += total;
+      at.incoming += total;
+      at.result += total;
+    });
+    const reveal = merge.reveal || 0;
+    const topAt = Math.max(0, versions.findIndex((entry) => entry.head === reveal));
+    const shownVersions = versions.slice(topAt).map((entry) => entry.html).join('');
+    const resultAt = Math.max(0, result.findIndex((entry) => entry.starts === reveal) - 2);
+    const shownResult = [];
+    for (const entry of result.slice(resultAt)) {
+      if (entry.hidden || shownResult.length >= shownRows) break;
+      shownResult.push(entry.html);
+    }
+    const total = index + 1;
+    const left = total - resolutions.filter(Boolean).length;
+    const versionHead = (side) =>
+      `<div class="merge-head"><span class="version-dot ${side}"></span><span class="medium">${ConflictTexts.title[side]}</span><span class="ellipsis muted">${esc(merge.labels[side])}</span></div>`;
+    const state = left
+      ? `<span class="conflicts-left">${esc(ConflictTexts.left(left))}</span><span class="muted ellipsis">${esc(ConflictTexts.hint)}</span>`
+      : `<span class="resolved">${esc(OperationTexts.noConflicts)}</span>`;
+    const resultHead =
+      `<div class="merge-head result"><span class="medium">${ConflictTexts.result}</span>${state}<span class="fill"></span>` +
+      C.Button({ label: ConflictTexts.startOver, icon: 'undo-2', variant: 'ghost', disabled: !resolutions.length, tooltip: ConflictTexts.startOverTooltip }) +
+      `</div>`;
+    return (
+      `<div data-c="MergeEditor" class="merge-editor">` +
+      `<div class="versions"><div class="merge-heads">${versionHead('current')}${versionHead('incoming')}</div><div class="diff">${shownVersions}</div></div>` +
+      `<div class="result">${resultHead}<div class="diff editor">${shownResult.join('')}</div></div>` +
+      `</div>`
+    );
+  },
+
+  ChangeStepper({ current, total, noun = 'Change' }) {
+    const text = total ? `${noun} ${thousands(current)} of ${thousands(total)}` : 'No changes';
     return `<div data-c="ChangeStepper" class="change-stepper"><span class="xs muted">${text}</span>${C.Button({ icon: 'arrow-up', variant: 'ghost', disabled: !total, tooltip: Texts.previousChange })}${C.Button({ icon: 'arrow-down', variant: 'ghost', disabled: !total, tooltip: Texts.nextChange })}</div>`;
   },
 
@@ -1238,7 +1419,7 @@ const C = {
     const stepper = changes ? C.ChangeStepper(changes) : '';
     const separator = '<div class="separator"></div>';
     const tools =
-      kind === 'text'
+      kind === 'text' || kind === 'conflict'
         ? C.Button({ icon: 'ellipsis', variant: 'ghost', selected: menuOpen, tooltip: Texts.viewOptions })
         : C.ZoomControl(zoom || {}) + (kind === 'image' ? C.BackdropButton() : '');
     const menu = menuOpen ? C.ViewOptionsMenu({ hot }) : '';
@@ -1257,12 +1438,12 @@ const C = {
     return `<div data-c="ChangeRuler" class="change-ruler" title="Where the changes are in the whole file">${marks.join('')}${shown}</div>`;
   },
 
-  VersionTag({ side, from, hearing = false, align = 'left' }) {
+  VersionTag({ side, from, hearing = false, align = 'left', label = VersionLabels[side] }) {
     const ear = hearing ? `<span class="ear">${icon('headphones', 'xs')}</span>` : '';
-    return `<div data-c="VersionTag" class="version-tag${align === 'right' ? ' right' : ''}"><span class="version-dot ${side}"></span><span>${VersionLabels[side]}</span>${from ? `<span class="source">${esc(from)}</span>` : ''}${ear}</div>`;
+    return `<div data-c="VersionTag" class="version-tag${align === 'right' ? ' right' : ''}"><span class="version-dot ${side}"></span><span>${esc(label)}</span>${from ? `<span class="source">${esc(from)}</span>` : ''}${ear}</div>`;
   },
 
-  MediaDetails({ details, sources, sides = ['before', 'after'], open = true }) {
+  MediaDetails({ details, sources, sides = ['before', 'after'], open = true, labels = VersionLabels }) {
     const { columns, before, after, deltas = {} } = details;
     const values = { before, after };
     const head = `<tr><th class="who"><span class="h" style="gap:6px">${twisty(open)}Details</span></th>${columns.map((name) => `<th>${esc(name)}</th>`).join('')}</tr>`;
@@ -1272,7 +1453,7 @@ const C = {
         const delta = changed && deltas[ix] ? `<span class="delta">${esc(deltas[ix])}</span>` : '';
         return `<td class="${changed ? 'changed' : ''}">${esc(value)}${delta}</td>`;
       });
-      return `<tr><td class="who"><span class="h" style="gap:6px"><span class="version-dot ${side}"></span>${VersionLabels[side]}<span class="source">${esc(sources[side === 'before' ? 0 : 1])}</span></span></td>${cells.join('')}</tr>`;
+      return `<tr><td class="who"><span class="h" style="gap:6px"><span class="version-dot ${side}"></span>${esc(labels[side])}<span class="source">${esc(sources[side === 'before' ? 0 : 1])}</span></span></td>${cells.join('')}</tr>`;
     };
     const body = open ? sides.map(row).join('') : '';
     return `<div data-c="MediaDetails" class="media-details"><table>${head}${body}</table></div>`;
@@ -1284,7 +1465,8 @@ const C = {
     const size = image.after.length * zoom;
     const art = (side) => pixelArt(image[side], image.palette, zoom);
     const picture = (inner) => `<div class="picture checker" style="width:${size}px;height:${size}px">${inner}</div>`;
-    const tag = (side, align) => C.VersionTag({ side, from: sources[side === 'before' ? 0 : 1], align });
+    const labels = diff.labels || VersionLabels;
+    const tag = (side, align) => C.VersionTag({ side, from: sources[side === 'before' ? 0 : 1], align, label: labels[side] });
     let canvas;
     if (sides.length === 1) {
       canvas = `<div class="compare-canvas">${tag(sides[0])}${picture(art(sides[0]))}</div>`;
@@ -1315,7 +1497,7 @@ const C = {
         : '';
       canvas = `<div class="compare-canvas">${picture(`<div class="layer dim">${art('after')}</div><div class="layer">${marks}</div>${boxes}${pointer}`)}${legend}</div>`;
     }
-    return `<div data-c="ImageCompare" class="media-compare">${canvas}${C.MediaDetails({ details: diff.details, sources, sides })}</div>`;
+    return `<div data-c="ImageCompare" class="media-compare">${canvas}${C.MediaDetails({ details: diff.details, sources, sides, labels })}</div>`;
   },
 
   MediaTimeline({ duration, at, changes, current = 0, step = 10 }) {
@@ -1413,12 +1595,19 @@ const C = {
     const kind = diff.kind || 'text';
     const labels = diff.commit ? null : SideLabels[diff.side];
     const ready = state === 'ready';
-    const total = kind === 'text' ? changeGroups(diff.hunks).length : (diff.changes || diff.image?.areas || []).length;
+    const total =
+      kind === 'text'
+        ? changeGroups(diff.hunks).length
+        : kind === 'conflict'
+          ? diff.parts.filter((part) => part.conflict).length
+          : (diff.changes || diff.image?.areas || []).length;
+    const noun = kind === 'conflict' ? 'Conflict' : 'Change';
     const zoom = kind === 'image' ? { percent: (mode === 'split' && !view.sides ? 12 : 18) * 100 } : kind === 'video' ? { percent: 36 } : {};
     const viewBar =
       kind === 'binary'
         ? ''
-        : C.ViewBar({ kind, mode, changes: ready ? { current: (diff.current || 0) + 1, total } : null, zoom, menuOpen, hot });
+        : C.ViewBar({ kind, mode, changes: ready ? { current: (diff.current || 0) + 1, total, noun } : null, zoom, menuOpen, hot });
+    const conflict = () => C.MergeEditor({ merge: diff });
     const text = () => {
       const diffView = C.DiffView({
         files: [{ path: diff.change.path, additions: diff.additions, deletions: diff.deletions, hunks: diff.hunks, lines: diff.lines }],
@@ -1434,6 +1623,7 @@ const C = {
     };
     const bodies = {
       text,
+      conflict,
       image: () => C.ImageCompare({ diff, mode, ...view }),
       video: () => C.VideoCompare({ diff, mode }),
       audio: () => C.AudioCompare({ diff, mode }),
@@ -1514,10 +1704,42 @@ const C = {
     return `<div data-c="RepoToolbar" class="repo-toolbar">${groups.join('<div class="separator"></div>')}</div>`;
   },
 
-  RepoView({ body, left, middle, right, status, toolbar = C.RepoToolbar(), expanded = false }) {
+  RepoView({ body, left, middle, right, status, toolbar = C.RepoToolbar(), expanded = false, operation = '' }) {
     const side = (place, content) => (expanded ? '' : `<div class="pane ${place}">${content}</div>`);
     const panes = body || `<div class="panes">${side('left', left)}<div class="pane middle">${middle}</div>${side('right', right)}</div>`;
-    return `<div data-c="RepoView" class="repo-view">${toolbar}<div class="fill v">${panes}</div>${status}</div>`;
+    return `<div data-c="RepoView" class="repo-view">${toolbar}${operation}<div class="fill v">${panes}</div>${status}</div>`;
+  },
+
+  OperationBar({ operation, conflicts = 0, running }) {
+    const { kind } = operation;
+    const stuck = conflicts > 0;
+    const glyph = stuck ? icon('triangle-alert', 'md', 'var(--yellow)') : icon('circle-check', 'md', 'var(--green)');
+    const step =
+      kind === 'rebase'
+        ? `<span class="muted">Commit ${operation.step} of ${operation.total}</span><span class="mono muted">${esc(operation.commit.id)}</span><span class="ellipsis">${esc(operation.commit.subject)}</span>`
+        : '';
+    const state = stuck
+      ? `<span class="conflict-count">${esc(counted(conflicts, 'conflicted file', 'conflicted files'))}</span>`
+      : `<span class="resolved">${esc(OperationTexts.noConflicts)}</span>`;
+    const abort = C.Button({ label: OperationTexts.abort[kind], icon: 'undo-2', size: 'sm', variant: 'ghost', disabled: !!running, loading: running === 'abort', tooltip: OperationTexts.abortTooltip[kind] });
+    const go = C.Button({
+      label: OperationTexts.go[kind],
+      size: 'sm',
+      variant: 'primary',
+      disabled: stuck || !!running,
+      loading: running === 'continue',
+      tooltip: stuck ? OperationTexts.waiting(conflicts) : OperationTexts.goTooltip[kind],
+    });
+    return (
+      `<div data-c="OperationBar" class="operation-bar${stuck ? ' stuck' : ''}">` +
+      glyph +
+      `<span class="semibold none">${esc(OperationTexts[kind](operation))}</span>` +
+      `<div class="h step sm">${step}</div>` +
+      state +
+      abort +
+      go +
+      `</div>`
+    );
   },
 
   BranchMenu({ label, current, mode, left = 0, top = 0, hot }) {

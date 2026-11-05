@@ -160,8 +160,7 @@ mod tests {
         WorkingChanges {
             unstaged: unstaged.iter().copied().map(file).collect(),
             staged: staged.iter().copied().map(file).collect(),
-            head: None,
-            digest: Default::default(),
+            ..WorkingChanges::default()
         }
     }
 

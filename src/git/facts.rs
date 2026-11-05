@@ -4,7 +4,7 @@ use anyhow::Result;
 use gix::ObjectId;
 
 use super::{
-    Repo, Revision,
+    Repo, Revision, Version,
     command::{Exit, READ_ONLY, run, run_text},
     lfs::LfsPointer,
 };
@@ -60,8 +60,10 @@ impl Repo {
 
     pub(crate) fn last_change(&self, revision: Revision, path: &OsStr) -> Result<Option<String>> {
         let start = match revision {
-            Revision::WorkTree => return Ok(None),
-            Revision::Head | Revision::Index => "HEAD".to_owned(),
+            Revision::WorkTree | Revision::Conflict(Version::Incoming) => return Ok(None),
+            Revision::Head | Revision::Index | Revision::Conflict(Version::Current) => {
+                "HEAD".to_owned()
+            }
             Revision::Commit(id) => id.to_string(),
         };
         let text = run_text(
@@ -115,6 +117,8 @@ fn revision_spec(revision: Revision, path: &OsStr) -> std::ffi::OsString {
         Revision::Index => ":".to_owned(),
         Revision::Head => "HEAD:".to_owned(),
         Revision::Commit(id) => format!("{id}:"),
+        Revision::Conflict(Version::Current) => ":2:".to_owned(),
+        Revision::Conflict(Version::Incoming) => ":3:".to_owned(),
         Revision::WorkTree => String::new(),
     });
     spec.push(path);

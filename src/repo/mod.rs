@@ -11,8 +11,11 @@ mod file_menu;
 mod file_tree;
 mod history_list;
 mod hunk_actions;
+mod merge_editor;
+mod merge_text;
 mod navigation;
 mod operation;
+mod operation_bar;
 mod patch_view;
 mod ref_tree;
 mod refs_list;
@@ -45,8 +48,8 @@ use crate::{
         PreviousFile, Refresh, WholeWindow,
     },
     git::{
-        Commit, FileChange, FileCommit, HISTORY_LIMIT, History, PullMode, RefLabel, Scope, Side,
-        Stash, short_id,
+        ChangeKind, Commit, FileChange, FileCommit, HISTORY_LIMIT, History, PullMode, RefLabel,
+        Scope, Side, Stash, WorkingChanges, short_id,
     },
     ui::{self, Failure, FileView, Folded, Look as _, Notice, run_in_background, thousands},
 };
@@ -57,12 +60,13 @@ use changes_list::{ChangesList, SideFolds, SideScrolls, discard_question};
 use commit_form::CommitForm;
 use commit_panel::{CommitPanel, OpenCommitFile, ShowFileHistory, copy_commit_hash};
 use compare::{Direction, FilePlace, Position};
-use file_diff_panel::{FileDiffEvent, FileDiffPanel};
+use file_diff_panel::{FileDiffEvent, FileDiffPanel, Resolution};
 use file_history::{FileHistory, HistorySource};
 use file_tree::{FileTreeRow, file_rows};
 use history_list::HistoryList;
 use navigation::{OpenFile, Step, Target};
-use operation::Operation;
+use operation::{Finish, Operation, Outcome};
+use operation_bar::OperationBar;
 use ref_tree::RefGroup;
 use refs_list::RefsList;
 pub(crate) use repository::{Repository, RepositoryEvent};
@@ -85,6 +89,8 @@ pub(crate) struct RepoView {
     file_diff: Entity<FileDiffPanel>,
     file_history: Option<FileHistory>,
     whole_window: bool,
+    whole_window_for_conflicts: bool,
+    follow_conflicts: bool,
     middle_focus: FocusHandle,
     file_history_focus: FocusHandle,
     history_scroll: UniformListScrollHandle,
@@ -105,7 +111,12 @@ impl RepoView {
                 RepositoryEvent::ChangesRead => this.on_changes_read(cx),
                 RepositoryEvent::Committed => {}
                 RepositoryEvent::Operated(operated) => {
-                    window.push_notification(notification(operated), cx)
+                    if matches!(operated.outcome, Ok(Outcome::Stopped)) {
+                        this.follow_conflicts = true;
+                    }
+                    if let Some(notification) = notification(operated) {
+                        window.push_notification(notification, cx)
+                    }
                 }
                 RepositoryEvent::PullModeNotSaved(failure) => window.push_notification(
                     Notification::error(failure.message())
@@ -121,6 +132,9 @@ impl RepoView {
                     FileDiffEvent::Close => this.close(window, cx),
                     FileDiffEvent::WholeWindow => this.toggle_whole_window(cx),
                     FileDiffEvent::StepFile(direction) => this.step_file(*direction, cx),
+                    FileDiffEvent::Resolve(change, resolution) => {
+                        this.resolve(change.clone(), resolution, cx)
+                    }
                 },
             ),
             cx.subscribe(&commit_panel, |this, _, OpenCommitFile(file), cx| {
@@ -144,6 +158,8 @@ impl RepoView {
             file_diff,
             file_history: None,
             whole_window: false,
+            whole_window_for_conflicts: false,
+            follow_conflicts: false,
             middle_focus: cx.focus_handle().tab_stop(true),
             file_history_focus: cx.focus_handle(),
             history_scroll: UniformListScrollHandle::new(),
@@ -217,8 +233,50 @@ impl RepoView {
             }
             target => self.target = target,
         }
+        if self.follow_conflicts {
+            self.follow_conflicts_in(&changes, cx);
+        }
         self.place_file(cx);
         cx.notify();
+    }
+
+    fn follow_conflicts_in(&mut self, changes: &WorkingChanges, cx: &mut Context<Self>) {
+        let open = match &self.target {
+            Target::WorkingTree { open } => open.clone(),
+            _ => None,
+        };
+        let on_a_conflict = open
+            .as_ref()
+            .is_some_and(|open| open.side == Side::Unstaged && changes.is_conflicted(&open.path));
+        if on_a_conflict {
+            return;
+        }
+        match changes.conflicted.first().cloned() {
+            Some(next) => self.open_working_file(Side::Unstaged, next, cx),
+            None => {
+                self.follow_conflicts = false;
+                if !self.target.is_working_tree() {
+                    self.target = Target::WorkingTree { open: None };
+                }
+                self.close_file(cx);
+            }
+        }
+    }
+
+    fn resolve(&mut self, change: FileChange, resolution: &Resolution, cx: &mut Context<Self>) {
+        self.follow_conflicts = true;
+        self.repository.update(cx, |repository, cx| match resolution {
+            Resolution::Text(text) => repository.resolve(change, text.clone(), cx),
+            Resolution::Keep(version) => repository.keep(change, *version, cx),
+        });
+    }
+
+    fn finish_underway(&mut self, finish: Finish, cx: &mut Context<Self>) {
+        if finish == Finish::Continue {
+            self.follow_conflicts = true;
+        }
+        self.repository
+            .update(cx, |repository, cx| repository.finish_underway(finish, cx));
     }
 
     fn select_commit(&mut self, id: ObjectId, cx: &mut Context<Self>) {
@@ -262,6 +320,14 @@ impl RepoView {
         let Some(repo) = self.repository.read(cx).repo().cloned() else {
             return;
         };
+        let conflicted = change.kind == ChangeKind::Conflicted;
+        if conflicted && !self.whole_window {
+            self.whole_window = true;
+            self.whole_window_for_conflicts = true;
+        } else if !conflicted && self.whole_window_for_conflicts {
+            self.whole_window = false;
+            self.whole_window_for_conflicts = false;
+        }
         self.target = Target::WorkingTree {
             open: Some(OpenFile {
                 side,
@@ -449,6 +515,7 @@ impl RepoView {
 
     fn toggle_whole_window(&mut self, cx: &mut Context<Self>) {
         self.whole_window = !self.whole_window;
+        self.whole_window_for_conflicts = false;
         self.place_file(cx);
         cx.notify();
     }
@@ -461,9 +528,12 @@ impl RepoView {
                 let Some(changes) = self.repository.read(cx).changes().cloned() else {
                     return Vec::new();
                 };
-                [Side::Staged, Side::Unstaged]
-                    .into_iter()
-                    .flat_map(|side| {
+                let conflicted = changes
+                    .conflicted
+                    .iter()
+                    .map(|change| Openable::Working(Side::Unstaged, change.clone()));
+                conflicted
+                    .chain([Side::Staged, Side::Unstaged].into_iter().flat_map(|side| {
                         let files = changes.files(side);
                         file_rows(view, files.iter().map(|change| change.path.as_ref()), &unfolded)
                             .into_iter()
@@ -474,7 +544,7 @@ impl RepoView {
                                 FileTreeRow::Folder { .. } => None,
                             })
                             .collect::<Vec<_>>()
-                    })
+                    }))
                     .collect()
             }
             Target::Commit { .. } => {
@@ -532,10 +602,10 @@ impl RepoView {
         }
     }
 
-    fn step_change(&mut self, direction: Direction, cx: &mut Context<Self>) {
+    fn step_change(&mut self, direction: Direction, window: &mut Window, cx: &mut Context<Self>) {
         if self.target.has_open_file() {
             self.file_diff
-                .update(cx, |panel, cx| panel.step_change(direction, cx));
+                .update(cx, |panel, cx| panel.step_change(direction, window, cx));
         }
     }
 
@@ -548,6 +618,10 @@ impl RepoView {
     }
 
     fn close_file(&mut self, cx: &mut Context<Self>) {
+        if self.whole_window_for_conflicts {
+            self.whole_window = false;
+            self.whole_window_for_conflicts = false;
+        }
         if self.file_history.take().is_some() {
             let row = self.target.commit().and_then(|id| {
                 self.repository.read(cx).history()?.row_of(&id)
@@ -721,6 +795,21 @@ impl RepoView {
         }
     }
 
+    fn operation_bar(&self, cx: &mut Context<Self>) -> Option<OperationBar> {
+        let repository = self.repository.read(cx);
+        let underway = repository.underway()?.clone();
+        let conflicts = repository
+            .changes()
+            .map_or(0, |changes| changes.conflicted.len());
+        Some(
+            OperationBar::new(underway, conflicts)
+                .finishing(repository.finishing(), repository.is_writing())
+                .on_finish(cx.listener(|this, finish: &Finish, _, cx| {
+                    this.finish_underway(*finish, cx)
+                })),
+        )
+    }
+
     fn toolbar(&self, cx: &mut Context<Self>) -> RepoToolbar {
         RepoToolbar::new(ToolbarState::of(self.repository.read(cx)))
             .on_run(cx.listener(|this, operation: &Operation, window, cx| {
@@ -861,6 +950,7 @@ impl RepoView {
             self.changes_scrolls.clone(),
         )
         .root(repository.repo().map(|repo| Arc::from(repo.location())))
+        .form_hidden(repository.underway().is_some())
         .open(open)
         .writing(repository.is_writing())
         .on_open(
@@ -903,11 +993,11 @@ impl Render for RepoView {
             }))
             .on_action(cx.listener(|this, _: &CopyHash, window, cx| this.copy_hash(window, cx)))
             .on_action(cx.listener(|this, _: &CloseDiff, window, cx| this.close(window, cx)))
-            .on_action(cx.listener(|this, _: &PreviousChange, _, cx| {
-                this.step_change(Direction::Back, cx)
+            .on_action(cx.listener(|this, _: &PreviousChange, window, cx| {
+                this.step_change(Direction::Back, window, cx)
             }))
-            .on_action(cx.listener(|this, _: &NextChange, _, cx| {
-                this.step_change(Direction::Forward, cx)
+            .on_action(cx.listener(|this, _: &NextChange, window, cx| {
+                this.step_change(Direction::Forward, window, cx)
             }))
             .on_action(cx.listener(|this, _: &PreviousFile, _, cx| {
                 this.step_file(Direction::Back, cx)
@@ -919,6 +1009,7 @@ impl Render for RepoView {
                 this.toggle_whole_window(cx)
             }))
             .child(self.toolbar(cx))
+            .children(self.operation_bar(cx))
             .child(div().fill_height().child(self.render_body(window, cx)))
             .child(status_bar)
     }

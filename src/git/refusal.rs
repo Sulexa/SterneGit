@@ -1,7 +1,5 @@
 use std::fmt;
 
-use gix::state::InProgress;
-
 const CHANGES_IN_THE_WAY: [&str; 3] = [
     "You have unstaged changes",
     "Your index contains uncommitted changes",
@@ -24,8 +22,6 @@ pub(crate) enum Refusal {
     CantFastForward(Tracking),
     RemoteAhead(Tracking),
     ChangesInTheWay,
-    MergeStopped,
-    RebaseStopped,
     StashKept,
     StashNotApplied,
     StashGone,
@@ -59,14 +55,6 @@ impl fmt::Display for Refusal {
                 f,
                 "Uncommitted changes are in the way: commit or stash them, then try again."
             ),
-            Refusal::MergeStopped => write!(
-                f,
-                "The merge stopped on conflicts: resolve the conflicted files, stage them and commit."
-            ),
-            Refusal::RebaseStopped => write!(
-                f,
-                "The rebase stopped on conflicts: resolve them, then run git rebase --continue, or git rebase --abort to undo it."
-            ),
             Refusal::StashKept => write!(
                 f,
                 "The stash didn't apply cleanly: resolve the conflicted files. The stash is kept, so nothing is lost."
@@ -85,14 +73,11 @@ impl fmt::Display for Refusal {
 
 impl std::error::Error for Refusal {}
 
-pub(super) fn why_git_stopped(repo: &gix::Repository, error: anyhow::Error) -> anyhow::Error {
+pub(super) fn why_git_stopped(error: anyhow::Error) -> anyhow::Error {
     let message = error.to_string();
-    match repo.state() {
-        Some(InProgress::Merge) => Refusal::MergeStopped.into(),
-        Some(InProgress::Rebase | InProgress::RebaseInteractive) => Refusal::RebaseStopped.into(),
-        _ if CHANGES_IN_THE_WAY.iter().any(|why| message.contains(why)) => {
-            Refusal::ChangesInTheWay.into()
-        }
-        _ => error,
+    if CHANGES_IN_THE_WAY.iter().any(|why| message.contains(why)) {
+        Refusal::ChangesInTheWay.into()
+    } else {
+        error
     }
 }

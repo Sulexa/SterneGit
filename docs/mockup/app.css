@@ -1374,3 +1374,83 @@
 .toast > .message { flex: 1; }
 .toast > .btn { position: absolute; top: 4px; right: 4px; visibility: hidden; }
 .toast:hover > .btn { visibility: visible; }
+
+.operation-bar {
+  flex: none;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px;
+  font-size: 14px;
+  line-height: 20px;
+  background: color-mix(in srgb, var(--green) 7%, var(--background));
+  border-bottom: 1px solid var(--border);
+}
+.operation-bar.stuck { background: color-mix(in srgb, var(--yellow) 8%, var(--background)); }
+.operation-bar > .step { flex: 1; min-width: 0; gap: 8px; overflow: hidden; }
+.operation-bar > .step > span { flex: none; white-space: nowrap; }
+.operation-bar > .step > .ellipsis { flex: 0 1 auto; min-width: 0; }
+.operation-bar > .conflict-count { flex: none; font-size: 12px; color: var(--magenta); }
+.operation-bar > .resolved { flex: none; font-size: 12px; color: var(--green); }
+
+.change-section.conflicts { flex: none; max-height: 40%; }
+.change-section.conflicts > .section-header { color: var(--magenta); }
+
+.diff-line.conflicted.current { background: color-mix(in srgb, var(--green) 12%, transparent); }
+.diff-line.conflicted.incoming { background: color-mix(in srgb, var(--blue) 12%, transparent); }
+
+.diff-line.conflict-head {
+  height: 24px;
+  align-items: center;
+  gap: 16px;
+  padding: 0 12px;
+  font: 12px/16px var(--font);
+  background: color-mix(in srgb, var(--secondary) 35%, transparent);
+}
+.diff-line.conflicted.edited { background: color-mix(in srgb, var(--yellow) 10%, transparent); }
+.diff-line.marker { background: color-mix(in srgb, var(--magenta) 12%, transparent); }
+.diff-line.marker > .text { color: var(--magenta); }
+
+.merge-editor { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.merge-editor > .versions { flex: 1 1 50%; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+.merge-editor > .result { flex: 1 1 50%; min-height: 0; display: flex; flex-direction: column; overflow: hidden; border-top: 1px solid var(--border); }
+.merge-editor .editor .diff-line { background: none; }
+.merge-editor .editor .diff-line.current > .number { box-shadow: inset 2px 0 var(--green); }
+.merge-editor .editor .diff-line.incoming > .number { box-shadow: inset 2px 0 var(--blue); }
+.merge-editor .editor .diff-line.edited > .number { box-shadow: inset 2px 0 var(--yellow); }
+.merge-editor .editor .diff-line.marker > .number { box-shadow: inset 2px 0 var(--magenta); }
+.merge-editor .editor .diff-line.current .tint { background: color-mix(in srgb, var(--green) 16%, transparent); }
+.merge-editor .editor .diff-line.incoming .tint { background: color-mix(in srgb, var(--blue) 16%, transparent); }
+.merge-editor .editor .diff-line.edited .tint { background: color-mix(in srgb, var(--yellow) 16%, transparent); }
+.merge-editor .editor .diff-line.marker .tint { background: color-mix(in srgb, var(--magenta) 20%, transparent); }
+.merge-editor .editor .diff-line.marker > .text { color: var(--foreground); }
+.merge-editor .diff { border-bottom: 0; }
+.merge-heads { flex: none; display: flex; border-bottom: 1px solid var(--border); }
+.merge-heads > .merge-head { flex: 1; min-width: 0; }
+.merge-heads > .merge-head + .merge-head { border-left: 1px solid var(--border); }
+.merge-head {
+  flex: none;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  font-size: 12px;
+  line-height: 16px;
+  overflow: hidden;
+}
+.merge-head.result { border-bottom: 1px solid var(--border); }
+.merge-head > .conflicts-left { flex: none; color: var(--magenta); }
+.merge-head > .resolved { flex: none; color: var(--green); }
+.merge-head > .muted.ellipsis { min-width: 0; }
+
+.caret { display: inline-block; width: 2px; height: 17px; margin-left: 1px; vertical-align: text-bottom; background: var(--foreground); }
+
+.checkbox { display: inline-flex; align-items: center; gap: 6px; font: 12px/16px var(--font); color: var(--foreground); cursor: default; }
+.checkbox > .box { width: 14px; height: 14px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--muted); border-radius: 4px; }
+.checkbox.checked > .box { background: var(--primary); border-color: var(--primary); color: var(--primary-foreground); }
+.checkbox.disabled { opacity: 0.5; }
+
+.version-dot.current { --c: var(--green); }
+.version-dot.incoming { --c: var(--blue); }

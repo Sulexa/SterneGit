@@ -129,7 +129,7 @@ impl Repo {
     fn try_switch(&self, args: &[&str]) -> Result<()> {
         run(&self.location, args, Exit::Success)
             .map(drop)
-            .map_err(|error| why_git_stopped(&self.local(), error))
+            .map_err(why_git_stopped)
     }
 }
 
@@ -242,9 +242,8 @@ mod tests {
         let status = repo.status()?;
         assert!(
             status
-                .staged
+                .conflicted
                 .iter()
-                .chain(&status.unstaged)
                 .any(|change| change.kind == ChangeKind::Conflicted)
         );
         assert_eq!(stashes(&scratch)?, 1);

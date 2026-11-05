@@ -1,5 +1,5 @@
 use gpui_kit::{
-    AnyElement, App, Div, ElementId, InteractiveElement as _, IntoElement, ParentElement as _,
+    AnyElement, App, Div, ElementId, Hsla, InteractiveElement as _, IntoElement, ParentElement as _,
     Pixels, RenderOnce, SharedString, StatefulInteractiveElement as _, Styled as _, Window,
     assets::IconName,
     component::{ActiveTheme as _, Icon, Sizable as _, StyledExt as _, h_flex, list::ListItem},
@@ -154,6 +154,7 @@ pub(crate) fn fold_icon(open: bool) -> Icon {
 #[derive(IntoElement)]
 pub(crate) struct SectionHeader {
     title: SharedString,
+    color: Option<Hsla>,
     count: Option<usize>,
     action: Option<AnyElement>,
     open: Option<bool>,
@@ -164,11 +165,17 @@ impl SectionHeader {
     pub(crate) fn new(title: impl Into<SharedString>) -> Self {
         Self {
             title: title.into(),
+            color: None,
             count: None,
             action: None,
             open: None,
             on_toggle: None,
         }
+    }
+
+    pub(crate) fn color(mut self, color: Hsla) -> Self {
+        self.color = Some(color);
+        self
     }
 
     pub(crate) fn open(mut self, open: bool) -> Self {
@@ -205,7 +212,7 @@ impl RenderOnce for SectionHeader {
             .gap_2()
             .xs_text()
             .font_medium()
-            .text_color(cx.theme().muted_foreground)
+            .text_color(self.color.unwrap_or(cx.theme().muted_foreground))
             .when_some(self.open, |this, open| {
                 this.gap_1p5().child(fold_icon(open))
             })

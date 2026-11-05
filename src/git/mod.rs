@@ -9,6 +9,7 @@ mod history;
 mod hunks;
 mod index;
 mod lfs;
+mod markers;
 mod merge;
 mod patch;
 mod pull_mode;
@@ -20,6 +21,7 @@ mod stash;
 mod status;
 mod text;
 mod time;
+mod underway;
 mod version;
 
 use std::{
@@ -43,6 +45,7 @@ pub(crate) use history::{Commit, HISTORY_LIMIT, History, RowKind, short_id};
 pub(crate) use hunks::{Hunks, LineAt, LineSide, LineSpan, Part, PartAction};
 pub(crate) use index::Scope;
 pub(crate) use lfs::FileVersion;
+pub(crate) use markers::{Marked, Piece, has_markers, split_conflicts};
 pub(crate) use merge::{Merged, Rebased};
 pub(crate) use patch::{FilePatch, Whitespace};
 pub(crate) use pull_mode::PullMode;
@@ -51,7 +54,10 @@ pub(crate) use refusal::{Refusal, Tracking};
 pub(crate) use remote::{Pulled, Pushed};
 pub(crate) use stash::{Carried, Stash};
 pub(crate) use status::{ChangeKind, FileChange, Side, WorkingChanges};
-pub(crate) use version::Revision;
+pub(crate) use underway::{Continued, Rebasing, Underway};
+#[cfg(test)]
+pub(crate) use underway::{Merging, Replaying};
+pub(crate) use version::{Conflicted, Revision, Version};
 
 const OBJECT_CACHE_BYTES: usize = 4 * 1024 * 1024;
 

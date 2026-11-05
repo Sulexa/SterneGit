@@ -66,6 +66,24 @@ const Screens = (() => {
   const ref = (name) => history.refs.find((label) => label.name === name);
 
   const gameTabs = [...tabs, { name: starfall.name, state: 'ready' }];
+
+  const { rebasing, rebase, starfallMerge, rebaseChanges, rebaseResolved, statusConflicts, statusMerged, slimeConflict, starfallConflicts } = Sample;
+  const busyDuringOperation = ['pull', 'push', 'stash', 'pop'];
+
+  const rebaseView = ({ middle, changes, open, conflicts, expanded = false }) =>
+    C.FastGit({
+      topBar: C.TopBar({ repository: rebasing.name, head: rebasing.head }),
+      tabStrip: tabStrip(),
+      body: C.RepoView({
+        toolbar: C.RepoToolbar({ unavailable: busyDuringOperation }),
+        operation: C.OperationBar({ operation: rebase, conflicts }),
+        expanded,
+        left: C.RefsList({ refs: rebasing.refs, selectedRow: null, collapsed }),
+        middle,
+        right: C.ChangesList({ changes, open, operation: rebase }),
+        status: C.RepoStatusBar({ summary: historySummary(rebasing) }),
+      }),
+    });
   const changedFiles = [...assets.staged, ...assets.unstaged];
 
   const assetComparison = (diff, { mode = 'split', expanded = false, view } = {}) =>
@@ -479,7 +497,7 @@ const Screens = (() => {
     {
       id: 'merged',
       title: 'Branch merged',
-      about: 'Check out, Merge, Rebase and Delete say what they did in a notification. A merge that stops on conflicts explains what to do in an error notification instead.',
+      about: 'Check out, Merge, Rebase and Delete say what they did in a notification. A merge or a rebase that stops on a conflict shows the OperationBar instead, until it is finished or aborted.',
       source: 'src/repo/operation.rs',
       render: () =>
         C.FastGit({
@@ -500,6 +518,65 @@ const Screens = (() => {
           tabStrip: tabStrip(),
           body: commitSelected(),
           overlays: `<div class="toasts">${C.Notification({ kind: 'warning', title: 'Switched to main', message: 'Your uncommitted changes conflict with main: resolve the conflicted files. The stash keeps a copy of them.' })}</div>`,
+        }),
+    },
+    {
+      id: 'rebase-stopped',
+      title: 'Rebase stopped on a conflict',
+      about: "Rebase in a branch's menu and Pull in Rebase mode go through on their own: uncommitted changes in the way are stashed first and brought back at the end, and a commit whose changes are already upstream is left out. FastGit stops only when a commit conflicts. The OperationBar under the header then says what is being rebased, which commit stopped and how many files conflict. The uncommitted changes get selected, the conflicted files get their own section at the top of the list, and the first one opens with the whole window, because three views of the code need the width; ⤡ shows the panes again and ‹ › step through the conflicted files. The head pill reads rebasing main while Git replays the commits on a detached HEAD. Pull, Push, Stash and Pop wait, and the commit form is hidden, because Continue commits each step with its own message. A conflicted text file opens in the MergeEditor: the current version (what the branch already has: during a rebase, origin/main and the commits replayed so far) and the incoming version (the commit being replayed) side by side on top, each conflict under a row with its two Accept checkboxes, and below them the result, the file as it will be saved, still holding the conflict markers. ↑ and ↓ step through the conflicts and scroll the three together.",
+      source: 'src/repo/operation_bar.rs',
+      render: () =>
+        rebaseView({
+          middle: C.FileDiffPanel({ diff: statusConflicts, expanded: true, filePosition: [1, 2] }),
+          changes: rebaseChanges,
+          open: { side: 'conflicted', path: statusConflicts.change.path },
+          conflicts: rebaseChanges.conflicted.length,
+          expanded: true,
+        }),
+    },
+    {
+      id: 'conflict-chosen',
+      title: 'Conflicts resolved in the result',
+      about: 'The same file, scrolled to its second conflict with ↓. Ticking Accept current, Accept incoming or both puts those lines in the result in place of the markers; unticking takes them out again. The result is an ordinary editor: here the incoming change was ticked for the second conflict, then two of its lines were edited by hand to keep the current String path, so they turn yellow and that conflict’s checkboxes are disabled. The result counts the conflicts left, and Mark resolved becomes primary once no markers are left, ticked or typed away. Mark resolved writes the result, stages it and opens the next conflicted file; until then nothing is written. Start over puts the markers back.',
+      source: 'src/repo/merge_editor.rs',
+      render: () =>
+        rebaseView({
+          middle: C.FileDiffPanel({ diff: statusMerged, expanded: true, filePosition: [1, 2] }),
+          changes: rebaseChanges,
+          open: { side: 'conflicted', path: statusConflicts.change.path },
+          conflicts: rebaseChanges.conflicted.length,
+          expanded: true,
+        }),
+    },
+    {
+      id: 'rebase-ready',
+      title: 'Rebase ready to continue',
+      about: "After the last Mark resolved the middle pane goes back to the graph. The replayed commit sits on origin/main, main still points at the old commits, and the uncommitted changes hold the resolved commit. The bar says no conflicts are left and Continue is ready: it commits them with the stopped commit's message and replays the rest, leaving out a commit the resolution emptied. The next conflict stops the same way. When every commit is replayed, main moves to the result, the bar goes away and a notification says Rebased main onto origin/main. Abort rebase puts main back where it was without asking, and brings back the stashed changes.",
+      source: 'src/repo/operation_bar.rs',
+      render: () =>
+        rebaseView({
+          middle: C.HistoryList({ history: rebasing, selectedRow: null, changes: rebaseResolved, wipSelected: true }),
+          changes: rebaseResolved,
+          conflicts: 0,
+        }),
+    },
+    {
+      id: 'merge-picture-conflict',
+      title: 'Merge stopped on a picture',
+      about: "The same bar serves a merge that stops, from a branch's menu or from Pull in Fast-forward if possible mode: Abort merge, and Commit merge, which commits with Git's usual message. A conflicted file that isn't text has no markers to choose between, so its comparison shows the current version as Before and the incoming one as After, side by side, with the comparison modes of its kind. Keep current or Keep incoming stages that version as it is.",
+      source: 'src/repo/file_diff_panel.rs',
+      render: () =>
+        C.FastGit({
+          topBar: C.TopBar({ repository: starfall.name, head: starfall.head }),
+          tabStrip: C.TabStrip({ tabs: gameTabs, active: gameTabs.length - 1 }),
+          body: C.RepoView({
+            toolbar: C.RepoToolbar({ unavailable: busyDuringOperation }),
+            operation: C.OperationBar({ operation: starfallMerge, conflicts: starfallConflicts.conflicted.length }),
+            left: C.RefsList({ refs: starfall.refs, selectedRow: null }),
+            middle: C.FileDiffPanel({ diff: slimeConflict, mode: 'split' }),
+            right: C.ChangesList({ changes: starfallConflicts, open: { side: 'conflicted', path: slimeConflict.change.path }, operation: starfallMerge }),
+            status: C.RepoStatusBar({ summary: historySummary(starfall) }),
+          }),
         }),
     },
     {

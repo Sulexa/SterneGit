@@ -2,7 +2,8 @@ use std::{path::Path, rc::Rc, sync::Arc};
 
 use gpui_kit::{
     AnyElement, AnyView, App, InteractiveElement as _, IntoElement, ParentElement as _,
-    RenderOnce, SharedString, Styled as _, UniformListScrollHandle, Window,
+    RenderOnce, SharedString, StatefulInteractiveElement as _, Styled as _,
+    UniformListScrollHandle, Window,
     component::{
         ActiveTheme as _, Disableable as _, Sizable as _,
         button::{Button, ButtonVariants as _},
@@ -12,7 +13,7 @@ use gpui_kit::{
     },
     div,
     prelude::FluentBuilder as _,
-    uniform_list,
+    relative, uniform_list,
 };
 
 use super::{
@@ -29,6 +30,7 @@ use crate::{
 };
 
 const SIDES_TOP_DOWN: [Side; 2] = [Side::Staged, Side::Unstaged];
+const CONFLICTS_HEIGHT: f32 = 0.4;
 
 pub(crate) struct DiscardQuestion {
     pub(crate) title: String,
@@ -107,6 +109,17 @@ impl RowActions {
         }
     }
 
+    fn conflict_menu(&self, menu: PopupMenu, change: &FileChange) -> PopupMenu {
+        let menu = match &self.on_history {
+            Some(on_history) => history_item(menu, on_history, change.clone()).separator(),
+            None => menu,
+        };
+        match &self.root {
+            Some(root) => on_disk_items(menu, root.join(change.exact_path()), true),
+            None => menu,
+        }
+    }
+
     fn item<T: 'static>(
         &self,
         label: &'static str,
@@ -133,6 +146,7 @@ pub(crate) struct ChangesList {
     changes: Option<Arc<WorkingChanges>>,
     rows: BySide<Rc<[FileTreeRow]>>,
     form: AnyView,
+    form_hidden: bool,
     open: Option<OpenFile>,
     scrolls: SideScrolls,
     actions: RowActions,
@@ -158,6 +172,7 @@ impl ChangesList {
             changes,
             rows,
             form: form.into(),
+            form_hidden: false,
             open: None,
             scrolls,
             actions: RowActions {
@@ -190,6 +205,11 @@ impl ChangesList {
         callback: impl Fn(&FileChange, &mut Window, &mut App) + 'static,
     ) -> Self {
         self.actions.on_history = Some(handler(callback));
+        self
+    }
+
+    pub(crate) fn form_hidden(mut self, hidden: bool) -> Self {
+        self.form_hidden = hidden;
         self
     }
 
@@ -242,10 +262,52 @@ impl ChangesList {
             .child(side_header(
                 side,
                 count,
+                everything_on(side, changes),
                 self.actions.writing,
                 self.actions.on_move.clone(),
             ))
             .child(div().fill_height().child(content))
+            .into_any_element()
+    }
+
+    fn conflicts_section(&self, changes: &WorkingChanges, cx: &App) -> AnyElement {
+        let rows = changes.conflicted.iter().map(|change| {
+            let selected = self
+                .open
+                .as_ref()
+                .is_some_and(|open| open.side == Side::Unstaged && open.path == change.path);
+            let opened = (Side::Unstaged, change.clone());
+            file_row(
+                SharedString::from(format!("conflicted/{}", change.path)),
+                change.kind,
+                &change.path,
+                FilePlace::Listed,
+                selected,
+                div(),
+                cx,
+            )
+            .when_some(self.actions.on_open.clone(), |row, on_open| {
+                row.on_click(move |_, window, cx| on_open(&opened, window, cx))
+            })
+            .context_menu({
+                let actions = self.actions.clone();
+                let change = change.clone();
+                move |menu, _, _| actions.conflict_menu(menu, &change)
+            })
+        });
+        v_flex()
+            .flex_none()
+            .max_h(relative(CONFLICTS_HEIGHT))
+            .child(
+                SectionHeader::new(format!("Conflicts ({})", thousands(changes.conflicted.len())))
+                    .color(cx.theme().magenta),
+            )
+            .child(
+                v_flex()
+                    .id("conflicted-files")
+                    .overflow_y_scroll()
+                    .children(rows),
+            )
             .into_any_element()
     }
 
@@ -318,6 +380,9 @@ impl RenderOnce for ChangesList {
         } else {
             std::iter::once(files_bar(&changes, cx))
                 .chain(
+                    (!changes.conflicted.is_empty()).then(|| self.conflicts_section(&changes, cx)),
+                )
+                .chain(
                     SIDES_TOP_DOWN
                         .iter()
                         .map(|&side| self.side_section(side, &changes, cx)),
@@ -326,7 +391,7 @@ impl RenderOnce for ChangesList {
         };
         v_flex()
             .pane()
-            .child(self.form)
+            .when(!self.form_hidden, |this| this.child(self.form))
             .children(lists)
             .into_any_element()
     }
@@ -399,9 +464,19 @@ fn change_folder_row(
     .into_any_element()
 }
 
+fn everything_on(side: Side, changes: &WorkingChanges) -> Scope {
+    match side {
+        Side::Unstaged if !changes.conflicted.is_empty() => {
+            Scope::Files(changes.unstaged.clone())
+        }
+        _ => Scope::Everything,
+    }
+}
+
 fn side_header(
     side: Side,
     count: usize,
+    everything: Scope,
     writing: bool,
     on_move: Option<Handler<(Side, Scope)>>,
 ) -> AnyElement {
@@ -416,7 +491,7 @@ fn side_header(
                 .disabled(writing || count == 0)
                 .when_some(on_move, |button, on_move| {
                     button.on_click(move |_, window, cx| {
-                        on_move(&(side, Scope::Everything), window, cx)
+                        on_move(&(side, everything.clone()), window, cx)
                     })
                 }),
         )

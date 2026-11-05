@@ -3,7 +3,7 @@ use gix::ObjectId;
 use gpui_kit::SharedString;
 
 use super::{
-    ChangeKind, Refusal, Repo,
+    Refusal, Repo,
     command::{Exit, run},
 };
 
@@ -112,20 +112,25 @@ impl Repo {
             .ok_or_else(|| Refusal::StashGone.into())
     }
 
-    fn latest_stash(&self) -> Option<ObjectId> {
+    pub(super) fn carried_since(&self, stash: Option<ObjectId>) -> Carried {
+        if self.has_conflicts() {
+            Carried::WithConflicts
+        } else if self.latest_stash() != stash {
+            Carried::OnlyInStash
+        } else {
+            Carried::Along
+        }
+    }
+
+    pub(super) fn latest_stash(&self) -> Option<ObjectId> {
         let local = self.local();
         let stash = local.try_find_reference(STASH).ok()??;
         stash.try_id().map(|id| id.detach())
     }
 
-    fn has_conflicts(&self) -> bool {
-        self.status().is_ok_and(|changes| {
-            changes
-                .unstaged
-                .iter()
-                .chain(&changes.staged)
-                .any(|change| change.kind == ChangeKind::Conflicted)
-        })
+    pub(super) fn has_conflicts(&self) -> bool {
+        self.status()
+            .is_ok_and(|changes| !changes.conflicted.is_empty())
     }
 }
 

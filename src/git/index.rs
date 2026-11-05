@@ -1,7 +1,7 @@
 use anyhow::Result;
 
 use super::{
-    ChangeKind, FileChange, Repo,
+    ChangeKind, FileChange, Repo, Version,
     command::{Exit, run, run_with_input},
 };
 
@@ -49,6 +49,29 @@ impl Repo {
         }
         let names = nul_separated([change.name_as_git_wrote_it()]);
         self.update_index(&["checkout", "--quiet"], Some(names), None)
+    }
+
+    pub(crate) fn resolve(&self, change: &FileChange, text: &[u8]) -> Result<()> {
+        std::fs::write(self.location.join(change.exact_path()), text)?;
+        self.stage(&Scope::Files(vec![change.clone()]))
+    }
+
+    pub(crate) fn keep(&self, change: &FileChange, version: Version) -> Result<()> {
+        let side = match version {
+            Version::Current => "--ours",
+            Version::Incoming => "--theirs",
+        };
+        let names = nul_separated([change.name_as_git_wrote_it()]);
+        if self
+            .update_index(&["checkout", side], Some(names), None)
+            .is_err()
+        {
+            let on_disk = self.location.join(change.exact_path());
+            if on_disk.exists() {
+                std::fs::remove_file(on_disk)?;
+            }
+        }
+        self.stage(&Scope::Files(vec![change.clone()]))
     }
 
     fn update_index(

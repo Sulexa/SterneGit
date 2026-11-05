@@ -502,8 +502,156 @@ const Sample = (() => {
     },
   };
 
+  const stoppedAt = { id: '3f2a91c', subject: 'Show conflicted files in the changes list' };
+
+  const rebasedCommits = [
+    { id: '9c4e1d2', subject: 'Read conflicted files from git status', author: 'Alex Martin', date: '2026-11-05 09:40', graph: [0, 2, 'O0'], head: true, refs: [] },
+    { id: 'b71d0e4', subject: 'Paint conflicted files magenta', author: 'Alex Martin', date: '2026-11-05 09:58', graph: [1, 2, 'P0 O1'], refs: [['main', 'local']] },
+    { ...stoppedAt, author: 'Alex Martin', date: '2026-11-05 09:51', graph: [1, 2, 'P0 I1 O1'], refs: [] },
+    { id: 'e05a7b3', subject: 'Read conflicted files from git status', author: 'Alex Martin', date: '2026-11-05 09:40', graph: [1, 2, 'P0 I1 O1'], refs: [] },
+    { id: '5d8c2fa', subject: 'Show the fetch time in the status bar', author: 'Sam Lee', date: '2026-11-05 08:51', graph: [0, 2, 'I0 O0 P1'], refs: [['origin/main', 'remote']] },
+    { id: 'a3e90b1', subject: 'Fetch in the background every five minutes', author: 'Sam Lee', date: '2026-11-04 17:22', graph: [0, 2, 'I0 O0 P1'], refs: [] },
+    { ...commits[0], graph: [0, 2, 'I0 I1 O0'], head: false, refs: [] },
+    ...commits.slice(1),
+  ];
+
+  const rebasing = {
+    ...history,
+    head: 'rebasing main',
+    total: history.total + 5,
+    commits: rebasedCommits,
+    refs: history.refs.map((label) =>
+      label.name === 'main'
+        ? { ...label, row: 1, head: false }
+        : label.name === 'origin/main'
+          ? { ...label, row: 4 }
+          : { ...label, row: label.row + 6 },
+    ),
+  };
+
+  const rebase = { kind: 'rebase', branch: 'main', onto: 'origin/main', step: 2, total: 3, commit: stoppedAt };
+  const merge = { kind: 'merge', from: 'feature/blame', into: 'main' };
+  const starfallMerge = { kind: 'merge', from: 'main', into: 'feature/slime-crown' };
+
+  const statusFile = { kind: 'U', path: 'src/git/status.rs' };
+  const listFile = { kind: 'U', path: 'src/repo/changes_list.rs' };
+  const badgesFile = { kind: 'M', path: 'src/ui/badges.rs' };
+
+  const rebaseChanges = { conflicted: [statusFile, listFile], staged: [badgesFile], unstaged: [] };
+  const rebaseOneLeft = { conflicted: [listFile], staged: [badgesFile, { ...statusFile, kind: 'M' }], unstaged: [] };
+  const rebaseResolved = { conflicted: [], staged: [badgesFile, { ...listFile, kind: 'M' }, { ...statusFile, kind: 'M' }], unstaged: [] };
+
+  const statusConflicts = {
+    kind: 'conflict',
+    change: statusFile,
+    side: 'conflicted',
+    lines: 386,
+    labels: { current: 'HEAD', incoming: `${stoppedAt.id} (${stoppedAt.subject})` },
+    parts: [
+      {
+        hidden: 29,
+        tail: [
+          'impl ChangeKind {',
+          "    pub(crate) fn letter(self) -> &'static str {",
+          '        match self {',
+          '            ChangeKind::Added => "A",',
+          '            ChangeKind::Modified => "M",',
+          '            ChangeKind::Deleted => "D",',
+        ],
+      },
+      { conflict: { current: ['            ChangeKind::Renamed => "R",'], incoming: ['            ChangeKind::Conflicted => "U",'] } },
+      {
+        head: [
+          '            ChangeKind::Untracked => "?",',
+          '        }',
+          '    }',
+          '}',
+          '',
+          'impl FileChange {',
+          '    pub(crate) fn new(path: &[u8], original: Option<&[u8]>, kind: ChangeKind) -> Self {',
+          '        Self { path: decode(path).into(), original: original.map(decode), kind }',
+        ],
+        hidden: 166,
+        tail: [
+          'fn parse_status(output: &[u8]) -> WorkingChanges {',
+          '    let mut changes = WorkingChanges::default();',
+          '    let mut entries = output.split(|&byte| byte == 0);',
+          '    while let Some(entry) = entries.next() {',
+          '        let (index, worktree) = (entry[0], entry[1]);',
+          "        let original_path = matches!(index, b'R' | b'C').then(|| entries.next());",
+        ],
+      },
+      {
+        conflict: {
+          current: ['        let path = String::from_utf8_lossy(&entry[3..]).into_owned();'],
+          incoming: [
+            '        let path = &entry[3..];',
+            "        if index == b'U' || worktree == b'U' {",
+            '            changes.conflicted.push(FileChange::new(path, None, ChangeKind::Conflicted));',
+            '            continue;',
+            '        }',
+          ],
+        },
+      },
+      {
+        head: [
+          "        if index == b'?' {",
+          '            changes.unstaged.push(FileChange::new(path, None, ChangeKind::Untracked));',
+          '            continue;',
+          '        }',
+          '        if let Some(kind) = ChangeKind::from_status_code(index) {',
+          '            changes.staged.push(FileChange::new(path, original_path, kind));',
+          '        }',
+          '    }',
+        ],
+        hidden: 142,
+      },
+    ],
+  };
+
+  const statusMerged = {
+    ...statusConflicts,
+    current: 1,
+    reveal: 1,
+    resolutions: [
+      { take: ['current', 'incoming'] },
+      {
+        take: ['incoming'],
+        caret: 2,
+        edited: [
+          ['edited', '        let path = String::from_utf8_lossy(&entry[3..]).into_owned();'],
+          ['incoming', "        if index == b'U' || worktree == b'U' {"],
+          ['edited', '            changes.conflicted.push(FileChange::new(&path, None, ChangeKind::Conflicted));'],
+          ['incoming', '            continue;'],
+          ['incoming', '        }'],
+        ],
+      },
+    ],
+  };
+
+  const slimeConflict = {
+    ...slimeDiff,
+    change: { kind: 'U', path: slimeDiff.change.path },
+    side: 'conflicted',
+    sources: ['Current', 'Incoming'],
+    details: {
+      ...slimeDiff.details,
+      before: ['24 × 24 px', 'RGBA, 8 bits', 'PNG', '913 B'],
+      after: ['24 × 24 px', 'RGBA, 8 bits', 'PNG', '742 B'],
+      deltas: { 3: '−171 B' },
+    },
+    image: { ...slime, before: slime.after, after: slime.before },
+  };
+
+  const starfallConflicts = {
+    conflicted: [slimeConflict.change],
+    staged: [{ kind: 'M', path: 'Assets/Scripts/Enemies/SlimeController.cs' }, { kind: 'A', path: 'Assets/Audio/Effects/squish.wav' }],
+    unstaged: [],
+  };
+
   return {
     history, stashed, collapsed, changes, partlyStaged, draft, commitDetails, commitFileDiff, fileHistory, fileDiff, stagedHunkDiff, partlyStagedDiff, selectedLines, tabs,
     starfall, assets, slimeDiff, crownIcon, introDiff, themeDiff, modelDiff,
+    rebasing, rebase, merge, starfallMerge, rebaseChanges, rebaseOneLeft, rebaseResolved, statusConflicts, statusMerged, slimeConflict, starfallConflicts,
   };
 })();
