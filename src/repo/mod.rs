@@ -17,6 +17,7 @@ mod patch_view;
 mod ref_tree;
 mod refs_list;
 mod repository;
+mod stash_menu;
 mod status_bar;
 mod toolbar;
 
@@ -45,11 +46,12 @@ use crate::{
     },
     git::{
         Commit, FileChange, FileCommit, HISTORY_LIMIT, History, PullMode, RefLabel, Scope, Side,
-        short_id,
+        Stash, short_id,
     },
     ui::{self, Failure, FileView, Folded, Look as _, Notice, run_in_background, thousands},
 };
 use branch_dialog::open_branch_dialog;
+use stash_menu::{StashAction, StashMenu};
 use branch_menu::{BranchAction, BranchMenu, confirm_delete};
 use changes_list::{ChangesList, SideFolds, SideScrolls, discard_question};
 use commit_form::CommitForm;
@@ -590,11 +592,7 @@ impl RepoView {
             return;
         };
         match history.row_of(&label.target) {
-            Some(row) => {
-                self.select_commit(label.target, cx);
-                self.history_scroll
-                    .scroll_to_item(row, ScrollStrategy::Center);
-            }
+            Some(row) => self.reveal_row(label.target, row, cx),
             None => window.push_notification(
                 format!(
                     "{} points to a commit older than the newest {} shown.",
@@ -604,6 +602,23 @@ impl RepoView {
                 cx,
             ),
         }
+    }
+
+    fn reveal_stash(&mut self, id: ObjectId, cx: &mut Context<Self>) {
+        let row = self
+            .repository
+            .read(cx)
+            .history()
+            .and_then(|history| history.row_of(&id));
+        if let Some(row) = row {
+            self.reveal_row(id, row, cx);
+        }
+    }
+
+    fn reveal_row(&mut self, id: ObjectId, row: usize, cx: &mut Context<Self>) {
+        self.select_commit(id, cx);
+        self.history_scroll
+            .scroll_to_item(row, ScrollStrategy::Center);
     }
 
     fn toggle_ref_fold(&mut self, group: RefGroup, cx: &mut Context<Self>) {
@@ -649,6 +664,29 @@ impl RepoView {
             Operation::Stash => repository.update(cx, |repository, cx| repository.stash(cx)),
             Operation::Pop => repository.update(cx, |repository, cx| repository.pop_stash(cx)),
         }
+    }
+
+    fn act_on_stash(
+        &mut self,
+        stash: Stash,
+        action: StashAction,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let repository = self.repository.clone();
+        match action {
+            StashAction::Apply | StashAction::Pop => repository
+                .update(cx, |repository, cx| repository.act_on_stash(stash, action, cx)),
+            StashAction::Delete => stash_menu::confirm_delete(repository, stash, window, cx),
+        }
+    }
+
+    fn stash_menu(&self, cx: &mut Context<Self>) -> StashMenu {
+        StashMenu::new(self.repository.read(cx).is_writing()).on_action(cx.listener(
+            |this, (stash, action): &(Stash, StashAction), window, cx| {
+                this.act_on_stash(stash.clone(), *action, window, cx)
+            },
+        ))
     }
 
     fn act_on_branch(
@@ -784,10 +822,13 @@ impl RepoView {
                 this.act_on_branch(label.clone(), *action, window, cx)
             },
         ));
+        let stash_menu = self.stash_menu(cx);
         RefsList::new(history, &self.folded_refs, self.refs_scroll.clone())
             .selected(self.target.commit())
             .branch_menu(branch_menu)
+            .stash_menu(stash_menu)
             .on_reveal(cx.listener(|this, ix: &usize, window, cx| this.reveal_ref(*ix, window, cx)))
+            .on_reveal_stash(cx.listener(|this, id: &ObjectId, _, cx| this.reveal_stash(*id, cx)))
             .on_toggle(
                 cx.listener(|this, group: &RefGroup, _, cx| {
                     this.toggle_ref_fold(group.clone(), cx)
@@ -797,11 +838,13 @@ impl RepoView {
 
     fn history_list(&self, history: Arc<History>, cx: &mut Context<Self>) -> HistoryList {
         let changes = self.repository.read(cx).changes().cloned();
+        let stash_menu = self.stash_menu(cx);
         HistoryList::new(
             history,
             self.middle_focus.clone(),
             self.history_scroll.clone(),
         )
+        .stash_menu(stash_menu)
         .selected(self.target.commit())
         .uncommitted(changes, self.target.is_working_tree())
         .on_select_commit(cx.listener(|this, id: &ObjectId, _, cx| this.select_commit(*id, cx)))

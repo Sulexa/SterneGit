@@ -1,5 +1,5 @@
 use gpui_kit::{
-    AnyElement, App, Div, Hsla, IntoElement, ParentElement as _, Styled as _,
+    AnyElement, App, Div, Hsla, IntoElement, ParentElement as _, SharedString, Styled as _,
     assets::IconName,
     component::{ActiveTheme as _, Icon, Sizable as _, StyledExt as _, h_flex},
     div,
@@ -25,6 +25,32 @@ fn ref_icon(kind: RefKind) -> IconName {
 
 pub(crate) fn ref_badge(shown: ShownRef, color: Hsla, cx: &App) -> AnyElement {
     let label = shown.label;
+    let icons = h_flex()
+        .flex_none()
+        .gap(px(2.))
+        .child(Icon::new(ref_icon(label.kind)).xsmall().text_color(color))
+        .when(shown.with_upstream, |this| {
+            this.child(
+                Icon::new(ref_icon(RefKind::RemoteBranch))
+                    .xsmall()
+                    .text_color(color),
+            )
+        });
+    badge(icons, label.name.clone(), label.is_head, color, cx)
+}
+
+pub(crate) fn stash_badge(name: SharedString, color: Hsla, cx: &App) -> AnyElement {
+    let icon = Icon::new(IconName::Archive).xsmall().text_color(color);
+    badge(icon, name, false, color, cx)
+}
+
+fn badge(
+    icons: impl IntoElement,
+    name: SharedString,
+    checked_out: bool,
+    color: Hsla,
+    cx: &App,
+) -> AnyElement {
     h_flex()
         .min_w(px(32.))
         .max_w(px(160.))
@@ -34,27 +60,15 @@ pub(crate) fn ref_badge(shown: ShownRef, color: Hsla, cx: &App) -> AnyElement {
         .rounded(px(4.))
         .border_1()
         .border_color(color.opacity(LABEL_BORDER))
-        .bg(color.opacity(if label.is_head { HEAD_FILL } else { LABEL_FILL }))
+        .bg(color.opacity(if checked_out { HEAD_FILL } else { LABEL_FILL }))
         .xs_text()
         .text_color(cx.theme().foreground)
-        .child(
-            h_flex()
-                .flex_none()
-                .gap(px(2.))
-                .child(Icon::new(ref_icon(label.kind)).xsmall().text_color(color))
-                .when(shown.with_upstream, |this| {
-                    this.child(
-                        Icon::new(ref_icon(RefKind::RemoteBranch))
-                            .xsmall()
-                            .text_color(color),
-                    )
-                }),
-        )
+        .child(icons)
         .child(
             div()
                 .ellipsis()
-                .when(label.is_head, |this| this.font_semibold())
-                .child(label.name.clone()),
+                .when(checked_out, |this| this.font_semibold())
+                .child(name),
         )
         .into_any_element()
 }

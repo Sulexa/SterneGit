@@ -1,5 +1,5 @@
 const Catalog = (() => {
-  const { history, collapsed, changes, partlyStaged, commitDetails, commitFileDiff, fileHistory, fileDiff, stagedHunkDiff, selectedLines, tabs } = Sample;
+  const { history, stashed, collapsed, changes, partlyStaged, commitDetails, commitFileDiff, fileHistory, fileDiff, stagedHunkDiff, selectedLines, tabs } = Sample;
   const { slimeDiff, crownIcon, introDiff, themeDiff, modelDiff } = Sample;
   const pane = { w: 736, h: 600 };
   const barFrame = (bar, width = 736) => `<div class="v" style="width:${width}px;position:relative;height:${bar.includes('ViewOptionsMenu') ? 300 : 40}px">${bar}</div>`;
@@ -206,7 +206,7 @@ const Catalog = (() => {
           name: 'RefBadge',
           code: 'ui::ref_badge',
           source: 'src/ui/badges.rs',
-          about: 'A ref on a commit row, tinted with the commit\'s lane color. The checked-out branch is filled more and bold. A local branch whose upstream sits on the same commit takes the upstream in: one badge with a branch and a cloud, named after the local branch. Width 32–160 px, then ellipsis.',
+          about: 'A ref on a commit row, tinted with the commit\'s lane color. The checked-out branch is filled more and bold. A local branch whose upstream sits on the same commit takes the upstream in: one badge with a branch and a cloud, named after the local branch. A stash row carries one with an archive icon and its stash@{n} name. Width 32–160 px, then ellipsis.',
           variants: [
             ['HEAD branch', () => C.RefBadge({ name: 'main', kind: 'local', head: true })],
             ['HEAD in sync with its upstream', () => C.RefBadge({ name: 'main', kind: 'local', head: true, synced: true })],
@@ -215,6 +215,7 @@ const Catalog = (() => {
             ['Remote', () => C.RefBadge({ name: 'origin/main', kind: 'remote' })],
             ['Tag', () => C.RefBadge({ name: 'v0.2.0', kind: 'tag', color: LaneColors[2] })],
             ['Long name', () => C.RefBadge({ name: 'origin/feature/a-very-long-branch-name', kind: 'remote', color: LaneColors[3] })],
+            ['Stash', () => C.RefBadge({ name: 'stash@{1}', kind: 'stash', color: LaneColors[1] })],
           ],
         },
         {
@@ -265,7 +266,7 @@ const Catalog = (() => {
           name: 'GraphCell',
           code: 'ui::graph_cell',
           source: 'src/ui/graph_cell.rs',
-          about: 'One row of the commit graph: 12 px per lane with a 6 px margin on each side, so the HEAD ring is never cut. Lines 2 px, nodes 4.5 px, merges at 70 %, a ring around HEAD.',
+          about: 'One row of the commit graph: 12 px per lane with a 6 px margin on each side, so the HEAD ring is never cut. Lines 2 px, nodes 4.5 px, merges at 70 %, a ring around HEAD. A stash is a hollow 9 px square, its line leaving from the bottom of the square.',
           variants: [
             ['HEAD, first commit', lanes([0, 1, 'O0'], { head: true }), { zoom: 2 }],
             ['On a straight lane', lanes([0, 1, 'I0 O0']), { zoom: 2 }],
@@ -273,6 +274,8 @@ const Catalog = (() => {
             ['Merge', lanes([0, 3, 'I0 P1 O0 O2'], { merge: true }), { zoom: 2 }],
             ['Lane joining its parent', lanes([2, 3, 'P0 P1 I2 O0']), { zoom: 2 }],
             ['Root commit', lanes([0, 1, 'I0']), { zoom: 2 }],
+            ['Stash', lanes([0, 1, 'O0'], { stash: true }), { zoom: 2 }],
+            ['Stash beside a lane', lanes([1, 2, 'P0 O1'], { stash: true }), { zoom: 2 }],
           ],
         },
         {
@@ -439,8 +442,9 @@ const Catalog = (() => {
           name: 'RefsList',
           code: 'repo::refs_list::RefsList',
           source: 'src/repo/refs_list.rs',
-          about: 'Branches, remotes and tags, each section only when it has refs. Names are split at each slash into folders, in the order Git lists them; under Remotes the first folder is the remote. Sections and folders fold with a click. Clicking a ref selects its commit; right-clicking a branch opens its BranchMenu.',
+          about: 'Branches, remotes, stashes and tags, each section only when it has something. Names are split at each slash into folders, in the order Git lists them; under Remotes the first folder is the remote. Stashes are listed newest first, without folders. Sections and folders fold with a click. Clicking a ref or a stash selects its commit; right-clicking a branch opens its BranchMenu, and right-clicking a stash its StashMenu.',
           variants: [
+            ['With stashes, one selected', () => C.RefsList({ refs: stashed.history.refs, stashes: stashed.history.stashes, selectedRow: 3, collapsed: ['local', 'remote'] }), { w: 224, h: 200 }],
             ['With a selection', () => C.RefsList({ refs: history.refs, selectedRow: 2, collapsed }), { w: 224, h: 480 }],
             ['Folders and sections folded', () => C.RefsList({ refs: history.refs, collapsed: ['local:feature', 'remote', 'tag'] }), { w: 224, h: 200 }],
           ],
@@ -470,6 +474,16 @@ const Catalog = (() => {
           ],
         },
         {
+          name: 'StashRow',
+          code: 'repo::refs_list::stash_row',
+          source: 'src/repo/refs_list.rs',
+          about: 'One stash in the RefsList: an archive icon, then its message as Git wrote it, cut with an ellipsis. Selected when its stash is. A click selects the stash in the graph; a right-click opens its StashMenu.',
+          variants: [
+            ['Made by the Stash button', () => C.StashRow({ stash: stashed.history.stashes[0] }), { w: 224 }],
+            ['With a message, selected', () => C.StashRow({ stash: stashed.history.stashes[1], selected: true }), { w: 224 }],
+          ],
+        },
+        {
           name: 'BranchMenu',
           code: 'repo::branch_menu::BranchMenu',
           source: 'src/repo/branch_menu.rs',
@@ -494,11 +508,29 @@ const Catalog = (() => {
           ],
         },
         {
+          name: 'StashMenu',
+          code: 'repo::stash_menu::StashMenu',
+          source: 'src/repo/stash_menu.rs',
+          about: 'The right-click menu of a stash, in the RefsList or on its CommitRow: Apply and Pop, then Delete…. Apply runs git stash apply --index, Pop git stash pop --index, so what was staged stays staged; a stash that conflicts or does not apply is kept, as with the header\'s Pop. Every item is disabled while Git writes.',
+          variants: [['A stash', () => menuFrame(C.StashMenu({ stash: stashed.history.stashes[1] }), 220)]],
+        },
+        {
+          name: 'DeleteStashDialog',
+          code: 'repo::stash_menu::confirm_delete',
+          source: 'src/repo/stash_menu.rs',
+          about: 'An AlertDialog opened by Delete… in a StashMenu. It quotes the stash message and says its changes are lost, since Git keeps no other copy. Delete runs git stash drop; Cancel or Esc does nothing.',
+          variants: [
+            ['Made by the Stash button', () => dialogFrame(C.DeleteStashDialog({ stash: stashed.history.stashes[0] }))],
+            ['With a message', () => dialogFrame(C.DeleteStashDialog({ stash: stashed.history.stashes[1] }))],
+          ],
+        },
+        {
           name: 'HistoryList',
           code: 'repo::history_list::HistoryList',
           source: 'src/repo/history_list.rs',
-          about: 'The Uncommitted changes row when the work tree has changes, then one row per commit. The graph is as wide as the widest visible row.',
-          variants: [['First rows', () => C.HistoryList({ history: { ...history, commits: history.commits.slice(0, 12) }, selectedRow: 2, changes }), { w: row, h: 370 }]],
+          about: 'The Uncommitted changes row when the work tree has changes, then one row per commit and one per stash, a stash at the time it was made. The graph is as wide as the widest visible row.',
+          variants: [
+            ['With stashes', () => C.HistoryList({ history: { ...stashed.history, commits: stashed.history.commits.slice(0, 8) }, selectedRow: 3, changes }), { w: row, h: 260 }],['First rows', () => C.HistoryList({ history: { ...history, commits: history.commits.slice(0, 12) }, selectedRow: 2, changes }), { w: row, h: 370 }]],
         },
         {
           name: 'CommitRow',
@@ -511,6 +543,7 @@ const Catalog = (() => {
             ['Merge', () => C.CommitRow({ commit: commit(3), width }), { w: row }],
             ['More than three refs', () => C.CommitRow({ commit: { ...commit(6), refs: [['v0.2.0', 'tag'], ['release', 'local'], ['origin/release', 'remote'], ['stable', 'tag'], ['lts', 'tag']] }, width }), { w: row }],
             ['No message', () => C.CommitRow({ commit: { ...commit(8), subject: '' }, width }), { w: row }],
+            ['Stash', () => C.CommitRow({ commit: stashed.history.commits[0], width }), { w: row }],
           ],
         },
         {

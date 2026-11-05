@@ -7,8 +7,8 @@ use gpui_kit::{
 
 use super::{Repository, file_history::HistoryPlace};
 use crate::{
-    git::HISTORY_LIMIT,
-    ui::{Look as _, thousands},
+    git::{HISTORY_LIMIT, RowKind},
+    ui::{Look as _, counted, thousands},
 };
 
 const FAILURE_WIDTH: f32 = 480.;
@@ -28,11 +28,15 @@ impl RepoStatusBar {
             _ if repository.is_reading_history() => "Reading history…".to_string(),
             Some(history) => {
                 let mut summary = format!(
-                    "{} commits · {} refs · read in {} ms",
-                    thousands(history.commits.len()),
+                    "{} commits · {} refs",
+                    thousands(history.commit_count()),
                     thousands(history.refs.len()),
-                    history.elapsed.as_millis()
                 );
+                if !history.stashes.is_empty() {
+                    let stashes = counted(history.stashes.len(), "stash", "stashes");
+                    summary.push_str(&format!(" · {stashes}"));
+                }
+                summary.push_str(&format!(" · read in {} ms", history.elapsed.as_millis()));
                 if history.truncated {
                     summary.push_str(&format!(" · newest {} shown", thousands(HISTORY_LIMIT)));
                 }
@@ -42,8 +46,15 @@ impl RepoStatusBar {
         };
         let position = history
             .zip(selected)
-            .and_then(|(history, id)| Some((history.row_of(&id)?, history.commits.len())))
-            .map(|(row, count)| format!("Commit {} of {}", thousands(row + 1), thousands(count)))
+            .and_then(|(history, id)| history.place_of(&id))
+            .map(|place| {
+                format!(
+                    "{} {} of {}",
+                    row_name(place.kind),
+                    thousands(place.number),
+                    thousands(place.count)
+                )
+            })
             .unwrap_or_default();
         Self {
             summary,
@@ -65,6 +76,13 @@ impl RepoStatusBar {
             );
         }
         self
+    }
+}
+
+fn row_name(kind: RowKind) -> &'static str {
+    match kind {
+        RowKind::Commit => "Commit",
+        RowKind::Stash => "Stash",
     }
 }
 

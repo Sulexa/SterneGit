@@ -13,10 +13,10 @@ mod side;
 mod text;
 
 pub(crate) use avatar::author_avatar;
-pub(crate) use badges::{additions, change_badge, deletions, ref_badge};
+pub(crate) use badges::{additions, change_badge, deletions, ref_badge, stash_badge};
 pub(crate) use file_view::{FileView, FileViewToggle};
 pub(crate) use folded::Folded;
-pub(crate) use graph_cell::{graph_cell, graph_width, uncommitted_cell};
+pub(crate) use graph_cell::{GraphNode, graph_cell, graph_width, uncommitted_cell};
 pub(crate) use handler::{Handler, handler};
 pub(crate) use load::{Failure, Job, Load, run_in_background};
 pub(crate) use look::Look;

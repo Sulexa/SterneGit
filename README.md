@@ -50,6 +50,12 @@ Click a branch, remote branch or tag in the sidebar to jump to its commit. In
 the graph, a branch on the same commit as its upstream shows as one badge with a
 branch and a cloud.
 
+Stashes have their own section in the sidebar, newest first, and a row each in
+the graph: a hollow square joined to the commit the stash was made on, with a
+`stash@{n}` badge. Select one in either place to see what it changes.
+Right-click one to **Apply** it (the stash is kept), **Pop** it, or **Delete** it
+after a confirmation.
+
 When the work tree has changes, an **Uncommitted changes** row sits above the
 graph. Select it (or press ↑ from the newest commit) to list the unstaged and
 staged files. Click a file to compare it with its previous version in the middle

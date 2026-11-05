@@ -5,18 +5,19 @@ use gpui_kit::{
     AnyElement, App, FocusHandle, InteractiveElement as _, IntoElement, MouseButton,
     ParentElement as _, Pixels, RenderOnce, SharedString, Styled as _, UniformListScrollHandle,
     Window,
-    component::{ActiveTheme as _, h_flex, scroll::Scrollbar, v_flex},
+    component::{ActiveTheme as _, h_flex, menu::ContextMenuExt as _, scroll::Scrollbar, v_flex},
     div,
     prelude::FluentBuilder as _,
     px, uniform_list,
 };
 
+use super::stash_menu::StashMenu;
 use crate::{
     actions::HISTORY_CONTEXT,
     git::{History, WorkingChanges},
     ui::{
-        self, Handler, Look as _, Palette, ROW_HEIGHT, commit_subject, handler, list_row,
-        ref_badge, thousands,
+        self, GraphNode, Handler, Look as _, Palette, ROW_HEIGHT, commit_subject, handler,
+        list_row, ref_badge, stash_badge, thousands,
     },
 };
 
@@ -35,6 +36,13 @@ pub(crate) struct HistoryList {
     scroll: UniformListScrollHandle,
     on_select_commit: Option<Handler<ObjectId>>,
     on_select_uncommitted: Option<Handler<()>>,
+    stash_menu: Option<StashMenu>,
+}
+
+#[derive(Clone)]
+struct RowActions {
+    on_select: Option<Handler<ObjectId>>,
+    stash_menu: Option<StashMenu>,
 }
 
 impl HistoryList {
@@ -51,7 +59,13 @@ impl HistoryList {
             scroll,
             on_select_commit: None,
             on_select_uncommitted: None,
+            stash_menu: None,
         }
+    }
+
+    pub(crate) fn stash_menu(mut self, menu: StashMenu) -> Self {
+        self.stash_menu = Some(menu);
+        self
     }
 
     pub(crate) fn selected(mut self, commit: Option<ObjectId>) -> Self {
@@ -97,7 +111,12 @@ impl RenderOnce for HistoryList {
             scroll,
             on_select_commit,
             on_select_uncommitted,
+            stash_menu,
         } = self;
+        let actions = RowActions {
+            on_select: on_select_commit,
+            stash_menu,
+        };
         let palette = Palette::new(cx);
         let uncommitted_row = uncommitted.map(|(changes, selected)| {
             uncommitted_row(&changes, selected, &palette, on_select_uncommitted, cx)
@@ -125,7 +144,7 @@ impl RenderOnce for HistoryList {
                                 selected == Some(row),
                                 graph_width,
                                 &palette,
-                                on_select_commit.clone(),
+                                &actions,
                                 cx,
                             )
                         })
@@ -149,16 +168,21 @@ fn commit_row(
     selected: bool,
     graph_width: Pixels,
     palette: &Palette,
-    on_select: Option<Handler<ObjectId>>,
+    actions: &RowActions,
     cx: &App,
 ) -> AnyElement {
     let commit = &history.commits[row];
     let id = commit.id;
     let graph_row = history.graph.rows[row].clone();
-    let is_head = history.head_id == Some(commit.id);
+    let stash = history.stash_on(&commit.id);
+    let node = match stash {
+        Some(_) => GraphNode::Stash,
+        None if history.head_id == Some(commit.id) => GraphNode::Head,
+        None => GraphNode::Commit,
+    };
     let labels = history.shown_on(&commit.id);
     let color = palette.lane(graph_row.node_lane);
-    list_row(SharedString::from(commit.id.to_string()), selected)
+    let row = list_row(SharedString::from(commit.id.to_string()), selected)
         .px_3()
         .child(
             h_flex()
@@ -166,13 +190,14 @@ fn commit_row(
                 .w_full()
                 .min_w_0()
                 .gap_3()
-                .child(ui::graph_cell(graph_row, is_head, palette, graph_width))
+                .child(ui::graph_cell(graph_row, node, palette, graph_width))
                 .child(
                     h_flex()
                         .flex_1()
                         .min_w_0()
                         .overflow_hidden()
                         .gap_1p5()
+                        .children(stash.map(|stash| stash_badge(stash.name.clone(), color, cx)))
                         .children(
                             labels
                                 .iter()
@@ -227,10 +252,17 @@ fn commit_row(
                         .child(commit.short_id.clone()),
                 ),
         )
-        .when_some(on_select, |row, on_select| {
+        .when_some(actions.on_select.clone(), |row, on_select| {
             row.on_click(move |_, window, cx| on_select(&id, window, cx))
-        })
-        .into_any_element()
+        });
+    match (stash, actions.stash_menu.clone()) {
+        (Some(stash), Some(stash_menu)) => {
+            let right_clicked = stash.clone();
+            row.context_menu(move |menu, _, _| stash_menu.build(menu, &right_clicked))
+                .into_any_element()
+        }
+        _ => row.into_any_element(),
+    }
 }
 
 fn uncommitted_row(

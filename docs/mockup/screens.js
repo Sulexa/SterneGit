@@ -1,5 +1,5 @@
 const Screens = (() => {
-  const { history, collapsed, changes, partlyStaged, draft, commitDetails, commitFileDiff, fileHistory, fileDiff, partlyStagedDiff, selectedLines, tabs } = Sample;
+  const { history, stashed, collapsed, changes, partlyStaged, draft, commitDetails, commitFileDiff, fileHistory, fileDiff, partlyStagedDiff, selectedLines, tabs } = Sample;
   const { starfall, assets, slimeDiff, introDiff, themeDiff, modelDiff } = Sample;
   const selected = 2;
   const position = (row) => `Commit ${thousands(row + 1)} of ${thousands(history.total)}`;
@@ -26,6 +26,15 @@ const Screens = (() => {
       right: C.CommitPanel({ commit: history.commits[selected], details: commitDetails, ...panel }),
       status,
       toolbar,
+    });
+
+  const stashSelected = () =>
+    repo({
+      left: C.RefsList({ refs: stashed.history.refs, stashes: stashed.history.stashes, selectedRow: 3, collapsed }),
+      middle: C.HistoryList({ history: stashed.history, selectedRow: 3, changes }),
+      right: C.CommitPanel({ commit: stashed.history.commits[3], details: stashed.details }),
+      status: { summary: historySummary(stashed.history), position: 'Stash 2 of 2' },
+      toolbar: C.RepoToolbar({ unavailable: [] }),
     });
 
   const commitFileComparison = () =>
@@ -130,6 +139,39 @@ const Screens = (() => {
       about: 'The main screen. Under the tabs, the header holds Pull, Push, Branch, Stash and Pop. Then refs on the left, split into folders at each slash, the commit graph in the middle, the selected commit and the files it changes on the right. The refs pointing at the selected commit are highlighted too. Click a section or a folder to fold it.',
       source: 'src/repo/mod.rs',
       render: () => C.FastGit({ topBar: topBar(), tabStrip: tabStrip(), body: commitSelected() }),
+    },
+    {
+      id: 'stashes',
+      title: 'Stashes',
+      about: 'Stashes get a section of their own in the left pane, between Remotes and Tags, newest first, each with its message as Git wrote it; it folds like the others and is left out when there is no stash. In the graph each stash is a row at the time it was made: a hollow square in the lane of the commit it was made on, joined to that commit, with a stash@{n} badge. Git also keeps a commit for the staged part of a stash and one for its untracked files; the graph leaves those out. Clicking a stash in the left pane or in the graph selects it, and the right pane shows what it changes in tracked files against the commit it was made on, as for any commit. The status bar counts the stashes, and says which one is selected; commit positions skip the stash rows.',
+      source: 'src/repo/refs_list.rs',
+      render: () => C.FastGit({ topBar: topBar(), tabStrip: tabStrip(), body: stashSelected() }),
+    },
+    {
+      id: 'stash-menu',
+      title: 'Right-click on a stash',
+      about: "A right-click on a stash, in the left pane or on its row in the graph, opens its menu where the pointer is, without selecting it. Apply brings its changes back into the work tree and keeps the stash; Pop brings them back and deletes the stash; both keep what was staged staged. When the changes conflict with the files, the conflicted files are left to resolve and the stash is kept; when they don't apply at all, nothing changes and the stash is kept; an error notification says which. Delete… asks first. Each item runs like the header's Pop: one Git write at a time, disabled while one runs, then a notification such as Popped stash@{1}. The header's Pop still pops the newest stash.",
+      source: 'src/repo/stash_menu.rs',
+      render: () =>
+        C.FastGit({
+          topBar: topBar(),
+          tabStrip: tabStrip(),
+          body: stashSelected(),
+          overlays: C.StashMenu({ stash: stashed.history.stashes[1], left: 120, top: 608, hot: Texts.popStash(stashed.history.stashes[1].name) }),
+        }),
+    },
+    {
+      id: 'delete-stash',
+      title: 'Delete a stash',
+      about: 'Delete… always asks first, because Git keeps no other copy of a stash. Delete then runs git stash drop on that stash, and the stashes after it move up by one; Cancel or Esc keeps it.',
+      source: 'src/repo/stash_menu.rs',
+      render: () =>
+        C.FastGit({
+          topBar: topBar(),
+          tabStrip: tabStrip(),
+          body: stashSelected(),
+          overlays: C.DeleteStashDialog({ stash: stashed.history.stashes[1] }),
+        }),
     },
     {
       id: 'commit-file',

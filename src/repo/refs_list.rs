@@ -15,10 +15,11 @@ use gpui_kit::{
 
 use super::{
     branch_menu::BranchMenu,
-    ref_tree::{RefGroup, RefTreeRow, last_segment, ref_tree},
+    ref_tree::{RefGroup, RefTreeRow, Section, last_segment, ref_tree},
+    stash_menu::StashMenu,
 };
 use crate::{
-    git::{History, RefKind, RefLabel},
+    git::{History, RefKind, RefLabel, Stash},
     ui::{Folded, Handler, SectionHeader, handler, list_row, tree_line},
 };
 
@@ -29,8 +30,10 @@ pub(crate) struct RefsList {
     selected: Option<ObjectId>,
     scroll: UniformListScrollHandle,
     on_reveal: Option<Handler<usize>>,
+    on_reveal_stash: Option<Handler<ObjectId>>,
     on_toggle: Option<Handler<RefGroup>>,
     branch_menu: Option<BranchMenu>,
+    stash_menu: Option<StashMenu>,
 }
 
 impl RefsList {
@@ -40,18 +43,25 @@ impl RefsList {
         scroll: UniformListScrollHandle,
     ) -> Self {
         Self {
-            rows: ref_tree(&history.refs, folded),
+            rows: ref_tree(&history.refs, history.stashes.len(), folded),
             history,
             selected: None,
             scroll,
             on_reveal: None,
+            on_reveal_stash: None,
             on_toggle: None,
             branch_menu: None,
+            stash_menu: None,
         }
     }
 
     pub(crate) fn branch_menu(mut self, menu: BranchMenu) -> Self {
         self.branch_menu = Some(menu);
+        self
+    }
+
+    pub(crate) fn stash_menu(mut self, menu: StashMenu) -> Self {
+        self.stash_menu = Some(menu);
         self
     }
 
@@ -65,6 +75,14 @@ impl RefsList {
         callback: impl Fn(&usize, &mut Window, &mut App) + 'static,
     ) -> Self {
         self.on_reveal = Some(handler(callback));
+        self
+    }
+
+    pub(crate) fn on_reveal_stash(
+        mut self,
+        callback: impl Fn(&ObjectId, &mut Window, &mut App) + 'static,
+    ) -> Self {
+        self.on_reveal_stash = Some(handler(callback));
         self
     }
 
@@ -85,8 +103,10 @@ impl RenderOnce for RefsList {
             selected,
             scroll,
             on_reveal,
+            on_reveal_stash,
             on_toggle,
             branch_menu,
+            stash_menu,
         } = self;
         div()
             .id("refs")
@@ -99,9 +119,11 @@ impl RenderOnce for RefsList {
                     rows[range]
                         .iter()
                         .map(|row| match row {
-                            &RefTreeRow::Section { kind, count, open } => {
-                                section_header(kind, count, open, on_toggle.clone())
-                            }
+                            &RefTreeRow::Section {
+                                section,
+                                count,
+                                open,
+                            } => section_header(section, count, open, on_toggle.clone()),
                             RefTreeRow::Folder {
                                 kind,
                                 path,
@@ -117,6 +139,14 @@ impl RenderOnce for RefsList {
                                 branch_menu.clone(),
                                 cx,
                             ),
+                            &RefTreeRow::Stash { ix } => stash_row(
+                                &history.stashes[ix],
+                                ix,
+                                selected,
+                                on_reveal_stash.clone(),
+                                stash_menu.clone(),
+                                cx,
+                            ),
                         })
                         .collect::<Vec<_>>()
                 })
@@ -127,11 +157,12 @@ impl RenderOnce for RefsList {
     }
 }
 
-fn section_title(kind: RefKind) -> &'static str {
-    match kind {
-        RefKind::LocalBranch => "Branches",
-        RefKind::RemoteBranch => "Remotes",
-        RefKind::Tag => "Tags",
+fn section_title(section: Section) -> &'static str {
+    match section {
+        Section::Refs(RefKind::LocalBranch) => "Branches",
+        Section::Refs(RefKind::RemoteBranch) => "Remotes",
+        Section::Stashes => "Stashes",
+        Section::Refs(RefKind::Tag) => "Tags",
     }
 }
 
@@ -150,13 +181,13 @@ fn leaf_icon(kind: RefKind) -> IconName {
 }
 
 fn section_header(
-    kind: RefKind,
+    section: Section,
     count: usize,
     open: bool,
     on_toggle: Option<Handler<RefGroup>>,
 ) -> AnyElement {
-    let group = RefGroup::Section(kind);
-    SectionHeader::new(section_title(kind))
+    let group = RefGroup::Section(section);
+    SectionHeader::new(section_title(section))
         .count(count)
         .open(open)
         .when_some(on_toggle, |header, on_toggle| {
@@ -219,6 +250,38 @@ fn ref_row(
         Some(branch_menu) => {
             let right_clicked = label.clone();
             row.context_menu(move |menu, _, _| branch_menu.build(menu, &right_clicked))
+                .into_any_element()
+        }
+        None => row.into_any_element(),
+    }
+}
+
+fn stash_row(
+    stash: &Stash,
+    ix: usize,
+    selected: Option<ObjectId>,
+    on_reveal: Option<Handler<ObjectId>>,
+    stash_menu: Option<StashMenu>,
+    cx: &App,
+) -> AnyElement {
+    let id = stash.id;
+    let row = list_row(SharedString::from(format!("stash/{ix}")), selected == Some(id))
+        .px_3()
+        .child(tree_line(
+            0,
+            None,
+            muted_icon(IconName::Archive, cx),
+            &stash.message,
+            false,
+            cx,
+        ))
+        .when_some(on_reveal, |row, on_reveal| {
+            row.on_click(move |_, window, cx| on_reveal(&id, window, cx))
+        });
+    match stash_menu {
+        Some(stash_menu) => {
+            let right_clicked = stash.clone();
+            row.context_menu(move |menu, _, _| stash_menu.build(menu, &right_clicked))
                 .into_any_element()
         }
         None => row.into_any_element(),

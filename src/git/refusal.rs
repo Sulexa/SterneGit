@@ -28,6 +28,7 @@ pub(crate) enum Refusal {
     RebaseStopped,
     StashKept,
     StashNotApplied,
+    StashGone,
 }
 
 impl fmt::Display for Refusal {
@@ -73,6 +74,10 @@ impl fmt::Display for Refusal {
             Refusal::StashNotApplied => write!(
                 f,
                 "The stash doesn't apply on top of the current files, so nothing changed. The stash is kept, so nothing is lost."
+            ),
+            Refusal::StashGone => write!(
+                f,
+                "That stash isn't there anymore: it was popped or deleted outside FastGit."
             ),
         }
     }

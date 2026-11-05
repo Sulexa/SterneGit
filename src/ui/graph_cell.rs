@@ -17,6 +17,23 @@ const MERGE_NODE_SCALE: f32 = 0.7;
 const HEAD_RING_GAP: Pixels = px(3.);
 const LINE_WIDTH: Pixels = px(2.);
 const RING_WIDTH: Pixels = px(1.5);
+const STASH_CORNER: Pixels = px(1.5);
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum GraphNode {
+    Commit,
+    Head,
+    Stash,
+}
+
+impl GraphNode {
+    fn line_leaves_below(self, middle: Pixels) -> Pixels {
+        match self {
+            GraphNode::Stash => middle + NODE_RADIUS,
+            GraphNode::Commit | GraphNode::Head => middle,
+        }
+    }
+}
 
 pub(crate) fn graph_width<'a>(visible: impl IntoIterator<Item = &'a Row>) -> Pixels {
     let lanes = visible
@@ -34,13 +51,13 @@ fn lane_x(bounds: &Bounds<Pixels>, lane: u16) -> Pixels {
 
 pub(crate) fn graph_cell(
     row: Row,
-    is_head: bool,
+    node: GraphNode,
     palette: &Palette,
     width: Pixels,
 ) -> impl IntoElement {
     let lanes = palette.lanes;
     cell(width, move |bounds, window| {
-        paint_row(&row, is_head, &lanes, bounds, window)
+        paint_row(&row, node, &lanes, bounds, window)
     })
 }
 
@@ -66,7 +83,7 @@ fn cell(
 
 fn paint_row(
     row: &Row,
-    is_head: bool,
+    shape: GraphNode,
     lanes: &[Hsla; LANE_COLORS],
     bounds: Bounds<Pixels>,
     window: &mut Window,
@@ -94,7 +111,7 @@ fn paint_row(
                     from
                 }
                 Edge::Out { to } => {
-                    path.move_to(point(x(node), middle));
+                    path.move_to(point(x(node), shape.line_leaves_below(middle)));
                     if to == node {
                         path.line_to(point(x(node), bottom));
                     } else {
@@ -109,6 +126,10 @@ fn paint_row(
         }
 
         let center = point(x(node), middle);
+        if shape == GraphNode::Stash {
+            paint_square(window, center, color(node));
+            return;
+        }
         let radius = if row.is_merge {
             NODE_RADIUS * MERGE_NODE_SCALE
         } else {
@@ -121,10 +142,22 @@ fn paint_row(
             )
             .corner_radii(radius),
         );
-        if is_head {
+        if shape == GraphNode::Head {
             paint_ring(window, center, NODE_RADIUS + HEAD_RING_GAP, color(node));
         }
     });
+}
+
+fn paint_square(window: &mut Window, center: Point<Pixels>, color: Hsla) {
+    window.paint_quad(
+        fill(
+            Bounds::centered_at(center, size(NODE_RADIUS * 2., NODE_RADIUS * 2.)),
+            transparent_black(),
+        )
+        .corner_radii(STASH_CORNER)
+        .border_widths(RING_WIDTH)
+        .border_color(color),
+    );
 }
 
 fn bend_into_commit(path: &mut PathBuilder, corner: Point<Pixels>, commit: Point<Pixels>) {

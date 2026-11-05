@@ -70,7 +70,7 @@ const ChangeColors = {
   U: 'var(--magenta)',
 };
 
-const RefIcons = { local: 'git-branch', remote: 'cloud', tag: 'tag' };
+const RefIcons = { local: 'git-branch', remote: 'cloud', tag: 'tag', stash: 'archive' };
 
 const TreeIcons = {
   local: { top: 'folder', folder: 'folder', ref: 'git-branch' },
@@ -83,6 +83,7 @@ const TreeIndent = 18;
 const RefSections = [
   ['local', 'Branches'],
   ['remote', 'Remotes'],
+  ['stash', 'Stashes'],
   ['tag', 'Tags'],
 ];
 
@@ -234,6 +235,11 @@ const Texts = {
   merge: (from, into) => `Merge ${from} into ${into}`,
   rebase: (branch, onto) => `Rebase ${branch} onto ${onto}`,
   branchHere: 'Create branch here…',
+  applyStash: (name) => `Apply ${name}`,
+  popStash: (name) => `Pop ${name}`,
+  deleteStash: (name) => `Delete ${name}…`,
+  deleteStashTitle: (name) => `Delete ${name}?`,
+  deleteStashDescription: (message) => `Git keeps no other copy of “${message}”, so its changes are lost.`,
   deleteBranch: (name) => `Delete ${name}…`,
   deleteRemoteBranch: (name, remote) => `Delete ${name} from ${remote}…`,
   deleteBranchTitle: (name) => `Delete ${name}?`,
@@ -636,7 +642,8 @@ function summarize(changes) {
 }
 
 function historySummary(history) {
-  const summary = `${thousands(history.total)} commits · ${thousands(history.refs.length)} refs · read in ${history.readMs} ms`;
+  const stashes = history.stashes?.length ? ` · ${counted(history.stashes.length, 'stash', 'stashes')}` : '';
+  const summary = `${thousands(history.total)} commits · ${thousands(history.refs.length)} refs${stashes} · read in ${history.readMs} ms`;
   return history.truncated ? `${summary} · newest ${thousands(Texts.historyLimit)} shown` : summary;
 }
 
@@ -716,6 +723,11 @@ function branchMenuItems({ label, current, mode = 'merge' }) {
     !checkedOut && [item(remote ? Texts.deleteRemoteBranch(remote.branch, remote.remote) : Texts.deleteBranch(label.name))],
   ].filter(Boolean);
   return groups.flatMap((group, ix) => (ix ? ['-', ...group] : group));
+}
+
+function stashMenuItems({ stash }) {
+  const item = (text) => [text, ''];
+  return [item(Texts.applyStash(stash.name)), item(Texts.popStash(stash.name)), '-', item(Texts.deleteStash(stash.name))];
 }
 
 const C = {
@@ -834,7 +846,7 @@ const C = {
     return `<span data-c="Deletions" class="deletions${extraClass ? ` ${extraClass}` : ''}">−${thousands(count)}</span>`;
   },
 
-  GraphCell({ graph, merge = false, head = false, width }) {
+  GraphCell({ graph, merge = false, head = false, stash = false, width }) {
     const [node, lanes, spec] = graph;
     const w = width || lanes * LaneWidth + 2 * GraphMargin;
     const x = laneX;
@@ -848,12 +860,14 @@ const C = {
               ? `M${x(lane)} 0 L${x(node)} 14`
               : `M${x(lane)} 0 C${x(lane)} 14 ${x(lane)} 14 ${x(node)} 14`
             : lane === node
-              ? `M${x(node)} 14 L${x(node)} 28`
+              ? `M${x(node)} ${stash ? 18.5 : 14} L${x(node)} 28`
               : `M${x(node)} 14 C${x(lane)} 14 ${x(lane)} 14 ${x(lane)} 28`;
       return `<path d="${d}" fill="none" style="stroke:${color(lane)}" stroke-width="2"/>`;
     });
     const radius = merge ? 4.5 * 0.7 : 4.5;
-    const dot = `<circle cx="${x(node)}" cy="14" r="${radius}" style="fill:${color(node)}"/>`;
+    const dot = stash
+      ? `<rect x="${x(node) - 4.5}" y="9.5" width="9" height="9" rx="1.5" fill="none" style="stroke:${color(node)}" stroke-width="1.5"/>`
+      : `<circle cx="${x(node)}" cy="14" r="${radius}" style="fill:${color(node)}"/>`;
     const ring = head ? `<circle cx="${x(node)}" cy="14" r="7.5" fill="none" style="stroke:${color(node)}" stroke-width="1.5"/>` : '';
     return `<span data-c="GraphCell" class="graph-cell none" style="width:${w}px"><svg width="${w}" height="28" viewBox="0 0 ${w} 28">${paths.join('')}${dot}${ring}</svg></span>`;
   },
@@ -890,7 +904,12 @@ const C = {
     return C.ListRow({ content, name: 'RefFolderRow' });
   },
 
-  RefsList({ refs, selectedRow, collapsed = [] }) {
+  StashRow({ stash, selected = false }) {
+    const content = `<div class="h fill tree-row">${twisty(null)}${icon('archive', 'sm', 'var(--muted)')}<div class="fill ellipsis sm">${esc(stash.message)}</div></div>`;
+    return C.ListRow({ content, selected, name: 'StashRow' });
+  },
+
+  RefsList({ refs, stashes = [], selectedRow, collapsed = [] }) {
     const closed = new Set(collapsed);
     const nodes = (kind, list, depth) =>
       list
@@ -900,7 +919,14 @@ const C = {
           return treeGroup(open, C.RefFolderRow({ name: node.name, kind, depth, open }), nodes(kind, node.children, depth + 1));
         })
         .join('');
+    const stashSection = () => {
+      if (!stashes.length) return '';
+      const open = !closed.has('stash');
+      const rows = stashes.map((stash) => C.StashRow({ stash, selected: stash.row === selectedRow })).join('');
+      return treeGroup(open, C.SectionHeader({ title: 'Stashes', count: stashes.length, open }), rows);
+    };
     const sections = RefSections.map(([kind, title]) => {
+      if (kind === 'stash') return stashSection();
       const items = refs.filter((label) => label.kind === kind);
       if (!items.length) return '';
       const open = !closed.has(kind);
@@ -912,13 +938,14 @@ const C = {
   CommitRow({ commit, selected = false, width }) {
     const color = LaneColors[commit.graph[0] % LaneColors.length];
     const refs = foldSyncedRefs(commit.refs);
-    const badges = refs.slice(0, 3).map((label) => C.RefBadge({ ...label, color })).join('');
+    const stashBadge = commit.stash ? C.RefBadge({ name: commit.stash, kind: 'stash', color }) : '';
+    const badges = stashBadge + refs.slice(0, 3).map((label) => C.RefBadge({ ...label, color })).join('');
     const more = refs.length > 3 ? `<div class="none xs muted">+${refs.length - 3}</div>` : '';
     const subject = commit.subject
       ? `<div class="fill ellipsis sm">${esc(commit.subject)}</div>`
       : '<div class="fill ellipsis sm muted">(no message)</div>';
     const content =
-      C.GraphCell({ graph: commit.graph, merge: commit.merge, head: commit.head, width }) +
+      C.GraphCell({ graph: commit.graph, merge: commit.merge, head: commit.head, stash: Boolean(commit.stash), width }) +
       `<div class="labels">${badges}${more}${subject}</div>` +
       `<div class="author h xs muted">${C.AuthorAvatar({ name: commit.author, email: commit.email })}<span class="ellipsis">${esc(commit.author)}</span></div>` +
       `<div class="date xs muted">${esc(commit.date)}</div>` +
@@ -1495,6 +1522,14 @@ const C = {
 
   BranchMenu({ label, current, mode, left = 0, top = 0, hot }) {
     return C.Menu({ items: branchMenuItems({ label, current, mode }), left, top, hot, name: 'BranchMenu' });
+  },
+
+  StashMenu({ stash, left = 0, top = 0, hot }) {
+    return C.Menu({ items: stashMenuItems({ stash }), left, top, hot, name: 'StashMenu' });
+  },
+
+  DeleteStashDialog({ stash }) {
+    return C.AlertDialog({ title: Texts.deleteStashTitle(stash.name), description: Texts.deleteStashDescription(stash.message), confirm: 'Delete', name: 'DeleteStashDialog' });
   },
 
   DeleteBranchDialog({ label, only = 0 }) {

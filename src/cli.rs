@@ -52,7 +52,7 @@ pub(crate) fn check(path: &Path) {
         Ok((repo, history)) => println!(
             "{}: {} commits{}, {} refs, {} lanes wide, read in {:.1?}",
             repo.name(),
-            history.commits.len(),
+            history.commit_count(),
             if history.truncated {
                 " (newest only)"
             } else {

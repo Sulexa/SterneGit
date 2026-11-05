@@ -69,6 +69,43 @@ const Sample = (() => {
     refs,
   };
 
+  const stashed = (() => {
+    const entries = [
+      { message: `WIP on main: ${commits[0].id} ${commits[0].subject}`, author: 'Alex Martin', date: '2026-11-04 11:02', base: 0, graph: [0, 1, 'O0'] },
+      { message: 'On feature/diff-view: Try a wider gutter', author: 'Sam Lee', date: '2026-11-03 19:10', base: 2, graph: [1, 2, 'P0 O1'] },
+    ];
+    const rowOf = (row) => row + entries.filter((stash) => stash.base <= row).length;
+    const stashRows = entries.map((stash, ix) => ({
+      subject: stash.message,
+      author: stash.author,
+      email: emails[stash.author],
+      date: stash.date,
+      graph: stash.graph,
+      stash: `stash@{${ix}}`,
+      id: hex(100 + ix),
+      refs: [],
+    }));
+    const rejoined = { 0: [0, 1, 'I0 O0'], 2: [1, 2, 'P0 I1 O1'] };
+    const shown = [];
+    commits.forEach((commit, row) => {
+      entries.forEach((stash, ix) => stash.base === row && shown.push(stashRows[ix]));
+      shown.push(rejoined[row] ? { ...commit, graph: rejoined[row] } : commit);
+    });
+    const stashes = entries.map((stash, ix) => ({ name: stashRows[ix].stash, message: stash.message, row: shown.indexOf(stashRows[ix]) }));
+    return {
+      history: { ...history, commits: shown, refs: refs.map((label) => ({ ...label, row: rowOf(label.row) })), stashes },
+      details: {
+        body: '',
+        parents: [commits[2].id],
+        files: [
+          { path: 'src/git/command.rs', kind: 'M', additions: 12, deletions: 3, hunks: [] },
+          { path: 'src/git/patch.rs', kind: 'M', additions: 4, deletions: 1, hunks: [] },
+          { path: 'src/ui/toast.rs', kind: 'A', additions: 40, deletions: 0, hunks: [] },
+        ],
+      },
+    };
+  })();
+
   const changes = {
     unstaged: [
       { kind: 'M', path: 'src/git/command.rs' },
@@ -466,7 +503,7 @@ const Sample = (() => {
   };
 
   return {
-    history, collapsed, changes, partlyStaged, draft, commitDetails, commitFileDiff, fileHistory, fileDiff, stagedHunkDiff, partlyStagedDiff, selectedLines, tabs,
+    history, stashed, collapsed, changes, partlyStaged, draft, commitDetails, commitFileDiff, fileHistory, fileDiff, stagedHunkDiff, partlyStagedDiff, selectedLines, tabs,
     starfall, assets, slimeDiff, crownIcon, introDiff, themeDiff, modelDiff,
   };
 })();

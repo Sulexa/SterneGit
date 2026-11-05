@@ -6,11 +6,14 @@ use std::{
 
 use gpui_kit::{Context, EventEmitter, SharedString};
 
-use super::operation::{self, Operated, Operation, Outcome};
+use super::{
+    operation::{self, Operated, Operation, Outcome},
+    stash_menu::StashAction,
+};
 use crate::{
     git::{
         self, CheckedOut, FileChange, History, PartAction, PullMode, RefLabel, RemoteBranch, Repo,
-        Scope, Side, WorkingChanges,
+        Scope, Side, Stash, WorkingChanges,
     },
     ui::{Failure, Job, Load, run_in_background},
 };
@@ -508,6 +511,27 @@ impl Repository {
             |repo| {
                 repo.pop_stash()
                     .map(|()| SharedString::from(operation::POPPED))
+            },
+            cx,
+        );
+    }
+
+    pub(crate) fn act_on_stash(
+        &mut self,
+        stash: Stash,
+        action: StashAction,
+        cx: &mut Context<Self>,
+    ) {
+        self.write_and_report(
+            None,
+            action.failed(&stash).into(),
+            move |repo| {
+                match action {
+                    StashAction::Apply => repo.apply_stash(stash.id)?,
+                    StashAction::Pop => repo.pop_stash_entry(stash.id)?,
+                    StashAction::Delete => repo.drop_stash(stash.id)?,
+                }
+                Ok(SharedString::from(action.done(&stash)))
             },
             cx,
         );

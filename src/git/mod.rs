@@ -39,7 +39,7 @@ pub(crate) use file_history::{FileCommit, LineCounts};
 pub(crate) use graph::{Edge, Row};
 #[cfg(test)]
 pub(crate) use history::fixtures;
-pub(crate) use history::{Commit, HISTORY_LIMIT, History, short_id};
+pub(crate) use history::{Commit, HISTORY_LIMIT, History, RowKind, short_id};
 pub(crate) use hunks::{Hunks, LineAt, LineSide, LineSpan, Part, PartAction};
 pub(crate) use index::Scope;
 pub(crate) use lfs::FileVersion;
@@ -49,7 +49,7 @@ pub(crate) use pull_mode::PullMode;
 pub(crate) use refs::{RefDigest, RefKind, RefLabel, RemoteBranch, ShownRef};
 pub(crate) use refusal::{Refusal, Tracking};
 pub(crate) use remote::{Pulled, Pushed};
-pub(crate) use stash::Carried;
+pub(crate) use stash::{Carried, Stash};
 pub(crate) use status::{ChangeKind, FileChange, Side, WorkingChanges};
 pub(crate) use version::Revision;
 

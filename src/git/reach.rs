@@ -10,6 +10,7 @@ impl History {
             .filter(|other| other.kind != label.kind || other.name != label.name)
             .map(|other| other.target)
             .chain(self.head_id)
+            .chain(self.stashes.iter().map(|stash| stash.id))
             .filter_map(|id| self.row_of(&id));
         self.reach(other_tips, &mut reached);
         Some(self.reach([tip], &mut reached))
@@ -70,6 +71,22 @@ mod tests {
         scratch.git(&["switch", "--quiet", "--create=topic"])?;
         scratch.commit("topic")?;
         scratch.git(&["checkout", "--quiet", "--detach"])?;
+        let (_, history) = scratch.open()?;
+        assert_eq!(history.commits_only_on(branch(&history, "topic")), Some(0));
+        Ok(())
+    }
+
+    #[test]
+    fn a_stash_keeps_the_commits_it_was_made_on() -> Result<()> {
+        let scratch = ScratchRepo::new("only-on-stash")?;
+        scratch.commit("first")?;
+        scratch.git(&["switch", "--quiet", "--create=topic"])?;
+        scratch.write("a.txt", "one\n")?;
+        scratch.git(&["add", "a.txt"])?;
+        scratch.commit("topic")?;
+        scratch.write("a.txt", "two\n")?;
+        scratch.git(&["stash", "push", "--quiet"])?;
+        scratch.git(&["switch", "--quiet", "main"])?;
         let (_, history) = scratch.open()?;
         assert_eq!(history.commits_only_on(branch(&history, "topic")), Some(0));
         Ok(())

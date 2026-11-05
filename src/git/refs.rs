@@ -9,7 +9,7 @@ use gix::{
 };
 use gpui_kit::SharedString;
 
-use super::text::decode;
+use super::{stash::stash_ids_newest_first, text::decode};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) enum RefKind {
@@ -19,9 +19,6 @@ pub(crate) enum RefKind {
 }
 
 impl RefKind {
-    pub(crate) const ALL: [RefKind; 3] =
-        [RefKind::LocalBranch, RefKind::RemoteBranch, RefKind::Tag];
-
     fn of(category: Category<'_>) -> Option<Self> {
         match category {
             Category::LocalBranch => Some(RefKind::LocalBranch),
@@ -109,6 +106,7 @@ impl RefDigest {
                 TargetRef::Symbolic(name) => name.as_bstr().hash(&mut hasher),
             }
         }
+        stash_ids_newest_first(repo).hash(&mut hasher);
         Ok(Self(hasher.finish()))
     }
 }
