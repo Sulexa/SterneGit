@@ -1,5 +1,5 @@
 const Screens = (() => {
-  const { history, stashed, collapsed, changes, partlyStaged, draft, commitDetails, commitFileDiff, fileHistory, fileDiff, partlyStagedDiff, selectedLines, tabs } = Sample;
+  const { history, tracked, stashed, collapsed, changes, partlyStaged, draft, commitDetails, commitFileDiff, fileHistory, fileDiff, partlyStagedDiff, selectedLines, tabs } = Sample;
   const { starfall, assets, slimeDiff, introDiff, themeDiff, modelDiff } = Sample;
   const selected = 2;
   const position = (row) => `Commit ${thousands(row + 1)} of ${thousands(history.total)}`;
@@ -157,6 +157,22 @@ const Screens = (() => {
       about: 'The main screen. Under the tabs, the header holds Pull, Push, Branch, Stash and Pop. Then refs on the left, split into folders at each slash, the commit graph in the middle, the selected commit and the files it changes on the right. The refs pointing at the selected commit are highlighted too. Click a section or a folder to fold it.',
       source: 'src/repo/mod.rs',
       render: () => C.FastGit({ topBar: topBar(), tabStrip: tabStrip(), body: commitSelected() }),
+    },
+    {
+      id: 'ahead-behind',
+      title: 'Branches apart from their upstream',
+      about: 'A local branch whose upstream is on another commit says how far apart they are, at the right of its row in the left pane: ↓ and the number of upstream commits the branch lacks, which Pull brings in, then ↑ and the number of its own commits the upstream lacks, which Push sends. A side with nothing to count is left out. A branch level with its upstream, without one, or whose upstream is gone shows nothing, and neither do remote branches and tags. Hovering the numbers says it in words, naming the upstream. The upstream is counted as the last fetch left it, so the numbers move with each fetch, pull, push and commit. Here main has two commits that origin/main lacks, and a fetch brought origin/feature/diff-view a commit that feature/diff-view lacks.',
+      source: 'src/repo/refs_list.rs',
+      render: () =>
+        C.FastGit({
+          topBar: topBar(),
+          tabStrip: tabStrip(),
+          body: repo({
+            left: C.RefsList({ refs: tracked.refs, selectedRow: null, collapsed }),
+            middle: C.HistoryList({ history: tracked, selectedRow: null, changes }),
+            right: C.Hint({ message: Texts.selectCommit }),
+          }),
+        }),
     },
     {
       id: 'stashes',

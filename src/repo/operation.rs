@@ -513,6 +513,7 @@ mod tests {
             target: id(1),
             is_head: false,
             upstream: None,
+            from_upstream: None,
         };
         assert_eq!(
             deleted(&label("origin/feature/x", RefKind::RemoteBranch)),

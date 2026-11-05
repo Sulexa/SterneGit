@@ -44,6 +44,19 @@ pub(crate) struct RefLabel {
     pub(crate) target: ObjectId,
     pub(crate) is_head: bool,
     pub(crate) upstream: Option<SharedString>,
+    pub(crate) from_upstream: Option<AheadBehind>,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct AheadBehind {
+    pub(crate) ahead: usize,
+    pub(crate) behind: usize,
+}
+
+impl AheadBehind {
+    pub(crate) fn is_level(self) -> bool {
+        self == Self::default()
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -149,6 +162,7 @@ pub(crate) fn read_labels(
             target: commit.id,
             is_head,
             upstream,
+            from_upstream: None,
         });
     }
     labels.sort_by(|a, b| {
@@ -157,6 +171,46 @@ pub(crate) fn read_labels(
             .then_with(|| a.name.as_str().cmp(b.name.as_str()))
     });
     Ok(labels)
+}
+
+pub(crate) fn count_from_upstreams(repo: &gix::Repository, labels: &mut [RefLabel]) {
+    let tracked: Vec<(usize, ObjectId, ObjectId)> = labels
+        .iter()
+        .enumerate()
+        .filter_map(|(ix, label)| {
+            let upstream = label.upstream.as_ref()?;
+            let upstream = labels
+                .iter()
+                .find(|other| other.kind == RefKind::RemoteBranch && other.name == *upstream)?;
+            Some((ix, label.target, upstream.target))
+        })
+        .collect();
+    for (ix, local, upstream) in tracked {
+        labels[ix].from_upstream = ahead_behind(repo, local, upstream).ok();
+    }
+}
+
+fn ahead_behind(
+    repo: &gix::Repository,
+    local: ObjectId,
+    upstream: ObjectId,
+) -> Result<AheadBehind> {
+    if local == upstream {
+        return Ok(AheadBehind::default());
+    }
+    Ok(AheadBehind {
+        ahead: commits_reached_only_from(repo, local, upstream)?,
+        behind: commits_reached_only_from(repo, upstream, local)?,
+    })
+}
+
+fn commits_reached_only_from(
+    repo: &gix::Repository,
+    tip: ObjectId,
+    other: ObjectId,
+) -> Result<usize> {
+    let mut walk = repo.rev_walk([tip]).with_hidden([other]).all()?;
+    Ok(walk.try_fold(0, |count, commit| commit.map(|_| count + 1))?)
 }
 
 fn is_alias_for_another_remote_branch(short_name: &BStr) -> bool {
@@ -200,7 +254,7 @@ mod tests {
     use anyhow::Result;
     use gix::ObjectId;
 
-    use super::{RefKind, RefLabel};
+    use super::{AheadBehind, RefKind, RefLabel};
     use crate::git::{History, fixtures::id, scratch::ScratchRepo};
 
     fn shown(history: &History, id: ObjectId) -> Vec<(&str, bool)> {
@@ -209,6 +263,61 @@ mod tests {
             .iter()
             .map(|shown| (shown.label.name.as_str(), shown.with_upstream))
             .collect()
+    }
+
+    fn from_upstream(scratch: &ScratchRepo, branch: &str) -> Result<Option<AheadBehind>> {
+        let (_, history) = scratch.open()?;
+        Ok(history
+            .refs
+            .iter()
+            .find(|label| label.kind == RefKind::LocalBranch && label.name.as_str() == branch)
+            .expect("the branch exists")
+            .from_upstream)
+    }
+
+    fn apart(ahead: usize, behind: usize) -> Option<AheadBehind> {
+        Some(AheadBehind { ahead, behind })
+    }
+
+    #[test]
+    fn a_branch_counts_the_commits_it_and_its_upstream_each_lack() -> Result<()> {
+        let origin = ScratchRepo::bare("apart-origin")?;
+        let ours = ScratchRepo::new("apart-ours")?;
+        ours.commit("first")?;
+        ours.git(&["remote", "add", "origin", &origin.location()])?;
+        ours.git(&["push", "--quiet", "--set-upstream", "origin", "main"])?;
+        assert_eq!(from_upstream(&ours, "main")?, apart(0, 0));
+        ours.commit("second")?;
+        ours.commit("third")?;
+        assert_eq!(from_upstream(&ours, "main")?, apart(2, 0));
+        let theirs = ScratchRepo::tracking("apart-theirs", &origin)?;
+        theirs.commit("theirs")?;
+        theirs.git(&["push", "--quiet", "origin", "main"])?;
+        assert_eq!(
+            from_upstream(&ours, "main")?,
+            apart(2, 0),
+            "the upstream is counted as the last fetch left it"
+        );
+        ours.git(&["fetch", "--quiet", "origin"])?;
+        assert_eq!(from_upstream(&ours, "main")?, apart(2, 1));
+        ours.git(&["reset", "--quiet", "--hard", "origin/main~1"])?;
+        assert_eq!(from_upstream(&ours, "main")?, apart(0, 1));
+        Ok(())
+    }
+
+    #[test]
+    fn a_branch_without_an_upstream_or_whose_upstream_is_gone_counts_nothing() -> Result<()> {
+        let origin = ScratchRepo::bare("apart-gone-origin")?;
+        let ours = ScratchRepo::new("apart-gone-ours")?;
+        ours.commit("first")?;
+        ours.git(&["remote", "add", "origin", &origin.location()])?;
+        ours.git(&["branch", "--no-track", "topic"])?;
+        assert_eq!(from_upstream(&ours, "topic")?, None);
+        ours.git(&["push", "--quiet", "--set-upstream", "origin", "topic"])?;
+        assert_eq!(from_upstream(&ours, "topic")?, apart(0, 0));
+        ours.git(&["push", "--quiet", "origin", "--delete", "topic"])?;
+        assert_eq!(from_upstream(&ours, "topic")?, None);
+        Ok(())
     }
 
     #[test]
@@ -247,6 +356,7 @@ mod tests {
             target: id(1),
             is_head,
             upstream: None,
+            from_upstream: None,
         };
         assert!(label("topic", RefKind::LocalBranch, false).can_be_checked_out());
         assert!(label("origin/topic", RefKind::RemoteBranch, false).can_be_checked_out());

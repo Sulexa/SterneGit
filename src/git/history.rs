@@ -145,7 +145,8 @@ impl History {
     pub(crate) fn read(repo: &gix::Repository, started: Instant) -> Result<Self> {
         let digest_never_newer_than_what_is_read = RefDigest::of(repo)?;
         let head = Head::read(repo)?;
-        let refs = refs::read_labels(repo, head.name.as_ref())?;
+        let mut refs = refs::read_labels(repo, head.name.as_ref())?;
+        refs::count_from_upstreams(repo, &mut refs);
         let (stashes, stashed): (Vec<Stash>, Vec<Commit>) = read_stashes(repo).into_iter().unzip();
         let bases = stashed.iter().filter_map(|stash| stash.parents.first().copied());
         let mut walked = walk_newest_first(repo, tips(&refs, head.id, bases))?;

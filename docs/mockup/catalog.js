@@ -1,5 +1,5 @@
 const Catalog = (() => {
-  const { history, stashed, collapsed, changes, partlyStaged, commitDetails, commitFileDiff, fileHistory, fileDiff, stagedHunkDiff, selectedLines, tabs } = Sample;
+  const { history, tracked, stashed, collapsed, changes, partlyStaged, commitDetails, commitFileDiff, fileHistory, fileDiff, stagedHunkDiff, selectedLines, tabs } = Sample;
   const { slimeDiff, crownIcon, introDiff, themeDiff, modelDiff } = Sample;
   const { rebase, merge, rebaseChanges, rebaseOneLeft, rebaseResolved, statusConflicts, slimeConflict } = Sample;
   const { statusMerged } = Sample;
@@ -487,8 +487,9 @@ const Catalog = (() => {
           name: 'RefsList',
           code: 'repo::refs_list::RefsList',
           source: 'src/repo/refs_list.rs',
-          about: 'Branches, remotes, stashes and tags, each section only when it has something. Names are split at each slash into folders, in the order Git lists them; under Remotes the first folder is the remote. Stashes are listed newest first, without folders. Sections and folders fold with a click. Clicking a ref or a stash selects its commit; double-clicking a branch checks it out; right-clicking a branch opens its BranchMenu, and right-clicking a stash its StashMenu.',
+          about: 'Branches, remotes, stashes and tags, each section only when it has something. Names are split at each slash into folders, in the order Git lists them; under Remotes the first folder is the remote. Stashes are listed newest first, without folders. Sections and folders fold with a click. A local branch apart from its upstream ends its row with an AheadBehind. Clicking a ref or a stash selects its commit; double-clicking a branch checks it out; right-clicking a branch opens its BranchMenu, and right-clicking a stash its StashMenu.',
           variants: [
+            ['Branches apart from their upstream', () => C.RefsList({ refs: tracked.refs, collapsed: ['remote', 'tag'] }), { w: 224, h: 200 }],
             ['With stashes, one selected', () => C.RefsList({ refs: stashed.history.refs, stashes: stashed.history.stashes, selectedRow: 3, collapsed: ['local', 'remote'] }), { w: 224, h: 200 }],
             ['With a selection', () => C.RefsList({ refs: history.refs, selectedRow: 2, collapsed }), { w: 224, h: 480 }],
             ['Folders and sections folded', () => C.RefsList({ refs: history.refs, collapsed: ['local:feature', 'remote', 'tag'] }), { w: 224, h: 200 }],
@@ -510,12 +511,27 @@ const Catalog = (() => {
           name: 'RefRow',
           code: 'repo::refs_list::ref_row',
           source: 'src/repo/refs_list.rs',
-          about: 'Icon by kind, then the last part of the name, in bold for the checked-out branch. An empty chevron slot keeps it lined up with the folders beside it; indented 18 px per folder. A click selects the commit; a double-click on a branch that is not checked out also checks it out, as Check out in its BranchMenu does.',
+          about: 'Icon by kind, then the last part of the name, in bold for the checked-out branch. An empty chevron slot keeps it lined up with the folders beside it; indented 18 px per folder. A local branch apart from its upstream ends with an AheadBehind, and its name gives way to it. A click selects the commit; a double-click on a branch that is not checked out also checks it out, as Check out in its BranchMenu does.',
           variants: [
             ['Checked-out branch', () => C.RefRow({ label: ref('main') }), { w: 224 }],
             ['Points at the selection, in a folder', () => C.RefRow({ label: ref('feature/diff-view'), name: 'diff-view', depth: 1, selected: true }), { w: 224 }],
+            ['Ahead of its upstream', () => C.RefRow({ label: tracked.refs.find((label) => label.name === 'main') }), { w: 224 }],
+            ['Behind its upstream, in a folder', () => C.RefRow({ label: tracked.refs.find((label) => label.name === 'feature/diff-view'), name: 'diff-view', depth: 1 }), { w: 224 }],
+            ['Both ways, long name, selected', () => C.RefRow({ label: { name: 'feature/version-entalto-rework', kind: 'local', ahead: 3, behind: 12, upstream: 'origin/feature/version-entalto-rework' }, name: 'version-entalto-rework', depth: 1, selected: true }), { w: 224 }],
             ['Remote branch', () => C.RefRow({ label: ref('origin/main'), name: 'main', depth: 1 }), { w: 224 }],
             ['Tag', () => C.RefRow({ label: ref('v0.2.0') }), { w: 224 }],
+          ],
+        },
+        {
+          name: 'AheadBehind',
+          code: 'repo::refs_list::ahead_behind',
+          source: 'src/repo/refs_list.rs',
+          about: 'How far a local branch and its upstream are apart, at the right of its RefRow: ↓ and the commits the upstream has that the branch lacks, which Pull brings in, then ↑ and the commits the branch has that the upstream lacks, which Push sends, in the order of the header\'s Pull and Push. A side at zero is left out. 12 px muted text with 12 px arrows and figures of one width, so the numbers line up from row to row. The tooltip says it in words and names the upstream.',
+          variants: [
+            ['Ahead', () => C.AheadBehind({ ahead: 2, upstream: 'origin/main' })],
+            ['Behind', () => C.AheadBehind({ behind: 1, upstream: 'origin/feature/diff-view' })],
+            ['Both ways', () => C.AheadBehind({ ahead: 3, behind: 12, upstream: 'origin/main' })],
+            ['Far behind', () => C.AheadBehind({ behind: 1284, upstream: 'origin/main' })],
           ],
         },
         {

@@ -393,6 +393,14 @@
 
 .tree-row { gap: 6px; }
 
+.ahead-behind {
+  flex: none;
+  gap: 6px;
+  font-variant-numeric: tabular-nums;
+}
+
+.ahead-behind > .h { gap: 1px; }
+
 .twisty {
   flex: none;
   width: 12px;

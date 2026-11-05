@@ -3,10 +3,11 @@ use std::sync::Arc;
 use gix::ObjectId;
 use gpui_kit::{
     AnyElement, App, InteractiveElement as _, IntoElement, ParentElement as _, RenderOnce,
-    SharedString, Styled as _, UniformListScrollHandle, Window,
+    SharedString, StatefulInteractiveElement as _, Styled as _, UniformListScrollHandle, Window,
     assets::IconName,
     component::{
-        ActiveTheme as _, Icon, Sizable as _, menu::ContextMenuExt as _, scroll::Scrollbar,
+        ActiveTheme as _, Icon, Sizable as _, h_flex, menu::ContextMenuExt as _,
+        scroll::Scrollbar, tooltip::Tooltip,
     },
     div,
     prelude::FluentBuilder as _,
@@ -19,8 +20,11 @@ use super::{
     stash_menu::StashMenu,
 };
 use crate::{
-    git::{History, RefKind, RefLabel, Stash},
-    ui::{Folded, Handler, SectionHeader, handler, is_double_click, list_row, tree_line},
+    git::{AheadBehind, History, RefKind, RefLabel, Stash},
+    ui::{
+        Folded, Handler, Look as _, SectionHeader, counted, handler, is_double_click, list_row,
+        thousands, tree_line,
+    },
 };
 
 #[derive(IntoElement)]
@@ -260,14 +264,24 @@ fn ref_row(
         selected == Some(label.target),
     )
     .px_3()
-    .child(tree_line(
-        depth,
-        None,
-        muted_icon(leaf_icon(label.kind), cx),
-        last_segment(&label.name),
-        label.is_head,
-        cx,
-    ))
+    .child(
+        h_flex()
+            .w_full()
+            .min_w_0()
+            .gap_2()
+            .child(
+                tree_line(
+                    depth,
+                    None,
+                    muted_icon(leaf_icon(label.kind), cx),
+                    last_segment(&label.name),
+                    label.is_head,
+                    cx,
+                )
+                .flex_1(),
+            )
+            .children(ahead_behind(label, cx)),
+    )
     .on_click(move |event, window, cx| {
         if let Some(on_reveal) = &on_reveal {
             on_reveal(&ix, window, cx)
@@ -283,6 +297,47 @@ fn ref_row(
                 .into_any_element()
         }
         None => row.into_any_element(),
+    }
+}
+
+fn ahead_behind(label: &RefLabel, cx: &App) -> Option<impl IntoElement> {
+    let apart = label.from_upstream.filter(|apart| !apart.is_level())?;
+    let words = apart_in_words(apart, label.upstream.as_deref()?);
+    let muted = cx.theme().muted_foreground;
+    let side = |count: usize, arrow: IconName| {
+        (count > 0).then(|| {
+            h_flex()
+                .gap_px()
+                .child(Icon::new(arrow).xsmall().text_color(muted))
+                .child(thousands(count))
+        })
+    };
+    Some(
+        h_flex()
+            .id("ahead-behind")
+            .flex_none()
+            .gap_1p5()
+            .xs_text()
+            .text_color(muted)
+            .children(side(apart.behind, IconName::ArrowDown))
+            .children(side(apart.ahead, IconName::ArrowUp))
+            .tooltip(move |window, cx| Tooltip::new(words.clone()).build(window, cx)),
+    )
+}
+
+fn apart_in_words(apart: AheadBehind, upstream: &str) -> String {
+    let pull = format!(
+        "{} to pull from {upstream}",
+        counted(apart.behind, "commit", "commits")
+    );
+    let push = format!(
+        "{} to push to {upstream}",
+        counted(apart.ahead, "commit", "commits")
+    );
+    match apart {
+        AheadBehind { ahead: 0, .. } => pull,
+        AheadBehind { behind: 0, .. } => push,
+        AheadBehind { ahead, .. } => format!("{pull}, {} to push", thousands(ahead)),
     }
 }
 
@@ -322,4 +377,18 @@ fn muted_icon(name: IconName, cx: &App) -> Icon {
     Icon::new(name)
         .small()
         .text_color(cx.theme().muted_foreground)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::apart_in_words;
+    use crate::git::AheadBehind;
+
+    #[test]
+    fn the_tooltip_says_what_to_pull_and_push_naming_the_upstream() {
+        let words = |ahead, behind| apart_in_words(AheadBehind { ahead, behind }, "origin/main");
+        assert_eq!(words(2, 0), "2 commits to push to origin/main");
+        assert_eq!(words(0, 1), "1 commit to pull from origin/main");
+        assert_eq!(words(3, 1_284), "1,284 commits to pull from origin/main, 3 to push");
+    }
 }

@@ -69,6 +69,17 @@ const Sample = (() => {
     refs,
   };
 
+  const tracked = (() => {
+    const apart = {
+      main: { ahead: 2, upstream: 'origin/main' },
+      'origin/main': { row: 3 },
+      'feature/diff-view': { row: 4, behind: 1, upstream: 'origin/feature/diff-view' },
+    };
+    const moved = refs.map((label) => ({ ...label, ...apart[label.name] }));
+    const badges = (row) => moved.filter((label) => label.row === row).map(({ name, kind, head }) => (head ? [name, kind, true] : [name, kind]));
+    return { ...history, refs: moved, commits: commits.map((commit, row) => ({ ...commit, refs: badges(row) })) };
+  })();
+
   const stashed = (() => {
     const entries = [
       { message: `WIP on main: ${commits[0].id} ${commits[0].subject}`, author: 'Alex Martin', date: '2026-11-04 11:02', base: 0, graph: [0, 1, 'O0'] },
@@ -650,7 +661,7 @@ const Sample = (() => {
   };
 
   return {
-    history, stashed, collapsed, changes, partlyStaged, draft, commitDetails, commitFileDiff, fileHistory, fileDiff, stagedHunkDiff, partlyStagedDiff, selectedLines, tabs,
+    history, tracked, stashed, collapsed, changes, partlyStaged, draft, commitDetails, commitFileDiff, fileHistory, fileDiff, stagedHunkDiff, partlyStagedDiff, selectedLines, tabs,
     starfall, assets, slimeDiff, crownIcon, introDiff, themeDiff, modelDiff,
     rebasing, rebase, merge, starfallMerge, rebaseChanges, rebaseOneLeft, rebaseResolved, statusConflicts, statusMerged, slimeConflict, starfallConflicts,
   };

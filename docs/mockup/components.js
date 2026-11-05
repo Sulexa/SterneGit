@@ -297,6 +297,11 @@ const Texts = {
   deleteRemoteDescription: (name, remote) => `The branch is removed from ${remote} for everyone who uses it. A local ${name}, if you have one, stays.`,
   branchPlaceholder: 'Branch name',
   branchExists: (name) => `There is already a branch named ${name}.`,
+  aheadBehind: (ahead, behind, upstream) => {
+    const pull = `${counted(behind, 'commit', 'commits')} to pull from ${upstream}`;
+    const push = `${counted(ahead, 'commit', 'commits')} to push to ${upstream}`;
+    return ahead && behind ? `${pull}, ${thousands(ahead)} to push` : behind ? pull : push;
+  },
   branchInvalid: "Git doesn't accept this name: no spaces, and none of ~ ^ : ? * [ \\ or ..",
   createBranch: 'Create branch',
   historyLimit: 10000,
@@ -947,8 +952,14 @@ const C = {
     return `<div data-c="Notice" class="notice">${icon('git-merge', 'lg', 'var(--muted)')}<div class="lg medium">${esc(title)}</div><div class="description sm muted">${esc(description)}</div>${action}</div>`;
   },
 
+  AheadBehind({ ahead = 0, behind = 0, upstream }) {
+    const side = (count, arrow) => (count ? `<span class="h">${icon(arrow, 'xs')}${thousands(count)}</span>` : '');
+    return `<span data-c="AheadBehind" class="ahead-behind h xs muted" title="${esc(Texts.aheadBehind(ahead, behind, upstream))}">${side(behind, 'arrow-down')}${side(ahead, 'arrow-up')}</span>`;
+  },
+
   RefRow({ label, name = label.name, depth = 0, selected = false }) {
-    const content = `<div class="h fill tree-row" style="padding-left:${depth * TreeIndent}px">${twisty(null)}${icon(TreeIcons[label.kind].ref, 'sm', 'var(--muted)')}<div class="fill ellipsis sm${label.head ? ' semibold' : ''}">${esc(name)}</div></div>`;
+    const apart = label.ahead || label.behind ? C.AheadBehind(label) : '';
+    const content = `<div class="h fill tree-row" style="padding-left:${depth * TreeIndent}px">${twisty(null)}${icon(TreeIcons[label.kind].ref, 'sm', 'var(--muted)')}<div class="fill ellipsis sm${label.head ? ' semibold' : ''}">${esc(name)}</div>${apart}</div>`;
     return C.ListRow({ content, selected, name: 'RefRow' });
   },
 
