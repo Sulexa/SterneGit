@@ -206,10 +206,12 @@ const Catalog = (() => {
           name: 'RefBadge',
           code: 'ui::ref_badge',
           source: 'src/ui/badges.rs',
-          about: 'A ref on a commit row, tinted with the commit\'s lane color. The checked-out branch is filled more and bold. Width 32–160 px, then ellipsis.',
+          about: 'A ref on a commit row, tinted with the commit\'s lane color. The checked-out branch is filled more and bold. A local branch whose upstream sits on the same commit takes the upstream in: one badge with a branch and a cloud, named after the local branch. Width 32–160 px, then ellipsis.',
           variants: [
             ['HEAD branch', () => C.RefBadge({ name: 'main', kind: 'local', head: true })],
+            ['HEAD in sync with its upstream', () => C.RefBadge({ name: 'main', kind: 'local', head: true, synced: true })],
             ['Branch', () => C.RefBadge({ name: 'feature/diff-view', kind: 'local', color: LaneColors[1] })],
+            ['Branch in sync with its upstream', () => C.RefBadge({ name: 'feature/version-entalto', kind: 'local', synced: true, color: LaneColors[1] })],
             ['Remote', () => C.RefBadge({ name: 'origin/main', kind: 'remote' })],
             ['Tag', () => C.RefBadge({ name: 'v0.2.0', kind: 'tag', color: LaneColors[2] })],
             ['Long name', () => C.RefBadge({ name: 'origin/feature/a-very-long-branch-name', kind: 'remote', color: LaneColors[3] })],

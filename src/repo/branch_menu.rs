@@ -198,6 +198,7 @@ mod tests {
             kind,
             target: id(1),
             is_head,
+            upstream: None,
         }
     }
 

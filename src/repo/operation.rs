@@ -279,6 +279,7 @@ mod tests {
             kind,
             target: id(1),
             is_head: false,
+            upstream: None,
         };
         assert_eq!(
             deleted(&label("origin/feature/x", RefKind::RemoteBranch)),

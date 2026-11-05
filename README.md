@@ -46,7 +46,9 @@ xkbcommon, Vulkan, fontconfig).
 | Ctrl+W (Cmd+W) | Close the current tab |
 | Ctrl+Tab / Ctrl+Shift+Tab | Switch to the next / previous tab |
 
-Click a branch, remote branch or tag in the sidebar to jump to its commit.
+Click a branch, remote branch or tag in the sidebar to jump to its commit. In
+the graph, a branch on the same commit as its upstream shows as one badge with a
+branch and a cloud.
 
 When the work tree has changes, an **Uncommitted changes** row sits above the
 graph. Select it (or press ↑ from the newest commit) to list the unstaged and

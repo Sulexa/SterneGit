@@ -44,7 +44,7 @@ pub(crate) use lfs::FileVersion;
 pub(crate) use merge::{Merged, Rebased};
 pub(crate) use patch::{FilePatch, Whitespace};
 pub(crate) use pull_mode::PullMode;
-pub(crate) use refs::{RefDigest, RefKind, RefLabel, RemoteBranch};
+pub(crate) use refs::{RefDigest, RefKind, RefLabel, RemoteBranch, ShownRef};
 pub(crate) use refusal::{Refusal, Tracking};
 pub(crate) use remote::{Pulled, Pushed};
 pub(crate) use stash::Carried;

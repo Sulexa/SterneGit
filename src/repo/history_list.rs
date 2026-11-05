@@ -13,7 +13,7 @@ use gpui_kit::{
 
 use crate::{
     actions::HISTORY_CONTEXT,
-    git::{History, RefLabel, WorkingChanges},
+    git::{History, WorkingChanges},
     ui::{
         self, Handler, Look as _, Palette, ROW_HEIGHT, commit_subject, handler, list_row,
         ref_badge, thousands,
@@ -155,7 +155,7 @@ fn commit_row(
     let id = commit.id;
     let graph_row = history.graph.rows[row].clone();
     let is_head = history.head_id == Some(commit.id);
-    let labels: Vec<&RefLabel> = history.labels_on(&commit.id).collect();
+    let labels = history.shown_on(&commit.id);
     let color = palette.lane(graph_row.node_lane);
     list_row(SharedString::from(commit.id.to_string()), selected)
         .px_3()
@@ -176,7 +176,7 @@ fn commit_row(
                             labels
                                 .iter()
                                 .take(MAX_BADGES)
-                                .map(|label| ref_badge(label, color, cx)),
+                                .map(|&shown| ref_badge(shown, color, cx)),
                         )
                         .when(labels.len() > MAX_BADGES, |this| {
                             this.child(

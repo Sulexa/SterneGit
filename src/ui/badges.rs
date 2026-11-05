@@ -8,7 +8,7 @@ use gpui_kit::{
 };
 
 use super::{look::Look as _, text::thousands};
-use crate::git::{ChangeKind, RefKind, RefLabel};
+use crate::git::{ChangeKind, RefKind, ShownRef};
 
 const HEAD_FILL: f32 = 0.35;
 const LABEL_FILL: f32 = 0.14;
@@ -23,7 +23,8 @@ fn ref_icon(kind: RefKind) -> IconName {
     }
 }
 
-pub(crate) fn ref_badge(label: &RefLabel, color: Hsla, cx: &App) -> AnyElement {
+pub(crate) fn ref_badge(shown: ShownRef, color: Hsla, cx: &App) -> AnyElement {
+    let label = shown.label;
     h_flex()
         .min_w(px(32.))
         .max_w(px(160.))
@@ -36,7 +37,19 @@ pub(crate) fn ref_badge(label: &RefLabel, color: Hsla, cx: &App) -> AnyElement {
         .bg(color.opacity(if label.is_head { HEAD_FILL } else { LABEL_FILL }))
         .xs_text()
         .text_color(cx.theme().foreground)
-        .child(Icon::new(ref_icon(label.kind)).xsmall().text_color(color))
+        .child(
+            h_flex()
+                .flex_none()
+                .gap(px(2.))
+                .child(Icon::new(ref_icon(label.kind)).xsmall().text_color(color))
+                .when(shown.with_upstream, |this| {
+                    this.child(
+                        Icon::new(ref_icon(RefKind::RemoteBranch))
+                            .xsmall()
+                            .text_color(color),
+                    )
+                }),
+        )
         .child(
             div()
                 .ellipsis()

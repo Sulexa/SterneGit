@@ -273,6 +273,15 @@ const counted = (n, singular, plural) => `${thousands(n)} ${n === 1 ? singular :
 
 const join = (parts) => parts.filter(Boolean).join('');
 
+function foldSyncedRefs(refs) {
+  const upstreamOf = (name) => `origin/${name}`;
+  const upstreams = new Set(refs.filter(([, kind]) => kind === 'local').map(([name]) => upstreamOf(name)));
+  const remotes = new Set(refs.filter(([, kind]) => kind === 'remote').map(([name]) => name));
+  return refs
+    .filter(([name, kind]) => !(kind === 'remote' && upstreams.has(name)))
+    .map(([name, kind, head]) => ({ name, kind, head, synced: kind === 'local' && remotes.has(upstreamOf(name)) }));
+}
+
 function icon(name, size = 'md', color) {
   const px = IconSizes[size];
   const style = color ? ` style="color:${color}"` : '';
@@ -744,8 +753,9 @@ const C = {
     return `<div data-c="SectionHeader" class="section-header${foldable ? ' foldable' : ''}">${foldable ? twisty(open) : ''}<span class="title ellipsis">${esc(title)}</span>${shownCount}${action || ''}</div>`;
   },
 
-  RefBadge({ name, kind, head = false, color = LaneColors[0] }) {
-    return `<div data-c="RefBadge" class="ref-badge${head ? ' head' : ''}" style="--c:${color}">${icon(RefIcons[kind], 'xs')}<div class="name ellipsis">${esc(name)}</div></div>`;
+  RefBadge({ name, kind, head = false, synced = false, color = LaneColors[0] }) {
+    const icons = icon(RefIcons[kind], 'xs') + (synced ? icon(RefIcons.remote, 'xs') : '');
+    return `<div data-c="RefBadge" class="ref-badge${head ? ' head' : ''}" style="--c:${color}"><div class="icons">${icons}</div><div class="name ellipsis">${esc(name)}</div></div>`;
   },
 
   ChangeBadge({ kind }) {
@@ -837,8 +847,9 @@ const C = {
 
   CommitRow({ commit, selected = false, width }) {
     const color = LaneColors[commit.graph[0] % LaneColors.length];
-    const badges = commit.refs.slice(0, 3).map(([name, kind, head]) => C.RefBadge({ name, kind, head, color })).join('');
-    const more = commit.refs.length > 3 ? `<div class="none xs muted">+${commit.refs.length - 3}</div>` : '';
+    const refs = foldSyncedRefs(commit.refs);
+    const badges = refs.slice(0, 3).map((label) => C.RefBadge({ ...label, color })).join('');
+    const more = refs.length > 3 ? `<div class="none xs muted">+${refs.length - 3}</div>` : '';
     const subject = commit.subject
       ? `<div class="fill ellipsis sm">${esc(commit.subject)}</div>`
       : '<div class="fill ellipsis sm muted">(no message)</div>';

@@ -15,7 +15,7 @@ use gpui_kit::SharedString;
 
 use super::{
     graph::{self, Graph},
-    refs::{self, RefDigest, RefLabel},
+    refs::{self, RefDigest, RefLabel, ShownRef},
     text::decode,
     time::format_time,
 };
@@ -172,6 +172,11 @@ impl History {
             .into_iter()
             .flatten()
             .map(|&ix| &self.refs[ix])
+    }
+
+    pub(crate) fn shown_on(&self, id: &ObjectId) -> Vec<ShownRef<'_>> {
+        let labels: Vec<&RefLabel> = self.labels_on(id).collect();
+        refs::fold_upstreams_in(&labels)
     }
 }
 

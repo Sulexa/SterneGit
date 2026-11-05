@@ -4,7 +4,8 @@ use anyhow::Result;
 use gix::{
     ObjectId,
     bstr::BStr,
-    refs::{Category, FullName, TargetRef},
+    refs::{Category, FullName, FullNameRef, TargetRef},
+    remote::Direction,
 };
 use gpui_kit::SharedString;
 
@@ -45,6 +46,13 @@ pub(crate) struct RefLabel {
     pub(crate) kind: RefKind,
     pub(crate) target: ObjectId,
     pub(crate) is_head: bool,
+    pub(crate) upstream: Option<SharedString>,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct ShownRef<'a> {
+    pub(crate) label: &'a RefLabel,
+    pub(crate) with_upstream: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -126,6 +134,10 @@ pub(crate) fn read_labels(
         let name = decode(short_name).into();
         let is_head = kind == RefKind::LocalBranch
             && head.is_some_and(|head| head.as_bstr() == reference.name().as_bstr());
+        let upstream = match kind {
+            RefKind::LocalBranch => upstream_of(repo, reference.name()),
+            RefKind::RemoteBranch | RefKind::Tag => None,
+        };
         let Ok(commit) = reference.peel_to_commit() else {
             continue;
         };
@@ -134,6 +146,7 @@ pub(crate) fn read_labels(
             kind,
             target: commit.id,
             is_head,
+            upstream,
         });
     }
     labels.sort_by(|a, b| {
@@ -148,11 +161,80 @@ fn is_alias_for_another_remote_branch(short_name: &BStr) -> bool {
     short_name.ends_with(b"/HEAD")
 }
 
+fn upstream_of(repo: &gix::Repository, branch: &FullNameRef) -> Option<SharedString> {
+    let tracking = repo
+        .branch_remote_tracking_ref_name(branch, Direction::Fetch)?
+        .ok()?;
+    match tracking.as_ref().category_and_short_name()? {
+        (Category::RemoteBranch, short_name) => Some(decode(short_name).into()),
+        _ => None,
+    }
+}
+
+pub(crate) fn fold_upstreams_in<'a>(same_commit: &[&'a RefLabel]) -> Vec<ShownRef<'a>> {
+    let is_here = |upstream: &SharedString| {
+        same_commit
+            .iter()
+            .any(|label| label.kind == RefKind::RemoteBranch && label.name == *upstream)
+    };
+    let is_folded = |label: &RefLabel| {
+        label.kind == RefKind::RemoteBranch
+            && same_commit
+                .iter()
+                .any(|local| local.upstream.as_ref() == Some(&label.name))
+    };
+    same_commit
+        .iter()
+        .filter(|label| !is_folded(label))
+        .map(|&label| ShownRef {
+            label,
+            with_upstream: label.upstream.as_ref().is_some_and(is_here),
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use anyhow::Result;
+    use gix::ObjectId;
 
-    use crate::git::scratch::ScratchRepo;
+    use crate::git::{History, scratch::ScratchRepo};
+
+    fn shown(history: &History, id: ObjectId) -> Vec<(&str, bool)> {
+        history
+            .shown_on(&id)
+            .iter()
+            .map(|shown| (shown.label.name.as_str(), shown.with_upstream))
+            .collect()
+    }
+
+    #[test]
+    fn a_branch_on_the_same_commit_as_its_upstream_takes_it_in() -> Result<()> {
+        let origin = ScratchRepo::bare("fold-origin")?;
+        let ours = ScratchRepo::new("fold-ours")?;
+        ours.commit("first")?;
+        ours.git(&["remote", "add", "origin", &origin.location()])?;
+        ours.git(&["push", "--quiet", "--set-upstream", "origin", "main"])?;
+        ours.git(&["push", "--quiet", "origin", "main:topic"])?;
+        ours.git(&["branch", "--no-track", "topic"])?;
+        let (_, history) = ours.open()?;
+        let first = history.head_id.expect("a commit");
+        assert_eq!(
+            shown(&history, first),
+            [("main", true), ("topic", false), ("origin/topic", false)],
+            "origin/topic shares a name with topic but isn't its upstream"
+        );
+        ours.commit("second")?;
+        let (_, history) = ours.open()?;
+        let second = history.head_id.expect("a commit");
+        assert_eq!(shown(&history, second), [("main", false)]);
+        assert_eq!(
+            shown(&history, first),
+            [("topic", false), ("origin/main", false), ("origin/topic", false)],
+            "main moved ahead of origin/main"
+        );
+        Ok(())
+    }
 
     #[test]
     fn the_ref_digest_follows_head_alone() -> Result<()> {

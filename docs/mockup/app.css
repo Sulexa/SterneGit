@@ -422,7 +422,7 @@
 
 .ref-badge.head { background: color-mix(in srgb, var(--c) 35%, transparent); }
 .ref-badge.head > .name { font-weight: 600; }
-.ref-badge > .icon { color: var(--c); }
+.ref-badge > .icons { flex: none; display: flex; gap: 2px; color: var(--c); }
 
 .change-badge {
   flex: none;
