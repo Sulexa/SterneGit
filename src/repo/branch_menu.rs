@@ -77,7 +77,7 @@ impl BranchMenu {
         let local = label.kind == RefKind::LocalBranch;
         let another_branch_is_checked_out = self.checked_out.is_some() && !checked_out;
         [
-            (!checked_out).then(|| vec![CheckOut]),
+            label.can_be_checked_out().then(|| vec![CheckOut]),
             local.then(|| vec![Pull, Push]),
             another_branch_is_checked_out.then(|| vec![Merge, Rebase]),
             Some(vec![BranchHere]),

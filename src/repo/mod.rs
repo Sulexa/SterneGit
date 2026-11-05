@@ -918,6 +918,9 @@ impl RepoView {
             .stash_menu(stash_menu)
             .on_reveal(cx.listener(|this, ix: &usize, window, cx| this.reveal_ref(*ix, window, cx)))
             .on_reveal_stash(cx.listener(|this, id: &ObjectId, _, cx| this.reveal_stash(*id, cx)))
+            .on_check_out(cx.listener(|this, label: &RefLabel, window, cx| {
+                this.act_on_branch(label.clone(), BranchAction::CheckOut, window, cx)
+            }))
             .on_toggle(
                 cx.listener(|this, group: &RefGroup, _, cx| {
                     this.toggle_ref_fold(group.clone(), cx)
@@ -938,6 +941,9 @@ impl RepoView {
         .uncommitted(changes, self.target.is_working_tree())
         .on_select_commit(cx.listener(|this, id: &ObjectId, _, cx| this.select_commit(*id, cx)))
         .on_select_uncommitted(cx.listener(|this, _: &(), _, cx| this.select_working_tree(cx)))
+        .on_check_out(cx.listener(|this, label: &RefLabel, window, cx| {
+            this.act_on_branch(label.clone(), BranchAction::CheckOut, window, cx)
+        }))
     }
 
     fn changes_list(&self, open: Option<OpenFile>, cx: &mut Context<Self>) -> ChangesList {

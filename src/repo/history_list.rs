@@ -2,9 +2,9 @@ use std::sync::Arc;
 
 use gix::ObjectId;
 use gpui_kit::{
-    AnyElement, App, FocusHandle, InteractiveElement as _, IntoElement, MouseButton,
-    ParentElement as _, Pixels, RenderOnce, SharedString, Styled as _, UniformListScrollHandle,
-    Window,
+    AnyElement, App, FocusHandle, Hsla, InteractiveElement as _, IntoElement, MouseButton,
+    ParentElement as _, Pixels, RenderOnce, SharedString, StatefulInteractiveElement as _,
+    Styled as _, UniformListScrollHandle, Window,
     component::{ActiveTheme as _, h_flex, menu::ContextMenuExt as _, scroll::Scrollbar, v_flex},
     div,
     prelude::FluentBuilder as _,
@@ -14,10 +14,10 @@ use gpui_kit::{
 use super::stash_menu::StashMenu;
 use crate::{
     actions::HISTORY_CONTEXT,
-    git::{History, WorkingChanges},
+    git::{History, RefLabel, ShownRef, WorkingChanges},
     ui::{
         self, GraphNode, Handler, Look as _, Palette, ROW_HEIGHT, commit_subject, handler,
-        list_row, ref_badge, stash_badge, thousands,
+        is_double_click, list_row, ref_badge, stash_badge, thousands,
     },
 };
 
@@ -36,12 +36,14 @@ pub(crate) struct HistoryList {
     scroll: UniformListScrollHandle,
     on_select_commit: Option<Handler<ObjectId>>,
     on_select_uncommitted: Option<Handler<()>>,
+    on_check_out: Option<Handler<RefLabel>>,
     stash_menu: Option<StashMenu>,
 }
 
 #[derive(Clone)]
 struct RowActions {
     on_select: Option<Handler<ObjectId>>,
+    on_check_out: Option<Handler<RefLabel>>,
     stash_menu: Option<StashMenu>,
 }
 
@@ -59,6 +61,7 @@ impl HistoryList {
             scroll,
             on_select_commit: None,
             on_select_uncommitted: None,
+            on_check_out: None,
             stash_menu: None,
         }
     }
@@ -99,6 +102,14 @@ impl HistoryList {
         self.on_select_uncommitted = Some(handler(callback));
         self
     }
+
+    pub(crate) fn on_check_out(
+        mut self,
+        callback: impl Fn(&RefLabel, &mut Window, &mut App) + 'static,
+    ) -> Self {
+        self.on_check_out = Some(handler(callback));
+        self
+    }
 }
 
 impl RenderOnce for HistoryList {
@@ -111,10 +122,12 @@ impl RenderOnce for HistoryList {
             scroll,
             on_select_commit,
             on_select_uncommitted,
+            on_check_out,
             stash_menu,
         } = self;
         let actions = RowActions {
             on_select: on_select_commit,
+            on_check_out,
             stash_menu,
         };
         let palette = Palette::new(cx);
@@ -202,7 +215,9 @@ fn commit_row(
                             labels
                                 .iter()
                                 .take(MAX_BADGES)
-                                .map(|&shown| ref_badge(shown, color, cx)),
+                                .map(|&shown| {
+                                    branch_badge(shown, color, actions.on_check_out.clone(), cx)
+                                }),
                         )
                         .when(labels.len() > MAX_BADGES, |this| {
                             this.child(
@@ -263,6 +278,25 @@ fn commit_row(
         }
         _ => row.into_any_element(),
     }
+}
+
+fn branch_badge(
+    shown: ShownRef,
+    color: Hsla,
+    on_check_out: Option<Handler<RefLabel>>,
+    cx: &App,
+) -> AnyElement {
+    let label = shown.label.clone();
+    let on_check_out = on_check_out.filter(|_| label.can_be_checked_out());
+    ref_badge(shown, color, cx)
+        .when_some(on_check_out, |badge, on_check_out| {
+            badge.on_click(move |event, window, cx| {
+                if is_double_click(event) {
+                    on_check_out(&label, window, cx)
+                }
+            })
+        })
+        .into_any_element()
 }
 
 fn uncommitted_row(

@@ -1,5 +1,6 @@
 use gpui_kit::{
-    AnyElement, App, Div, Hsla, IntoElement, ParentElement as _, SharedString, Styled as _,
+    AnyElement, App, Div, Hsla, InteractiveElement as _, IntoElement, ParentElement as _,
+    SharedString, Stateful, Styled as _,
     assets::IconName,
     component::{ActiveTheme as _, Icon, Sizable as _, StyledExt as _, h_flex},
     div,
@@ -23,7 +24,7 @@ fn ref_icon(kind: RefKind) -> IconName {
     }
 }
 
-pub(crate) fn ref_badge(shown: ShownRef, color: Hsla, cx: &App) -> AnyElement {
+pub(crate) fn ref_badge(shown: ShownRef, color: Hsla, cx: &App) -> Stateful<Div> {
     let label = shown.label;
     let icons = h_flex()
         .flex_none()
@@ -36,12 +37,12 @@ pub(crate) fn ref_badge(shown: ShownRef, color: Hsla, cx: &App) -> AnyElement {
                     .text_color(color),
             )
         });
-    badge(icons, label.name.clone(), label.is_head, color, cx)
+    badge(icons, label.name.clone(), label.is_head, color, cx).id(label.full_name())
 }
 
 pub(crate) fn stash_badge(name: SharedString, color: Hsla, cx: &App) -> AnyElement {
     let icon = Icon::new(IconName::Archive).xsmall().text_color(color);
-    badge(icon, name, false, color, cx)
+    badge(icon, name, false, color, cx).into_any_element()
 }
 
 fn badge(
@@ -50,7 +51,7 @@ fn badge(
     checked_out: bool,
     color: Hsla,
     cx: &App,
-) -> AnyElement {
+) -> Div {
     h_flex()
         .min_w(px(32.))
         .max_w(px(160.))
@@ -70,7 +71,6 @@ fn badge(
                 .when(checked_out, |this| this.font_semibold())
                 .child(name),
         )
-        .into_any_element()
 }
 
 fn change_color(kind: ChangeKind, cx: &App) -> Hsla {

@@ -471,7 +471,7 @@ const Catalog = (() => {
           name: 'RefsList',
           code: 'repo::refs_list::RefsList',
           source: 'src/repo/refs_list.rs',
-          about: 'Branches, remotes, stashes and tags, each section only when it has something. Names are split at each slash into folders, in the order Git lists them; under Remotes the first folder is the remote. Stashes are listed newest first, without folders. Sections and folders fold with a click. Clicking a ref or a stash selects its commit; right-clicking a branch opens its BranchMenu, and right-clicking a stash its StashMenu.',
+          about: 'Branches, remotes, stashes and tags, each section only when it has something. Names are split at each slash into folders, in the order Git lists them; under Remotes the first folder is the remote. Stashes are listed newest first, without folders. Sections and folders fold with a click. Clicking a ref or a stash selects its commit; double-clicking a branch checks it out; right-clicking a branch opens its BranchMenu, and right-clicking a stash its StashMenu.',
           variants: [
             ['With stashes, one selected', () => C.RefsList({ refs: stashed.history.refs, stashes: stashed.history.stashes, selectedRow: 3, collapsed: ['local', 'remote'] }), { w: 224, h: 200 }],
             ['With a selection', () => C.RefsList({ refs: history.refs, selectedRow: 2, collapsed }), { w: 224, h: 480 }],
@@ -494,7 +494,7 @@ const Catalog = (() => {
           name: 'RefRow',
           code: 'repo::refs_list::ref_row',
           source: 'src/repo/refs_list.rs',
-          about: 'Icon by kind, then the last part of the name, in bold for the checked-out branch. An empty chevron slot keeps it lined up with the folders beside it; indented 18 px per folder.',
+          about: 'Icon by kind, then the last part of the name, in bold for the checked-out branch. An empty chevron slot keeps it lined up with the folders beside it; indented 18 px per folder. A click selects the commit; a double-click on a branch that is not checked out also checks it out, as Check out in its BranchMenu does.',
           variants: [
             ['Checked-out branch', () => C.RefRow({ label: ref('main') }), { w: 224 }],
             ['Points at the selection, in a folder', () => C.RefRow({ label: ref('feature/diff-view'), name: 'diff-view', depth: 1, selected: true }), { w: 224 }],
@@ -516,7 +516,7 @@ const Catalog = (() => {
           name: 'BranchMenu',
           code: 'repo::branch_menu::BranchMenu',
           source: 'src/repo/branch_menu.rs',
-          about: 'The right-click menu of a local or remote branch in the RefsList, in groups: Check out; Pull and Push; Merge and Rebase with the checked-out branch; Create branch here…; Delete…. Items that cannot apply are left out: the checked-out branch has no Check out, Merge, Rebase or Delete, a remote branch has no Pull or Push, and a detached HEAD has no Merge or Rebase. Every item is disabled while Git writes; Pull and Push spin the header\'s button while they run. Check out on a remote branch switches to the local branch of the same name, or makes one that tracks it.',
+          about: 'The right-click menu of a local or remote branch in the RefsList, in groups: Check out; Pull and Push; Merge and Rebase with the checked-out branch; Create branch here…; Delete…. Items that cannot apply are left out: the checked-out branch has no Check out, Merge, Rebase or Delete, a remote branch has no Pull or Push, and a detached HEAD has no Merge or Rebase. Every item is disabled while Git writes; Pull and Push spin the header\'s button while they run. Check out on a remote branch switches to the local branch of the same name, or makes one that tracks it. Double-clicking the branch, in the RefsList or on its badge in a CommitRow, runs Check out without opening the menu.',
           variants: [
             ['Another local branch', () => menuFrame(C.BranchMenu({ label: ref('feature/blame'), current: 'main' }), 280)],
             ['Checked-out branch', () => menuFrame(C.BranchMenu({ label: ref('main'), current: 'main' }), 280)],
@@ -565,7 +565,7 @@ const Catalog = (() => {
           name: 'CommitRow',
           code: 'repo::history_list::commit_row',
           source: 'src/repo/history_list.rs',
-          about: 'The same 12 px left padding as every row, then the graph, up to three ref badges (then +n), subject, author 120 px with its AuthorAvatar in front, date 104 px, short id 56 px.',
+          about: 'The same 12 px left padding as every row, then the graph, up to three ref badges (then +n), subject, author 120 px with its AuthorAvatar in front, date 104 px, short id 56 px. A click selects the commit; a double-click on a branch badge that is not the checked-out branch checks that branch out, the local one for a badge that holds its upstream too.',
           variants: [
             ['HEAD with refs', () => C.CommitRow({ commit: commit(0), width }), { w: row }],
             ['Selected', () => C.CommitRow({ commit: commit(2), width, selected: true }), { w: row }],

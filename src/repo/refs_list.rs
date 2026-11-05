@@ -20,7 +20,7 @@ use super::{
 };
 use crate::{
     git::{History, RefKind, RefLabel, Stash},
-    ui::{Folded, Handler, SectionHeader, handler, list_row, tree_line},
+    ui::{Folded, Handler, SectionHeader, handler, is_double_click, list_row, tree_line},
 };
 
 #[derive(IntoElement)]
@@ -31,6 +31,7 @@ pub(crate) struct RefsList {
     scroll: UniformListScrollHandle,
     on_reveal: Option<Handler<usize>>,
     on_reveal_stash: Option<Handler<ObjectId>>,
+    on_check_out: Option<Handler<RefLabel>>,
     on_toggle: Option<Handler<RefGroup>>,
     branch_menu: Option<BranchMenu>,
     stash_menu: Option<StashMenu>,
@@ -49,6 +50,7 @@ impl RefsList {
             scroll,
             on_reveal: None,
             on_reveal_stash: None,
+            on_check_out: None,
             on_toggle: None,
             branch_menu: None,
             stash_menu: None,
@@ -86,6 +88,14 @@ impl RefsList {
         self
     }
 
+    pub(crate) fn on_check_out(
+        mut self,
+        callback: impl Fn(&RefLabel, &mut Window, &mut App) + 'static,
+    ) -> Self {
+        self.on_check_out = Some(handler(callback));
+        self
+    }
+
     pub(crate) fn on_toggle(
         mut self,
         callback: impl Fn(&RefGroup, &mut Window, &mut App) + 'static,
@@ -104,6 +114,7 @@ impl RenderOnce for RefsList {
             scroll,
             on_reveal,
             on_reveal_stash,
+            on_check_out,
             on_toggle,
             branch_menu,
             stash_menu,
@@ -135,7 +146,10 @@ impl RenderOnce for RefsList {
                                 ix,
                                 depth,
                                 selected,
-                                on_reveal.clone(),
+                                RefClicks {
+                                    on_reveal: on_reveal.clone(),
+                                    on_check_out: on_check_out.clone(),
+                                },
                                 branch_menu.clone(),
                                 cx,
                             ),
@@ -221,15 +235,26 @@ fn folder_row(
         .into_any_element()
 }
 
+struct RefClicks {
+    on_reveal: Option<Handler<usize>>,
+    on_check_out: Option<Handler<RefLabel>>,
+}
+
 fn ref_row(
     label: &RefLabel,
     ix: usize,
     depth: usize,
     selected: Option<ObjectId>,
-    on_reveal: Option<Handler<usize>>,
+    clicks: RefClicks,
     branch_menu: Option<BranchMenu>,
     cx: &App,
 ) -> AnyElement {
+    let RefClicks {
+        on_reveal,
+        on_check_out,
+    } = clicks;
+    let on_check_out = on_check_out.filter(|_| label.can_be_checked_out());
+    let double_clicked = label.clone();
     let row = list_row(
         SharedString::from(format!("{:?}/{}", label.kind, label.name)),
         selected == Some(label.target),
@@ -243,8 +268,13 @@ fn ref_row(
         label.is_head,
         cx,
     ))
-    .when_some(on_reveal, |row, on_reveal| {
-        row.on_click(move |_, window, cx| on_reveal(&ix, window, cx))
+    .on_click(move |event, window, cx| {
+        if let Some(on_reveal) = &on_reveal {
+            on_reveal(&ix, window, cx)
+        }
+        if let Some(on_check_out) = on_check_out.as_ref().filter(|_| is_double_click(event)) {
+            on_check_out(&double_clicked, window, cx)
+        }
     });
     match branch_menu.filter(|_| label.is_branch()) {
         Some(branch_menu) => {

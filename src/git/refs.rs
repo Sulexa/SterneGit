@@ -63,6 +63,10 @@ impl RefLabel {
         matches!(self.kind, RefKind::LocalBranch | RefKind::RemoteBranch)
     }
 
+    pub(crate) fn can_be_checked_out(&self) -> bool {
+        self.is_branch() && !self.is_head
+    }
+
     pub(crate) fn full_name(&self) -> String {
         format!("{}{}", self.kind.namespace(), self.name)
     }
@@ -196,7 +200,8 @@ mod tests {
     use anyhow::Result;
     use gix::ObjectId;
 
-    use crate::git::{History, scratch::ScratchRepo};
+    use super::{RefKind, RefLabel};
+    use crate::git::{History, fixtures::id, scratch::ScratchRepo};
 
     fn shown(history: &History, id: ObjectId) -> Vec<(&str, bool)> {
         history
@@ -232,6 +237,21 @@ mod tests {
             "main moved ahead of origin/main"
         );
         Ok(())
+    }
+
+    #[test]
+    fn only_a_branch_that_is_not_checked_out_can_be_checked_out() {
+        let label = |name: &str, kind, is_head| RefLabel {
+            name: name.to_owned().into(),
+            kind,
+            target: id(1),
+            is_head,
+            upstream: None,
+        };
+        assert!(label("topic", RefKind::LocalBranch, false).can_be_checked_out());
+        assert!(label("origin/topic", RefKind::RemoteBranch, false).can_be_checked_out());
+        assert!(!label("main", RefKind::LocalBranch, true).can_be_checked_out());
+        assert!(!label("v1.0", RefKind::Tag, false).can_be_checked_out());
     }
 
     #[test]
