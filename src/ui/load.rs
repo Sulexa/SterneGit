@@ -54,6 +54,10 @@ impl<T> Load<T> {
         }
     }
 
+    pub(crate) fn is_idle(&self) -> bool {
+        matches!(self, Load::Idle)
+    }
+
     pub(crate) fn is_loading(&self) -> bool {
         matches!(self, Load::Loading { .. } | Load::Refreshing { .. })
     }

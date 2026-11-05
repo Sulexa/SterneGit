@@ -74,8 +74,8 @@ pub(crate) struct Repository {
 impl EventEmitter<RepositoryEvent> for Repository {}
 
 impl Repository {
-    pub(crate) fn new(path: PathBuf, cx: &mut Context<Self>) -> Self {
-        let mut this = Self {
+    pub(crate) fn new(path: PathBuf) -> Self {
+        Self {
             path,
             opened: Load::Idle,
             changes: None,
@@ -90,9 +90,11 @@ impl Repository {
             write_failure: None,
             chosen_pull_mode: None,
             pull_mode_save: Job::default(),
-        };
-        this.refresh(cx);
-        this
+        }
+    }
+
+    pub(crate) fn path(&self) -> &Path {
+        &self.path
     }
 
     pub(crate) fn name(&self) -> SharedString {
@@ -177,6 +179,12 @@ impl Repository {
 
     pub(crate) fn fetch_failure(&self) -> Option<&Failure> {
         self.fetch_failure.as_ref()
+    }
+
+    pub(crate) fn read_if_never_read(&mut self, cx: &mut Context<Self>) {
+        if self.opened.is_idle() {
+            self.refresh(cx);
+        }
     }
 
     pub(crate) fn refresh(&mut self, cx: &mut Context<Self>) {

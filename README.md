@@ -13,9 +13,12 @@ doesn't commit or push yet.
 cargo run --release -- path/to/repository
 ```
 
-Without a path it opens the current directory if that's a repository, and otherwise
-offers **Open repository…**. Git 2.26 or newer must be on `PATH` for diffs and
-staging.
+FastGit brings back the tabs that were open last time, and a path given on the
+command line opens in one more tab. With no tabs to bring back it offers **Open
+repository…**. The open tabs are saved after every change, in
+`%APPDATA%\FastGit\tabs` on Windows, `~/Library/Application Support/FastGit/tabs`
+on macOS and `$XDG_STATE_HOME/fastgit/tabs` (or `~/.local/state/fastgit/tabs`) on
+Linux. Git 2.26 or newer must be on `PATH` for diffs and staging.
 
 To time how long reading a repository takes, without opening a window:
 

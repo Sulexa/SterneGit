@@ -16,6 +16,7 @@ use gpui_kit::{
 
 use super::{
     draws_its_own_menu_bar,
+    saved_tabs::SavedTabs,
     tab_strip::{TabLabel, TabState, TabStrip},
     tabs::Tabs,
     top_bar::TopBar,
@@ -25,6 +26,7 @@ use crate::{
         About, CloseTab, CopyHash, Fetch, NextTab, OpenRepository, PreviousTab, Quit, Refresh,
         WINDOW_CONTEXT,
     },
+    git,
     repo::{RepoView, Repository},
     ui::{Look as _, Notice},
 };
@@ -71,11 +73,32 @@ impl FastGit {
             _poll: poll,
             _activation: activation,
         };
+        this.restore(SavedTabs::load().still_on_disk(), window, cx);
         match path {
             Some(path) => this.open_paths(vec![path], window, cx),
-            None => this.update_title(window, cx),
+            None => this.show_active_tab(window, cx),
         }
         this
+    }
+
+    fn restore(&mut self, saved: SavedTabs, window: &mut Window, cx: &mut Context<Self>) {
+        for path in saved.paths {
+            let tab = self.new_tab(path, window, cx);
+            self.tabs.push(tab);
+        }
+        self.tabs.activate(saved.active);
+    }
+
+    fn save_tabs(&self, cx: &App) {
+        SavedTabs {
+            paths: self
+                .tabs
+                .iter()
+                .map(|tab| tab.repository.read(cx).path().to_owned())
+                .collect(),
+            active: self.tabs.active_index(),
+        }
+        .save();
     }
 
     fn poll(&mut self, cx: &mut Context<Self>) {
@@ -93,6 +116,7 @@ impl FastGit {
     fn catch_up(&self, cx: &mut App) {
         if let Some(tab) = self.tabs.active() {
             tab.repository.update(cx, |repository, cx| {
+                repository.read_if_never_read(cx);
                 repository.check_for_changes(cx);
                 repository.fetch_if_older_than(FETCH_ON_RETURN_UNLESS_FETCHED_WITHIN, cx);
             });
@@ -102,6 +126,7 @@ impl FastGit {
     fn open_paths(&mut self, paths: Vec<PathBuf>, window: &mut Window, cx: &mut Context<Self>) {
         let mut last = None;
         for path in paths {
+            let path = git::top_folder(&path).unwrap_or(path);
             let resolved = std::fs::canonicalize(&path).unwrap_or_else(|_| path.clone());
             let existing = self
                 .tabs
@@ -158,6 +183,7 @@ impl FastGit {
         }
         self.catch_up(cx);
         self.update_title(window, cx);
+        self.save_tabs(cx);
         cx.notify();
     }
 

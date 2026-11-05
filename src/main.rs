@@ -16,6 +16,6 @@ fn main() {
         Invocation::Help => cli::print_help(),
         Invocation::Misuse => cli::exit_with_usage(),
         Invocation::Check(path) => cli::check(&path),
-        Invocation::Open(path) => app::run(path.or_else(cli::current_repository)),
+        Invocation::Open(path) => app::run(path),
     }
 }

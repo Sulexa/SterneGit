@@ -73,7 +73,7 @@ impl Repo {
 
     fn new(repo: gix::Repository) -> Self {
         let has_work_tree = repo.workdir().is_some();
-        let location = absolute(repo.workdir().unwrap_or_else(|| repo.git_dir()));
+        let location = top_folder_of(&repo);
         let name = folder_name(&location);
         Self {
             repo: repo.into_sync(),
@@ -104,8 +104,12 @@ impl Repo {
     }
 }
 
-pub(crate) fn is_inside_repository(path: &Path) -> bool {
-    gix::discover(path).is_ok()
+pub(crate) fn top_folder(path: &Path) -> Option<PathBuf> {
+    gix::discover(path).ok().map(|repo| top_folder_of(&repo))
+}
+
+fn top_folder_of(repo: &gix::Repository) -> PathBuf {
+    absolute(repo.workdir().unwrap_or_else(|| repo.git_dir()))
 }
 
 pub(crate) fn folder_name(path: &Path) -> SharedString {
@@ -239,5 +243,21 @@ pub(crate) mod scratch {
         fn drop(&mut self) {
             let _ = std::fs::remove_dir_all(&self.dir);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use anyhow::Result;
+
+    use super::{scratch::ScratchRepo, top_folder};
+
+    #[test]
+    fn a_folder_inside_a_repository_leads_to_the_repository_top_folder() -> Result<()> {
+        let scratch = ScratchRepo::new("top-folder")?;
+        let inside = scratch.dir.join("src").join("deep");
+        std::fs::create_dir_all(&inside)?;
+        assert_eq!(top_folder(&inside), Some(scratch.dir.clone()));
+        Ok(())
     }
 }

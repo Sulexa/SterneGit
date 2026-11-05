@@ -1,3 +1,4 @@
+mod saved_tabs;
 mod tab_strip;
 mod tabs;
 mod top_bar;

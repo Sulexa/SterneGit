@@ -85,7 +85,7 @@ pub(crate) struct RepoView {
 
 impl RepoView {
     pub(crate) fn new(path: PathBuf, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let repository = cx.new(|cx| Repository::new(path, cx));
+        let repository = cx.new(|_| Repository::new(path));
         let commit_panel = cx.new(|_| CommitPanel::new());
         let commit_form = cx.new(|cx| CommitForm::new(repository.clone(), window, cx));
         let file_diff = cx.new(|cx| FileDiffPanel::new(repository.clone(), cx));
@@ -499,7 +499,7 @@ impl RepoView {
     fn render_body(&self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         let repository = self.repository.read(cx);
         let Some(history) = repository.history().cloned() else {
-            return if repository.is_reading_history() {
+            return if repository.failure().is_none() {
                 ui::loading("Reading history…")
             } else {
                 self.render_failure(cx)

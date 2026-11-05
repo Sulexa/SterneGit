@@ -3,10 +3,10 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::git::{self, Repo};
+use crate::git::Repo;
 
 const USAGE: &str = "Usage: fastgit [--check] [repository]";
-const HELP: &str = "Opens the repository containing the given path, or the current directory.\n\
+const HELP: &str = "Brings back the tabs open last time, plus the repository containing the given path.\n\
                     --check reads the history without opening a window and reports how long it took.";
 
 #[derive(Debug, PartialEq, Eq)]
@@ -69,12 +69,6 @@ pub(crate) fn check(path: &Path) {
     }
 }
 
-pub(crate) fn current_repository() -> Option<PathBuf> {
-    std::env::current_dir()
-        .ok()
-        .filter(|dir| git::is_inside_repository(dir))
-}
-
 #[cfg(test)]
 mod tests {
     use std::{ffi::OsString, path::PathBuf};
@@ -86,7 +80,7 @@ mod tests {
     }
 
     #[test]
-    fn no_arguments_open_the_current_directory_when_it_is_a_repository() {
+    fn no_arguments_open_no_repository_beyond_the_saved_tabs() {
         assert_eq!(parsed(&[]), Invocation::Open(None));
     }
 
