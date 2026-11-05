@@ -1,10 +1,13 @@
 mod branch;
 mod command;
 mod commit;
+mod context;
+mod facts;
 mod graph;
 mod history;
 mod hunks;
 mod index;
+mod lfs;
 mod merge;
 mod patch;
 mod pull_mode;
@@ -16,6 +19,7 @@ mod stash;
 mod status;
 mod text;
 mod time;
+mod version;
 
 use std::{
     path::{Path, PathBuf},
@@ -27,21 +31,25 @@ use gix::ThreadSafeRepository;
 use gpui_kit::SharedString;
 
 pub(crate) use branch::{CheckedOut, NameProblem, new_branch_name};
+pub(crate) use command::without_console_window;
 pub(crate) use commit::commit_message;
+pub(crate) use facts::DifftoolTarget;
 pub(crate) use graph::{Edge, Row};
 #[cfg(test)]
 pub(crate) use history::fixtures;
 pub(crate) use history::{Commit, HISTORY_LIMIT, History, short_id};
 pub(crate) use hunks::{Hunks, LineAt, LineSide, LineSpan, Part, PartAction};
 pub(crate) use index::Scope;
+pub(crate) use lfs::FileVersion;
 pub(crate) use merge::{Merged, Rebased};
-pub(crate) use patch::FilePatch;
+pub(crate) use patch::{FilePatch, Whitespace};
 pub(crate) use pull_mode::PullMode;
 pub(crate) use refs::{RefDigest, RefKind, RefLabel, RemoteBranch};
 pub(crate) use refusal::{Refusal, Tracking};
 pub(crate) use remote::{Pulled, Pushed};
 pub(crate) use stash::Carried;
 pub(crate) use status::{ChangeKind, FileChange, Side, WorkingChanges};
+pub(crate) use version::Revision;
 
 const OBJECT_CACHE_BYTES: usize = 4 * 1024 * 1024;
 

@@ -16,7 +16,7 @@ pub use decoration::{DiffDecoration, DiffGutterMarker};
 pub use document::{DiffFile, DiffFileStatus, DiffLinePosition, DiffLineRange, DiffSide};
 pub use parser::{DiffParseError, DiffParseOptions};
 pub use presentation::DiffInlineUnit;
-pub use state::{DiffEvent, DiffState};
+pub use state::{DiffChangeMark, DiffEvent, DiffState};
 
 use std::{collections::HashMap, rc::Rc, sync::Arc};
 

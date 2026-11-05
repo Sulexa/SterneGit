@@ -7,6 +7,9 @@ edition = "2024"
 anyhow = "1.0.104"
 gix = "0.90.0"
 gpui-kit = { version = "0.9.0", features = ["syntect"] }
+image = { version = "0.25.10", default-features = false }
+symphonia = { version = "0.6.1", default-features = false, features = ["wav", "pcm", "ogg", "vorbis", "flac", "mp3", "aiff", "isomp4", "aac"] }
+cpal = "0.18.2"
 
 # Dependencies are optimized even in dev builds: gix walks history and GPUI renders
 # frames far too slowly at opt-level 0, which would hide real performance problems.

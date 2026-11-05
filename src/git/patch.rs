@@ -7,8 +7,10 @@ use gpui_kit::SharedString;
 use super::{
     ChangeKind, FileChange, Repo, Side,
     command::{Exit, READ_ONLY, run, run_text},
+    context::with_whole_file,
     hunks::Hunks,
     text::decode,
+    version::Revision,
 };
 
 const NAMES_AS_WRITTEN: &str = "core.quotePath=false";
@@ -44,6 +46,26 @@ const FILE_PATCH: &[&str] = &[
 
 const NOTHING: &str = "/dev/null";
 
+const IGNORE_WHITESPACE: &str = "--ignore-all-space";
+
+const MOST_BYTES_SPREAD: u64 = 8 * 1024 * 1024;
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) enum Whitespace {
+    #[default]
+    Compared,
+    Ignored,
+}
+
+impl Whitespace {
+    fn option(self) -> Option<&'static str> {
+        match self {
+            Whitespace::Compared => None,
+            Whitespace::Ignored => Some(IGNORE_WHITESPACE),
+        }
+    }
+}
+
 pub(crate) struct CommitDetails {
     pub(crate) body: SharedString,
     pub(crate) patch: String,
@@ -70,9 +92,20 @@ impl Repo {
         Ok(CommitDetails { body, patch })
     }
 
+    #[cfg(test)]
     pub(crate) fn file_patch(&self, change: &FileChange, side: Side) -> Result<FilePatch> {
+        self.file_patch_with(change, side, Whitespace::Compared)
+    }
+
+    pub(crate) fn file_patch_with(
+        &self,
+        change: &FileChange,
+        side: Side,
+        whitespace: Whitespace,
+    ) -> Result<FilePatch> {
         let paths: Vec<&OsStr> = change.exact_paths().collect();
-        let split = change.kind == ChangeKind::Modified;
+        let split = change.kind == ChangeKind::Modified && whitespace == Whitespace::Compared;
+        let blanks = whitespace.option();
         match (change.kind, side) {
             (ChangeKind::Conflicted, _) => self.conflicted_file(change),
             (ChangeKind::Untracked, _) => self.diff(
@@ -82,12 +115,50 @@ impl Repo {
                 false,
             ),
             (_, Side::Staged) => self.diff(
-                &["--cached", "--find-renames"],
+                &[Some("--cached"), Some("--find-renames"), blanks]
+                    .into_iter()
+                    .flatten()
+                    .collect::<Vec<_>>(),
                 &paths,
                 Exit::Success,
                 split,
             ),
-            (_, Side::Unstaged) => self.diff(&[], &paths, Exit::Success, split),
+            (_, Side::Unstaged) => self.diff(
+                &blanks.into_iter().collect::<Vec<_>>(),
+                &paths,
+                Exit::Success,
+                split,
+            ),
+        }
+    }
+
+    pub(crate) fn commit_file_patch(
+        &self,
+        id: ObjectId,
+        paths: &[&OsStr],
+        whitespace: Whitespace,
+    ) -> Result<String> {
+        let id = id.to_string();
+        let mut args: Vec<&OsStr> = COMMIT_PATCH.iter().map(OsStr::new).collect();
+        args.extend(whitespace.option().map(OsStr::new));
+        args.extend([OsStr::new(&id), OsStr::new("--")]);
+        args.extend(paths);
+        run_text(&self.location, &args, Exit::Success)
+    }
+
+    pub(crate) fn with_whole_file(&self, patch: String, revision: Revision, path: &OsStr) -> String {
+        let small_enough = match revision {
+            Revision::WorkTree => std::fs::metadata(self.location.join(path))
+                .is_ok_and(|metadata| metadata.len() <= MOST_BYTES_SPREAD),
+            _ => true,
+        };
+        let new_text = small_enough
+            .then(|| self.file_bytes(revision, path).ok())
+            .flatten()
+            .filter(|bytes| bytes.len() as u64 <= MOST_BYTES_SPREAD);
+        match new_text {
+            Some(bytes) => with_whole_file(&patch, &decode(&bytes)).unwrap_or(patch),
+            None => patch,
         }
     }
 

@@ -107,6 +107,10 @@ impl CommitPanel {
         cx.notify();
     }
 
+    pub(crate) fn files(&self) -> Option<Arc<[DiffFile]>> {
+        self.details.value().map(|summary| summary.files.clone())
+    }
+
     pub(crate) fn mark_open(&mut self, path: Option<SharedString>, cx: &mut Context<Self>) {
         if self.open != path {
             self.open = path;

@@ -65,11 +65,11 @@ fn never_prompt(command: &mut Command) {
 }
 
 #[cfg(windows)]
-fn without_console_window(command: &mut Command) {
+pub(crate) fn without_console_window(command: &mut Command) {
     use std::os::windows::process::CommandExt as _;
     const CREATE_NO_WINDOW: u32 = 0x0800_0000;
     command.creation_flags(CREATE_NO_WINDOW);
 }
 
 #[cfg(not(windows))]
-fn without_console_window(_: &mut Command) {}
+pub(crate) fn without_console_window(_: &mut Command) {}

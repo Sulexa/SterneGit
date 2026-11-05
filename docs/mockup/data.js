@@ -178,6 +178,7 @@ const Sample = (() => {
     additions: commitFile.additions,
     deletions: commitFile.deletions,
     hunks: commitFile.hunks,
+    lines: 404,
   };
 
   const hunk = (oldStart, newStart, scope, lines) => {
@@ -232,20 +233,20 @@ const Sample = (() => {
 
   const patchFile = { kind: 'M', path: 'src/git/patch.rs' };
 
-  const workingDiff = (side, hunks) => ({ change: patchFile, side, ...counts(hunks), hunks });
+  const workingDiff = (side, hunks, lines) => ({ change: patchFile, side, ...counts(hunks), hunks, lines });
 
   const fileDiff = workingDiff('unstaged', [
     hunk(14, 14, 'pub(crate) enum FilePatch {', conflictedBranch),
     hunk(27, 30, 'impl Repo {', conflictedReader),
     hunk(52, 60, 'fn diff_args(change: &FileChange, side: Side) -> Result<Vec<String>> {', pathArguments),
-  ]);
+  ], 183);
 
-  const stagedHunkDiff = workingDiff('staged', [hunk(14, 14, 'pub(crate) enum FilePatch {', conflictedBranch)]);
+  const stagedHunkDiff = workingDiff('staged', [hunk(14, 14, 'pub(crate) enum FilePatch {', conflictedBranch)], 179);
 
   const partlyStagedDiff = workingDiff('unstaged', [
     hunk(30, 30, 'impl Repo {', conflictedReader),
     hunk(55, 60, 'fn diff_args(change: &FileChange, side: Side) -> Result<Vec<String>> {', pathArguments),
-  ]);
+  ], 183);
 
   const partlyStaged = {
     unstaged: changes.unstaged,
@@ -265,5 +266,193 @@ const Sample = (() => {
     { name: 'linux', state: 'reading' },
   ];
 
-  return { history, collapsed, changes, partlyStaged, draft, commitDetails, commitFileDiff, fileDiff, stagedHunkDiff, partlyStagedDiff, selectedLines, tabs };
+  const starfall = {
+    name: 'starfall',
+    head: 'feature/slime-crown',
+    total: 3906,
+    readMs: 61,
+    truncated: false,
+    refs: [
+      { name: 'feature/boss-music', kind: 'local', row: 4 },
+      { name: 'feature/slime-crown', kind: 'local', row: 0, head: true },
+      { name: 'main', kind: 'local', row: 2 },
+      { name: 'release/0.4', kind: 'local', row: 7 },
+      { name: 'origin/feature/boss-music', kind: 'remote', row: 4 },
+      { name: 'origin/main', kind: 'remote', row: 2 },
+      { name: 'origin/release/0.4', kind: 'remote', row: 7 },
+      { name: 'v0.3.0', kind: 'tag', row: 12 },
+      { name: 'v0.4.0-beta', kind: 'tag', row: 7 },
+    ],
+  };
+
+  const assets = {
+    unstaged: [
+      { kind: 'M', path: 'Assets/Art/Characters/slime.png' },
+      { kind: 'M', path: 'Assets/Audio/Music/boss-theme.ogg' },
+      { kind: 'M', path: 'Assets/Video/intro.mp4' },
+      { kind: 'M', path: 'Assets/Models/slime.fbx' },
+      { kind: 'M', path: 'Assets/Scripts/Enemies/SlimeController.cs' },
+    ],
+    staged: [
+      { kind: 'A', path: 'Assets/Art/UI/crown-icon.png' },
+      { kind: 'M', path: 'ProjectSettings/QualitySettings.asset' },
+    ],
+  };
+
+  const onDisk = ['HEAD', 'Working copy'];
+
+  const slime = {
+    palette: { k: '#14532d', g: '#4ade80', d: '#16a34a', h: '#bbf7d0', w: '#f8fafc', p: '#0f172a', m: '#14532d', s: '#00000059', y: '#facc15', o: '#ca8a04', r: '#ef4444' },
+    before: [
+      '........................',
+      '........................',
+      '........................',
+      '........................',
+      '........................',
+      '........................',
+      '........................',
+      '........................',
+      '.........kkkkkk.........',
+      '.......kkggggggkk.......',
+      '......kghhhggggggk......',
+      '.....kghhgggggggggk.....',
+      '....kgghggggggggggdk....',
+      '....kgggwwggggwwggdk....',
+      '...kggggwpggggpwggddk...',
+      '...kggggwpggggpwggddk...',
+      '...kggggggggggggggddk...',
+      '...kggggggmggmggggddk...',
+      '...kdddddddmmdddddddk...',
+      '....kddddddddddddddk....',
+      '.....kkkkkkkkkkkkkk.....',
+      '.....ssssssssssssss.....',
+      '.......ssssssssss.......',
+      '........................',
+    ],
+    after: [
+      '........................',
+      '........................',
+      '........................',
+      '........................',
+      '........y..yy..y........',
+      '........yy.yy.yy........',
+      '........yyyrryyy........',
+      '........yyyrryyy........',
+      '........oooooooo........',
+      '.......kkggggggkk.......',
+      '......kghhhggggggk......',
+      '.....kghhgggggggggk.....',
+      '....kgghggggggggggdk....',
+      '....kgggwwggggwwggdk....',
+      '...kggggwpggggpwggddk...',
+      '...kggggwpggggpwggddk...',
+      '...kgggggmmmmmmgggddk...',
+      '...kgggggmwwwwmgggddk...',
+      '...kddddddmmmmddddddk...',
+      '....kddddddddddddddk....',
+      '.....kkkkkkkkkkkkkk.....',
+      '......ssssssssssss......',
+      '........ssssssss........',
+      '........................',
+    ],
+    areas: [
+      { x: 8, y: 4, w: 8, h: 5 },
+      { x: 9, y: 16, w: 6, h: 3 },
+      { x: 5, y: 21, w: 14, h: 2 },
+    ],
+  };
+
+  const slimeDiff = {
+    kind: 'image',
+    change: assets.unstaged[0],
+    side: 'unstaged',
+    sources: onDisk,
+    facts: '24 × 24 PNG',
+    image: slime,
+    details: {
+      columns: ['Size', 'Color', 'Format', 'File size'],
+      before: ['24 × 24 px', 'RGBA, 8 bits', 'PNG', '742 B'],
+      after: ['24 × 24 px', 'RGBA, 8 bits', 'PNG', '913 B'],
+      deltas: { 3: '+171 B' },
+    },
+  };
+
+  const crownIcon = {
+    kind: 'image',
+    change: assets.staged[0],
+    side: 'staged',
+    sources: ['', 'Staged'],
+    facts: '24 × 24 PNG',
+    image: slime,
+    details: {
+      columns: ['Size', 'Color', 'Format', 'File size'],
+      before: ['', '', '', ''],
+      after: ['24 × 24 px', 'RGBA, 8 bits', 'PNG', '913 B'],
+    },
+  };
+
+  const introDiff = {
+    kind: 'video',
+    change: assets.unstaged[2],
+    side: 'unstaged',
+    sources: onDisk,
+    lfs: true,
+    facts: '0:41.00 → 0:44.50',
+    duration: { before: 41, after: 44.5 },
+    at: 12.48,
+    changes: [[0, 3.2], [11.5, 16], [28, 31], [41, 44.5]],
+    current: 1,
+    hearing: 'after',
+    details: {
+      columns: ['Resolution', 'Frame rate', 'Duration', 'Video', 'Audio', 'Bit rate', 'File size'],
+      before: ['1920 × 1080', '30 fps', '0:41.00', 'H.264', 'AAC, 48 kHz', '8.2 Mb/s', '42.1 MB'],
+      after: ['1920 × 1080', '60 fps', '0:44.50', 'H.264', 'AAC, 48 kHz', '9.6 Mb/s', '53.4 MB'],
+      deltas: { 2: '+3.50 s', 6: '+11.3 MB' },
+    },
+  };
+
+  const themeDiff = {
+    kind: 'audio',
+    change: assets.unstaged[1],
+    side: 'unstaged',
+    sources: onDisk,
+    lfs: true,
+    facts: '2:41.3 → 2:47.9',
+    duration: { before: 161.3, after: 167.9 },
+    at: 78.4,
+    changes: [[31.5, 38], [72, 89.5], [156, 167.9]],
+    current: 1,
+    hearing: 'after',
+    song: {
+      before: [[0, 16, 0.2, 0.45], [16, 31.5, 0.5, 0.55], [31.5, 38, 0.55, 0.6], [38, 72, 0.78, 0.82], [72, 89.5, 0.3, 0.36], [89.5, 136, 0.84, 0.86], [136, 156, 0.56, 0.5], [156, 161.3, 0.45, 0]],
+      after: [[0, 16, 0.2, 0.45], [16, 31.5, 0.5, 0.55], [31.5, 38, 0.86, 0.95], [38, 72, 0.78, 0.82], [72, 89.5, 0.6, 0.68], [89.5, 136, 0.84, 0.86], [136, 156, 0.56, 0.5], [156, 162, 0.55, 0.64], [162, 167.9, 0.64, 0]],
+    },
+    details: {
+      columns: ['Duration', 'Sample rate', 'Channels', 'Codec', 'Bit rate', 'Loudness', 'Peak', 'File size'],
+      before: ['2:41.3', '48 kHz', 'Stereo', 'Vorbis', '192 kb/s', '−14.2 LUFS', '−1.0 dB', '3.7 MB'],
+      after: ['2:47.9', '48 kHz', 'Stereo', 'Vorbis', '192 kb/s', '−12.8 LUFS', '−0.3 dB', '3.9 MB'],
+      deltas: { 0: '+6.6 s', 5: '+1.4' },
+    },
+  };
+
+  const modelDiff = {
+    kind: 'binary',
+    change: assets.unstaged[3],
+    side: 'unstaged',
+    sources: onDisk,
+    lfs: true,
+    type: 'FBX',
+    facts: '2.4 MB → 2.6 MB',
+    details: {
+      columns: ['Type', 'File size', 'Last changed'],
+      before: ['FBX 7.4, binary', '2.4 MB', '2026-10-28 by Robin Chen'],
+      after: ['FBX 7.4, binary', '2.6 MB', 'Not committed yet'],
+      deltas: { 1: '+212 KB' },
+    },
+  };
+
+  return {
+    history, collapsed, changes, partlyStaged, draft, commitDetails, commitFileDiff, fileDiff, stagedHunkDiff, partlyStagedDiff, selectedLines, tabs,
+    starfall, assets, slimeDiff, crownIcon, introDiff, themeDiff, modelDiff,
+  };
 })();

@@ -5,6 +5,7 @@ mod app;
 mod assets;
 mod cli;
 mod git;
+mod media;
 mod repo;
 mod ui;
 

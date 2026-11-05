@@ -1,5 +1,6 @@
 const Screens = (() => {
   const { history, collapsed, changes, partlyStaged, draft, commitDetails, commitFileDiff, fileDiff, partlyStagedDiff, selectedLines, tabs } = Sample;
+  const { starfall, assets, slimeDiff, introDiff, themeDiff, modelDiff } = Sample;
   const selected = 2;
   const position = (row) => `Commit ${thousands(row + 1)} of ${thousands(history.total)}`;
 
@@ -39,12 +40,28 @@ const Screens = (() => {
   const fileComparison = (mode, extra = {}) =>
     repo({
       wipSelected: true,
-      middle: C.FileDiffPanel({ diff: extra.diff || fileDiff, mode, selection: extra.selection, pointed: extra.pointed }),
+      middle: C.FileDiffPanel({ diff: extra.diff || fileDiff, mode, selection: extra.selection, pointed: extra.pointed, menuOpen: extra.menuOpen, hot: extra.hot }),
       right: C.ChangesList({ changes: extra.changes || changes, open: openFile, view: extra.view }),
     });
 
   const firstUnstaged = changes.unstaged[0];
   const ref = (name) => history.refs.find((label) => label.name === name);
+
+  const gameTabs = [...tabs, { name: starfall.name, state: 'ready' }];
+  const changedFiles = [...assets.staged, ...assets.unstaged];
+
+  const assetComparison = (diff, { mode = 'split', expanded = false, view } = {}) =>
+    C.FastGit({
+      topBar: C.TopBar({ repository: starfall.name, head: starfall.head }),
+      tabStrip: C.TabStrip({ tabs: gameTabs, active: gameTabs.length - 1 }),
+      body: C.RepoView({
+        expanded,
+        left: C.RefsList({ refs: starfall.refs, selectedRow: null }),
+        middle: C.FileDiffPanel({ diff, mode, expanded, view, filePosition: [changedFiles.indexOf(diff.change) + 1, changedFiles.length] }),
+        right: C.ChangesList({ changes: assets, open: { side: diff.side, path: diff.change.path } }),
+        status: C.RepoStatusBar({ summary: historySummary(starfall) }),
+      }),
+    });
 
   return [
     {
@@ -193,7 +210,7 @@ const Screens = (() => {
     {
       id: 'file-split',
       title: 'File comparison — Split',
-      about: 'A file was clicked in the changes list. The middle pane swaps the graph for a side-by-side comparison; Esc or × goes back to the graph. Each hunk header ends with Discard hunk and Stage hunk, so one part of the file can be staged or thrown away without the rest.',
+      about: 'A file was clicked in the changes list. The middle pane swaps the graph for a side-by-side comparison; Esc or × goes back to the graph. The file bar names the file and holds what acts on all of it: Stage, the button that gives the comparison the whole window, and ×. The view bar under it picks Split or Unified, counts the changes and steps through them with ↑ and ↓ (Alt+Up, Alt+Down), and opens the view options. Changed words are highlighted inside changed lines. FastGit reads the whole file, so each hunk header is followed by the unchanged lines above it, folded: a click shows them all, or 20 at a time when there are more. The strip at the right edge marks where the changes sit and what part of the comparison is in view; a click on a mark goes there. Each hunk header ends with Discard hunk and Stage hunk, so one part of the file can be staged or thrown away without the rest.',
       source: 'src/repo/file_diff_panel.rs',
       render: () => C.FastGit({ topBar: topBar(), tabStrip: tabStrip(), body: fileComparison('split') }),
     },
@@ -234,6 +251,62 @@ const Screens = (() => {
           tabStrip: tabStrip(),
           body: fileComparison('split', { diff: partlyStagedDiff, changes: partlyStaged }),
         }),
+    },
+    {
+      id: 'view-options',
+      title: 'File comparison — view options',
+      about: 'The ⋯ at the right end of the view bar opens the options of every text comparison, in every tab: changed words highlighted, long lines wrapped, the whole file shown instead of the changed parts, whitespace changes hidden. While whitespace is hidden the hunk buttons and the line menu go away, because Git could not apply those parts to the file.',
+      source: 'src/repo/file_diff_panel.rs',
+      render: () => C.FastGit({ topBar: topBar(), tabStrip: tabStrip(), body: fileComparison('split', { menuOpen: true, hot: 'whitespace' }) }),
+    },
+    {
+      id: 'picture-split',
+      title: 'Compare pictures — Split',
+      about: 'A picture opens as pictures, not as “binary”: PNG, JPEG, GIF, WebP, BMP, TGA, ICO and QOI. Other formats show their details and the Open buttons. Split puts the version before the change on the left and the file on disk on the right, at the same zoom, on a checkerboard where they are transparent; zooming or dragging one moves the other. The view bar picks the way to compare, steps through the changed areas (each step zooms both sides onto one), zooms (Fit, − and +, Ctrl+wheel) and picks what shows behind transparent pixels. Past 400 % pixels stay square, which suits pixel art. Under the pictures, the details put both versions in one table, what changed in yellow. A new or deleted picture shows its one version and no modes.',
+      source: 'src/repo/file_diff_panel.rs',
+      render: () => assetComparison(slimeDiff),
+    },
+    {
+      id: 'picture-swipe',
+      title: 'Compare pictures — Swipe',
+      about: 'Swipe draws one picture: the version before the change left of the line, the file on disk right of it. Drag the handle, or click anywhere on the picture, to sweep the line across a change.',
+      source: 'src/repo/file_diff_panel.rs',
+      render: () => assetComparison(slimeDiff, { mode: 'swipe', view: { at: 0.47 } }),
+    },
+    {
+      id: 'picture-onion',
+      title: 'Compare pictures — Onion skin',
+      about: 'Onion skin lays the file on disk over the version before it. The slider sets how much of each shows; Space jumps between its two ends, so a change blinks in place.',
+      source: 'src/repo/file_diff_panel.rs',
+      render: () => assetComparison(slimeDiff, { mode: 'onion', view: { mix: 0.5 } }),
+    },
+    {
+      id: 'picture-difference',
+      title: 'Compare pictures — Difference',
+      about: 'Difference greys the picture out and paints only the pixels that changed, with the colors of the file letters: green where a pixel appeared, yellow where its color changed, red where it went transparent. Each changed area gets a numbered frame, and the view bar steps through them. Hovering a pixel reads its color in both versions.',
+      source: 'src/repo/file_diff_panel.rs',
+      render: () => assetComparison(slimeDiff, { mode: 'difference', view: { probe: { x: 11, y: 17 } } }),
+    },
+    {
+      id: 'video-whole-window',
+      title: 'Compare videos — whole window',
+      about: 'A video compares frame by frame. Here the comparison has the whole window: the button left of × in the file bar hides the refs and the file list until it is clicked again, and the file bar gains ‹ and › to move through the changed files (Alt+Left, Alt+Right). Both versions play in step from the same time, and the frame buttons step one frame. The timeline draws how long each version is and where their frames differ, numbered like the changes in the view bar. FastGit uses the ffmpeg and ffprobe found on PATH; without them a video shows its details and the Open buttons, with a note that says so. Hear picks whose sound plays. Split, Swipe, Onion skin and Difference work as for pictures. LFS says Git LFS stores the file: FastGit compares the videos, not the pointers.',
+      source: 'src/repo/file_diff_panel.rs',
+      render: () => assetComparison(introDiff, { expanded: true }),
+    },
+    {
+      id: 'music',
+      title: 'Compare music and sounds',
+      about: 'A sound shows both waveforms on one time scale, the version before the change on top. Yellow bands mark where they sound different, numbered like the changes in the view bar; the hatching is where the old version has already ended. One playhead drives both: Hear switches which version plays at once, without stopping, so the same bar can be heard one way and then the other (Tab switches too). Loop change repeats the current band. Difference shows only what changed. The details add loudness (EBU R128) and peak. FastGit reads WAV, AIFF, FLAC, Ogg Vorbis, MP3 and M4A (AAC).',
+      source: 'src/repo/file_diff_panel.rs',
+      render: () => assetComparison(themeDiff),
+    },
+    {
+      id: 'other-file',
+      title: 'Compare a file FastGit can’t draw',
+      about: 'A file FastGit can’t draw, such as a 3D model, still says what changed: its type, its size and when it last changed. Open Before gives a copy of the old version to its default app, Open After the file on disk, and Compare in difftool hands both to the tool set in Git’s diff.tool; it only shows when one is set.',
+      source: 'src/repo/file_diff_panel.rs',
+      render: () => assetComparison(modelDiff),
     },
     {
       id: 'pulling',

@@ -8,6 +8,14 @@ gpui_kit::actions!(
         OpenRepository,
         CopyHash,
         CloseDiff,
+        PreviousChange,
+        NextChange,
+        PreviousFile,
+        NextFile,
+        WholeWindow,
+        PlayPause,
+        SwitchVersion,
+        LoopChange,
         CloseTab,
         NextTab,
         PreviousTab,
@@ -18,3 +26,4 @@ gpui_kit::actions!(
 
 pub(crate) const WINDOW_CONTEXT: &str = "FastGit";
 pub(crate) const HISTORY_CONTEXT: &str = "History";
+pub(crate) const MEDIA_CONTEXT: &str = "Media";

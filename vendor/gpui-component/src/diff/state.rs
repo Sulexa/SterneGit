@@ -65,6 +65,16 @@ impl DisplayRow {
     }
 }
 
+/// One run of changed rows: where it starts, how many rows it spans, and
+/// whether it adds lines, removes them, or both.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct DiffChangeMark {
+    pub first_row: usize,
+    pub rows: usize,
+    pub adds: bool,
+    pub removes: bool,
+}
+
 /// Which part of a collapsed unchanged range a disclosure reveals.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum FoldExpansion {
@@ -562,6 +572,76 @@ impl DiffState {
     /// Whether the file at `path` shows only its header.
     pub fn is_file_collapsed(&self, path: &str) -> bool {
         self.collapsed.contains(path)
+    }
+
+    /// The number of rows shown, file headers, hunk headers and folds included.
+    pub fn row_count(&self) -> usize {
+        self.rows.len()
+    }
+
+    /// The row at the top of the viewport.
+    pub fn top_row(&self) -> usize {
+        self.list.logical_scroll_top().item_ix
+    }
+
+    /// The rows at least partly inside the viewport.
+    pub fn visible_rows(&self) -> Range<usize> {
+        let count = self.rows.len();
+        let top = self.top_row().min(count);
+        let bottom = self.list.viewport_bounds().bottom();
+        let end = (top..count)
+            .find(|&ix| {
+                self.list
+                    .bounds_for_item(ix)
+                    .is_none_or(|bounds| bounds.top() >= bottom)
+            })
+            .unwrap_or(count);
+        top..end.max((top + 1).min(count))
+    }
+
+    /// Each run of changed rows, in display order, as the change
+    /// navigation steps through them.
+    pub fn change_marks(&self) -> Vec<DiffChangeMark> {
+        self.change_rows
+            .iter()
+            .map(|&first_row| {
+                let file = self.rows[first_row].file();
+                let mut mark = DiffChangeMark {
+                    first_row,
+                    rows: 0,
+                    adds: false,
+                    removes: false,
+                };
+                for row in &self.rows[first_row..] {
+                    match row {
+                        DisplayRow::Code {
+                            file: row_file,
+                            original,
+                            modified,
+                            changed: true,
+                        } if *row_file == file => {
+                            mark.rows += 1;
+                            mark.adds |= modified.is_some();
+                            mark.removes |= original.is_some();
+                        }
+                        _ => break,
+                    }
+                }
+                mark
+            })
+            .collect()
+    }
+
+    /// Scrolls so that `row` sits at the top of the viewport.
+    pub fn scroll_to_row(&mut self, row: usize, cx: &mut Context<Self>) {
+        let Some(last) = self.rows.len().checked_sub(1) else {
+            return;
+        };
+        self.list.scroll_to(ListOffset {
+            item_ix: row.min(last),
+            offset_in_item: px(0.),
+        });
+        cx.notify();
     }
 
     pub(crate) fn rows(&self) -> &Rc<Vec<DisplayRow>> {

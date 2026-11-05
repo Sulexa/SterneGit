@@ -27,6 +27,27 @@ const IconPaths = {
   'window-minimize': '<path d="M4.8 11.2h14.4" stroke-width="1.6"/>',
   'window-maximize': '<rect width="14.4" height="14.4" x="4.8" y="4.8" rx="1.6" stroke-width="1.6"/>',
   'window-close': '<path d="M19.2 4.8 4.8 19.2" stroke-width="1.6"/><path d="m4.8 4.8 14.4 14.4" stroke-width="1.6"/>',
+  'maximize-2': '<path d="M15 3h6v6"/><path d="m21 3-7 7"/><path d="m3 21 7-7"/><path d="M9 21H3v-6"/>',
+  'minimize-2': '<path d="m14 10 7-7"/><path d="M20 10h-6V4"/><path d="m3 21 7-7"/><path d="M4 14h6v6"/>',
+  'arrow-up': '<path d="m5 12 7-7 7 7"/><path d="M12 19V5"/>',
+  'arrow-down': '<path d="M12 5v14"/><path d="m19 12-7 7-7-7"/>',
+  'chevron-left': '<path d="m15 18-6-6 6-6"/>',
+  'chevrons-up-down': '<path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/>',
+  ellipsis: '<circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>',
+  'square-split-horizontal': '<path d="M8 19H5c-1 0-2-1-2-2V7c0-1 1-2 2-2h3"/><path d="M16 5h3c1 0 2 1 2 2v10c0 1-1 2-2 2h-3"/><path d="M12 4v16"/>',
+  blend: '<circle cx="9" cy="9" r="7"/><circle cx="15" cy="15" r="7"/>',
+  diff: '<path d="M12 3v14"/><path d="M5 10h14"/><path d="M5 21h14"/>',
+  'audio-lines': '<path d="M2 10v3"/><path d="M6 6v11"/><path d="M10 3v18"/><path d="M14 8v7"/><path d="M18 5v13"/><path d="M22 10v3"/>',
+  'chart-column': '<path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/>',
+  play: '<path d="M6 4.5v15a1 1 0 0 0 1.5.86l12.5-7.5a1 1 0 0 0 0-1.72L7.5 3.64A1 1 0 0 0 6 4.5z" fill="currentColor"/>',
+  pause: '<rect x="6" y="4" width="4" height="16" rx="1" fill="currentColor"/><rect x="14" y="4" width="4" height="16" rx="1" fill="currentColor"/>',
+  'step-back': '<path d="M6 4v16"/><path d="M18 5 9 12l9 7z"/>',
+  'step-forward': '<path d="M18 4v16"/><path d="m6 5 9 7-9 7z"/>',
+  repeat: '<path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/>',
+  headphones: '<path d="M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a9 9 0 0 1 18 0v7a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3"/>',
+  'file-question': '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z"/><path d="M9.1 9a3 3 0 0 1 5.82 1c0 2-3 3-3 3"/><path d="M12 17h.01"/>',
+  'external-link': '<path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
+  'move-horizontal': '<path d="m18 8 4 4-4 4"/><path d="M2 12h20"/><path d="m6 8-4 4 4 4"/>',
 };
 
 const IconSizes = { xs: 12, sm: 14, md: 16, lg: 24 };
@@ -139,6 +160,43 @@ const ToolbarGroups = [
   ],
 ];
 
+const PictureModes = [
+  { key: 'split', label: 'Split', icon: 'columns-2', tooltip: 'Show both versions side by side' },
+  { key: 'swipe', label: 'Swipe', icon: 'square-split-horizontal', tooltip: 'Drag a line between the two versions' },
+  { key: 'onion', label: 'Onion skin', icon: 'blend', tooltip: 'Fade one version into the other' },
+  { key: 'difference', label: 'Difference', icon: 'diff', tooltip: 'Show only the pixels that changed' },
+];
+
+const CompareModes = {
+  text: [
+    { key: 'split', label: 'Split', icon: 'columns-2', tooltip: 'Compare side by side' },
+    { key: 'unified', label: 'Unified', icon: 'rows-2', tooltip: 'Show changes in one column' },
+  ],
+  image: PictureModes,
+  video: PictureModes,
+  audio: [
+    { key: 'split', label: 'Split', icon: 'audio-lines', tooltip: 'Show both waveforms on one time scale' },
+    { key: 'difference', label: 'Difference', icon: 'diff', tooltip: 'Show only what sounds different' },
+  ],
+};
+
+const VersionLabels = { before: 'Before', after: 'After' };
+
+const ViewOptions = [
+  { key: 'words', label: 'Highlight changed words', about: 'Marks what changed inside a line' },
+  { key: 'wrap', label: 'Wrap long lines', about: 'Breaks lines that are wider than the pane' },
+  { key: 'whole', label: 'Show the whole file', about: 'Keeps unchanged lines instead of folding them' },
+  { key: 'whitespace', label: 'Ignore whitespace', about: 'Hides changes to spaces and tabs; parts can’t be staged then' },
+];
+
+const PixelChanges = {
+  '+': { color: 'var(--green)', label: 'added' },
+  '~': { color: 'var(--yellow)', label: 'changed' },
+  '-': { color: 'var(--red)', label: 'removed' },
+};
+
+const FoldLimit = 20;
+
 const Texts = {
   welcomeTitle: 'Open a Git repository',
   welcomeDescription: 'FastGit reads history straight from the repository on disk. Each repository opens in its own tab.',
@@ -189,6 +247,21 @@ const Texts = {
   branchInvalid: "Git doesn't accept this name: no spaces, and none of ~ ^ : ? * [ \\ or ..",
   createBranch: 'Create branch',
   historyLimit: 10000,
+  useWindow: 'Use the whole window',
+  showPanes: 'Show the refs and the file list again',
+  viewOptions: 'View options',
+  previousChange: 'Previous change  Alt+Up',
+  nextChange: 'Next change  Alt+Down',
+  previousFile: 'Previous file  Alt+Left',
+  nextFile: 'Next file  Alt+Right',
+  lfs: 'Stored with Git LFS: FastGit compares the file, not its pointer',
+  backdrop: 'What shows behind transparent pixels',
+  showAbove: (n) => `Show ${n} lines above`,
+  showBelow: (n) => `Show ${n} lines below`,
+  expandLines: (n) => `Expand ${counted(n, 'unchanged line', 'unchanged lines')}`,
+  cannotShow: (type) => `FastGit can’t draw ${type} files`,
+  cannotShowDescription: 'Open each version in the app that made it, or hand both to the diff tool set in Git’s diff.tool.',
+  hear: (side) => `Hear ${side === 'before' ? 'the version before the change' : 'the changed version'}  Tab switches`,
 };
 
 const esc = (text) =>
@@ -208,16 +281,222 @@ function icon(name, size = 'md', color) {
 
 const RustTokens = /("(?:[^"\\]|\\.)*")|\b(fn|let|pub|impl|if|else|return|match|mut|use|struct|enum|crate|self|Self|true|false|move|for|in|const)\b|\b([A-Z][A-Za-z0-9_]*)\b|\b(\d+(?:\.\d+)*)\b|\b([a-z_][a-z0-9_]*)(?=\()/g;
 
-function highlight(code) {
-  let html = '';
+function highlight(code, words = []) {
+  const pieces = [];
   let last = 0;
   for (const match of code.matchAll(RustTokens)) {
-    html += esc(code.slice(last, match.index));
+    if (match.index > last) pieces.push([last, match.index, '']);
     const kind = match[1] ? 'string' : match[2] ? 'keyword' : match[3] ? 'type' : match[4] ? 'number' : 'function';
-    html += `<span class="tok-${kind}">${esc(match[0])}</span>`;
+    pieces.push([match.index, match.index + match[0].length, `tok-${kind}`]);
     last = match.index + match[0].length;
   }
-  return html + esc(code.slice(last));
+  if (last < code.length) pieces.push([last, code.length, '']);
+  const cuts = words.flat();
+  const marked = (from, to) => words.some(([start, end]) => from >= start && to <= end);
+  let html = '';
+  for (const [start, end, kind] of pieces) {
+    const points = [...new Set(cuts.filter((point) => point > start && point < end))].sort((a, b) => a - b);
+    let from = start;
+    for (const to of [...points, end]) {
+      const classes = [kind, marked(from, to) && 'inline'].filter(Boolean).join(' ');
+      const text = esc(code.slice(from, to));
+      html += classes ? `<span class="${classes}">${text}</span>` : text;
+      from = to;
+    }
+  }
+  return html;
+}
+
+const WordTokens = /\w+|\s+|[^\w\s]/g;
+
+function changedWords(before, after) {
+  const a = [...before.matchAll(WordTokens)];
+  const b = [...after.matchAll(WordTokens)];
+  const common = Array.from({ length: a.length + 1 }, () => new Array(b.length + 1).fill(0));
+  for (let i = a.length - 1; i >= 0; i--) {
+    for (let j = b.length - 1; j >= 0; j--) {
+      common[i][j] = a[i][0] === b[j][0] ? common[i + 1][j + 1] + 1 : Math.max(common[i + 1][j], common[i][j + 1]);
+    }
+  }
+  const keptA = new Set();
+  const keptB = new Set();
+  for (let i = 0, j = 0; i < a.length && j < b.length; ) {
+    if (a[i][0] === b[j][0]) {
+      keptA.add(i++);
+      keptB.add(j++);
+    } else if (common[i + 1][j] >= common[i][j + 1]) i++;
+    else j++;
+  }
+  const words = (tokens, kept) => tokens.filter((token, ix) => token[0].trim() && (!kept || kept.has(ix))).length;
+  if ((2 * words(a, keptA)) / (words(a) + words(b) || 1) < 0.5) return [[], []];
+  const runs = (tokens, kept, text) => {
+    const ranges = [];
+    tokens.forEach((token, ix) => {
+      if (kept.has(ix)) return;
+      const start = token.index;
+      const end = start + token[0].length;
+      const previous = ranges[ranges.length - 1];
+      if (previous && text.slice(previous[1], start).trim() === '') previous[1] = end;
+      else ranges.push([start, end]);
+    });
+    return ranges.filter(([start, end]) => text.slice(start, end).trim() !== '');
+  };
+  return [runs(a, keptA, before), runs(b, keptB, after)];
+}
+
+function wordChanges(lines) {
+  const words = new Map();
+  for (const [deleted, added] of pairLines(lines)) {
+    if (!deleted || !added || deleted === added || deleted[0] !== '-' || added[0] !== '+') continue;
+    const [before, after] = changedWords(deleted[3], added[3]);
+    words.set(deleted, before);
+    words.set(added, after);
+  }
+  return words;
+}
+
+function changeGroups(hunks) {
+  const groups = [];
+  for (const h of hunks) {
+    let group = null;
+    let lastNew = null;
+    for (const [sign, , newNo] of h.lines) {
+      if (sign === ' ') {
+        if (group) group.end = newNo - 1;
+        group = null;
+        lastNew = newNo;
+        continue;
+      }
+      if (!group) {
+        group = { start: newNo ?? (lastNew ?? 0) + 1, end: newNo ?? (lastNew ?? 0) + 1, added: 0, deleted: 0 };
+        groups.push(group);
+      }
+      if (sign === '+') {
+        group.added++;
+        group.end = newNo;
+        lastNew = newNo;
+      } else group.deleted++;
+    }
+  }
+  return groups;
+}
+
+function newSpan(h) {
+  const numbers = h.lines.map((line) => line[2]).filter((n) => n !== null);
+  return [Math.min(...numbers), Math.max(...numbers)];
+}
+
+function widenedHeader(header, above, below) {
+  const match = header.match(/^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@(.*)$/);
+  if (!match) return header;
+  const [, oldStart, oldCount = '1', newStart, newCount = '1', scope] = match;
+  const range = (start, count) => `${Number(start) - above},${Number(count) + above + below}`;
+  return `@@ -${range(oldStart, oldCount)} +${range(newStart, newCount)} @@${scope}`;
+}
+
+function hiddenLines(hunks, total) {
+  const spans = hunks.map(newSpan);
+  const above = spans.map(([start], ix) => start - (ix ? spans[ix - 1][1] : 0) - 1);
+  return { above, below: total - spans[spans.length - 1][1] };
+}
+
+function pixelArt(rows, palette, scale) {
+  const rects = [];
+  rows.forEach((row, y) => {
+    for (let x = 0; x < row.length; ) {
+      let end = x + 1;
+      while (end < row.length && row[end] === row[x]) end++;
+      if (row[x] !== '.') rects.push(`<rect x="${x}" y="${y}" width="${end - x}" height="1" fill="${palette[row[x]]}"/>`);
+      x = end;
+    }
+  });
+  const w = rows[0].length;
+  const h = rows.length;
+  return `<svg width="${w * scale}" height="${h * scale}" viewBox="0 0 ${w} ${h}" shape-rendering="crispEdges">${rects.join('')}</svg>`;
+}
+
+function pixelChanges(before, after) {
+  return before.map((row, y) => [...row].map((b, x) => {
+    const a = after[y][x];
+    return a === b ? '.' : b === '.' ? '+' : a === '.' ? '-' : '~';
+  }).join(''));
+}
+
+function clock(seconds, digits = 2) {
+  const minutes = Math.floor(seconds / 60);
+  const rest = seconds - minutes * 60;
+  const shown = digits ? rest.toFixed(digits).padStart(digits + 3, '0') : String(Math.floor(rest)).padStart(2, '0');
+  return `${minutes}:${shown}`;
+}
+
+function percentOf(value, total) {
+  return `${((value / total) * 100).toFixed(3)}%`;
+}
+
+function noise(seed, count) {
+  let state = seed;
+  return Array.from({ length: count }, () => {
+    state = (state + 0x6d2b79f5) | 0;
+    let t = Math.imul(state ^ (state >>> 15), 1 | state);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  });
+}
+
+function loudness(sections, duration, total, bins, grain) {
+  return Array.from({ length: bins }, (_, ix) => {
+    const t = ((ix + 0.5) / bins) * total;
+    if (t > duration) return null;
+    const [from, to, a, b] = sections.find(([start, end]) => t >= start && t < end) || sections[sections.length - 1];
+    const level = a + (b - a) * Math.min(1, (t - from) / (to - from));
+    const beat = (t * 2.2) % 1 < 0.14 ? 1.18 : 1;
+    return Math.min(0.97, level * (0.58 + 0.42 * grain(ix, t)) * beat);
+  });
+}
+
+function waveform(levels, changed) {
+  let plain = '';
+  let marked = '';
+  levels.forEach((level, ix) => {
+    if (level === null) return;
+    const h = Math.max(1, level * 96);
+    const bar = `M${ix + 0.15} ${(50 - h / 2).toFixed(2)}h0.7v${h.toFixed(2)}h-0.7z`;
+    if (changed(ix)) marked += bar;
+    else plain += bar;
+  });
+  return `<svg viewBox="0 0 ${levels.length} 100" preserveAspectRatio="none"><path d="${plain}" style="fill:var(--blue)"/><path d="${marked}" style="fill:var(--yellow)"/></svg>`;
+}
+
+function starfallFrame(version) {
+  const after = version === 'after';
+  const stars = noise(3, 90);
+  const dots = [];
+  for (let ix = 0; ix < 30; ix++) {
+    dots.push(`<circle cx="${(stars[ix * 3] * 640).toFixed(1)}" cy="${(stars[ix * 3 + 1] * 210).toFixed(1)}" r="${(0.6 + stars[ix * 3 + 2] * 1.3).toFixed(2)}" fill="#e2e8f0" opacity="${(0.4 + stars[ix * 3 + 2] * 0.6).toFixed(2)}"/>`);
+  }
+  const planet = after
+    ? '<circle cx="486" cy="104" r="62" fill="url(#sf-teal)"/><ellipse cx="486" cy="104" rx="104" ry="20" fill="none" stroke="#99f6e4" stroke-width="4" transform="rotate(-14 486 104)" opacity="0.8"/>'
+    : '<circle cx="150" cy="118" r="52" fill="url(#sf-violet)"/><ellipse cx="150" cy="118" rx="88" ry="17" fill="none" stroke="#c4b5fd" stroke-width="4" transform="rotate(-18 150 118)" opacity="0.8"/>';
+  const streak = after ? '<path d="M70 52 L214 112" stroke="url(#sf-streak)" stroke-width="3" stroke-linecap="round"/><circle cx="214" cy="112" r="3.5" fill="#fef9c3"/>' : '';
+  const title = after
+    ? '<text x="320" y="196" text-anchor="middle" font-family="Segoe UI, sans-serif" font-size="66" font-weight="800" letter-spacing="10" fill="url(#sf-gold)" filter="url(#sf-glow)">STARFALL</text>'
+    : '<text x="320" y="190" text-anchor="middle" font-family="Segoe UI, sans-serif" font-size="62" font-weight="800" letter-spacing="10" fill="#f8fafc">STARFALL</text>';
+  const prompt = after ? 'PRESS START' : 'PRESS ANY KEY';
+  return `<svg viewBox="0 0 640 360" preserveAspectRatio="xMidYMid slice">
+    <defs>
+      <linearGradient id="sf-sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#050816"/><stop offset="1" stop-color="#1e2a5e"/></linearGradient>
+      <radialGradient id="sf-violet" cx="0.35" cy="0.35"><stop offset="0" stop-color="#c084fc"/><stop offset="1" stop-color="#5b21b6"/></radialGradient>
+      <radialGradient id="sf-teal" cx="0.35" cy="0.35"><stop offset="0" stop-color="#5eead4"/><stop offset="1" stop-color="#0f766e"/></radialGradient>
+      <linearGradient id="sf-gold" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fde68a"/><stop offset="1" stop-color="#f59e0b"/></linearGradient>
+      <linearGradient id="sf-streak" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fef9c3" stop-opacity="0"/><stop offset="1" stop-color="#fef9c3"/></linearGradient>
+      <filter id="sf-glow" x="-20%" y="-50%" width="140%" height="200%"><feGaussianBlur stdDeviation="5" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    </defs>
+    <rect width="640" height="360" fill="url(#sf-sky)"/>${dots.join('')}${planet}${streak}
+    <path d="M0 300 L70 248 L132 282 L214 214 L300 272 L382 228 L452 266 L540 218 L640 258 L640 360 L0 360 Z" fill="#0b1124"/>
+    <path d="M0 330 L96 296 L190 324 L284 290 L388 326 L476 300 L572 328 L640 306 L640 360 L0 360 Z" fill="#060a16"/>
+    ${title}
+    <text x="320" y="236" text-anchor="middle" font-family="Segoe UI, sans-serif" font-size="15" letter-spacing="5" fill="#cbd5e1">${prompt}</text>
+  </svg>`;
 }
 
 function graphWidth(rows) {
@@ -382,7 +661,7 @@ function branchMenuItems({ label, current, mode = 'merge' }) {
 }
 
 const C = {
-  Button({ label, icon: iconName, variant = 'default', size = 'xs', selected = false, disabled = false, loading = false, tooltip }) {
+  Button({ label, icon: iconName, variant = 'default', size = 'xs', selected = false, disabled = false, loading = false, tooltip, dot }) {
     const classes = ['btn', variant, size, selected && 'selected', disabled && 'disabled', !label && 'icon-only']
       .filter(Boolean)
       .join(' ');
@@ -393,7 +672,8 @@ const C = {
       : iconName
         ? icon(iconName, glyphSize)
         : '';
-    return `<span data-c="Button" class="${classes}"${title}>${glyph}${label ? `<span>${esc(label)}</span>` : ''}</span>`;
+    const mark = dot ? `<span class="version-dot ${dot}"></span>` : '';
+    return `<span data-c="Button" class="${classes}"${title}>${glyph}${mark}${label ? `<span>${esc(label)}</span>` : ''}</span>`;
   },
 
   Input({ value = '', placeholder = '', lines = 1, focused = false, disabled = false }) {
@@ -587,7 +867,14 @@ const C = {
     return `<div data-c="HistoryList" class="history v">${wip}<div class="fill" style="position:relative;overflow:hidden">${rows}<div class="scrollbar" style="top:2px;height:${thumb}px"></div></div></div>`;
   },
 
-  DiffView({ files, mode = 'unified', header = true, actions, selection, pointed, menu = '' }) {
+  DiffView({ files, mode = 'unified', header = true, actions, selection, pointed, menu = '', words = true }) {
+    const fold = (count, arrow) => {
+      if (count <= 0) return '';
+      const partial = count > FoldLimit;
+      const reveal = partial ? C.Button({ icon: arrow, variant: 'ghost', tooltip: arrow === 'arrow-up' ? Texts.showAbove(FoldLimit) : Texts.showBelow(FoldLimit) }) : '';
+      const all = C.Button({ icon: partial ? 'chevrons-up-down' : 'chevron-down', label: counted(count, 'unchanged line', 'unchanged lines'), variant: 'ghost', tooltip: Texts.expandLines(count) });
+      return `<div class="diff-line fold">${reveal}${all}</div>`;
+    };
     const line = (entry, side, marks) => {
       if (!entry) return '<div class="diff-line blank"><span class="number"></span><span class="sign"></span><span class="text"></span></div>';
       const [sign, oldNo, newNo, text] = entry;
@@ -601,12 +888,15 @@ const C = {
           : side === 'new'
             ? `<span class="number">${newNo ?? ''}</span>`
             : `<span class="number">${oldNo ?? ''}</span><span class="number">${newNo ?? ''}</span>`;
-      return `<div class="${classes}">${numbers}<span class="sign">${sign === ' ' ? '' : sign === '-' ? '−' : '+'}</span><span class="text">${highlight(text)}</span>${anchored ? menu : ''}</div>`;
+      return `<div class="${classes}">${numbers}<span class="sign">${sign === ' ' ? '' : sign === '-' ? '−' : '+'}</span><span class="text">${highlight(text, marks.words.get(entry))}</span>${anchored ? menu : ''}</div>`;
     };
     const hunk = (h, hx, marks, own) => {
       const selected = own && selection && selection.hunk === hx ? selectionSize(selection) : 0;
       const buttons = actions ? C.HunkActions({ side: actions.side, selected, writing: actions.writing }) : '';
-      const top = `<div class="diff-line hunk"><span class="text">${esc(h.header)}</span>${buttons}</div>`;
+      const above = marks.hidden ? marks.hidden.above[hx] : 0;
+      const below = marks.hidden && hx === marks.last ? marks.hidden.below : 0;
+      const title = marks.hidden ? widenedHeader(h.header, above, below) : h.header;
+      const top = `<div class="diff-line hunk"><span class="text">${esc(title)}</span>${buttons}</div>${fold(above, 'arrow-up')}`;
       if (mode === 'split') {
         return top + pairLines(h.lines).map(([left, right]) => `<div class="diff-split-row">${line(left, 'old', marks)}${line(right, 'new', marks)}</div>`).join('');
       }
@@ -617,11 +907,15 @@ const C = {
       const marks = {
         selected: selectedEntries(f.hunks, own ? selection : null),
         pointed: own && pointed ? f.hunks[pointed.hunk].lines[pointed.line] : null,
+        words: words ? new Map(f.hunks.flatMap((h) => [...wordChanges(h.lines)])) : new Map(),
+        hidden: f.lines && f.hunks.length ? hiddenLines(f.hunks, f.lines) : null,
+        last: f.hunks.length - 1,
       };
       const top = header
         ? `<div class="diff-file-header">${C.Button({ icon: 'chevron-down', variant: 'ghost' })}<span class="title ellipsis">${esc(f.path)}</span><span class="stats xs muted">+${thousands(f.additions)} −${thousands(f.deletions)}</span></div>`
         : '';
-      return `<div class="diff-file">${top}${f.hunks.map((h, hx) => hunk(h, hx, marks, own)).join('')}</div>`;
+      const end = fold(marks.hidden ? marks.hidden.below : 0, 'arrow-down');
+      return `<div class="diff-file">${top}${f.hunks.map((h, hx) => hunk(h, hx, marks, own)).join('')}${end}</div>`;
     };
     return `<div data-c="DiffView" data-base="Diff" class="diff">${files.map(file).join('')}</div>`;
   },
@@ -774,26 +1068,270 @@ const C = {
     return `<div data-c="ChangesList" class="changes">${form}${bar}${section('staged', Texts.nothingStaged)}${section('unstaged', Texts.nothingUnstaged)}</div>`;
   },
 
-  FileDiffPanel({ diff, mode = 'split', state = 'ready', writing = false, reason = '', selection, pointed }) {
+  FileBar({ diff, state = 'ready', writing = false, expanded = false, filePosition }) {
     const labels = diff.commit ? null : SideLabels[diff.side];
     const shownState = diff.commit ? `in ${diff.commit}` : labels.state;
     const moveButton = labels ? C.Button({ label: labels.verb, icon: labels.icon, disabled: writing, tooltip: labels.openFileTooltip }) : '';
     const path = diff.change.original ? `${diff.change.original} → ${diff.change.path}` : diff.change.path;
-    const stats = state === 'ready' || state === 'empty'
-      ? C.Additions({ count: state === 'empty' ? 0 : diff.additions, extraClass: 'none xs' }) + C.Deletions({ count: state === 'empty' ? 0 : diff.deletions, extraClass: 'none xs' })
-      : '';
-    const toolbar =
-      `<div class="diff-toolbar">` +
+    const text = !diff.kind || diff.kind === 'text';
+    const facts = !text
+      ? `<div class="none xs muted">${esc(diff.facts)}</div>`
+      : state === 'ready' || state === 'empty'
+        ? C.Additions({ count: state === 'empty' ? 0 : diff.additions, extraClass: 'none xs' }) + C.Deletions({ count: state === 'empty' ? 0 : diff.deletions, extraClass: 'none xs' })
+        : '';
+    const lfs = diff.lfs ? `<span class="lfs-chip" title="${esc(Texts.lfs)}">LFS</span>` : '';
+    const stepper =
+      expanded && filePosition
+        ? `<div class="file-stepper">${C.Button({ icon: 'chevron-left', variant: 'ghost', tooltip: Texts.previousFile })}<span class="xs muted">File ${filePosition[0]} of ${filePosition[1]}</span>${C.Button({ icon: 'chevron-right', variant: 'ghost', tooltip: Texts.nextFile })}</div>`
+        : '';
+    const expand = C.Button({ icon: expanded ? 'minimize-2' : 'maximize-2', variant: 'ghost', selected: expanded, tooltip: expanded ? Texts.showPanes : Texts.useWindow });
+    return (
+      `<div data-c="FileBar" class="diff-toolbar">` +
       C.ChangeBadge({ kind: diff.change.kind }) +
       `<div class="ellipsis sm mono">${esc(path)}</div>` +
+      lfs +
       `<div class="none xs muted">${esc(shownState)}</div>` +
-      stats +
+      facts +
       `<div class="fill"></div>` +
-      C.Button({ label: 'Split', icon: 'columns-2', variant: 'ghost', selected: mode === 'split', tooltip: 'Compare side by side' }) +
-      C.Button({ label: 'Unified', icon: 'rows-2', variant: 'ghost', selected: mode === 'unified', tooltip: 'Show changes in one column' }) +
+      stepper +
       moveButton +
+      expand +
       C.Button({ icon: 'close', variant: 'ghost', tooltip: 'Back to the graph  Esc' }) +
-      `</div>`;
+      `</div>`
+    );
+  },
+
+  ChangeStepper({ current, total }) {
+    const text = total ? `Change ${thousands(current)} of ${thousands(total)}` : 'No changes';
+    return `<div data-c="ChangeStepper" class="change-stepper"><span class="xs muted">${text}</span>${C.Button({ icon: 'arrow-up', variant: 'ghost', disabled: !total, tooltip: Texts.previousChange })}${C.Button({ icon: 'arrow-down', variant: 'ghost', disabled: !total, tooltip: Texts.nextChange })}</div>`;
+  },
+
+  ZoomControl({ percent, fit = true }) {
+    const shown = percent === undefined ? '' : `<span class="xs muted percent">${thousands(percent)} %</span>`;
+    return `<div data-c="ZoomControl" class="zoom-control">${C.Button({ icon: 'minus', variant: 'ghost', tooltip: 'Zoom out  Ctrl+−' })}${shown}${C.Button({ icon: 'plus', variant: 'ghost', tooltip: 'Zoom in  Ctrl+=' })}${C.Button({ label: 'Fit', variant: 'ghost', selected: fit, tooltip: 'Fit the pane  Ctrl+0' })}</div>`;
+  },
+
+  BackdropButton({ open = false } = {}) {
+    const classes = ['btn', 'ghost', 'xs', 'icon-only', open && 'selected'].filter(Boolean).join(' ');
+    return `<span data-c="BackdropButton" data-base="Button" class="${classes}" title="${esc(Texts.backdrop)}"><span class="swatch checker"></span></span>`;
+  },
+
+  ViewOptionsMenu({ checked = ['words', 'wrap'], hot, right = 8, top = 30 }) {
+    const rows = ViewOptions.map(
+      (item) =>
+        `<div class="item${item.key === hot ? ' hot' : ''}"><span class="check">${checked.includes(item.key) ? icon('check', 'sm') : ''}</span><span class="v label"><span>${esc(item.label)}</span><span class="about">${esc(item.about)}</span></span></div>`,
+    ).join('');
+    return `<div data-c="ViewOptionsMenu" data-base="PopupMenu" class="menu choices sm" style="right:${right}px;top:${top}px"><div class="heading">Every text comparison</div>${rows}</div>`;
+  },
+
+  ViewBar({ kind = 'text', mode, changes, zoom, menuOpen = false, hot }) {
+    const modes = CompareModes[kind]
+      .map((item) => C.Button({ label: item.label, icon: item.icon, variant: 'ghost', selected: item.key === mode, tooltip: item.tooltip }))
+      .join('');
+    const stepper = changes ? C.ChangeStepper(changes) : '';
+    const separator = '<div class="separator"></div>';
+    const tools =
+      kind === 'text'
+        ? C.Button({ icon: 'ellipsis', variant: 'ghost', selected: menuOpen, tooltip: Texts.viewOptions })
+        : C.ZoomControl(zoom || {}) + (kind === 'image' ? C.BackdropButton() : '');
+    const menu = menuOpen ? C.ViewOptionsMenu({ hot }) : '';
+    return `<div data-c="ViewBar" class="view-bar"><div class="modes">${modes}</div><div class="fill"></div>${stepper}${stepper ? separator : ''}${tools}${menu}</div>`;
+  },
+
+  ChangeRuler({ hunks, lines }) {
+    const marks = changeGroups(hunks).map((group) => {
+      const color = group.added && group.deleted ? 'var(--yellow)' : group.added ? 'var(--green)' : 'var(--red)';
+      const size = Math.max(group.end - group.start + 1, 1);
+      return `<span class="mark" style="top:${percentOf(group.start - 1, lines)};height:${percentOf(size, lines)};--c:${color}"></span>`;
+    });
+    const [first] = newSpan(hunks[0]);
+    const [, last] = newSpan(hunks[hunks.length - 1]);
+    const shown = `<span class="view" style="top:${percentOf(first - 1, lines)};height:${percentOf(last - first + 1, lines)}"></span>`;
+    return `<div data-c="ChangeRuler" class="change-ruler" title="Where the changes are in the whole file">${marks.join('')}${shown}</div>`;
+  },
+
+  VersionTag({ side, from, hearing = false, align = 'left' }) {
+    const ear = hearing ? `<span class="ear">${icon('headphones', 'xs')}</span>` : '';
+    return `<div data-c="VersionTag" class="version-tag${align === 'right' ? ' right' : ''}"><span class="version-dot ${side}"></span><span>${VersionLabels[side]}</span>${from ? `<span class="source">${esc(from)}</span>` : ''}${ear}</div>`;
+  },
+
+  MediaDetails({ details, sources, sides = ['before', 'after'], open = true }) {
+    const { columns, before, after, deltas = {} } = details;
+    const values = { before, after };
+    const head = `<tr><th class="who"><span class="h" style="gap:6px">${twisty(open)}Details</span></th>${columns.map((name) => `<th>${esc(name)}</th>`).join('')}</tr>`;
+    const row = (side) => {
+      const cells = values[side].map((value, ix) => {
+        const changed = side === 'after' && sides.length === 2 && value !== before[ix];
+        const delta = changed && deltas[ix] ? `<span class="delta">${esc(deltas[ix])}</span>` : '';
+        return `<td class="${changed ? 'changed' : ''}">${esc(value)}${delta}</td>`;
+      });
+      return `<tr><td class="who"><span class="h" style="gap:6px"><span class="version-dot ${side}"></span>${VersionLabels[side]}<span class="source">${esc(sources[side === 'before' ? 0 : 1])}</span></span></td>${cells.join('')}</tr>`;
+    };
+    const body = open ? sides.map(row).join('') : '';
+    return `<div data-c="MediaDetails" class="media-details"><table>${head}${body}</table></div>`;
+  },
+
+  ImageCompare({ diff, mode = 'split', at = 0.46, mix = 0.5, probe, sides = ['before', 'after'] }) {
+    const { image, sources, current = 0 } = diff;
+    const zoom = mode === 'split' && sides.length === 2 ? 12 : 18;
+    const size = image.after.length * zoom;
+    const art = (side) => pixelArt(image[side], image.palette, zoom);
+    const picture = (inner) => `<div class="picture checker" style="width:${size}px;height:${size}px">${inner}</div>`;
+    const tag = (side, align) => C.VersionTag({ side, from: sources[side === 'before' ? 0 : 1], align });
+    let canvas;
+    if (sides.length === 1) {
+      canvas = `<div class="compare-canvas">${tag(sides[0])}${picture(art(sides[0]))}</div>`;
+    } else if (mode === 'split') {
+      canvas = `<div class="compare-canvas split">${sides.map((side) => `<div class="side">${tag(side)}${picture(art(side))}</div>`).join('')}</div>`;
+    } else if (mode === 'swipe') {
+      const handle = `<div class="swipe-handle" style="left:${at * 100}%"><span class="knob">${icon('move-horizontal', 'sm')}</span></div>`;
+      canvas = `<div class="compare-canvas">${tag('before')}${tag('after', 'right')}${picture(`${art('before')}<div class="layer" style="clip-path:inset(0 0 0 ${at * 100}%)">${art('after')}</div>${handle}`)}</div>`;
+    } else if (mode === 'onion') {
+      const slider = `<div class="onion-slider"><span class="h" style="gap:6px"><span class="version-dot before"></span>Before</span><span class="slider"><span class="track"></span><span class="fill" style="width:${mix * 100}%"></span><span class="thumb" style="left:${mix * 100}%"></span></span><span class="h" style="gap:6px">After<span class="version-dot after"></span></span></div>`;
+      canvas = `<div class="compare-canvas">${tag('before')}${tag('after', 'right')}${picture(`${art('before')}<div class="layer" style="opacity:${mix}">${art('after')}</div>`)}${slider}</div>`;
+    } else {
+      const changes = pixelChanges(image.before, image.after);
+      const paint = Object.fromEntries(Object.entries(PixelChanges).map(([key, value]) => [key, value.color]));
+      const marks = pixelArt(changes, paint, zoom).replace(/fill="(var\([^)]+\))"/g, 'style="fill:$1"');
+      const boxes = image.areas
+        .map((area, ix) => `<div class="change-box${ix === current ? ' current' : ''}" style="left:${area.x * zoom - 4}px;top:${area.y * zoom - 4}px;width:${area.w * zoom + 8}px;height:${area.h * zoom + 8}px"><span class="number">${ix + 1}</span></div>`)
+        .join('');
+      const counts = Object.keys(PixelChanges).map((key) => [key, changes.join('').split(key).length - 1]);
+      const changedPixels = counts.reduce((sum, [, n]) => sum + n, 0);
+      const share = Math.round((changedPixels / (image.after.length * image.after[0].length)) * 100);
+      const legend = `<div class="compare-legend">${counts.map(([key, n]) => `<span class="h" style="gap:6px"><span class="key" style="--c:${PixelChanges[key].color}"></span>${thousands(n)} ${PixelChanges[key].label}</span>`).join('')}<span>${share} % of the picture</span></div>`;
+      const pointer = probe
+        ? `<div class="pixel-hot" style="left:${probe.x * zoom}px;top:${probe.y * zoom}px;width:${zoom}px;height:${zoom}px"></div><div class="pixel-probe" style="left:${(probe.x + 1) * zoom + 12}px;top:${probe.y * zoom - 10}px"><div class="medium">Pixel ${probe.x}, ${probe.y}</div>${sides.map((side) => {
+            const value = image.palette[image[side][probe.y][probe.x]] || 'transparent';
+            return `<div class="h" style="gap:8px"><span class="swatch" style="background:${value}"></span><span class="mono">${esc(value)}</span><span class="muted">${VersionLabels[side]}</span></div>`;
+          }).join('')}</div>`
+        : '';
+      canvas = `<div class="compare-canvas">${picture(`<div class="layer dim">${art('after')}</div><div class="layer">${marks}</div>${boxes}${pointer}`)}${legend}</div>`;
+    }
+    return `<div data-c="ImageCompare" class="media-compare">${canvas}${C.MediaDetails({ details: diff.details, sources, sides })}</div>`;
+  },
+
+  MediaTimeline({ duration, at, changes, current = 0, step = 10 }) {
+    const total = Math.max(duration.before, duration.after);
+    const place = (t) => percentOf(t, total);
+    const lane = (side) => {
+      const length = duration[side];
+      const segments = changes
+        .filter(([from]) => from < length)
+        .map(([from, to]) => {
+          const ix = changes.findIndex((change) => change[0] === from);
+          return `<span class="segment${ix === current ? ' current' : ''}" style="left:${place(from)};width:${place(Math.min(to, length) - from)}"></span>`;
+        })
+        .join('');
+      const ended = length < total ? `<span class="ended" style="left:${place(length)};right:0"></span>` : '';
+      return `<div class="lane"><span class="who"><span class="version-dot ${side}"></span>${VersionLabels[side]}<span class="xs mono muted">${clock(length)}</span></span><span class="length" style="width:${place(length)}"></span>${ended}${segments}</div>`;
+    };
+    const numbers = changes.map(([from, to], ix) => `<span class="${ix === current ? 'current' : ''}" style="left:${place((from + to) / 2)}">${ix + 1}</span>`).join('');
+    const ticks = [];
+    for (let t = 0; t <= total; t += step) ticks.push(`<span style="left:${place(t)}">${clock(t, 0)}</span>`);
+    return `<div data-c="MediaTimeline" class="media-timeline"><div class="tracks"><div class="numbers">${numbers}</div>${lane('before')}${lane('after')}<div class="ticks">${ticks.join('')}</div><span class="playhead" style="left:${place(at)}"></span></div></div>`;
+  },
+
+  Transport({ at, duration, frames = false, hearing = 'after', loop = false, playing = false }) {
+    const total = Math.max(duration.before, duration.after);
+    const play = `<span data-c="Button" class="btn primary play" title="${playing ? 'Pause both' : 'Play both'}  Space">${icon(playing ? 'pause' : 'play', 'sm')}</span>`;
+    const stepBack = frames ? C.Button({ icon: 'step-back', variant: 'ghost', tooltip: 'Previous frame  ,' }) : '';
+    const stepForward = frames ? C.Button({ icon: 'step-forward', variant: 'ghost', tooltip: 'Next frame  .' }) : '';
+    const repeat = C.Button({ label: 'Loop change', icon: 'repeat', variant: 'ghost', selected: loop, tooltip: 'Play the current change over and over  L' });
+    const ears = ['before', 'after'].map((side) => C.Button({ label: VersionLabels[side], dot: side, variant: 'ghost', selected: hearing === side, tooltip: Texts.hear(side) })).join('');
+    return `<div data-c="Transport" class="transport">${stepBack}${play}${stepForward}<span class="time"><b>${clock(at)}</b> / ${clock(total)}</span>${repeat}<div class="fill"></div><span class="hear"><span class="label">${icon('headphones', 'xs')}Hear</span>${ears}</span></div>`;
+  },
+
+  VideoCompare({ diff, mode = 'split' }) {
+    const { sources } = diff;
+    const sides = ['before', 'after']
+      .map((side, ix) => `<div class="side">${C.VersionTag({ side, from: sources[ix], hearing: diff.hearing === side })}<div class="frame">${starfallFrame(side)}</div></div>`)
+      .join('');
+    return (
+      `<div data-c="VideoCompare" class="media-compare">` +
+      `<div class="compare-canvas split" data-mode="${mode}">${sides}</div>` +
+      C.MediaTimeline({ duration: diff.duration, at: diff.at, changes: diff.changes, current: diff.current }) +
+      C.Transport({ at: diff.at, duration: diff.duration, frames: true, hearing: diff.hearing }) +
+      C.MediaDetails({ details: diff.details, sources }) +
+      `</div>`
+    );
+  },
+
+  AudioCompare({ diff, mode = 'split', bins = 352 }) {
+    const { sources, duration, changes, current = 0, song } = diff;
+    const total = Math.max(duration.before, duration.after);
+    const place = (t) => percentOf(t, total);
+    const inChange = (t) => changes.some(([from, to]) => t >= from && t < to);
+    const timeOf = (ix) => ((ix + 0.5) / bins) * total;
+    const shared = noise(7, bins);
+    const fresh = noise(11, bins);
+    const lane = (side, ix) => {
+      const grain = (bin, t) => (side === 'after' && inChange(t) ? fresh[bin] : shared[bin]);
+      const levels = loudness(song[side], duration[side], total, bins, grain);
+      const ended = duration[side] < total ? `<span class="ended" style="left:${place(duration[side])}"></span>` : '';
+      const quiet = diff.hearing !== side;
+      return `<div class="audio-lane${quiet ? ' quiet' : ''}">${C.VersionTag({ side, from: sources[ix], hearing: !quiet })}${waveform(levels, (bin) => inChange(timeOf(bin)))}${ended}</div>`;
+    };
+    const ruler = [];
+    for (let t = 0; t <= total; t += 10) {
+      const major = t % 30 === 0;
+      ruler.push(`<span class="tick${major ? ' major' : ''}" style="left:${place(t)}"></span>${major ? `<span class="label" style="left:${place(t)}">${clock(t, 0)}</span>` : ''}`);
+    }
+    const regions = changes
+      .map(([from, to], ix) => `<div class="audio-region${ix === current ? ' current' : ''}" style="left:${place(from)};width:${place(to - from)}"><span class="number">${ix + 1}</span></div>`)
+      .join('');
+    return (
+      `<div data-c="AudioCompare" class="media-compare">` +
+      `<div class="audio-area" data-mode="${mode}"><div class="audio-inner"><div class="time-ruler">${ruler.join('')}</div>${lane('before', 0)}${lane('after', 1)}${regions}<span class="playhead" style="left:${place(diff.at)}"><span class="knob"></span></span></div></div>` +
+      C.Transport({ at: diff.at, duration, hearing: diff.hearing, loop: true }) +
+      C.MediaDetails({ details: diff.details, sources }) +
+      `</div>`
+    );
+  },
+
+  BinaryFacts({ diff }) {
+    const buttons =
+      C.Button({ label: 'Open Before', icon: 'external-link', size: 'md', tooltip: 'Open a copy of the version before the change with its default app' }) +
+      C.Button({ label: 'Open After', icon: 'external-link', size: 'md', tooltip: 'Open the file on disk with its default app' }) +
+      C.Button({ label: 'Compare in difftool', variant: 'primary', size: 'md', tooltip: 'git difftool, with the tool set in diff.tool' });
+    return (
+      `<div data-c="BinaryFacts" class="media-compare">` +
+      `<div class="compare-canvas"><div class="notice">${icon('file-question', 'lg', 'var(--muted)')}<div class="base medium">${esc(Texts.cannotShow(diff.type))}</div><div class="description sm muted">${esc(Texts.cannotShowDescription)}</div><div class="h" style="gap:8px;margin-top:4px">${buttons}</div></div></div>` +
+      C.MediaDetails({ details: diff.details, sources: diff.sources }) +
+      `</div>`
+    );
+  },
+
+  FileDiffPanel({ diff, mode = 'split', state = 'ready', writing = false, reason = '', selection, pointed, expanded = false, filePosition, menuOpen = false, hot, view = {} }) {
+    const kind = diff.kind || 'text';
+    const labels = diff.commit ? null : SideLabels[diff.side];
+    const ready = state === 'ready';
+    const total = kind === 'text' ? changeGroups(diff.hunks).length : (diff.changes || diff.image?.areas || []).length;
+    const zoom = kind === 'image' ? { percent: (mode === 'split' && !view.sides ? 12 : 18) * 100 } : kind === 'video' ? { percent: 36 } : {};
+    const viewBar =
+      kind === 'binary'
+        ? ''
+        : C.ViewBar({ kind, mode, changes: ready ? { current: (diff.current || 0) + 1, total } : null, zoom, menuOpen, hot });
+    const text = () => {
+      const diffView = C.DiffView({
+        files: [{ path: diff.change.path, additions: diff.additions, deletions: diff.deletions, hunks: diff.hunks, lines: diff.lines }],
+        mode,
+        header: false,
+        actions: labels && diff.change.kind === 'M' ? { side: diff.side, writing } : undefined,
+        selection,
+        pointed,
+        menu: pointed && labels ? C.LineMenu({ side: diff.side, selected: pointed.selected, changed: pointed.changed, left: pointed.left, top: pointed.top, hot: pointed.hot }) : '',
+      });
+      const ruler = diff.lines ? C.ChangeRuler({ hunks: diff.hunks, lines: diff.lines }) : '';
+      return `<div class="diff-area">${diffView}${ruler}</div>`;
+    };
+    const bodies = {
+      text,
+      image: () => C.ImageCompare({ diff, mode, ...view }),
+      video: () => C.VideoCompare({ diff, mode }),
+      audio: () => C.AudioCompare({ diff, mode }),
+      binary: () => C.BinaryFacts({ diff }),
+    };
     const content =
       state === 'loading'
         ? C.Loading({ message: Texts.readingChanges })
@@ -801,16 +1339,8 @@ const C = {
           ? C.Failure({ title: Texts.fileFailed, reason })
           : state === 'empty'
             ? C.Hint({ message: Texts.fileEmpty })
-            : C.DiffView({
-                files: [{ path: diff.change.path, additions: diff.additions, deletions: diff.deletions, hunks: diff.hunks }],
-                mode,
-                header: false,
-                actions: labels && diff.change.kind === 'M' ? { side: diff.side, writing } : undefined,
-                selection,
-                pointed,
-                menu: pointed && labels ? C.LineMenu({ side: diff.side, selected: pointed.selected, changed: pointed.changed, left: pointed.left, top: pointed.top, hot: pointed.hot }) : '',
-              });
-    return `<div data-c="FileDiffPanel" class="file-diff">${toolbar}<div class="fill v">${content}</div></div>`;
+            : bodies[kind]();
+    return `<div data-c="FileDiffPanel" class="file-diff">${C.FileBar({ diff, state, writing, expanded, filePosition })}${viewBar}<div class="fill v">${content}</div></div>`;
   },
 
   RepoStatusBar({ summary = '', position = '', fetching = false, failure }) {
@@ -855,8 +1385,9 @@ const C = {
     return `<div data-c="RepoToolbar" class="repo-toolbar">${groups.join('<div class="separator"></div>')}</div>`;
   },
 
-  RepoView({ body, left, middle, right, status, toolbar = C.RepoToolbar() }) {
-    const panes = body || `<div class="panes"><div class="pane left">${left}</div><div class="pane middle">${middle}</div><div class="pane right">${right}</div></div>`;
+  RepoView({ body, left, middle, right, status, toolbar = C.RepoToolbar(), expanded = false }) {
+    const side = (place, content) => (expanded ? '' : `<div class="pane ${place}">${content}</div>`);
+    const panes = body || `<div class="panes">${side('left', left)}<div class="pane middle">${middle}</div>${side('right', right)}</div>`;
     return `<div data-c="RepoView" class="repo-view">${toolbar}<div class="fill v">${panes}</div>${status}</div>`;
   },
 

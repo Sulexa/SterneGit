@@ -13,8 +13,9 @@ use gpui_kit::{
 
 use crate::{
     actions::{
-        About, CloseDiff, CloseTab, CopyHash, Fetch, HISTORY_CONTEXT, NewerCommit, NextTab,
-        OlderCommit, OpenRepository, PreviousTab, Quit, Refresh, WINDOW_CONTEXT,
+        About, CloseDiff, CloseTab, CopyHash, Fetch, HISTORY_CONTEXT, NewerCommit, NextChange,
+        NextFile, NextTab, OlderCommit, OpenRepository, PreviousChange, PreviousFile, PreviousTab,
+        LoopChange, MEDIA_CONTEXT, PlayPause, Quit, Refresh, SwitchVersion, WINDOW_CONTEXT, WholeWindow,
     },
     assets::Assets,
 };
@@ -82,6 +83,13 @@ fn bind_keys(cx: &mut App) {
             Some(WINDOW_CONTEXT),
         ),
         KeyBinding::new("escape", CloseDiff, Some(WINDOW_CONTEXT)),
+        KeyBinding::new("alt-up", PreviousChange, Some(WINDOW_CONTEXT)),
+        KeyBinding::new("alt-down", NextChange, Some(WINDOW_CONTEXT)),
+        KeyBinding::new("alt-left", PreviousFile, Some(WINDOW_CONTEXT)),
+        KeyBinding::new("alt-right", NextFile, Some(WINDOW_CONTEXT)),
+        KeyBinding::new("space", PlayPause, Some(MEDIA_CONTEXT)),
+        KeyBinding::new("tab", SwitchVersion, Some(MEDIA_CONTEXT)),
+        KeyBinding::new("l", LoopChange, Some(MEDIA_CONTEXT)),
         KeyBinding::new(primary("cmd-w", "ctrl-w"), CloseTab, Some(WINDOW_CONTEXT)),
         KeyBinding::new("ctrl-tab", NextTab, Some(WINDOW_CONTEXT)),
         KeyBinding::new("ctrl-shift-tab", PreviousTab, Some(WINDOW_CONTEXT)),
@@ -119,6 +127,11 @@ fn menus() -> Vec<Menu> {
             MenuItem::action("Refresh", Refresh),
             MenuItem::action("Fetch All Remotes", Fetch),
             MenuItem::action("Close File Diff", CloseDiff),
+            MenuItem::action("Previous Change", PreviousChange),
+            MenuItem::action("Next Change", NextChange),
+            MenuItem::action("Previous File", PreviousFile),
+            MenuItem::action("Next File", NextFile),
+            MenuItem::action("Use the Whole Window", WholeWindow),
             MenuItem::separator(),
             MenuItem::action("Newer Commit", NewerCommit),
             MenuItem::action("Older Commit", OlderCommit),

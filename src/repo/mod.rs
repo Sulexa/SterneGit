@@ -4,6 +4,7 @@ mod changes_list;
 mod commit_files;
 mod commit_form;
 mod commit_panel;
+mod compare;
 mod file_diff_panel;
 mod file_tree;
 mod history_list;
@@ -36,7 +37,10 @@ use gpui_kit::{
 };
 
 use crate::{
-    actions::{CloseDiff, CopyHash, Fetch, NewerCommit, OlderCommit, Refresh},
+    actions::{
+        CloseDiff, CopyHash, Fetch, NewerCommit, NextChange, NextFile, OlderCommit, PreviousChange,
+        PreviousFile, Refresh, WholeWindow,
+    },
     git::{FileChange, HISTORY_LIMIT, History, PullMode, RefLabel, Scope, Side, short_id},
     ui::{self, Failure, FileView, Folded, Look as _, Notice, thousands},
 };
@@ -45,7 +49,9 @@ use branch_menu::{BranchAction, BranchMenu, confirm_delete};
 use changes_list::{ChangesList, SideFolds, SideScrolls, discard_question};
 use commit_form::CommitForm;
 use commit_panel::{CommitPanel, OpenCommitFile, copy_commit_hash};
-use file_diff_panel::{CloseFileDiff, FileDiffPanel};
+use compare::{Direction, FilePlace, Position};
+use file_diff_panel::{FileDiffEvent, FileDiffPanel};
+use file_tree::{FileTreeRow, file_rows};
 use history_list::HistoryList;
 use navigation::{OpenFile, Step, Target};
 use operation::Operation;
@@ -55,6 +61,12 @@ pub(crate) use repository::{Repository, RepositoryEvent};
 use status_bar::RepoStatusBar;
 use toolbar::{RepoToolbar, ToolbarState, notification};
 
+#[derive(Clone)]
+enum Openable {
+    Working(Side, FileChange),
+    Commit(DiffFile),
+}
+
 pub(crate) struct RepoView {
     repository: Entity<Repository>,
     target: Target,
@@ -63,11 +75,12 @@ pub(crate) struct RepoView {
     commit_panel: Entity<CommitPanel>,
     commit_form: Entity<CommitForm>,
     file_diff: Entity<FileDiffPanel>,
+    whole_window: bool,
     middle_focus: FocusHandle,
     history_scroll: UniformListScrollHandle,
     refs_scroll: UniformListScrollHandle,
     changes_scrolls: SideScrolls,
-    _subscriptions: [Subscription; 3],
+    _subscriptions: [Subscription; 4],
 }
 
 impl RepoView {
@@ -91,12 +104,15 @@ impl RepoView {
                     cx,
                 ),
             }),
-            cx.subscribe(&file_diff, |this, _, _: &CloseFileDiff, cx| {
-                this.close_file(cx)
+            cx.subscribe(&file_diff, |this, _, event: &FileDiffEvent, cx| match event {
+                FileDiffEvent::Close => this.close_file(cx),
+                FileDiffEvent::WholeWindow => this.toggle_whole_window(cx),
+                FileDiffEvent::StepFile(direction) => this.step_file(*direction, cx),
             }),
             cx.subscribe(&commit_panel, |this, _, OpenCommitFile(file), cx| {
                 this.open_commit_file(file.clone(), cx)
             }),
+            cx.observe(&commit_panel, |this, _, cx| this.place_file(cx)),
         ];
         Self {
             repository,
@@ -106,6 +122,7 @@ impl RepoView {
             commit_panel,
             commit_form,
             file_diff,
+            whole_window: false,
             middle_focus: cx.focus_handle().tab_stop(true),
             history_scroll: UniformListScrollHandle::new(),
             refs_scroll: UniformListScrollHandle::new(),
@@ -174,6 +191,7 @@ impl RepoView {
             }
             target => self.target = target,
         }
+        self.place_file(cx);
         cx.notify();
     }
 
@@ -227,6 +245,7 @@ impl RepoView {
         self.file_diff.update(cx, |panel, cx| {
             panel.open_working_file(&repo, change, side, cx)
         });
+        self.place_file(cx);
         cx.notify();
     }
 
@@ -236,12 +255,112 @@ impl RepoView {
         };
         let path = file.path().clone();
         *open = Some(path.clone());
-        let short_id = short_id(*id);
+        let id = *id;
+        let parent = self
+            .repository
+            .read(cx)
+            .history()
+            .and_then(|history| history.row_of(&id).map(|row| history.commits[row].parents.first().copied()))
+            .flatten();
         self.commit_panel
             .update(cx, |panel, cx| panel.mark_open(Some(path), cx));
-        self.file_diff
-            .update(cx, |panel, cx| panel.open_commit_file(short_id, file, cx));
+        self.file_diff.update(cx, |panel, cx| {
+            panel.open_commit_file(id, parent, short_id(id), file, cx)
+        });
+        self.place_file(cx);
         cx.notify();
+    }
+
+    fn toggle_whole_window(&mut self, cx: &mut Context<Self>) {
+        self.whole_window = !self.whole_window;
+        self.place_file(cx);
+        cx.notify();
+    }
+
+    fn files_in_order(&self, cx: &Context<Self>) -> Vec<Openable> {
+        let view = FileView::current(cx);
+        let unfolded = Folded::default();
+        match &self.target {
+            Target::WorkingTree { .. } => {
+                let Some(changes) = self.repository.read(cx).changes().cloned() else {
+                    return Vec::new();
+                };
+                [Side::Staged, Side::Unstaged]
+                    .into_iter()
+                    .flat_map(|side| {
+                        let files = changes.files(side);
+                        file_rows(view, files.iter().map(|change| change.path.as_ref()), &unfolded)
+                            .into_iter()
+                            .filter_map(|row| match row {
+                                FileTreeRow::File { ix, .. } => {
+                                    Some(Openable::Working(side, files[ix].clone()))
+                                }
+                                FileTreeRow::Folder { .. } => None,
+                            })
+                            .collect::<Vec<_>>()
+                    })
+                    .collect()
+            }
+            Target::Commit { .. } => {
+                let Some(files) = self.commit_panel.read(cx).files() else {
+                    return Vec::new();
+                };
+                file_rows(view, files.iter().map(|file| file.path().as_ref()), &unfolded)
+                    .into_iter()
+                    .filter_map(|row| match row {
+                        FileTreeRow::File { ix, .. } => Some(Openable::Commit(files[ix].clone())),
+                        FileTreeRow::Folder { .. } => None,
+                    })
+                    .collect()
+            }
+            Target::Nothing => Vec::new(),
+        }
+    }
+
+    fn open_position(&self, files: &[Openable]) -> Option<usize> {
+        files.iter().position(|file| match (file, &self.target) {
+            (Openable::Working(side, change), Target::WorkingTree { open: Some(open) }) => {
+                *side == open.side && change.path == open.path
+            }
+            (Openable::Commit(file), Target::Commit { open: Some(path), .. }) => file.path() == path,
+            _ => false,
+        })
+    }
+
+    fn place_file(&mut self, cx: &mut Context<Self>) {
+        let files = self.files_in_order(cx);
+        let position = self.open_position(&files).map(|index| Position {
+            index,
+            count: files.len(),
+        });
+        let place = FilePlace {
+            whole_window: self.whole_window,
+            position,
+        };
+        self.file_diff.update(cx, |panel, cx| panel.place(place, cx));
+    }
+
+    fn step_file(&mut self, direction: Direction, cx: &mut Context<Self>) {
+        let files = self.files_in_order(cx);
+        let Some(current) = self.open_position(&files) else {
+            return;
+        };
+        let next = match direction {
+            Direction::Back => current.checked_sub(1),
+            Direction::Forward => Some(current + 1).filter(|next| *next < files.len()),
+        };
+        match next.and_then(|next| files.get(next)).cloned() {
+            Some(Openable::Working(side, change)) => self.open_working_file(side, change, cx),
+            Some(Openable::Commit(file)) => self.open_commit_file(file, cx),
+            None => {}
+        }
+    }
+
+    fn step_change(&mut self, direction: Direction, cx: &mut Context<Self>) {
+        if self.target.has_open_file() {
+            self.file_diff
+                .update(cx, |panel, cx| panel.step_change(direction, cx));
+        }
     }
 
     fn close_file(&mut self, cx: &mut Context<Self>) {
@@ -386,6 +505,13 @@ impl RepoView {
                 self.render_failure(cx)
             };
         };
+        if self.whole_window && self.target.has_open_file() {
+            return div()
+                .pane()
+                .track_focus(&self.middle_focus)
+                .child(self.file_diff.clone())
+                .into_any_element();
+        }
         let rem = window.rem_size();
         h_resizable("fastgit-panes")
             .child(
@@ -524,6 +650,21 @@ impl Render for RepoView {
             }))
             .on_action(cx.listener(|this, _: &CopyHash, window, cx| this.copy_hash(window, cx)))
             .on_action(cx.listener(|this, _: &CloseDiff, _, cx| this.close_file(cx)))
+            .on_action(cx.listener(|this, _: &PreviousChange, _, cx| {
+                this.step_change(Direction::Back, cx)
+            }))
+            .on_action(cx.listener(|this, _: &NextChange, _, cx| {
+                this.step_change(Direction::Forward, cx)
+            }))
+            .on_action(cx.listener(|this, _: &PreviousFile, _, cx| {
+                this.step_file(Direction::Back, cx)
+            }))
+            .on_action(cx.listener(|this, _: &NextFile, _, cx| {
+                this.step_file(Direction::Forward, cx)
+            }))
+            .on_action(cx.listener(|this, _: &WholeWindow, _, cx| {
+                this.toggle_whole_window(cx)
+            }))
             .child(self.toolbar(cx))
             .child(div().fill_height().child(self.render_body(window, cx)))
             .child(status_bar)

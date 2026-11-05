@@ -17,7 +17,20 @@ gpui_kit::assets::icon_assets!(
         ArrowDownToLine,
         ArrowUpFromLine,
         Archive,
-        ArchiveRestore
+        ArchiveRestore,
+        Maximize2,
+        Minimize2,
+        SquareSplitHorizontal,
+        Blend,
+        Diff,
+        MoveHorizontal,
+        Headphones,
+        AudioLines,
+        ChartColumn,
+        StepBack,
+        StepForward,
+        Repeat,
+        FileQuestionMark
     ]
 );
 

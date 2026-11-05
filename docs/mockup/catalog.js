@@ -1,5 +1,8 @@
 const Catalog = (() => {
   const { history, collapsed, changes, partlyStaged, commitDetails, commitFileDiff, fileDiff, stagedHunkDiff, selectedLines, tabs } = Sample;
+  const { slimeDiff, crownIcon, introDiff, themeDiff, modelDiff } = Sample;
+  const pane = { w: 736, h: 600 };
+  const barFrame = (bar, width = 736) => `<div class="v" style="width:${width}px;position:relative;height:${bar.includes('ViewOptionsMenu') ? 300 : 40}px">${bar}</div>`;
   const commit = (ix) => history.commits[ix];
   const ref = (name) => history.refs.find((label) => label.name === name);
   const width = graphWidth(history.commits);
@@ -614,8 +617,10 @@ const Catalog = (() => {
           name: 'FileDiffPanel',
           code: 'repo::file_diff_panel::FileDiffPanel',
           source: 'src/repo/file_diff_panel.rs',
-          about: 'A 40 px toolbar (status, path, side or commit, counts, Split / Unified, Stage or Unstage, close) over the comparison. A modified working file gets HunkActions in each hunk header and a LineMenu on right-click; after any of them the comparison reads the file again and keeps the scroll position. A new, deleted, renamed, untracked or conflicted file only moves whole, and a file from a commit says which commit and has neither the Stage button nor the hunk actions.',
+          about: 'A FileBar (what the file is and what acts on all of it) and a ViewBar (how to compare it) over the comparison, which takes the shape of the file: a DiffView for text, an ImageCompare for pictures, a VideoCompare, an AudioCompare, or BinaryFacts for anything else. A modified working text file gets HunkActions in each hunk header and a LineMenu on right-click; after any of them the comparison reads the file again and keeps the scroll position. A new, deleted, renamed, untracked or conflicted file only moves whole, and a file from a commit says which commit and has neither the Stage button nor the hunk actions.',
           variants: [
+            ['Picture', () => C.FileDiffPanel({ diff: slimeDiff, mode: 'split' }), pane],
+            ['Sound', () => C.FileDiffPanel({ diff: themeDiff, mode: 'split' }), pane],
             ['From a commit', () => C.FileDiffPanel({ diff: commitFileDiff, mode: 'split' }), { w: row, h: 420 }],
             ['Split', () => C.FileDiffPanel({ diff: fileDiff, mode: 'split' }), { w: row, h: 420 }],
             ['Unified', () => C.FileDiffPanel({ diff: fileDiff, mode: 'unified' }), { w: row, h: 420 }],
@@ -664,6 +669,149 @@ const Catalog = (() => {
             ['Fetching', () => C.RepoStatusBar({ summary: historySummary(history), position: 'Commit 3 of 1,284', fetching: true }), { w: 1000 }],
             ['Fetch failed', () => C.RepoStatusBar({ summary: historySummary(history), failure: 'fatal: Authentication failed for \'https://github.com/example/fastgit.git/\'' }), { w: 1000 }],
           ],
+        },
+      ],
+    },
+    {
+      key: 'compare',
+      title: 'File comparison',
+      about: 'The pieces FileDiffPanel compares a file with: two bars that every kind of file shares, then one view per kind. Before is always left or on top and marked red, After right or below and marked green, like deleted and added lines.',
+      items: [
+        {
+          name: 'FileBar',
+          code: 'repo::file_diff_panel::FileBar',
+          source: 'src/repo/file_diff_panel.rs',
+          about: 'The 40 px bar on top: status letter, path (old → new for a rename), LFS when Git LFS stores the file, the side or the commit, then a short summary: line counts for text, size or length for the rest. On the right: Stage or Unstage for a working file, the button that gives the comparison the whole window, and ×. With the whole window, ‹ and › move through the changed files.',
+          variants: [
+            ['Working text file', () => barFrame(C.FileBar({ diff: fileDiff }))],
+            ['From a commit', () => barFrame(C.FileBar({ diff: commitFileDiff }))],
+            ['Video, whole window', () => barFrame(C.FileBar({ diff: introDiff, expanded: true, filePosition: [5, 7] }), 900)],
+          ],
+        },
+        {
+          name: 'ViewBar',
+          code: 'repo::file_diff_panel::ViewBar',
+          source: 'src/repo/file_diff_panel.rs',
+          about: 'The 32 px bar under the FileBar: the ways to compare this kind of file on the left; on the right the ChangeStepper, then the view options for text, or the ZoomControl and, for pictures, the BackdropButton.',
+          variants: [
+            ['Text', () => barFrame(C.ViewBar({ kind: 'text', mode: 'split', changes: { current: 1, total: 3 } }))],
+            ['Picture', () => barFrame(C.ViewBar({ kind: 'image', mode: 'difference', changes: { current: 1, total: 3 }, zoom: { percent: 1800 } }))],
+            ['Sound', () => barFrame(C.ViewBar({ kind: 'audio', mode: 'split', changes: { current: 2, total: 3 } }))],
+            ['Text, options open', () => barFrame(C.ViewBar({ kind: 'text', mode: 'split', changes: { current: 1, total: 3 }, menuOpen: true, hot: 'whitespace' }))],
+          ],
+        },
+        {
+          name: 'ChangeStepper',
+          code: 'repo::file_diff_panel::ChangeStepper',
+          source: 'src/repo/file_diff_panel.rs',
+          about: 'Which change is current and how many there are, with ↑ and ↓ (Alt+Up, Alt+Down). A change is a run of changed lines in text, a changed area in a picture, a stretch of time in a video or a sound. Stepping scrolls text, zooms pictures onto the area and moves the playhead.',
+          variants: [
+            ['Text', () => C.ChangeStepper({ current: 1, total: 3 })],
+            ['No changes', () => C.ChangeStepper({ current: 0, total: 0 })],
+          ],
+        },
+        {
+          name: 'ViewOptionsMenu',
+          code: 'repo::file_diff_panel::ViewOptionsMenu',
+          source: 'src/repo/file_diff_panel.rs',
+          about: 'Opened from ⋯ in a text ViewBar. Each item is a check that applies to every text comparison. Ignore whitespace reads the comparison again with git diff -w and turns the hunk buttons off.',
+          variants: [['Words and wrapping on', () => `<div style="position:relative;width:330px;height:236px">${C.ViewOptionsMenu({ right: 0, top: 0, hot: 'whitespace' })}</div>`]],
+        },
+        {
+          name: 'ChangeRuler',
+          code: 'repo::file_diff_panel::ChangeRuler',
+          source: 'src/repo/file_diff_panel.rs',
+          about: 'A 12 px strip at the right edge of a text comparison: one mark per change at its place in the whole file, green when it only adds lines, red when it only removes some, yellow when it does both, and a lighter box for what is in view. A click jumps there.',
+          variants: [['patch.rs, 183 lines', () => `<div class="h" style="height:300px;align-items:stretch">${C.ChangeRuler({ hunks: fileDiff.hunks, lines: fileDiff.lines })}</div>`]],
+        },
+        {
+          name: 'ZoomControl',
+          code: 'repo::file_diff_panel::ZoomControl',
+          source: 'src/repo/file_diff_panel.rs',
+          about: 'Zoom out, the zoom, zoom in, and Fit, which keeps the pictures as large as the pane allows. Both versions always share one zoom.',
+          variants: [
+            ['Fit', () => C.ZoomControl({ percent: 1200 })],
+            ['Zoomed in', () => C.ZoomControl({ percent: 3200, fit: false })],
+          ],
+        },
+        {
+          name: 'BackdropButton',
+          code: 'repo::file_diff_panel::BackdropButton',
+          source: 'src/repo/file_diff_panel.rs',
+          about: 'Picks what shows behind transparent pixels: a checkerboard, black, white or the panel color.',
+          variants: [['Checkerboard', () => C.BackdropButton()]],
+        },
+        {
+          name: 'VersionTag',
+          code: 'repo::file_diff_panel::VersionTag',
+          source: 'src/repo/file_diff_panel.rs',
+          about: 'Names a version over its picture, frame or waveform: Before or After, then where it comes from (HEAD, Staged, Working copy or a commit). The version that is heard carries headphones.',
+          variants: [
+            ['Before', () => `<div style="position:relative;width:240px;height:42px">${C.VersionTag({ side: 'before', from: 'HEAD' })}</div>`],
+            ['After, heard', () => `<div style="position:relative;width:240px;height:42px">${C.VersionTag({ side: 'after', from: 'Working copy', hearing: true })}</div>`],
+          ],
+        },
+        {
+          name: 'ImageCompare',
+          code: 'repo::file_diff_panel::ImageCompare',
+          source: 'src/repo/file_diff_panel.rs',
+          about: 'Pictures in four modes over the MediaDetails. Split: side by side. Swipe: one picture split by a handle. Onion skin: After over Before with a slider. Difference: After greyed, changed pixels painted, changed areas framed and numbered. Zoom and position are shared by both versions in every mode.',
+          variants: [
+            ['Split', () => C.ImageCompare({ diff: slimeDiff, mode: 'split' }), pane],
+            ['Swipe', () => C.ImageCompare({ diff: slimeDiff, mode: 'swipe' }), pane],
+            ['Onion skin', () => C.ImageCompare({ diff: slimeDiff, mode: 'onion' }), pane],
+            ['Difference, pixel hovered', () => C.ImageCompare({ diff: slimeDiff, mode: 'difference', probe: { x: 11, y: 17 } }), pane],
+            ['Added picture', () => C.ImageCompare({ diff: crownIcon, sides: ['after'] }), pane],
+          ],
+        },
+        {
+          name: 'MediaDetails',
+          code: 'repo::file_diff_panel::MediaDetails',
+          source: 'src/repo/file_diff_panel.rs',
+          about: 'One row per version and one column per property, under every comparison that is not text. A value that changed is yellow, with the difference beside it when it is a number. The header folds the table.',
+          variants: [
+            ['Picture', () => C.MediaDetails({ details: slimeDiff.details, sources: slimeDiff.sources }), { w: 736 }],
+            ['Sound', () => C.MediaDetails({ details: themeDiff.details, sources: themeDiff.sources }), { w: 736 }],
+            ['Folded', () => C.MediaDetails({ details: themeDiff.details, sources: themeDiff.sources, open: false }), { w: 736 }],
+          ],
+        },
+        {
+          name: 'VideoCompare',
+          code: 'repo::file_diff_panel::VideoCompare',
+          source: 'src/repo/file_diff_panel.rs',
+          about: 'Two frames from the same time, then a MediaTimeline, a Transport and the MediaDetails. The picture modes apply to the frames.',
+          variants: [['Split', () => C.VideoCompare({ diff: introDiff }), { w: 1200, h: 640 }]],
+        },
+        {
+          name: 'MediaTimeline',
+          code: 'repo::file_diff_panel::MediaTimeline',
+          source: 'src/repo/file_diff_panel.rs',
+          about: 'One bar per version, as long as that version, on one time scale; hatching where a version has ended; yellow where the frames differ, the current change brighter and numbered above. Click or drag to move the playhead.',
+          variants: [['intro.mp4', () => C.MediaTimeline({ duration: introDiff.duration, at: introDiff.at, changes: introDiff.changes, current: introDiff.current }), { w: 1000 }]],
+        },
+        {
+          name: 'Transport',
+          code: 'repo::file_diff_panel::Transport',
+          source: 'src/repo/file_diff_panel.rs',
+          about: 'Plays both versions in step (Space). Videos add the frame buttons (comma and period). Loop change repeats the current change; Hear picks the version whose sound plays and switches at once without stopping (Tab).',
+          variants: [
+            ['Video', () => C.Transport({ at: introDiff.at, duration: introDiff.duration, frames: true }), { w: 736 }],
+            ['Sound, looping, playing', () => C.Transport({ at: themeDiff.at, duration: themeDiff.duration, loop: true, playing: true }), { w: 736 }],
+          ],
+        },
+        {
+          name: 'AudioCompare',
+          code: 'repo::file_diff_panel::AudioCompare',
+          source: 'src/repo/file_diff_panel.rs',
+          about: 'A time ruler, then the waveform of each version, Before on top, on the same scale. Yellow bands mark where the two sound different; the version that is not heard is dimmed. A click moves the one playhead of both.',
+          variants: [['Split', () => C.AudioCompare({ diff: themeDiff }), pane]],
+        },
+        {
+          name: 'BinaryFacts',
+          code: 'repo::file_diff_panel::BinaryFacts',
+          source: 'src/repo/file_diff_panel.rs',
+          about: 'For a file FastGit can’t draw: what it is, buttons that open each version with its default app or both with git difftool, and the MediaDetails.',
+          variants: [['3D model', () => C.BinaryFacts({ diff: modelDiff }), { w: 736, h: 420 }]],
         },
       ],
     },
