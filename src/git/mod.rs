@@ -51,7 +51,7 @@ pub(crate) use patch::{FilePatch, Whitespace};
 pub(crate) use pull_mode::PullMode;
 pub(crate) use refs::{RefDigest, RefKind, RefLabel, RemoteBranch, ShownRef};
 pub(crate) use refusal::{Refusal, Tracking};
-pub(crate) use remote::{Pulled, Pushed};
+pub(crate) use remote::{Behind, CaughtUp, Pulled, Pushed};
 pub(crate) use stash::{Carried, Stash};
 pub(crate) use status::{ChangeKind, FileChange, Side, WorkingChanges};
 pub(crate) use underway::{Continued, Rebasing, Underway};

@@ -2,8 +2,8 @@ use gpui_kit::SharedString;
 
 use crate::{
     git::{
-        Carried, CheckedOut, Continued, Merged, Pulled, Pushed, Rebased, RefLabel, Refusal,
-        RemoteBranch, Tracking, Underway,
+        Behind, Carried, CaughtUp, CheckedOut, Continued, Merged, Pulled, Pushed, Rebased,
+        RefLabel, Refusal, RemoteBranch, Tracking, Underway,
     },
     ui::Failure,
 };
@@ -11,6 +11,7 @@ use crate::{
 const DIVERGED_ADVICE: &str = "Choose Fast-forward if possible or Rebase in the Pull menu.";
 pub(crate) const STASHED: &str = "Stashed the uncommitted changes";
 pub(crate) const POPPED: &str = "Brought back the latest stash";
+pub(crate) const PULL_AND_PUSH_FAILED: &str = "Couldn't pull and push";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Operation {
@@ -57,6 +58,7 @@ pub(crate) enum Outcome {
         message: SharedString,
     },
     Stopped,
+    Behind(Behind),
     Quiet,
 }
 
@@ -100,14 +102,34 @@ pub(crate) fn pulled_back((pulled, carried): (Pulled, Carried)) -> Outcome {
     }
 }
 
-pub(crate) fn pushed(pushed: &Pushed) -> SharedString {
-    match pushed {
-        Pushed::Sent(Tracking { branch, upstream }) => {
-            format!("Pushed {branch} to {upstream}").into()
-        }
+pub(crate) fn pushed(pushed: Pushed) -> Outcome {
+    let done = match pushed {
+        Pushed::Behind(behind) => return Outcome::Behind(behind),
+        Pushed::Sent(Tracking { branch, upstream }) => format!("Pushed {branch} to {upstream}"),
         Pushed::AlreadyThere(Tracking { branch, upstream }) => {
-            format!("{upstream} already has every commit of {branch}").into()
+            format!("{upstream} already has every commit of {branch}")
         }
+        Pushed::Forced(Tracking { branch, upstream }) => {
+            format!("Force pushed {branch} to {upstream}")
+        }
+    };
+    Outcome::Done(done.into())
+}
+
+pub(crate) fn caught_up(caught_up: CaughtUp) -> Outcome {
+    let CaughtUp {
+        pulled,
+        carried,
+        pushed,
+    } = caught_up;
+    match pushed {
+        Some(Pushed::Behind(behind)) => Outcome::Behind(behind),
+        Some(Pushed::Sent(Tracking { branch, upstream })) => put_back(
+            format!("Pulled {upstream} into {branch}, then pushed {branch} to {upstream}").into(),
+            &format!("the updated {branch}"),
+            carried,
+        ),
+        _ => pulled_back((pulled, carried)),
     }
 }
 
@@ -244,12 +266,12 @@ pub(crate) fn failure(error: &anyhow::Error) -> Failure {
 #[cfg(test)]
 mod tests {
     use super::{
-        Finish, Outcome, aborted, checked_out, continued, deleted, failure, finish_failed, merged,
-        pulled, pulled_back, pushed, rebased, switched,
+        Finish, Outcome, aborted, caught_up, checked_out, continued, deleted, failure,
+        finish_failed, merged, pulled, pulled_back, pushed, rebased, switched,
     };
     use crate::git::{
-        Carried, CheckedOut, Continued, Merged, Merging, Pulled, Pushed, Rebased, Rebasing,
-        RefKind, RefLabel, Refusal, Tracking, Underway, fixtures::id,
+        Behind, Carried, CaughtUp, CheckedOut, Continued, Merged, Merging, Pulled, Pushed,
+        Rebased, Rebasing, RefKind, RefLabel, Refusal, Tracking, Underway, fixtures::id,
     };
 
     fn main_tracking() -> Tracking {
@@ -274,8 +296,82 @@ mod tests {
             "main is already up to date with origin/main"
         );
         assert_eq!(
-            pushed(&Pushed::Sent(main_tracking())),
-            "Pushed main to origin/main"
+            pushed(Pushed::Sent(main_tracking())),
+            Outcome::Done("Pushed main to origin/main".into())
+        );
+        assert_eq!(
+            pushed(Pushed::Forced(main_tracking())),
+            Outcome::Done("Force pushed main to origin/main".into())
+        );
+    }
+
+    fn behind_main() -> Behind {
+        Behind {
+            tracking: main_tracking(),
+            theirs: 2,
+            ours: 1,
+            checked_out: true,
+            upstream_at: id(1),
+        }
+    }
+
+    #[test]
+    fn a_push_the_upstream_is_ahead_of_asks_instead_of_failing() {
+        assert_eq!(
+            pushed(Pushed::Behind(behind_main())),
+            Outcome::Behind(behind_main())
+        );
+    }
+
+    #[test]
+    fn pull_and_push_says_both_steps_or_only_the_one_that_happened() {
+        let caught = |pulled, carried, pushed| {
+            caught_up(CaughtUp {
+                pulled,
+                carried,
+                pushed,
+            })
+        };
+        let brought_in = Pulled::BroughtIn(main_tracking());
+        assert_eq!(
+            caught(
+                brought_in.clone(),
+                Carried::Along,
+                Some(Pushed::Sent(main_tracking()))
+            ),
+            Outcome::Done("Pulled origin/main into main, then pushed main to origin/main".into())
+        );
+        assert_eq!(
+            caught(
+                brought_in.clone(),
+                Carried::Along,
+                Some(Pushed::AlreadyThere(main_tracking()))
+            ),
+            Outcome::Done("Pulled origin/main into main".into())
+        );
+        assert_eq!(
+            caught(Pulled::Stopped(main_tracking()), Carried::Along, None),
+            Outcome::Stopped
+        );
+        assert_eq!(
+            caught(
+                brought_in.clone(),
+                Carried::Along,
+                Some(Pushed::Behind(behind_main()))
+            ),
+            Outcome::Behind(behind_main())
+        );
+        assert_eq!(
+            caught(
+                brought_in,
+                Carried::OnlyInStash,
+                Some(Pushed::Sent(main_tracking()))
+            ),
+            Outcome::Warning {
+                title: "Pulled origin/main into main, then pushed main to origin/main".into(),
+                message: "Your uncommitted changes don't apply on the updated main, so they stay in the stash."
+                    .into()
+            }
         );
     }
 

@@ -21,6 +21,7 @@ pub(crate) enum Refusal {
     Diverged(Tracking),
     CantFastForward(Tracking),
     RemoteAhead(Tracking),
+    UpstreamMoved(Tracking),
     ChangesInTheWay,
     StashKept,
     StashNotApplied,
@@ -50,6 +51,10 @@ impl fmt::Display for Refusal {
             Refusal::RemoteAhead(Tracking { branch, upstream }) => write!(
                 f,
                 "{upstream} has commits that {branch} doesn't have yet. Pull them, then push again."
+            ),
+            Refusal::UpstreamMoved(Tracking { upstream, .. }) => write!(
+                f,
+                "{upstream} moved again since FastGit fetched it, so nothing was overwritten. Push again to see what it has now."
             ),
             Refusal::ChangesInTheWay => write!(
                 f,

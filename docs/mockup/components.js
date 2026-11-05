@@ -266,6 +266,19 @@ const Texts = {
   pullWithMode: (mode) => `Pull (${mode.toLowerCase()})`,
   pullFastForward: 'Pull (fast-forward only)',
   push: 'Push',
+  behindTitle: (branch, upstream) => `${upstream} has commits that ${branch} doesn't have`,
+  behindCounts: (branch, upstream, theirs, ours) =>
+    `${upstream} has ${counted(theirs, 'new commit', 'new commits')}, and ${branch} has ${ours ? `${ours} that ${upstream} doesn't` : 'none of its own to push'}.`,
+  behindPull: (branch) => `Pull and push brings them into ${branch}, with a merge commit if ${branch} can't fast-forward, then pushes.`,
+  behindFastForward: (branch, upstream) => `Pull fast-forwards ${branch} to ${upstream}.`,
+  behindCheckOut: (branch) => `Check out ${branch} to pull them in: a branch that isn't checked out can only fast-forward.`,
+  behindForce: (branch, upstream, theirs) => `Force push replaces ${upstream} with ${branch}, dropping ${theirs === 1 ? 'the new commit' : `the ${theirs} new commits`} for everyone.`,
+  pullAndPush: 'Pull and push',
+  pullOnly: 'Pull',
+  forcePush: 'Force push',
+  pulledAndPushed: (branch, upstream) => `Pulled ${upstream} into ${branch}, then pushed ${branch} to ${upstream}`,
+  forcePushed: (branch, upstream) => `Force pushed ${branch} to ${upstream}`,
+  movedAgain: (upstream) => `${upstream} moved again since FastGit fetched it, so nothing was overwritten. Push again to see what it has now.`,
   merge: (from, into) => `Merge ${from} into ${into}`,
   rebase: (branch, onto) => `Rebase ${branch} onto ${onto}`,
   branchHere: 'Create branch here…',
@@ -1761,6 +1774,14 @@ const C = {
     }
     const description = only === null ? Texts.deleteUncounted(label.name) : only ? Texts.deleteUnmerged(label.name, only) : Texts.deleteMerged(label.name);
     return C.AlertDialog({ title: Texts.deleteBranchTitle(label.name), description, confirm: 'Delete', name: 'DeleteBranchDialog' });
+  },
+
+  BehindDialog({ branch, upstream, theirs, ours, checkedOut = true }) {
+    const pull = ours === 0 ? Texts.behindFastForward(branch, upstream) : checkedOut ? Texts.behindPull(branch) : Texts.behindCheckOut(branch);
+    const description = [Texts.behindCounts(branch, upstream, theirs, ours), pull, Texts.behindForce(branch, upstream, theirs)].join(' ');
+    const pullButton = ours === 0 || checkedOut ? C.Button({ label: ours === 0 ? Texts.pullOnly : Texts.pullAndPush, variant: 'primary', size: 'md' }) : '';
+    const buttons = C.Button({ label: 'Cancel', size: 'md' }) + C.Button({ label: Texts.forcePush, variant: 'danger', size: 'md' }) + pullButton;
+    return `<div class="overlay"><div data-c="BehindDialog" data-base="AlertDialog" class="dialog"><div class="base semibold">${esc(Texts.behindTitle(branch, upstream))}</div><div class="sm muted">${esc(description)}</div><div class="footer stretch">${buttons}</div></div></div>`;
   },
 
   BranchDialog({ head, from, value = '', problem }) {

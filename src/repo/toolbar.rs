@@ -253,7 +253,7 @@ pub(crate) fn notification(operated: &Operated) -> Option<Notification> {
         Ok(Outcome::Warning { title, message }) => Notification::warning(message.clone())
             .title(title.clone())
             .autohide(false),
-        Ok(Outcome::Stopped | Outcome::Quiet) => return None,
+        Ok(Outcome::Stopped | Outcome::Behind(_) | Outcome::Quiet) => return None,
         Err(failure) => Notification::error(failure.message())
             .title(operated.failed.clone())
             .autohide(false),

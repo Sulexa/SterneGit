@@ -17,7 +17,9 @@ const HEAD: &str = "HEAD";
 const FAST_FORWARD_IMPOSSIBLE: &str = "Not possible to fast-forward";
 const PUSH_REJECTED: &str = "[rejected]";
 const REJECTED_FOR_MISSING_COMMITS: [&str; 2] = ["(fetch first)", "(non-fast-forward)"];
+const REJECTED_FOR_A_MOVED_LEASE: &str = "(stale info)";
 const FETCH_REFUSED_TO_MOVE_BACK: &str = "(non-fast-forward)";
+const COUNT_EACH_SIDE: [&str; 3] = ["rev-list", "--left-right", "--count"];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Fetched {
@@ -38,6 +40,30 @@ pub(crate) enum Pulled {
 pub(crate) enum Pushed {
     Sent(Tracking),
     AlreadyThere(Tracking),
+    Forced(Tracking),
+    Behind(Behind),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct Behind {
+    pub(crate) tracking: Tracking,
+    pub(crate) theirs: usize,
+    pub(crate) ours: usize,
+    pub(crate) checked_out: bool,
+    pub(crate) upstream_at: ObjectId,
+}
+
+impl Behind {
+    pub(crate) fn can_pull(&self) -> bool {
+        self.checked_out || self.ours == 0
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct CaughtUp {
+    pub(crate) pulled: Pulled,
+    pub(crate) carried: Carried,
+    pub(crate) pushed: Option<Pushed>,
 }
 
 struct Upstream {
@@ -104,8 +130,9 @@ impl Repo {
             return self.push_without_upstream(&repo, &branch, HEAD);
         };
         let already_there = commit_of(&repo, &upstream.reference) == head_commit(&repo);
-        run(&self.location, &["push", "--quiet"], Exit::Success)
-            .map_err(|error| refused_for_missing_commits(error, &upstream.tracking))?;
+        if let Err(error) = run(&self.location, &["push", "--quiet"], Exit::Success) {
+            return self.behind_or(error, &upstream.tracking.branch);
+        }
         Ok(if already_there {
             Pushed::AlreadyThere(upstream.tracking)
         } else {
@@ -153,17 +180,100 @@ impl Repo {
         let upstream = configured.upstream;
         let already_there = commit_of(&repo, &upstream.reference) == commit_of(&repo, &local);
         let refspec = format!("{}:{}", local.as_bstr(), configured.merge);
-        run(
+        if let Err(error) = run(
             &self.location,
             &["push", "--quiet", &configured.remote, &refspec],
             Exit::Success,
-        )
-        .map_err(|error| refused_for_missing_commits(error, &upstream.tracking))?;
+        ) {
+            return self.behind_or(error, branch);
+        }
         Ok(if already_there {
             Pushed::AlreadyThere(upstream.tracking)
         } else {
             Pushed::Sent(upstream.tracking)
         })
+    }
+
+    pub(crate) fn force_push(&self, behind: &Behind) -> Result<Pushed> {
+        let branch = &behind.tracking.branch;
+        let Some(configured) = self.configured_upstream(branch)? else {
+            return Err(Refusal::NoUpstream {
+                branch: branch.clone(),
+            }
+            .into());
+        };
+        let lease = format!("--force-with-lease={}:{}", configured.merge, behind.upstream_at);
+        let refspec = format!("{}:{}", branch_reference(branch)?.as_bstr(), configured.merge);
+        let tracking = configured.upstream.tracking;
+        match run(
+            &self.location,
+            &["push", "--quiet", &lease, &configured.remote, &refspec],
+            Exit::Success,
+        ) {
+            Ok(_) => Ok(Pushed::Forced(tracking)),
+            Err(error) if error.to_string().contains(REJECTED_FOR_A_MOVED_LEASE) => {
+                Err(Refusal::UpstreamMoved(tracking).into())
+            }
+            Err(error) => Err(error),
+        }
+    }
+
+    pub(crate) fn pull_then_push(&self, behind: &Behind) -> Result<CaughtUp> {
+        let branch = &behind.tracking.branch;
+        let on_it = self.local().head_name()? == Some(branch_reference(branch)?);
+        if !on_it {
+            let pulled = self.pull_branch(branch)?;
+            let pushed = self.push_branch(branch)?;
+            return Ok(CaughtUp {
+                pulled,
+                carried: Carried::Along,
+                pushed: Some(pushed),
+            });
+        }
+        let (pulled, carried) = self.pull(PullMode::FastForwardIfPossible)?;
+        let pushed = match pulled {
+            Pulled::Stopped(_) => None,
+            _ => Some(self.push()?),
+        };
+        Ok(CaughtUp {
+            pulled,
+            carried,
+            pushed,
+        })
+    }
+
+    fn behind_or(&self, error: anyhow::Error, branch: &str) -> Result<Pushed> {
+        if !rejected_for_missing_commits(&error) {
+            return Err(error);
+        }
+        let Some(configured) = self.configured_upstream(branch)? else {
+            return Err(error);
+        };
+        run(
+            &self.location,
+            &["fetch", "--quiet", &configured.remote],
+            Exit::Success,
+        )?;
+        let repo = self.local();
+        let local = branch_reference(branch)?;
+        let upstream = configured.upstream;
+        let Some(upstream_at) = commit_of(&repo, &upstream.reference) else {
+            return Err(error);
+        };
+        let range = format!("{}...{}", local.as_bstr(), upstream.reference.as_bstr());
+        let mut args = COUNT_EACH_SIDE.to_vec();
+        args.push(&range);
+        let counted = run_text(&self.location, &args, Exit::Success)?;
+        let Some((ours, theirs)) = each_side(&counted).filter(|&(_, theirs)| theirs > 0) else {
+            return Err(error);
+        };
+        Ok(Pushed::Behind(Behind {
+            tracking: upstream.tracking,
+            theirs,
+            ours,
+            checked_out: repo.head_name()? == Some(local),
+            upstream_at,
+        }))
     }
 
     fn configured_upstream(&self, branch: &str) -> Result<Option<ConfiguredUpstream>> {
@@ -214,7 +324,13 @@ impl Repo {
             &["push", "--quiet", "--set-upstream", &remote, refspec],
             Exit::Success,
         )
-        .map_err(|error| refused_for_missing_commits(error, &tracking))?;
+        .map_err(|error| {
+            if rejected_for_missing_commits(&error) {
+                Refusal::RemoteAhead(tracking.clone()).into()
+            } else {
+                error
+            }
+        })?;
         Ok(Pushed::Sent(tracking))
     }
 
@@ -264,16 +380,19 @@ pub(super) fn commit_of(repo: &gix::Repository, name: &FullName) -> Option<Objec
     reference.peel_to_commit().ok().map(|commit| commit.id)
 }
 
-fn refused_for_missing_commits(error: anyhow::Error, tracking: &Tracking) -> anyhow::Error {
+fn rejected_for_missing_commits(error: &anyhow::Error) -> bool {
     let message = error.to_string();
-    let missing_commits = message.contains(PUSH_REJECTED)
+    message.contains(PUSH_REJECTED)
         && REJECTED_FOR_MISSING_COMMITS
             .iter()
-            .any(|reason| message.contains(reason));
-    if missing_commits {
-        Refusal::RemoteAhead(tracking.clone()).into()
-    } else {
-        error
+            .any(|reason| message.contains(reason))
+}
+
+fn each_side(counted: &str) -> Option<(usize, usize)> {
+    let mut sides = counted.split_whitespace().map(str::parse);
+    match (sides.next(), sides.next()) {
+        (Some(Ok(ours)), Some(Ok(theirs))) => Some((ours, theirs)),
+        _ => None,
     }
 }
 
@@ -281,7 +400,7 @@ fn refused_for_missing_commits(error: anyhow::Error, tracking: &Tracking) -> any
 mod tests {
     use anyhow::Result;
 
-    use super::{Fetched, Pulled, Pushed};
+    use super::{Behind, CaughtUp, Fetched, Pulled, Pushed};
     use crate::git::{Carried, PullMode, Refusal, Tracking, scratch::ScratchRepo};
 
     struct Shared {
@@ -331,6 +450,17 @@ mod tests {
 
         fn push(&self) -> Result<Pushed> {
             self.ours.open()?.0.push()
+        }
+
+        fn behind(&self) -> Result<Behind> {
+            match self.push()? {
+                Pushed::Behind(behind) => Ok(behind),
+                pushed => panic!("the push should have been refused, got {pushed:?}"),
+            }
+        }
+
+        fn upstream_head(&self, branch: &str) -> Result<String> {
+            Ok(self.origin.git(&["rev-parse", branch])?.trim().to_owned())
         }
     }
 
@@ -550,14 +680,132 @@ mod tests {
     }
 
     #[test]
-    fn a_push_the_remote_rejects_for_missing_commits_asks_for_a_pull() -> Result<()> {
+    fn a_push_the_remote_rejects_fetches_and_counts_both_sides() -> Result<()> {
         let shared = Shared::new("push-rejected")?;
+        let theirs = shared.they_push("second")?;
+        shared.they_push("third")?;
+        shared.ours.commit("mine")?;
+        let behind = shared.behind()?;
+        assert_eq!(
+            (behind.tracking.clone(), behind.theirs, behind.ours, behind.checked_out),
+            (main_tracking(), 2, 1, true)
+        );
+        assert_eq!(behind.upstream_at.to_string(), shared.theirs.head()?);
+        assert_eq!(
+            shared.ours.git(&["rev-parse", "origin/main~1"])?.trim(),
+            theirs
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn pull_and_push_merges_the_upstream_in_then_sends_the_merge() -> Result<()> {
+        let shared = Shared::new("push-pull-merge")?;
         shared.they_push("second")?;
         shared.ours.commit("mine")?;
+        shared.ours.git(&["config", "pull.rebase", "true"])?;
+        let behind = shared.behind()?;
+        let caught_up = shared.ours.open()?.0.pull_then_push(&behind)?;
         assert_eq!(
-            refusal(shared.push()),
-            Refusal::RemoteAhead(main_tracking())
+            caught_up,
+            CaughtUp {
+                pulled: Pulled::BroughtIn(main_tracking()),
+                carried: Carried::Along,
+                pushed: Some(Pushed::Sent(main_tracking())),
+            }
         );
+        assert_eq!(parent_count(&shared.ours)?, 2);
+        assert_eq!(shared.upstream_head("main")?, shared.ours.head()?);
+        Ok(())
+    }
+
+    #[test]
+    fn with_nothing_of_its_own_pull_and_push_only_fast_forwards() -> Result<()> {
+        let shared = Shared::new("push-only-behind")?;
+        let theirs = shared.they_push("second")?;
+        let behind = shared.behind()?;
+        assert_eq!((behind.theirs, behind.ours), (1, 0));
+        let caught_up = shared.ours.open()?.0.pull_then_push(&behind)?;
+        assert_eq!(caught_up.pulled, Pulled::BroughtIn(main_tracking()));
+        assert_eq!(
+            caught_up.pushed,
+            Some(Pushed::AlreadyThere(main_tracking()))
+        );
+        assert_eq!(shared.ours.head()?, theirs);
+        Ok(())
+    }
+
+    #[test]
+    fn a_pull_that_stops_on_conflicts_pushes_nothing() -> Result<()> {
+        let shared = Shared::new("push-pull-conflict")?;
+        shared.both_change("shared.txt")?;
+        let theirs = shared.theirs.head()?;
+        let behind = shared.behind()?;
+        let caught_up = shared.ours.open()?.0.pull_then_push(&behind)?;
+        assert_eq!(caught_up.pulled, Pulled::Stopped(main_tracking()));
+        assert_eq!(caught_up.pushed, None);
+        assert_eq!(shared.upstream_head("main")?, theirs);
+        Ok(())
+    }
+
+    #[test]
+    fn force_push_overwrites_the_upstream_only_where_it_was_counted() -> Result<()> {
+        let shared = Shared::new("push-force")?;
+        shared.they_push("second")?;
+        shared.ours.commit("mine")?;
+        let behind = shared.behind()?;
+        let moved_again = shared.they_push("third")?;
+        let (repo, _) = shared.ours.open()?;
+        assert_eq!(
+            refusal(repo.force_push(&behind)),
+            Refusal::UpstreamMoved(main_tracking())
+        );
+        assert_eq!(shared.upstream_head("main")?, moved_again);
+        let behind = shared.behind()?;
+        assert_eq!((behind.theirs, behind.ours), (2, 1));
+        assert_eq!(repo.force_push(&behind)?, Pushed::Forced(main_tracking()));
+        assert_eq!(shared.upstream_head("main")?, shared.ours.head()?);
+        Ok(())
+    }
+
+    #[test]
+    fn a_branch_that_is_not_checked_out_asks_too_and_can_be_forced() -> Result<()> {
+        let shared = with_topic_on_both_sides("push-other-behind")?;
+        shared.they_push("theirs on topic")?;
+        shared.ours.git(&["switch", "--quiet", "topic"])?;
+        shared.ours.commit("mine on topic")?;
+        let mine = shared.ours.head()?;
+        shared.ours.git(&["switch", "--quiet", "main"])?;
+        let (repo, _) = shared.ours.open()?;
+        let Pushed::Behind(behind) = repo.push_branch("topic")? else {
+            panic!("the push of topic should have been refused");
+        };
+        assert_eq!(
+            (behind.tracking.clone(), behind.theirs, behind.ours, behind.checked_out),
+            (topic_tracking(), 1, 1, false)
+        );
+        assert!(!behind.can_pull());
+        assert_eq!(repo.force_push(&behind)?, Pushed::Forced(topic_tracking()));
+        assert_eq!(shared.upstream_head("topic")?, mine);
+        Ok(())
+    }
+
+    #[test]
+    fn a_branch_that_is_not_checked_out_and_only_behind_pulls_by_fast_forward() -> Result<()> {
+        let shared = with_topic_on_both_sides("push-other-only-behind")?;
+        let theirs = shared.they_push("theirs on topic")?;
+        let (repo, _) = shared.ours.open()?;
+        let Pushed::Behind(behind) = repo.push_branch("topic")? else {
+            panic!("the push of topic should have been refused");
+        };
+        assert!(behind.can_pull());
+        let caught_up = repo.pull_then_push(&behind)?;
+        assert_eq!(caught_up.pulled, Pulled::BroughtIn(topic_tracking()));
+        assert_eq!(
+            caught_up.pushed,
+            Some(Pushed::AlreadyThere(topic_tracking()))
+        );
+        assert_eq!(shared.ours.git(&["rev-parse", "topic"])?.trim(), theirs);
         Ok(())
     }
 

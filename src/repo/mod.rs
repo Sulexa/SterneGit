@@ -1,3 +1,4 @@
+mod behind_dialog;
 mod branch_dialog;
 mod branch_menu;
 mod changes_list;
@@ -53,6 +54,7 @@ use crate::{
     },
     ui::{self, Failure, FileView, Folded, Look as _, Notice, run_in_background, thousands},
 };
+use behind_dialog::open_behind_dialog;
 use branch_dialog::open_branch_dialog;
 use stash_menu::{StashAction, StashMenu};
 use branch_menu::{BranchAction, BranchMenu, confirm_delete};
@@ -111,8 +113,15 @@ impl RepoView {
                 RepositoryEvent::ChangesRead => this.on_changes_read(cx),
                 RepositoryEvent::Committed => {}
                 RepositoryEvent::Operated(operated) => {
-                    if matches!(operated.outcome, Ok(Outcome::Stopped)) {
-                        this.follow_conflicts = true;
+                    match &operated.outcome {
+                        Ok(Outcome::Stopped) => this.follow_conflicts = true,
+                        Ok(Outcome::Behind(behind)) => open_behind_dialog(
+                            this.repository.clone(),
+                            behind.clone(),
+                            window,
+                            cx,
+                        ),
+                        _ => {}
                     }
                     if let Some(notification) = notification(operated) {
                         window.push_notification(notification, cx)

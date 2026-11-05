@@ -12,8 +12,8 @@ use super::{
 };
 use crate::{
     git::{
-        self, CheckedOut, FileChange, History, PartAction, PullMode, RefLabel, RemoteBranch, Repo,
-        Scope, Side, Stash, Underway, Version, WorkingChanges,
+        self, Behind, CheckedOut, FileChange, History, PartAction, PullMode, RefLabel,
+        RemoteBranch, Repo, Scope, Side, Stash, Underway, Version, WorkingChanges,
     },
     ui::{Failure, Job, Load, run_in_background},
 };
@@ -379,7 +379,24 @@ impl Repository {
     pub(crate) fn push(&mut self, cx: &mut Context<Self>) {
         self.operate(
             Operation::Push,
-            |repo| repo.push().map(|pushed| operation::pushed(&pushed)),
+            |repo| repo.push().map(operation::pushed),
+            cx,
+        );
+    }
+
+    pub(crate) fn pull_then_push(&mut self, behind: Behind, cx: &mut Context<Self>) {
+        self.write_and_report(
+            Some(Operation::Push),
+            operation::PULL_AND_PUSH_FAILED.into(),
+            move |repo| repo.pull_then_push(&behind).map(operation::caught_up),
+            cx,
+        );
+    }
+
+    pub(crate) fn force_push(&mut self, behind: Behind, cx: &mut Context<Self>) {
+        self.operate(
+            Operation::Push,
+            move |repo| repo.force_push(&behind).map(operation::pushed),
             cx,
         );
     }
@@ -441,10 +458,7 @@ impl Repository {
         }
         self.operate(
             Operation::Push,
-            move |repo| {
-                repo.push_branch(&label.name)
-                    .map(|pushed| operation::pushed(&pushed))
-            },
+            move |repo| repo.push_branch(&label.name).map(operation::pushed),
             cx,
         );
     }

@@ -430,16 +430,29 @@ const Screens = (() => {
         }),
     },
     {
-      id: 'push-failed',
-      title: 'Header — push rejected',
-      about: 'When Git refuses, the notification says why and stays until it is closed. A push the remote rejects because it has commits main does not have yet asks for a pull first.',
+      id: 'push-behind',
+      title: 'Header — push behind its upstream',
+      about: "When the remote refuses a push because origin/main has commits main doesn't have, FastGit fetches that remote, counts the commits on each side and asks what to do; the graph behind the dialog already shows the fetched commits. Pull and push pulls in Fast-forward if possible mode, whatever the header's mode is, then pushes; a pull that stops on a conflict shows the OperationBar and pushes nothing, so Push is clicked again once the merge is committed. Force push overwrites origin/main with main, but only if origin/main is still where the dialog counted from: if someone pushed again in between, nothing is overwritten and a notification says so. Cancel or Esc pushes nothing. When main has nothing of its own to push, the primary button is just Pull. Push in a branch's menu asks the same way; for a branch that isn't checked out, Pull is only offered when it can fast-forward.",
+      source: 'src/repo/behind_dialog.rs',
+      render: () =>
+        C.FastGit({
+          topBar: topBar(),
+          tabStrip: tabStrip(),
+          body: commitSelected(),
+          overlays: C.BehindDialog({ branch: 'main', upstream: 'origin/main', theirs: 2, ours: 1 }),
+        }),
+    },
+    {
+      id: 'pulled-and-pushed',
+      title: 'Header — pulled, then pushed',
+      about: 'Pull and push says both steps in one notification. Force push says Force pushed main to origin/main. When the upstream moved again before Force push ran, the push fails and the notification stays until it is closed; pushing again asks with fresh counts.',
       source: 'src/repo/toolbar.rs',
       render: () =>
         C.FastGit({
           topBar: topBar(),
           tabStrip: tabStrip(),
           body: commitSelected(),
-          overlays: `<div class="toasts">${C.Notification({ kind: 'error', title: 'Push failed', message: "origin/main has commits that main doesn't have yet. Pull them, then push again." })}</div>`,
+          overlays: `<div class="toasts">${C.Notification({ kind: 'success', message: Texts.pulledAndPushed('main', 'origin/main') })}</div>`,
         }),
     },
     {

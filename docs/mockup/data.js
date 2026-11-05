@@ -513,7 +513,7 @@ const Sample = (() => {
     { id: 'a3e90b1', subject: 'Fetch in the background every five minutes', author: 'Sam Lee', date: '2026-11-04 17:22', graph: [0, 2, 'I0 O0 P1'], refs: [] },
     { ...commits[0], graph: [0, 2, 'I0 I1 O0'], head: false, refs: [] },
     ...commits.slice(1),
-  ];
+  ].map((commit) => ({ ...commit, email: emails[commit.author] }));
 
   const rebasing = {
     ...history,

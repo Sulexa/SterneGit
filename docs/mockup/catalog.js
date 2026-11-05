@@ -12,6 +12,7 @@ const Catalog = (() => {
   const lanes = (graph, extra = {}) => () => C.GraphCell({ graph, ...extra });
   const menuFrame = (menu, width = 240) => `<div style="position:relative;width:${width}px;height:${(menu.match(/class="item/g).length + 1) * 28 + 8}px">${menu}</div>`;
   const dialogFrame = (dialog) => `<div style="position:relative;width:520px;height:260px" class="mk-dialog-frame">${dialog}</div>`;
+  const tallDialogFrame = (dialog) => `<div style="position:relative;width:520px;height:300px" class="mk-dialog-frame">${dialog}</div>`;
   const hunkFrame = (actions) => `<div class="diff" style="width:560px;flex:none"><div class="diff-line hunk"><span class="text">${esc(fileDiff.hunks[0].header)}</span>${actions}</div></div>`;
 
   return [
@@ -129,6 +130,9 @@ const Catalog = (() => {
             ['Check-out with conflicting changes', () => C.Notification({ kind: 'warning', title: 'Switched to feature/blame', message: 'Your uncommitted changes conflict with feature/blame: resolve the conflicted files. The stash keeps a copy of them.' })],
             ['Check-out with changes left in the stash', () => C.Notification({ kind: 'warning', title: 'Switched to feature/blame', message: "Your uncommitted changes don't apply on feature/blame, so they stay in the stash." })],
             ['Stash left unapplied', () => C.Notification({ kind: 'error', title: 'Pop failed', message: "The stash doesn't apply on top of the current files, so nothing changed. The stash is kept, so nothing is lost." })],
+            ['Pulled, then pushed', () => C.Notification({ kind: 'success', message: Texts.pulledAndPushed('main', 'origin/main') })],
+            ['Force pushed', () => C.Notification({ kind: 'success', message: Texts.forcePushed('main', 'origin/main') })],
+            ['Upstream moved before a force push', () => C.Notification({ kind: 'error', title: 'Push failed', message: Texts.movedAgain('origin/main') })],
             ['Fast-forward refused on another branch', () => C.Notification({ kind: 'error', title: 'Pull failed', message: "feature/blame and origin/feature/blame have diverged, so feature/blame can't fast-forward. Check it out to merge or rebase." })],
           ],
         },
@@ -465,6 +469,18 @@ const Catalog = (() => {
             ['Refused by Git', () => dialogFrame(C.BranchDialog({ head: `main (${commit(0).id})`, value: 'my branch', problem: Texts.branchInvalid }))],
             ['Detached HEAD', () => dialogFrame(C.BranchDialog({ head: commit(3).id, value: 'fix/merge' }))],
             ['From another ref', () => dialogFrame(C.BranchDialog({ from: `feature/blame (${commit(9).id})`, value: 'fix/blame-tabs' }))],
+          ],
+        },
+        {
+          name: 'BehindDialog',
+          code: 'repo::behind_dialog::open_behind_dialog',
+          source: 'src/repo/behind_dialog.rs',
+          about: "An AlertDialog opened when the remote refuses a push from Push or a BranchMenu because the upstream has commits the branch doesn't. It counts the commits on each side, after fetching the upstream's remote. Cancel, Force push in red, then the primary Pull and push, which Enter picks, share the footer's width: git pull --no-rebase --ff, then git push. With nothing to push the primary button is Pull. A branch that isn't checked out can only fast-forward, so when both sides have commits it gets no Pull button. Force push runs git push --force-with-lease set to the upstream commit that was counted. Esc cancels.",
+          variants: [
+            ['Both sides have commits', () => tallDialogFrame(C.BehindDialog({ branch: 'main', upstream: 'origin/main', theirs: 2, ours: 1 }))],
+            ['Nothing to push', () => tallDialogFrame(C.BehindDialog({ branch: 'main', upstream: 'origin/main', theirs: 1, ours: 0 }))],
+            ['Branch not checked out', () => tallDialogFrame(C.BehindDialog({ branch: 'feature/blame', upstream: 'origin/feature/blame', theirs: 3, ours: 2, checkedOut: false }))],
+            ['Branch not checked out, nothing to push', () => tallDialogFrame(C.BehindDialog({ branch: 'feature/blame', upstream: 'origin/feature/blame', theirs: 3, ours: 0, checkedOut: false }))],
           ],
         },
         {
