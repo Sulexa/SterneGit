@@ -1,5 +1,5 @@
 const Catalog = (() => {
-  const { history, collapsed, changes, partlyStaged, commitDetails, commitFileDiff, fileDiff, stagedHunkDiff, selectedLines, tabs } = Sample;
+  const { history, collapsed, changes, partlyStaged, commitDetails, commitFileDiff, fileHistory, fileDiff, stagedHunkDiff, selectedLines, tabs } = Sample;
   const { slimeDiff, crownIcon, introDiff, themeDiff, modelDiff } = Sample;
   const pane = { w: 736, h: 600 };
   const barFrame = (bar, width = 736) => `<div class="v" style="width:${width}px;position:relative;height:${bar.includes('ViewOptionsMenu') ? 300 : 40}px">${bar}</div>`;
@@ -230,6 +230,21 @@ const Catalog = (() => {
             ['Renamed', () => C.ChangeBadge({ kind: 'R' })],
             ['Copied', () => C.ChangeBadge({ kind: 'C' })],
             ['Conflicted', () => C.ChangeBadge({ kind: 'U' })],
+          ],
+        },
+        {
+          name: 'AuthorAvatar',
+          code: 'ui::author_avatar',
+          source: 'src/ui/avatar.rs',
+          about: 'A picture drawn from the author’s email, so one person gets the same picture in every repository and every run, with no network, no image file and no setting. The email, trimmed and lowercased, goes through 64-bit FNV-1a and a final mix; the hash modulo 360 picks the hue, and the 15 bits above the ninth fill the left three columns of a 5 × 5 grid, mirrored onto the right two. Light cells on a dark tint of the same hue, in a rounded square. Hovering it shows the name and the email. 16 px in a CommitRow, 20 px in the CommitPanel, 14 px in a FileHistoryRow.',
+          variants: [
+            ['Alex Martin', () => C.AuthorAvatar({ name: 'Alex Martin', email: 'alex@fastgit.dev', size: 32 })],
+            ['Sam Lee', () => C.AuthorAvatar({ name: 'Sam Lee', email: 'sam@fastgit.dev', size: 32 })],
+            ['Robin Chen', () => C.AuthorAvatar({ name: 'Robin Chen', email: 'robin@fastgit.dev', size: 32 })],
+            ['Same email, other case', () => C.AuthorAvatar({ name: 'Robin Chen', email: ' Robin@FastGit.dev ', size: 32 })],
+            ['A bot', () => C.AuthorAvatar({ name: 'dependabot[bot]', email: '49699333+dependabot[bot]@users.noreply.github.com', size: 32 })],
+            ['Row sizes', () => `<div class="h" style="gap:12px">${[14, 16, 20].map((size) => C.AuthorAvatar({ name: 'Sam Lee', email: 'sam@fastgit.dev', size })).join('')}</div>`],
+            ['Initials instead', () => C.AuthorAvatar({ name: 'Sam Lee', email: 'sam@fastgit.dev', size: 32, look: 'initials' })],
           ],
         },
         {
@@ -489,7 +504,7 @@ const Catalog = (() => {
           name: 'CommitRow',
           code: 'repo::history_list::commit_row',
           source: 'src/repo/history_list.rs',
-          about: 'The same 12 px left padding as every row, then the graph, up to three ref badges (then +n), subject, author 120 px, date 104 px, short id 56 px.',
+          about: 'The same 12 px left padding as every row, then the graph, up to three ref badges (then +n), subject, author 120 px with its AuthorAvatar in front, date 104 px, short id 56 px.',
           variants: [
             ['HEAD with refs', () => C.CommitRow({ commit: commit(0), width }), { w: row }],
             ['Selected', () => C.CommitRow({ commit: commit(2), width, selected: true }), { w: row }],
@@ -512,7 +527,7 @@ const Catalog = (() => {
           name: 'CommitPanel',
           code: 'repo::commit_panel::CommitPanel',
           source: 'src/repo/commit_panel.rs',
-          about: 'Subject, body (140 px at most), author and date, short id and parents, Copy hash, file and line counts with the FileViewToggle at their right, then the files the commit changes. Clicking a file compares it in the middle pane.',
+          about: 'Subject, body (140 px at most), the author’s AuthorAvatar, author and date, short id and parents, Copy hash, file and line counts with the FileViewToggle at their right, then the files the commit changes. Clicking a file compares it in the middle pane.',
           variants: [
             ['Ready', () => C.CommitPanel({ commit: commit(2), details: commitDetails }), { w: 480, h: 420 }],
             ['Files as a tree', () => C.CommitPanel({ commit: commit(2), details: commitDetails, view: 'tree' }), { w: 480, h: 420 }],
@@ -527,7 +542,7 @@ const Catalog = (() => {
           name: 'CommitFiles',
           code: 'repo::commit_files::CommitFiles',
           source: 'src/repo/commit_files.rs',
-          about: 'Every file the commit changes in a virtual list: in patch order as a list, or as a tree with folders first, then files, both by name and regardless of case. Clicking a folder folds it; folded folders open again when another commit is selected. The open file is highlighted.',
+          about: 'Every file the commit changes in a virtual list: in patch order as a list, or as a tree with folders first, then files, both by name and regardless of case. Clicking a folder folds it; folded folders open again when another commit is selected. The open file is highlighted. A right-click on a file opens its CommitFileMenu.',
           variants: [
             ['Files', () => C.CommitFiles({ files: commitDetails.files }), { w: 480, h: 180 }],
             ['One open', () => C.CommitFiles({ files: commitDetails.files, open: commitFileDiff.change.path }), { w: 480, h: 180 }],
@@ -546,6 +561,40 @@ const Catalog = (() => {
             ['In a tree', () => C.CommitFileRow({ file: commitDetails.files[0], depth: 1 }), { w: 480 }],
             ['Added', () => C.CommitFileRow({ file: commitDetails.files[1] }), { w: 480 }],
             ['Binary, deleted', () => C.CommitFileRow({ file: commitDetails.files[3] }), { w: 480 }],
+            ['Right-clicked', () => `<div style="height:170px">${C.CommitFileRow({ file: commitDetails.files[0], menu: C.CommitFileMenu({ file: commitDetails.files[0], left: 150, top: 16, hot: Texts.fileHistory }) })}</div>`, { w: 480 }],
+          ],
+        },
+        {
+          name: 'CommitFileMenu',
+          code: 'repo::commit_files::FileActions::menu',
+          source: 'src/repo/commit_files.rs',
+          about: 'The right-click menu of a file in a commit. File history opens the FileHistoryList with this commit selected. Open file, Show in folder and Copy path work as in the FileMenu, on the file as it is on disk; a file the commit deletes has neither Open file nor Show in folder.',
+          variants: [
+            ['Modified', () => menuFrame(C.CommitFileMenu({ file: commitDetails.files[0] }))],
+            ['Deleted', () => menuFrame(C.CommitFileMenu({ file: commitDetails.files[3] }))],
+          ],
+        },
+        {
+          name: 'FileHistoryList',
+          code: 'repo::file_history::FileHistoryList',
+          source: 'src/repo/file_history.rs',
+          about: 'Takes the left pane, in place of the RefsList, while a file history is open: a SectionHeader with the number of commits, then one FileHistoryRow per commit that changed the file, newest first, read with git log --follow so the list goes on past renames. While Git reads the header spins, without a count; when the branches move, the list is read again and keeps the selected commit while it is still listed. A failed read shows why in the list. Up and Down move through the rows; the middle pane compares the file in the selected commit.',
+          variants: [
+            ['Read', () => C.FileHistoryList({ history: fileHistory, selected: 2 }), { w: 224, h: 380 }],
+            ['Reading', () => C.FileHistoryList({ history: fileHistory, reading: true }), { w: 224, h: 90 }],
+          ],
+        },
+        {
+          name: 'FileHistoryRow',
+          code: 'repo::file_history::file_commit_row',
+          source: 'src/repo/file_history.rs',
+          about: 'A 48 px row on two lines, so it fits the narrow left pane. What the commit did to the file as a ChangeBadge, then the subject on a line of its own; under it the AuthorAvatar, the author and the day, or the old path for a rename, and the lines the commit added and removed in that file, or "binary". The short id and the time are in the CommitPanel on the right.',
+          variants: [
+            ['Modified', () => C.FileHistoryRow({ entry: fileHistory.entries[1] }), { w: 224 }],
+            ['Selected', () => C.FileHistoryRow({ entry: fileHistory.entries[2], selected: true }), { w: 224 }],
+            ['Renamed', () => C.FileHistoryRow({ entry: fileHistory.entries[5] }), { w: 224 }],
+            ['Added', () => C.FileHistoryRow({ entry: fileHistory.entries[6] }), { w: 224 }],
+            ['Binary', () => C.FileHistoryRow({ entry: { ...fileHistory.entries[3], binary: true } }), { w: 224 }],
           ],
         },
         {
@@ -597,7 +646,7 @@ const Catalog = (() => {
           name: 'FileMenu',
           code: 'repo::changes_list::RowActions::menu',
           source: 'src/repo/changes_list.rs',
-          about: 'The right-click menu of a changed file. Stage or Unstage, then Discard changes… for an unstaged file (Delete file… for an untracked one, nothing for a conflicted one), which asks first in a DiscardDialog. Open file uses the default app, Show in folder the file manager; a deleted file has neither. Copy path copies the full path and says so in a notification.',
+          about: 'The right-click menu of a changed file. Stage or Unstage, then Discard changes… for an unstaged file (Delete file… for an untracked one, nothing for a conflicted one), which asks first in a DiscardDialog. File history opens the FileHistoryList with its newest commit selected; a new or untracked file has none. Open file uses the default app, Show in folder the file manager; a deleted file has neither. Copy path copies the full path and says so in a notification.',
           variants: [
             ['Unstaged, modified', () => menuFrame(C.FileMenu({ change: changes.unstaged[0], side: 'unstaged' }))],
             ['Unstaged, untracked', () => menuFrame(C.FileMenu({ change: changes.unstaged[3], side: 'unstaged' }))],

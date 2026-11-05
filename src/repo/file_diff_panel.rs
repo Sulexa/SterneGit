@@ -697,7 +697,7 @@ impl FileDiffPanel {
         }
     }
 
-    fn shows_commit_file(&self, id: ObjectId, path: &SharedString) -> bool {
+    pub(crate) fn shows_commit_file(&self, id: ObjectId, path: &SharedString) -> bool {
         matches!(&self.compared, Some(Compared::CommitFile { id: shown, file, .. }) if *shown == id && file.path() == path)
     }
 

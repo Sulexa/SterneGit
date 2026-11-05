@@ -463,9 +463,38 @@
   overflow: hidden;
 }
 
-.commit-row > .author { flex: none; width: 120px; }
+.commit-row > .author { flex: none; width: 120px; gap: 6px; }
+
+.author-avatar { flex: none; display: block; }
 .commit-row > .date { flex: none; width: 104px; }
 .commit-row > .short-id { flex: none; width: 56px; }
+
+.file-history {
+  height: 100%;
+  background: var(--sidebar);
+}
+
+.file-history-row {
+  height: 48px;
+  gap: 8px;
+  padding-right: 8px;
+}
+
+.file-history-row > .lines {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.file-history-row .detail { gap: 8px; }
+
+.file-history-row .counts {
+  flex: none;
+  display: flex;
+  gap: 6px;
+}
 
 .uncommitted-row {
   flex: none;

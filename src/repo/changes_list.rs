@@ -1,10 +1,10 @@
 use std::{path::Path, rc::Rc, sync::Arc};
 
 use gpui_kit::{
-    AnyElement, AnyView, App, ClipboardItem, InteractiveElement as _, IntoElement,
-    ParentElement as _, RenderOnce, SharedString, Styled as _, UniformListScrollHandle, Window,
+    AnyElement, AnyView, App, InteractiveElement as _, IntoElement, ParentElement as _,
+    RenderOnce, SharedString, Styled as _, UniformListScrollHandle, Window,
     component::{
-        ActiveTheme as _, Disableable as _, Sizable as _, WindowExt as _,
+        ActiveTheme as _, Disableable as _, Sizable as _,
         button::{Button, ButtonVariants as _},
         menu::{ContextMenuExt as _, PopupMenu, PopupMenuItem},
         scroll::Scrollbar,
@@ -16,6 +16,7 @@ use gpui_kit::{
 };
 
 use super::{
+    file_menu::{history_item, on_disk_items},
     file_tree::{FileTreeRow, file_rows, is_inside},
     navigation::OpenFile,
 };
@@ -66,6 +67,10 @@ fn discard_label(change: &FileChange) -> Option<&'static str> {
     }
 }
 
+fn has_history(change: &FileChange) -> bool {
+    !matches!(change.kind, ChangeKind::Added | ChangeKind::Untracked)
+}
+
 #[derive(Clone)]
 struct RowActions {
     root: Option<Arc<Path>>,
@@ -73,6 +78,7 @@ struct RowActions {
     on_open: Option<Handler<(Side, FileChange)>>,
     on_move: Option<Handler<(Side, Scope)>>,
     on_discard: Option<Handler<FileChange>>,
+    on_history: Option<Handler<FileChange>>,
     on_fold: Option<Handler<(Side, SharedString)>>,
 }
 
@@ -85,31 +91,20 @@ impl RowActions {
             (Some(label), Some(_)) => menu.item(self.item(label, &self.on_discard, change.clone())),
             _ => menu,
         };
-        let Some(path) = self
-            .root
-            .as_ref()
-            .map(|root| root.join(change.exact_path()))
-        else {
-            return menu;
+        let menu = match &self.on_history {
+            Some(on_history) if has_history(change) => {
+                history_item(menu.separator(), on_history, change.clone())
+            }
+            _ => menu,
         };
-        let on_disk = change.kind != ChangeKind::Deleted;
-        let open = path.clone();
-        let reveal = path.clone();
-        menu.separator()
-            .when(on_disk, |menu| {
-                menu.item(
-                    PopupMenuItem::new("Open file")
-                        .on_click(move |_, _, cx| cx.open_with_system(&open)),
-                )
-                .item(
-                    PopupMenuItem::new("Show in folder")
-                        .on_click(move |_, _, cx| cx.reveal_path(&reveal)),
-                )
-            })
-            .item(
-                PopupMenuItem::new("Copy path")
-                    .on_click(move |_, window, cx| copy_path(&path, window, cx)),
-            )
+        match &self.root {
+            Some(root) => on_disk_items(
+                menu.separator(),
+                root.join(change.exact_path()),
+                change.kind != ChangeKind::Deleted,
+            ),
+            None => menu,
+        }
     }
 
     fn item<T: 'static>(
@@ -127,11 +122,6 @@ impl RowActions {
                 }
             })
     }
-}
-
-fn copy_path(path: &Path, window: &mut Window, cx: &mut App) {
-    cx.write_to_clipboard(ClipboardItem::new_string(path.display().to_string()));
-    window.push_notification("Path copied", cx);
 }
 
 pub(crate) type SideScrolls = BySide<UniformListScrollHandle>;
@@ -176,6 +166,7 @@ impl ChangesList {
                 on_open: None,
                 on_move: None,
                 on_discard: None,
+                on_history: None,
                 on_fold: None,
             },
         }
@@ -191,6 +182,14 @@ impl ChangesList {
         callback: impl Fn(&FileChange, &mut Window, &mut App) + 'static,
     ) -> Self {
         self.actions.on_discard = Some(handler(callback));
+        self
+    }
+
+    pub(crate) fn on_history(
+        mut self,
+        callback: impl Fn(&FileChange, &mut Window, &mut App) + 'static,
+    ) -> Self {
+        self.actions.on_history = Some(handler(callback));
         self
     }
 

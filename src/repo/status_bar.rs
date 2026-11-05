@@ -5,7 +5,7 @@ use gpui_kit::{
     div, px,
 };
 
-use super::Repository;
+use super::{Repository, file_history::HistoryPlace};
 use crate::{
     git::HISTORY_LIMIT,
     ui::{Look as _, thousands},
@@ -51,6 +51,20 @@ impl RepoStatusBar {
             fetching: repository.is_fetching(),
             fetch_failure: repository.fetch_failure().map(|failure| failure.message()),
         }
+    }
+}
+
+impl RepoStatusBar {
+    pub(crate) fn in_file_history(mut self, place: Option<HistoryPlace>) -> Self {
+        if let Some(place) = place {
+            self.position = format!(
+                "Commit {} of {} changing {}",
+                thousands(place.row + 1),
+                thousands(place.count),
+                place.name
+            );
+        }
+        self
     }
 }
 

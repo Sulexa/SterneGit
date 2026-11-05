@@ -1,21 +1,53 @@
-use std::sync::Arc;
+use std::{path::Path, sync::Arc};
 
 use gpui_kit::{
     AnyElement, App, InteractiveElement as _, IntoElement, ParentElement as _, RenderOnce,
     SharedString, Styled as _, UniformListScrollHandle, Window,
-    component::{ActiveTheme as _, diff::DiffFile, h_flex, scroll::Scrollbar},
+    component::{
+        ActiveTheme as _,
+        diff::DiffFile,
+        h_flex,
+        menu::{ContextMenuExt as _, PopupMenu},
+        scroll::Scrollbar,
+    },
     div,
     prelude::FluentBuilder as _,
     uniform_list,
 };
 
 use super::{
+    file_menu::{history_item, on_disk_items},
     file_tree::{FileTreeRow, file_rows},
     patch_view::change_kind,
 };
-use crate::ui::{
-    self, FilePlace, FileView, Folded, Handler, Look as _, file_row, folder_row, handler,
+use crate::{
+    git::ChangeKind,
+    ui::{self, FilePlace, FileView, Folded, Handler, Look as _, file_row, folder_row, handler},
 };
+
+#[derive(Clone, Default)]
+struct FileActions {
+    root: Option<Arc<Path>>,
+    on_open: Option<Handler<DiffFile>>,
+    on_history: Option<Handler<DiffFile>>,
+}
+
+impl FileActions {
+    fn menu(&self, menu: PopupMenu, file: &DiffFile) -> PopupMenu {
+        let menu = match &self.on_history {
+            Some(on_history) => history_item(menu, on_history, file.clone()),
+            None => menu,
+        };
+        match &self.root {
+            Some(root) => on_disk_items(
+                menu.separator(),
+                root.join(file.path().as_ref()),
+                change_kind(file) != ChangeKind::Deleted,
+            ),
+            None => menu,
+        }
+    }
+}
 
 #[derive(IntoElement)]
 pub(crate) struct CommitFiles {
@@ -23,7 +55,7 @@ pub(crate) struct CommitFiles {
     rows: Vec<FileTreeRow>,
     open: Option<SharedString>,
     scroll: UniformListScrollHandle,
-    on_open: Option<Handler<DiffFile>>,
+    actions: FileActions,
     on_fold: Option<Handler<SharedString>>,
 }
 
@@ -39,9 +71,22 @@ impl CommitFiles {
             files,
             open: None,
             scroll,
-            on_open: None,
+            actions: FileActions::default(),
             on_fold: None,
         }
+    }
+
+    pub(crate) fn root(mut self, root: Option<Arc<Path>>) -> Self {
+        self.actions.root = root;
+        self
+    }
+
+    pub(crate) fn on_history(
+        mut self,
+        callback: impl Fn(&DiffFile, &mut Window, &mut App) + 'static,
+    ) -> Self {
+        self.actions.on_history = Some(handler(callback));
+        self
     }
 
     pub(crate) fn open(mut self, path: Option<SharedString>) -> Self {
@@ -53,7 +98,7 @@ impl CommitFiles {
         mut self,
         callback: impl Fn(&DiffFile, &mut Window, &mut App) + 'static,
     ) -> Self {
-        self.on_open = Some(handler(callback));
+        self.actions.on_open = Some(handler(callback));
         self
     }
 
@@ -73,7 +118,7 @@ impl RenderOnce for CommitFiles {
             rows,
             open,
             scroll,
-            on_open,
+            actions,
             on_fold,
         } = self;
         div()
@@ -94,7 +139,7 @@ impl RenderOnce for CommitFiles {
                             &FileTreeRow::File { ix, place } => {
                                 let file = &files[ix];
                                 let selected = open.as_ref() == Some(file.path());
-                                commit_file_row(file, place, selected, &on_open, cx)
+                                commit_file_row(file, place, selected, &actions, cx)
                             }
                         })
                         .collect::<Vec<_>>()
@@ -133,7 +178,7 @@ fn commit_file_row(
     file: &DiffFile,
     place: FilePlace,
     selected: bool,
-    on_open: &Option<Handler<DiffFile>>,
+    actions: &FileActions,
     cx: &App,
 ) -> AnyElement {
     let counts = if file.is_binary() {
@@ -162,8 +207,13 @@ fn commit_file_row(
         counts,
         cx,
     )
-    .when_some(on_open.clone(), |row, on_open| {
+    .when_some(actions.on_open.clone(), |row, on_open| {
         row.on_click(move |_, window, cx| on_open(&opened, window, cx))
+    })
+    .context_menu({
+        let actions = actions.clone();
+        let file = file.clone();
+        move |menu, _, _| actions.menu(menu, &file)
     })
     .into_any_element()
 }

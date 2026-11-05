@@ -20,6 +20,7 @@ const Sample = (() => {
     'Initial commit',
   ];
   const authors = ['Alex Martin', 'Sam Lee', 'Robin Chen'];
+  const emails = { 'Alex Martin': 'alex@fastgit.dev', 'Sam Lee': 'sam@fastgit.dev', 'Robin Chen': 'robin@fastgit.dev' };
   const hex = (seed) => ((seed * 2654435761) >>> 0).toString(16).padStart(8, '0').slice(0, 7);
 
   const commits = [
@@ -40,7 +41,7 @@ const Sample = (() => {
       date: `2026-10-${String(31 - ix).padStart(2, '0')} ${String(9 + (ix * 5) % 12).padStart(2, '0')}:${String((ix * 17) % 60).padStart(2, '0')}`,
       graph: [0, 1, ix === linear.length - 1 ? 'I0' : 'I0 O0'],
     })),
-  ].map((commit, ix) => ({ ...commit, id: hex(ix + 7), refs: commit.refs || [] }));
+  ].map((commit, ix) => ({ ...commit, email: emails[commit.author], id: hex(ix + 7), refs: commit.refs || [] }));
 
   const refs = [
     { name: 'feature/blame', kind: 'local', row: 9 },
@@ -179,6 +180,19 @@ const Sample = (() => {
     deletions: commitFile.deletions,
     hunks: commitFile.hunks,
     lines: 404,
+  };
+
+  const fileHistory = {
+    path: commitFile.path,
+    entries: [
+      { row: 0, kind: 'M', additions: 64, deletions: 12 },
+      { row: 1, kind: 'M', additions: 18, deletions: 41 },
+      { row: 2, kind: 'M', additions: commitFile.additions, deletions: commitFile.deletions },
+      { row: 4, kind: 'M', additions: 22, deletions: 3 },
+      { row: 7, kind: 'M', additions: 6, deletions: 6 },
+      { row: 9, kind: 'R', original: 'src/diff_panel.rs', additions: 40, deletions: 8 },
+      { row: 10, kind: 'A', additions: 87, deletions: 0 },
+    ].map((entry) => ({ ...entry, commit: commits[entry.row] })),
   };
 
   const hunk = (oldStart, newStart, scope, lines) => {
@@ -452,7 +466,7 @@ const Sample = (() => {
   };
 
   return {
-    history, collapsed, changes, partlyStaged, draft, commitDetails, commitFileDiff, fileDiff, stagedHunkDiff, partlyStagedDiff, selectedLines, tabs,
+    history, collapsed, changes, partlyStaged, draft, commitDetails, commitFileDiff, fileHistory, fileDiff, stagedHunkDiff, partlyStagedDiff, selectedLines, tabs,
     starfall, assets, slimeDiff, crownIcon, introDiff, themeDiff, modelDiff,
   };
 })();

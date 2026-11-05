@@ -1,9 +1,9 @@
-use std::sync::Arc;
+use std::{path::Path, sync::Arc};
 
 use gix::ObjectId;
 use gpui_kit::{
     App, ClipboardItem, Context, EventEmitter, InteractiveElement as _, IntoElement,
-    ParentElement as _, Render, SharedString, StatefulInteractiveElement as _, Styled as _,
+    ParentElement as _, Pixels, Render, SharedString, StatefulInteractiveElement as _, Styled as _,
     UniformListScrollHandle, Window,
     component::{
         ActiveTheme as _, Sizable as _, StyledExt as _, WindowExt as _,
@@ -29,6 +29,8 @@ use crate::{
     },
 };
 
+const AVATAR_SIZE: Pixels = px(20.);
+
 const TEXTS: PatchTexts = PatchTexts {
     loading: "Reading commit…",
     failed: "Couldn't read this commit",
@@ -43,8 +45,11 @@ struct Summary {
 
 pub(crate) struct OpenCommitFile(pub(crate) DiffFile);
 
+pub(crate) struct ShowFileHistory(pub(crate) DiffFile);
+
 pub(crate) struct CommitPanel {
     commit: Option<Commit>,
+    root: Option<Arc<Path>>,
     details: Load<Summary>,
     open: Option<SharedString>,
     folded: Folded<SharedString>,
@@ -53,10 +58,13 @@ pub(crate) struct CommitPanel {
 
 impl EventEmitter<OpenCommitFile> for CommitPanel {}
 
+impl EventEmitter<ShowFileHistory> for CommitPanel {}
+
 impl CommitPanel {
     pub(crate) fn new() -> Self {
         Self {
             commit: None,
+            root: None,
             details: Load::Idle,
             open: None,
             folded: Folded::default(),
@@ -78,6 +86,7 @@ impl CommitPanel {
             self.files_scroll = UniformListScrollHandle::new();
         }
         self.commit = Some(commit.clone());
+        self.root = Some(Arc::from(repo.location()));
         let repo = repo.clone();
         let id = commit.id;
         let task = run_in_background(
@@ -111,6 +120,20 @@ impl CommitPanel {
         self.details.value().map(|summary| summary.files.clone())
     }
 
+    pub(crate) fn commit(&self) -> Option<&Commit> {
+        self.commit.as_ref()
+    }
+
+    pub(crate) fn files_of(&self, id: ObjectId) -> Option<Arc<[DiffFile]>> {
+        self.commit.as_ref().filter(|commit| commit.id == id)?;
+        self.files()
+    }
+
+    pub(crate) fn first_parent_of(&self, id: ObjectId) -> Option<ObjectId> {
+        let commit = self.commit.as_ref().filter(|commit| commit.id == id)?;
+        commit.parents.first().copied()
+    }
+
     pub(crate) fn mark_open(&mut self, path: Option<SharedString>, cx: &mut Context<Self>) {
         if self.open != path {
             self.open = path;
@@ -132,6 +155,8 @@ impl Render for CommitPanel {
         let muted = cx.theme().muted_foreground;
         let on_open =
             cx.listener(|_, file: &DiffFile, _, cx| cx.emit(OpenCommitFile(file.clone())));
+        let on_history =
+            cx.listener(|_, file: &DiffFile, _, cx| cx.emit(ShowFileHistory(file.clone())));
         let on_fold = cx.listener(|this, folder: &SharedString, _, cx| {
             this.folded.toggle(folder.clone());
             cx.notify();
@@ -149,7 +174,9 @@ impl Render for CommitPanel {
                     self.files_scroll.clone(),
                 )
                 .open(self.open.clone())
+                .root(self.root.clone())
                 .on_open(on_open)
+                .on_history(on_history)
                 .on_fold(on_fold)
                 .into_any_element()
             },
@@ -204,6 +231,7 @@ impl Render for CommitPanel {
                             .gap_2()
                             .xs_text()
                             .text_color(muted)
+                            .child(ui::author_avatar(&commit.author, &commit.author_email, AVATAR_SIZE))
                             .child(commit.author.clone())
                             .child("·")
                             .child(commit.authored.clone()),

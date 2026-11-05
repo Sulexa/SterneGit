@@ -1,3 +1,4 @@
+mod avatar;
 mod badges;
 mod file_view;
 mod folded;
@@ -11,6 +12,7 @@ mod rows;
 mod side;
 mod text;
 
+pub(crate) use avatar::author_avatar;
 pub(crate) use badges::{additions, change_badge, deletions, ref_badge};
 pub(crate) use file_view::{FileView, FileViewToggle};
 pub(crate) use folded::Folded;

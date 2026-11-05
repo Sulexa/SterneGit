@@ -58,6 +58,11 @@ next to each file, **Stage all** / **Unstage all**, and the button above the
 comparison move files between the two lists. Edits made outside FastGit show up
 within a few seconds.
 
+Right-click a file in a commit, or a changed file, and choose **File history** to
+list every commit that changed it in place of the sidebar, newest first and across
+renames. Select one to compare the file as that commit changed it; ↑ / ↓ move
+through them, and Esc brings the sidebar and the graph back.
+
 Each repository opens in its own tab under the top bar; **+** opens another one.
 Every action is also in the File, Edit, View and About menus of the top bar
 (macOS's own menu bar on a Mac).
@@ -67,7 +72,8 @@ Every action is also in the File, Edit, View and About menus of the top bar
 - `src/git/` reads and changes the repository, and knows nothing about the UI.
   Refs and history come from gix inside the process, so a refresh starts no
   processes however large the history is; the newest 10,000 commits are read.
-  A commit's patch comes from one `git show`, uncommitted changes from
+  A commit's patch comes from one `git show`, a file's history from
+  `git log --follow`, uncommitted changes from
   `git status`, each file's comparison from `git diff`, staging from
   `git add` / `git reset`, and fetching from `git fetch`, so patches match what
   Git prints in a terminal and fetches use the user's own credentials. The

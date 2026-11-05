@@ -3,6 +3,7 @@ mod command;
 mod commit;
 mod context;
 mod facts;
+mod file_history;
 mod graph;
 mod history;
 mod hunks;
@@ -34,6 +35,7 @@ pub(crate) use branch::{CheckedOut, NameProblem, new_branch_name};
 pub(crate) use command::without_console_window;
 pub(crate) use commit::commit_message;
 pub(crate) use facts::DifftoolTarget;
+pub(crate) use file_history::{FileCommit, LineCounts};
 pub(crate) use graph::{Edge, Row};
 #[cfg(test)]
 pub(crate) use history::fixtures;

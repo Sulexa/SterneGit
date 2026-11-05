@@ -1,5 +1,5 @@
 const Screens = (() => {
-  const { history, collapsed, changes, partlyStaged, draft, commitDetails, commitFileDiff, fileDiff, partlyStagedDiff, selectedLines, tabs } = Sample;
+  const { history, collapsed, changes, partlyStaged, draft, commitDetails, commitFileDiff, fileHistory, fileDiff, partlyStagedDiff, selectedLines, tabs } = Sample;
   const { starfall, assets, slimeDiff, introDiff, themeDiff, modelDiff } = Sample;
   const selected = 2;
   const position = (row) => `Commit ${thousands(row + 1)} of ${thousands(history.total)}`;
@@ -7,10 +7,10 @@ const Screens = (() => {
   const topBar = (extra = {}) => C.TopBar({ repository: history.name, head: history.head, ...extra });
   const tabStrip = (overrides = {}) => C.TabStrip({ tabs: tabs.map((tab, ix) => ({ ...tab, ...(overrides[ix] || {}) })), active: 0 });
 
-  const repo = ({ middle, right, selectedRow = null, wipSelected = false, status = {}, toolbar }) =>
+  const repo = ({ left, middle, right, selectedRow = null, wipSelected = false, status = {}, toolbar }) =>
     C.RepoView({
       toolbar,
-      left: C.RefsList({ refs: history.refs, selectedRow, collapsed }),
+      left: left || C.RefsList({ refs: history.refs, selectedRow, collapsed }),
       middle: middle || C.HistoryList({ history, selectedRow, changes, wipSelected }),
       right,
       status: C.RepoStatusBar({
@@ -33,6 +33,15 @@ const Screens = (() => {
       selectedRow: selected,
       middle: C.FileDiffPanel({ diff: commitFileDiff, mode: 'split' }),
       right: C.CommitPanel({ commit: history.commits[selected], details: commitDetails, open: commitFileDiff.change.path }),
+    });
+
+  const fileHistoryView = () =>
+    repo({
+      selectedRow: selected,
+      left: C.FileHistoryList({ history: fileHistory, selected: 2 }),
+      middle: C.FileDiffPanel({ diff: commitFileDiff, mode: 'split' }),
+      right: C.CommitPanel({ commit: history.commits[selected], details: commitDetails, open: fileHistory.path }),
+      status: { position: Texts.historyPosition(3, fileHistory.entries.length, splitPath(fileHistory.path)[0]) },
     });
 
   const openFile = { side: fileDiff.side, path: fileDiff.change.path };
@@ -137,6 +146,25 @@ const Screens = (() => {
       render: () => C.FastGit({ topBar: topBar(), tabStrip: tabStrip(), body: commitSelected(undefined, { view: 'tree' }) }),
     },
     {
+      id: 'commit-file-menu',
+      title: "Right-click on a commit's file",
+      about: "A right-click on a file in the selected commit's list opens its menu where the pointer is, without opening the file: File history, then Open file, Show in folder and Copy path, as for a changed file. A file the commit deletes has nothing to open or show, but still has a history. The same menu opens on the files of a commit in a file's history.",
+      source: 'src/repo/commit_files.rs',
+      render: () =>
+        C.FastGit({
+          topBar: topBar(),
+          tabStrip: tabStrip(),
+          body: commitSelected(undefined, { pointed: { path: fileHistory.path, left: 150, top: 16, hot: Texts.fileHistory } }),
+        }),
+    },
+    {
+      id: 'file-history',
+      title: 'File history',
+      about: "File history puts every commit that changed the file in the left pane, in place of the refs, newest first, and follows the file through renames as git log --follow does. Each row says what the commit did to the file (added, modified, renamed, deleted) and its subject, then its author and day, or the old path for a rename, and the lines it added and removed in that file. The middle pane compares the file as the selected commit changed it with its first parent, as for any file of a commit. Opened from a commit, that commit is selected; opened from the changes list, the newest one. The right pane shows the selected commit with the file highlighted; a click on another of its files compares that file and leaves the history. Up and Down move through the file's commits; Esc or × in the file bar brings back the refs and the graph, with the same commit selected. While Git reads, the header spins and the list waits; opened from a commit, that commit is compared at once. A file no commit changed says so, and the history is read again when the branches move.",
+      source: 'src/repo/file_history.rs',
+      render: () => C.FastGit({ topBar: topBar(), tabStrip: tabStrip(), body: fileHistoryView() }),
+    },
+    {
       id: 'nothing-selected',
       title: 'History — nothing selected',
       about: 'History is read but nothing is selected yet, so the right pane asks for a selection.',
@@ -182,7 +210,7 @@ const Screens = (() => {
     {
       id: 'file-menu',
       title: 'Right-click on a changed file',
-      about: 'A right-click on a file in the changes list opens its menu where the pointer is: move it to the other list, discard its unstaged changes (Delete file… when Git does not track it), open it with its default app, show it in the file manager or copy its full path. A staged or conflicted file has no Discard; a deleted one has nothing to open or show.',
+      about: 'A right-click on a file in the changes list opens its menu where the pointer is: move it to the other list, discard its unstaged changes (Delete file… when Git does not track it), see its history, open it with its default app, show it in the file manager or copy its full path. A staged or conflicted file has no Discard; a file that is new or untracked has no history yet; a deleted one has nothing to open or show.',
       source: 'src/repo/changes_list.rs',
       render: () =>
         C.FastGit({

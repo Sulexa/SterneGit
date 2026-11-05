@@ -30,6 +30,7 @@ pub(crate) struct Commit {
     pub(crate) parents: Vec<ObjectId>,
     pub(crate) subject: SharedString,
     pub(crate) author: SharedString,
+    pub(crate) author_email: SharedString,
     pub(crate) authored: SharedString,
     pub(crate) committed: SharedString,
     committed_at: i64,
@@ -37,16 +38,26 @@ pub(crate) struct Commit {
 
 impl Commit {
     fn read(info: &Info<'_>) -> Result<Self> {
-        let commit = info.object()?;
+        Self::of(info.id, info.parent_ids.iter().copied().collect(), &info.object()?)
+    }
+
+    pub(crate) fn find(repo: &gix::Repository, id: ObjectId) -> Result<Self> {
+        let commit = repo.find_commit(id)?;
+        let parents = commit.parent_ids().map(|parent| parent.detach()).collect();
+        Self::of(id, parents, &commit)
+    }
+
+    fn of(id: ObjectId, parents: Vec<ObjectId>, commit: &gix::Commit<'_>) -> Result<Self> {
         let author = commit.author()?;
         let authored = author.time()?;
         let committed = commit.time()?;
         Ok(Self {
-            id: info.id,
-            short_id: short_id(info.id),
-            parents: info.parent_ids.iter().copied().collect(),
+            id,
+            short_id: short_id(id),
+            parents,
             subject: decode(&commit.message()?.summary()).into(),
             author: decode(author.name).into(),
+            author_email: decode(author.email).into(),
             authored: format_time(authored.seconds, authored.offset).into(),
             committed: format_time(committed.seconds, committed.offset).into(),
             committed_at: committed.seconds,
@@ -275,6 +286,7 @@ pub(crate) mod fixtures {
             parents: parents.iter().copied().map(id).collect(),
             subject: Default::default(),
             author: Default::default(),
+            author_email: Default::default(),
             authored: Default::default(),
             committed: Default::default(),
             committed_at,

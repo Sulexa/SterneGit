@@ -261,6 +261,12 @@ const Texts = {
   expandLines: (n) => `Expand ${counted(n, 'unchanged line', 'unchanged lines')}`,
   cannotShow: (type) => `FastGit can’t draw ${type} files`,
   cannotShowDescription: 'Open each version in the app that made it, or hand both to the diff tool set in Git’s diff.tool.',
+  fileHistory: 'File history',
+  openFile: 'Open file',
+  showInFolder: 'Show in folder',
+  copyPath: 'Copy path',
+  historyPosition: (at, n, name) => `Commit ${thousands(at)} of ${thousands(n)} changing ${name}`,
+  renamedFrom: (path) => `Renamed from ${path}`,
   hear: (side) => `Hear ${side === 'before' ? 'the version before the change' : 'the changed version'}  Tab switches`,
 };
 
@@ -272,6 +278,41 @@ const thousands = (n) => n.toLocaleString('en-US');
 const counted = (n, singular, plural) => `${thousands(n)} ${n === 1 ? singular : plural}`;
 
 const join = (parts) => parts.filter(Boolean).join('');
+
+const Bits64 = 0xffffffffffffffffn;
+
+function avatarHash(email) {
+  let h = 0xcbf29ce484222325n;
+  for (const byte of new TextEncoder().encode(email.trim().toLowerCase())) h = ((h ^ BigInt(byte)) * 0x100000001b3n) & Bits64;
+  h ^= h >> 33n;
+  h = (h * 0xff51afd7ed558ccdn) & Bits64;
+  h ^= h >> 33n;
+  h = (h * 0xc4ceb9fe1a85ec53n) & Bits64;
+  return h ^ (h >> 33n);
+}
+
+const AvatarGrid = 5;
+
+const AvatarHalf = Math.ceil(AvatarGrid / 2);
+
+const AvatarPatternShift = 9n;
+
+function identiconCells(hash) {
+  const cells = [];
+  for (let y = 0; y < AvatarGrid; y++)
+    for (let x = 0; x < AvatarHalf; x++)
+      if ((hash >> (AvatarPatternShift + BigInt(y * AvatarHalf + x))) & 1n) {
+        cells.push([x, y]);
+        if (x !== AvatarGrid - 1 - x) cells.push([AvatarGrid - 1 - x, y]);
+      }
+  return cells;
+}
+
+function authorInitials(name, email) {
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  if (words.length > 1) return (words[0][0] + words[words.length - 1][0]).toUpperCase();
+  return (words[0] || email.split('@')[0]).slice(0, 2).toUpperCase();
+}
 
 function foldSyncedRefs(refs) {
   const upstreamOf = (name) => `origin/${name}`;
@@ -643,11 +684,19 @@ function lineMenuItems({ side, selected = 0, changed = true }) {
   return changed ? [...hunk, '-', ...pair(PartLabels.line)] : hunk;
 }
 
+const menuGroups = (groups) => groups.map((group) => group.filter(Boolean)).filter((group) => group.length).flatMap((group, ix) => (ix ? ['-', ...group] : group));
+
+const placeItems = (kind) => [kind !== 'D' && [Texts.openFile, ''], kind !== 'D' && [Texts.showInFolder, ''], [Texts.copyPath, '']];
+
 function fileMenuItems({ change, side }) {
   const labels = SideLabels[side];
   const discard = labels.discards && change.kind !== 'U' && [change.kind === '?' ? 'Delete file…' : 'Discard changes…', ''];
-  const onDisk = change.kind !== 'D' && [['Open file', ''], ['Show in folder', '']];
-  return [[labels.fileTooltip, ''], discard, '-', ...(onDisk || []), ['Copy path', '']].filter(Boolean);
+  const committed = change.kind !== '?' && change.kind !== 'A' && [Texts.fileHistory, ''];
+  return menuGroups([[[labels.fileTooltip, ''], discard], [committed], placeItems(change.kind)]);
+}
+
+function commitFileMenuItems({ file }) {
+  return menuGroups([[[Texts.fileHistory, '']], placeItems(file.kind)]);
 }
 
 function remoteParts(name) {
@@ -762,6 +811,21 @@ const C = {
     return `<div data-c="ChangeBadge" class="change-badge" style="--c:${ChangeColors[kind]}">${esc(kind)}</div>`;
   },
 
+  AuthorAvatar({ name = '', email, size = 16, look = 'identicon' }) {
+    const hash = avatarHash(email);
+    const hue = Number(hash % 360n);
+    const ink = `hsl(${hue} 60% 62%)`;
+    const ground = `hsl(${hue} 30% 22%)`;
+    const span = AvatarGrid + 1;
+    const picture =
+      look === 'initials'
+        ? `<circle cx="${span / 2}" cy="${span / 2}" r="${span / 2}" fill="${ground}"/><text x="${span / 2}" y="${span / 2}" dy="0.36em" text-anchor="middle" font-size="2.6" font-weight="600" fill="${ink}">${esc(authorInitials(name, email))}</text>`
+        : `<rect width="${span}" height="${span}" rx="1.2" fill="${ground}"/>` +
+          identiconCells(hash).map(([x, y]) => `<rect x="${x + 0.5}" y="${y + 0.5}" width="1" height="1" fill="${ink}"/>`).join('');
+    const title = name ? `${name} <${email}>` : email;
+    return `<svg data-c="AuthorAvatar" class="author-avatar" width="${size}" height="${size}" viewBox="0 0 ${span} ${span}" shape-rendering="${look === 'initials' ? 'auto' : 'crispEdges'}"><title>${esc(title)}</title>${picture}</svg>`;
+  },
+
   Additions({ count, extraClass = '' }) {
     return `<span data-c="Additions" class="additions${extraClass ? ` ${extraClass}` : ''}">+${thousands(count)}</span>`;
   },
@@ -856,7 +920,7 @@ const C = {
     const content =
       C.GraphCell({ graph: commit.graph, merge: commit.merge, head: commit.head, width }) +
       `<div class="labels">${badges}${more}${subject}</div>` +
-      `<div class="author ellipsis xs muted">${esc(commit.author)}</div>` +
+      `<div class="author h xs muted">${C.AuthorAvatar({ name: commit.author, email: commit.email })}<span class="ellipsis">${esc(commit.author)}</span></div>` +
       `<div class="date xs muted">${esc(commit.date)}</div>` +
       `<div class="short-id xs muted mono">${esc(commit.id)}</div>`;
     return C.ListRow({ content, selected, extraClass: 'commit-row', name: 'CommitRow' });
@@ -948,6 +1012,10 @@ const C = {
     return C.Menu({ items: fileMenuItems({ change, side }), left, top, hot, name: 'FileMenu' });
   },
 
+  CommitFileMenu({ file, left = 0, top = 0, hot }) {
+    return C.Menu({ items: commitFileMenuItems({ file }), left, top, hot, name: 'CommitFileMenu' });
+  },
+
   FileViewToggle({ view = 'list' } = {}) {
     const list = C.Button({ icon: 'list', variant: 'ghost', selected: view === 'list', tooltip: Texts.listView });
     const tree = C.Button({ icon: 'list-tree', variant: 'ghost', selected: view === 'tree', tooltip: Texts.treeView });
@@ -959,7 +1027,7 @@ const C = {
     return C.ListRow({ content, extraClass: 'folder-row', name: 'FolderRow' });
   },
 
-  CommitPanel({ commit, details, state = 'ready', reason = '', open, view = 'list', collapsed }) {
+  CommitPanel({ commit, details, state = 'ready', reason = '', open, view = 'list', collapsed, pointed }) {
     if (!commit || state === 'none') return `<div data-c="CommitPanel" class="commit-panel">${C.Hint({ message: Texts.selectCommit })}</div>`;
     const ready = state === 'ready' || state === 'empty';
     const files = state === 'empty' ? [] : details.files;
@@ -977,7 +1045,7 @@ const C = {
       `<div class="panel-header">` +
       `<div class="base medium">${esc(commit.subject || '(no message)')}</div>` +
       body +
-      `<div class="h xs muted" style="gap:8px"><span>${esc(commit.author)}</span><span>·</span><span>${esc(commit.date)}</span></div>` +
+      `<div class="h xs muted" style="gap:8px">${C.AuthorAvatar({ name: commit.author, email: commit.email, size: 20 })}<span>${esc(commit.author)}</span><span>·</span><span>${esc(commit.date)}</span></div>` +
       `<div class="h xs muted" style="gap:8px"><span class="mono">${esc(commit.id)}</span>${parents ? `<span>${relation} ${esc(parents)}</span>` : ''}<div class="fill"></div>${copy}</div>` +
       stats +
       `</div>`;
@@ -988,7 +1056,7 @@ const C = {
           ? C.Failure({ title: Texts.commitFailed, reason })
           : state === 'empty'
             ? C.Hint({ message: Texts.commitEmpty })
-            : C.CommitFiles({ files, open, view, collapsed });
+            : C.CommitFiles({ files, open, view, collapsed, pointed });
     return `<div data-c="CommitPanel" class="commit-panel">${header}<div class="fill v">${content}</div></div>`;
   },
 
@@ -1002,15 +1070,16 @@ const C = {
     return C.ListRow({ content: place + trailing, selected, extraClass: 'file-row', name, base: name === 'FileRow' ? 'ListRow' : 'FileRow' });
   },
 
-  CommitFileRow({ file, depth, selected = false }) {
+  CommitFileRow({ file, depth, selected = false, menu = '' }) {
     const counts = file.binary
       ? '<div class="counts xs muted">binary</div>'
       : `<div class="counts xs">${C.Additions({ count: file.additions })}${C.Deletions({ count: file.deletions })}</div>`;
-    return C.FileRow({ kind: file.kind, path: file.path, depth, selected, trailing: counts, name: 'CommitFileRow' });
+    return C.FileRow({ kind: file.kind, path: file.path, depth, selected, trailing: counts + menu, name: 'CommitFileRow' });
   },
 
-  CommitFiles({ files, open, view = 'list', collapsed = [] }) {
-    const row = (file, depth) => C.CommitFileRow({ file, depth, selected: file.path === open });
+  CommitFiles({ files, open, view = 'list', collapsed = [], pointed }) {
+    const menu = (file) => (pointed && pointed.path === file.path ? C.CommitFileMenu({ file, left: pointed.left, top: pointed.top, hot: pointed.hot }) : '');
+    const row = (file, depth) => C.CommitFileRow({ file, depth, selected: file.path === open, menu: menu(file) });
     const rows =
       view === 'tree'
         ? fileTreeRows(fileTree(files), {
@@ -1352,6 +1421,28 @@ const C = {
             ? C.Hint({ message: Texts.fileEmpty })
             : bodies[kind]();
     return `<div data-c="FileDiffPanel" class="file-diff">${C.FileBar({ diff, state, writing, expanded, filePosition })}${viewBar}<div class="fill v">${content}</div></div>`;
+  },
+
+  FileHistoryRow({ entry, selected = false }) {
+    const { commit } = entry;
+    const subject = commit.subject
+      ? `<div class="ellipsis sm">${esc(commit.subject)}</div>`
+      : '<div class="ellipsis sm muted">(no message)</div>';
+    const counts = entry.binary
+      ? '<div class="counts xs muted">binary</div>'
+      : `<div class="counts xs">${C.Additions({ count: entry.additions })}${C.Deletions({ count: entry.deletions })}</div>`;
+    const detail = entry.original ? Texts.renamedFrom(entry.original) : `${commit.author} · ${commit.date.slice(0, 10)}`;
+    const avatar = entry.original ? '' : C.AuthorAvatar({ name: commit.author, email: commit.email, size: 14 });
+    const content =
+      C.ChangeBadge({ kind: entry.kind }) +
+      `<div class="lines">${subject}<div class="h detail">${avatar}<div class="fill ellipsis xs muted">${esc(detail)}</div>${counts}</div></div>`;
+    return C.ListRow({ content, selected, extraClass: 'file-history-row', name: 'FileHistoryRow' });
+  },
+
+  FileHistoryList({ history, selected = 0, reading = false }) {
+    const head = C.SectionHeader({ title: Texts.fileHistory, count: reading ? undefined : history.entries.length, action: reading ? C.Spinner({ size: 'xs' }) : '' });
+    const rows = reading ? '' : history.entries.map((entry, ix) => C.FileHistoryRow({ entry, selected: ix === selected })).join('');
+    return `<div data-c="FileHistoryList" class="file-history">${head}${rows}</div>`;
   },
 
   RepoStatusBar({ summary = '', position = '', fetching = false, failure }) {

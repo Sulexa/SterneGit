@@ -40,7 +40,7 @@ impl ChangeKind {
         }
     }
 
-    fn from_status_code(code: u8) -> Option<Self> {
+    pub(super) fn from_status_code(code: u8) -> Option<Self> {
         Some(match code {
             b'A' => ChangeKind::Added,
             b'M' | b'T' => ChangeKind::Modified,

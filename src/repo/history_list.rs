@@ -22,6 +22,7 @@ use crate::{
 
 const MAX_BADGES: usize = 3;
 const AUTHOR_WIDTH: Pixels = px(120.);
+const AVATAR_SIZE: Pixels = px(16.);
 const DATE_WIDTH: Pixels = px(104.);
 const ID_WIDTH: Pixels = px(56.);
 
@@ -199,13 +200,14 @@ fn commit_row(
                         ),
                 )
                 .child(
-                    div()
+                    h_flex()
                         .flex_none()
                         .w(AUTHOR_WIDTH)
-                        .truncate()
+                        .gap_1p5()
                         .xs_text()
                         .text_color(palette.muted)
-                        .child(commit.author.clone()),
+                        .child(ui::author_avatar(&commit.author, &commit.author_email, AVATAR_SIZE))
+                        .child(div().ellipsis().child(commit.author.clone())),
                 )
                 .child(
                     div()
