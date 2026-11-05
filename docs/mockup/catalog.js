@@ -532,7 +532,7 @@ const Catalog = (() => {
           name: 'BranchMenu',
           code: 'repo::branch_menu::BranchMenu',
           source: 'src/repo/branch_menu.rs',
-          about: 'The right-click menu of a local or remote branch in the RefsList, in groups: Check out; Pull and Push; Merge and Rebase with the checked-out branch; Create branch here…; Delete…. Items that cannot apply are left out: the checked-out branch has no Check out, Merge, Rebase or Delete, a remote branch has no Pull or Push, and a detached HEAD has no Merge or Rebase. Every item is disabled while Git writes; Pull and Push spin the header\'s button while they run. Check out on a remote branch switches to the local branch of the same name, or makes one that tracks it. Double-clicking the branch, in the RefsList or on its badge in a CommitRow, runs Check out without opening the menu.',
+          about: 'The right-click menu of a local or remote branch, in the RefsList or on its badge in a CommitRow, in groups: Check out; Pull and Push; Merge and Rebase with the checked-out branch; Create branch here…; Delete…. Items that cannot apply are left out: the checked-out branch has no Check out, Merge, Rebase or Delete, a remote branch has no Pull or Push, and a detached HEAD has no Merge or Rebase. Every item is disabled while Git writes; Pull and Push spin the header\'s button while they run. Check out on a remote branch switches to the local branch of the same name, or makes one that tracks it. Double-clicking the branch, in the RefsList or on its badge in a CommitRow, runs Check out without opening the menu.',
           variants: [
             ['Another local branch', () => menuFrame(C.BranchMenu({ label: ref('feature/blame'), current: 'main' }), 280)],
             ['Checked-out branch', () => menuFrame(C.BranchMenu({ label: ref('main'), current: 'main' }), 280)],
@@ -581,7 +581,7 @@ const Catalog = (() => {
           name: 'CommitRow',
           code: 'repo::history_list::commit_row',
           source: 'src/repo/history_list.rs',
-          about: 'The same 12 px left padding as every row, then the graph, up to three ref badges (then +n), subject, author 120 px with its AuthorAvatar in front, date 104 px, short id 56 px. A click selects the commit; a double-click on a branch badge that is not the checked-out branch checks that branch out, the local one for a badge that holds its upstream too.',
+          about: 'The same 12 px left padding as every row, then the graph, up to three ref badges (then +n), subject, author 120 px with its AuthorAvatar in front, date 104 px, short id 56 px. A click selects the commit; a double-click on a branch badge that is not the checked-out branch checks that branch out, and a right-click on a branch badge opens its BranchMenu, both for the local branch when the badge holds its upstream too.',
           variants: [
             ['HEAD with refs', () => C.CommitRow({ commit: commit(0), width }), { w: row }],
             ['Selected', () => C.CommitRow({ commit: commit(2), width, selected: true }), { w: row }],

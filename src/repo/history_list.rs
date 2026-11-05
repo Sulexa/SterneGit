@@ -11,7 +11,7 @@ use gpui_kit::{
     px, uniform_list,
 };
 
-use super::stash_menu::StashMenu;
+use super::{branch_menu::BranchMenu, stash_menu::StashMenu};
 use crate::{
     actions::HISTORY_CONTEXT,
     git::{History, RefLabel, ShownRef, WorkingChanges},
@@ -37,6 +37,7 @@ pub(crate) struct HistoryList {
     on_select_commit: Option<Handler<ObjectId>>,
     on_select_uncommitted: Option<Handler<()>>,
     on_check_out: Option<Handler<RefLabel>>,
+    branch_menu: Option<BranchMenu>,
     stash_menu: Option<StashMenu>,
 }
 
@@ -44,6 +45,7 @@ pub(crate) struct HistoryList {
 struct RowActions {
     on_select: Option<Handler<ObjectId>>,
     on_check_out: Option<Handler<RefLabel>>,
+    branch_menu: Option<BranchMenu>,
     stash_menu: Option<StashMenu>,
 }
 
@@ -62,8 +64,14 @@ impl HistoryList {
             on_select_commit: None,
             on_select_uncommitted: None,
             on_check_out: None,
+            branch_menu: None,
             stash_menu: None,
         }
+    }
+
+    pub(crate) fn branch_menu(mut self, menu: BranchMenu) -> Self {
+        self.branch_menu = Some(menu);
+        self
     }
 
     pub(crate) fn stash_menu(mut self, menu: StashMenu) -> Self {
@@ -123,11 +131,13 @@ impl RenderOnce for HistoryList {
             on_select_commit,
             on_select_uncommitted,
             on_check_out,
+            branch_menu,
             stash_menu,
         } = self;
         let actions = RowActions {
             on_select: on_select_commit,
             on_check_out,
+            branch_menu,
             stash_menu,
         };
         let palette = Palette::new(cx);
@@ -215,9 +225,7 @@ fn commit_row(
                             labels
                                 .iter()
                                 .take(MAX_BADGES)
-                                .map(|&shown| {
-                                    branch_badge(shown, color, actions.on_check_out.clone(), cx)
-                                }),
+                                .map(|&shown| branch_badge(shown, color, actions, cx)),
                         )
                         .when(labels.len() > MAX_BADGES, |this| {
                             this.child(
@@ -280,23 +288,26 @@ fn commit_row(
     }
 }
 
-fn branch_badge(
-    shown: ShownRef,
-    color: Hsla,
-    on_check_out: Option<Handler<RefLabel>>,
-    cx: &App,
-) -> AnyElement {
+fn branch_badge(shown: ShownRef, color: Hsla, actions: &RowActions, cx: &App) -> AnyElement {
     let label = shown.label.clone();
-    let on_check_out = on_check_out.filter(|_| label.can_be_checked_out());
-    ref_badge(shown, color, cx)
-        .when_some(on_check_out, |badge, on_check_out| {
-            badge.on_click(move |event, window, cx| {
-                if is_double_click(event) {
-                    on_check_out(&label, window, cx)
-                }
-            })
+    let on_check_out = actions
+        .on_check_out
+        .clone()
+        .filter(|_| label.can_be_checked_out());
+    let double_clicked = label.clone();
+    let badge = ref_badge(shown, color, cx).when_some(on_check_out, |badge, on_check_out| {
+        badge.on_click(move |event, window, cx| {
+            if is_double_click(event) {
+                on_check_out(&double_clicked, window, cx)
+            }
         })
-        .into_any_element()
+    });
+    match actions.branch_menu.clone().filter(|_| label.is_branch()) {
+        Some(branch_menu) => badge
+            .context_menu(move |menu, _, _| branch_menu.build(menu, &label))
+            .into_any_element(),
+        None => badge.into_any_element(),
+    }
 }
 
 fn uncommitted_row(

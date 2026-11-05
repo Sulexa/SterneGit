@@ -772,6 +772,20 @@ impl RepoView {
         ))
     }
 
+    fn branch_menu(&self, history: &History, cx: &mut Context<Self>) -> BranchMenu {
+        let repository = self.repository.read(cx);
+        BranchMenu::new(
+            history.branch.clone(),
+            repository.pull_mode(),
+            repository.is_writing(),
+        )
+        .on_action(cx.listener(
+            |this, (label, action): &(RefLabel, BranchAction), window, cx| {
+                this.act_on_branch(label.clone(), *action, window, cx)
+            },
+        ))
+    }
+
     fn act_on_branch(
         &mut self,
         label: RefLabel,
@@ -909,17 +923,7 @@ impl RepoView {
     }
 
     fn refs_list(&self, history: Arc<History>, cx: &mut Context<Self>) -> RefsList {
-        let repository = self.repository.read(cx);
-        let branch_menu = BranchMenu::new(
-            history.branch.clone(),
-            repository.pull_mode(),
-            repository.is_writing(),
-        )
-        .on_action(cx.listener(
-            |this, (label, action): &(RefLabel, BranchAction), window, cx| {
-                this.act_on_branch(label.clone(), *action, window, cx)
-            },
-        ));
+        let branch_menu = self.branch_menu(&history, cx);
         let stash_menu = self.stash_menu(cx);
         RefsList::new(history, &self.folded_refs, self.refs_scroll.clone())
             .selected(self.target.commit())
@@ -939,12 +943,14 @@ impl RepoView {
 
     fn history_list(&self, history: Arc<History>, cx: &mut Context<Self>) -> HistoryList {
         let changes = self.repository.read(cx).changes().cloned();
+        let branch_menu = self.branch_menu(&history, cx);
         let stash_menu = self.stash_menu(cx);
         HistoryList::new(
             history,
             self.middle_focus.clone(),
             self.history_scroll.clone(),
         )
+        .branch_menu(branch_menu)
         .stash_menu(stash_menu)
         .selected(self.target.commit())
         .uncommitted(changes, self.target.is_working_tree())
