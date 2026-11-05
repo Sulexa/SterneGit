@@ -12,12 +12,19 @@ symphonia = { version = "0.6.1", default-features = false, features = ["wav", "p
 cpal = "0.18.2"
 base64 = "0.22.1"
 futures = "0.3.34"
+serde = "1.0.229"
 serde_json = { version = "1.0.154", features = ["preserve_order"] }
+serde_path_to_error = "0.1.20"
 smol = "2.0.2"
 url = "2.5.8"
+fastgit-protocol = { path = "connectors/protocol" }
+wasmi = { version = "~2.0.0", default-features = false, features = ["std", "validate", "auto-dispatch"] }
 
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.62.2", features = ["Win32_Foundation", "Win32_Security_Credentials"] }
+
+[dev-dependencies]
+wat = { version = "1.228.0", default-features = false }
 
 # Dependencies are optimized even in dev builds: gix walks history and GPUI renders
 # frames far too slowly at opt-level 0, which would hide real performance problems.
@@ -27,9 +34,33 @@ debug = "limited"
 [profile.dev.package."*"]
 opt-level = 2
 
+# wasmi dispatches by tail calls that only become jumps when built as in release;
+# dev builds and tests run the connector engine with release's settings.
+[profile.dev.package.wasmi]
+opt-level = "s"
+debug-assertions = false
+overflow-checks = false
+
 [profile.release]
 lto = "thin"
 strip = true
+
+# The connector engine is an interpreter: optimizing it for size saves about 450 KB of exe
+# for 15-30% slower connectors, which still wait on the network far longer than they compute.
+[profile.release.package.wasmi]
+opt-level = "s"
+
+[profile.release.package.wasmi_core]
+opt-level = "s"
+
+[profile.release.package.wasmi_ir]
+opt-level = "s"
+
+[profile.release.package.wasmi_collections]
+opt-level = "s"
+
+[profile.release.package.wasmparser]
+opt-level = "s"
 
 [patch.crates-io]
 gpui-component = { path = "vendor/gpui-component" }

@@ -14,6 +14,21 @@ pub(crate) enum Method {
 }
 
 impl Method {
+    const ALL: [Method; 6] = [
+        Method::Get,
+        Method::Head,
+        Method::Post,
+        Method::Put,
+        Method::Patch,
+        Method::Delete,
+    ];
+
+    pub(crate) fn named(name: &str) -> Option<Self> {
+        Self::ALL
+            .into_iter()
+            .find(|method| method.name().eq_ignore_ascii_case(name))
+    }
+
     pub(crate) fn name(self) -> &'static str {
         match self {
             Method::Get => "GET",

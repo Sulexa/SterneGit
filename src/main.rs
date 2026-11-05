@@ -6,9 +6,9 @@ mod actions;
 mod app;
 mod assets;
 mod cli;
+mod connect;
 mod git;
 mod media;
-#[cfg_attr(not(test), expect(dead_code))]
 mod net;
 mod repo;
 mod settings;
@@ -26,6 +26,9 @@ fn main() {
         Invocation::Open(path) => app::run(path),
         Invocation::GitCredential { account, operation } => {
             cli::answer_git_credential(&account, &operation)
+        }
+        Invocation::ConnectorTest { folder, cassette } => {
+            cli::test_connector(&folder, cassette.as_deref())
         }
     }
 }

@@ -1,0 +1,54 @@
+{
+  "op": "pulls.list",
+  "account": {
+    "id": "github:github.com:583231",
+    "login": "octocat",
+    "endpoints": { "api": "https://api.github.com/", "web": "https://github.com/" }
+  },
+  "repo": { "owner": "octo-org", "name": "hello" },
+  "input": { "state": "open", "cursor": null },
+  "exchanges": [
+    {
+      "method": "GET",
+      "url": "https://api.github.com/rate_limit",
+      "status": 200,
+      "headers": [["x-ratelimit-remaining", "4999"]],
+      "body": "{}"
+    },
+    {
+      "method": "GET",
+      "url": "https://api.github.com/repos/octo-org/hello/pulls?state=open",
+      "status": 200,
+      "headers": [["link", "<https://api.github.com/repositories/1/pulls?state=open&page=2>; rel=\"next\""]],
+      "body": [
+        {
+          "number": 7,
+          "title": "Add a greeting",
+          "user": { "login": "octocat" },
+          "created_at": "2026-11-01T10:00:00Z",
+          "html_url": "https://github.com/octo-org/hello/pull/7"
+        }
+      ]
+    }
+  ],
+  "output": {
+    "ok": {
+      "items": [
+        {
+          "number": 7,
+          "title": "Add a greeting",
+          "state": "open",
+          "draft": false,
+          "author": { "login": "octocat", "name": null, "avatar_url": null },
+          "base": { "branch": "main", "sha": "0000000000000000000000000000000000000000", "repo": { "owner": "octo-org", "name": "hello" } },
+          "head": { "branch": "topic", "sha": "0000000000000000000000000000000000000000", "repo": { "owner": "octo-org", "name": "hello" } },
+          "review": null,
+          "created_at": "2026-11-01T10:00:00Z",
+          "updated_at": "2026-11-01T10:00:00Z",
+          "web_url": "https://github.com/octo-org/hello/pull/7"
+        }
+      ],
+      "next": "https://api.github.com/repositories/1/pulls?state=open&page=2"
+    }
+  }
+}

@@ -41,6 +41,10 @@ impl Cancel {
     pub(crate) async fn cancelled(&self) {
         while self.0.recv().await.is_ok() {}
     }
+
+    pub(crate) fn is_cancelled(&self) -> bool {
+        self.0.is_closed()
+    }
 }
 
 pub(crate) trait HostServices: Send + Sync + 'static {

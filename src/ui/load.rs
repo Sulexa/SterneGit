@@ -120,8 +120,16 @@ pub(crate) fn run_in_background<V: 'static, R: Send + 'static>(
     work: impl FnOnce() -> R + Send + 'static,
     then: impl FnOnce(&mut V, R, &mut Context<V>) + 'static,
 ) -> Task<()> {
+    run_async_in_background(cx, async move { work() }, then)
+}
+
+pub(crate) fn run_async_in_background<V: 'static, R: Send + 'static>(
+    cx: &mut Context<V>,
+    work: impl Future<Output = R> + Send + 'static,
+    then: impl FnOnce(&mut V, R, &mut Context<V>) + 'static,
+) -> Task<()> {
     cx.spawn(async move |this, cx| {
-        let result = cx.background_spawn(async move { work() }).await;
+        let result = cx.background_spawn(work).await;
         let _ = this.update(cx, |this, cx| then(this, result, cx));
     })
 }

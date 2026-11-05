@@ -21,7 +21,7 @@ Chosen on 2026-11-05. This is the reference for building connectors and drawing 
 | Sign-in | Device flow by default; a pasted token; or the token Git Credential Manager holds, after the user agrees. |
 | Tokens | In the OS credential store, under FastGit's own names. FastGit is git's credential helper for the remotes its accounts cover. |
 | SSH | One ed25519 key per account, set per repository with `core.sshCommand`. `~/.ssh/config` is never edited. |
-| Size | No cap; reported. The measured estimate is about 1.4 MB of exe before the new screens. |
+| Size | No cap; reported. Measured after milestone 2: +1.89 MB of exe before the new screens (engine 1.36 MB, decoding every answer 0.27 MB, `serde_path_to_error` 0.26 MB). |
 | SDK docs | The SDK is comment-free like the rest of FastGit, documented in `docs/connectors/authoring.md`. |
 
 ## Words
@@ -168,7 +168,7 @@ wasmi 2.0.x, pinned to its minor version, with `default-features = false` and va
 - **Memory:**
   - 64 MB per instance, one memory, one instance, four tables, 20,000 table elements;
   - growth past a limit traps;
-  - the SDK links a 128 KiB stack, so an instance takes about 160 KiB.
+  - the SDK sets a 128 KiB stack, so an instance takes about 160 KiB. A library can't pass link flags to the crate using it, so a connector's `build.rs` calls `fastgit_sdk::build::link_small_stack()`. Measured on a 0.2 MB test connector: 192 KiB at start, 256 KiB after a call.
 - **CPU:**
   - fuel in slices of 20 M (6–15 ms); at each slice the call yields, which is where cancellation lands, then refuels;
   - 50 slices per call, and 200 for operations that page through lists;
@@ -177,6 +177,7 @@ wasmi 2.0.x, pinned to its minor version, with `default-features = false` and va
 
 ```rust
 pub(crate) enum Stop {
+    Refused(String),
     Trapped { message: String, log: Vec<String> },
     OutOfFuel,
     OutOfMemory,
@@ -185,8 +186,10 @@ pub(crate) enum Stop {
 }
 ```
 
+- **`Refused`** is a module that never runs: not valid WebAssembly, a foreign import, a start function, no `memory` or `fastgit_call(i32) -> i32` export, or a `hello` answering a newer major protocol.
 - **`BadOutput`** comes from deserializing the result through `serde_path_to_error`, so an author reads `items[0].clone: missing field https`.
 - **The SDK's panic hook** logs the message before trapping.
+- **wasmi 2.0.0 and the dev profile.** Built at opt-level 2 or 3 in the dev profile, wasmi's tail-call dispatch overflows the stack on long loops, and `Caller::get_export` inside a host function reads a bad instance pointer and crashes. At `"s"`, as in release, both work. So dev builds and tests compile wasmi exactly like release, and the host functions take the memory from the call's data, never from `get_export`.
 
 ## 5. ABI 1
 
@@ -199,10 +202,12 @@ pub(crate) enum Stop {
 | `log(level, text, len: i32)` | One log line; 64 KB per call at most. |
 | `now() -> i64` | Unix time in milliseconds. |
 
-- **Exports:** the module exports `memory` and `fastgit_call(input_len: i32) -> i32`.
+- **Exports:** the module exports `memory` and `fastgit_call(input_len: i32) -> i32`. It returns 0; any other status stops the call, and so does returning without one `finish`.
 - **Who allocates:** the guest does all the allocating, so the host never calls into it.
-- **Request head:** `{"method","url","headers"}`. A relative `url` is resolved against the account's `api` endpoint.
-- **Response:** a `u32` head length, the head `{"status","headers"}`, then the raw body.
+- **Request head:** `{"method","url","headers"}`, headers as `[name, value]` pairs. A relative `url`, with or without its leading `/`, goes under the account's `api` endpoint, so `/user/repos` reaches `{server}/api/v3/user/repos` on Enterprise Server.
+- **Response:** a little-endian `u32` head length, the head `{"status","headers"}`, then the raw body.
+- **Per call:** at most 16 requests sent and not yet read, and 32 MB of request bodies on their way. A pointer outside the guest's memory, a `wait` for a request never sent or already read, or a broken head stops the call.
+- **Log levels:** 0 debug, 1 info, 2 warn, 3 error.
 - **Transport failures end the call.** If the host can't complete a request (`NetError`: not signed in, origin not allowed, timeout, TLS, proxy, too large, cancelled), the call stops with `CallError::Net`. The guest never sees them; a connector couldn't recover from any of them, and this way every screen handles them alike. This replaces the `error` field in wasmi.md's response head.
 
 ## 6. Protocol 1.0
@@ -234,6 +239,13 @@ A call's input is `{"op", "account", "repo", "input"}`. Its output is `{"ok": �
 | `pulls.merge` | pulls.merge | `Merge` | `Merged` |
 
 Publishing is `repositories.create` with `initialize: false`; FastGit then adds the remote and pushes. A review stays a draft in FastGit until one `pulls.review` submits it.
+
+- **`hello`** carries FastGit's protocol with `sdk: null`; the connector answers its own protocol and SDK version.
+- **No input** is sent as `null`.
+- **Inputs in braces** have names in `connectors/protocol`: `PullsQuery`, `BranchQuery`, `PullNumber`, `CommitQuery`, `ConversationQuery`, `NewComment`, `NewReply`, `Resolution`. `pulls.list` filters by `StateFilter`: `open`, `closed`, `all`.
+- **`ops`** lists every operation once, with its name, input, output and whether it needs `repo`; FastGit's `Forge` and the SDK's dispatch both use it.
+- **`Failure`** also has an `Unknown` fallback, and `Unsupported` reaches screens as `CallError::Unavailable`.
+- **A cassette** is one call and its exchanges: `{"op", "account", "repo", "input", "exchanges": [{"method", "url", "status", "headers", "body"}], "output"}`. A `body` that is a string is sent as is, anything else as JSON. Each exchange answers one request with the same method and URL, in order. `output`, when present, is the answer expected.
 
 The types, in `connectors/protocol`:
 
@@ -637,8 +649,12 @@ Gitea needs no FastGit change and should be about 700–900 lines.
   - whether curl is present on minimal Linux installs;
   - NTLM-only proxies, since System32's curl lacks NTLM;
   - the scoped helper reset on Git 2.26, the README's minimum;
-  - FastGit's real exe delta;
   - anything on macOS or Linux.
+- **Measured at milestone 2,** against a release build of d58113f (37,505,024 B):
+  - +1,886,208 B (+5.03%) in all; thin LTO moves a build by about 80 KB;
+  - without checking answers against their types, +1,355,264 B: wasmi, the engine, `--connector-test` and the envelope;
+  - typed answers decoded by plain serde, +271,360 B; `serde_path_to_error` on top of them, +259,584 B;
+  - a test connector built with the SDK: 202,446 B of wasm, started in 4.7–5.7 ms, 256 KiB of memory after a call; an endless loop stopped after 50 slices in 0.41 s, a memory hog at 64 MiB in 30 ms.
 - **Later:**
   - avatars, fetched in batches through curl into a cache and drawn with `img(path)`;
   - libcurl at run time;

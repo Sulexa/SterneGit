@@ -3,6 +3,8 @@ use std::{
     path::{Path, PathBuf},
 };
 
+const BUILD_OUTPUT: &str = "target";
+
 #[test]
 fn the_sources_carry_no_comments() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
@@ -10,6 +12,7 @@ fn the_sources_carry_no_comments() {
     for file in rust_files(&root.join("src"))
         .into_iter()
         .chain(rust_files(&root.join("tests")))
+        .chain(rust_files(&root.join("connectors")))
     {
         let source = fs::read_to_string(&file).expect("sources are UTF-8");
         let shown = file
@@ -47,7 +50,9 @@ fn rust_files(dir: &Path) -> Vec<PathBuf> {
     };
     let mut files = Vec::new();
     for path in entries.filter_map(|entry| entry.ok().map(|entry| entry.path())) {
-        if path.is_dir() {
+        if path.is_dir() && path.file_name().is_some_and(|name| name == BUILD_OUTPUT) {
+            continue;
+        } else if path.is_dir() {
             files.extend(rust_files(&path));
         } else if path.extension().is_some_and(|extension| extension == "rs") {
             files.push(path);

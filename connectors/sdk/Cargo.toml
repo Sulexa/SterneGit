@@ -1,0 +1,12 @@
+[package]
+name = "fastgit-sdk"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+fastgit-protocol = { path = "../protocol" }
+serde = "1.0.229"
+serde_json = "1.0.154"
+
+[workspace]

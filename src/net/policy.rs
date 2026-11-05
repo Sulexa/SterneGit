@@ -47,6 +47,18 @@ impl AllowList {
         }
     }
 
+    pub(crate) fn of_endpoints(endpoints: impl IntoIterator<Item = Url>) -> Self {
+        Self {
+            entries: endpoints
+                .into_iter()
+                .map(|base| Entry {
+                    base,
+                    carries_token: false,
+                })
+                .collect(),
+        }
+    }
+
     pub(crate) fn admit(&self, url: &Url) -> Option<Admission> {
         if !url.username().is_empty() || url.password().is_some() {
             return None;

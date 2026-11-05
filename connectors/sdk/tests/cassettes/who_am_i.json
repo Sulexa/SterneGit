@@ -1,0 +1,20 @@
+{
+  "op": "account.who_am_i",
+  "account": {
+    "id": "github:github.com:583231",
+    "login": "octocat",
+    "endpoints": { "api": "https://api.github.com/", "web": "https://github.com/" }
+  },
+  "exchanges": [
+    {
+      "method": "GET",
+      "url": "https://api.github.com/user",
+      "status": 200,
+      "headers": [["content-type", "application/json"], ["x-oauth-scopes", "repo, read:org"]],
+      "body": { "login": "octocat", "name": "The Octocat", "id": 583231 }
+    }
+  ],
+  "output": {
+    "ok": { "login": "octocat", "name": "The Octocat", "avatar_url": null, "scopes": ["repo", "read:org"] }
+  }
+}
