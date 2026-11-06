@@ -6,11 +6,13 @@ use gix::{ObjectId, state::InProgress};
 use super::{
     Carried, Repo,
     command::{Exit, run},
-    history::short_id,
+    history::{Commit, short_id},
     refs::{RefKind, RefLabel, read_labels},
 };
 
 const REBASE_FOLDERS: [&str; 2] = ["rebase-merge", "rebase-apply"];
+const CHERRY_PICK_HEAD: &str = "CHERRY_PICK_HEAD";
+const REVERT_HEAD: &str = "REVERT_HEAD";
 const BRANCHES: &str = "refs/heads/";
 const QUOTE: char = '\'';
 
@@ -18,6 +20,14 @@ const QUOTE: char = '\'';
 pub(crate) enum Underway {
     Rebase(Rebasing),
     Merge(Merging),
+    CherryPick(Picking),
+    Revert(Picking),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub(crate) struct Picking {
+    pub(crate) branch: String,
+    pub(crate) commit: Replaying,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -44,22 +54,34 @@ pub(crate) struct Merging {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Continued {
     Finished(Carried),
+    Emptied(Carried),
     StoppedAgain,
 }
 
 impl Underway {
-    fn finish_args(&self) -> [&'static str; 2] {
+    fn command(&self) -> &'static str {
         match self {
-            Underway::Rebase(_) => ["rebase", "--continue"],
-            Underway::Merge(_) => ["merge", "--continue"],
+            Underway::Rebase(_) => "rebase",
+            Underway::Merge(_) => "merge",
+            Underway::CherryPick(_) => "cherry-pick",
+            Underway::Revert(_) => "revert",
         }
     }
 
+    fn finish_args(&self) -> [&'static str; 2] {
+        [self.command(), "--continue"]
+    }
+
     fn abort_args(&self) -> [&'static str; 2] {
-        match self {
-            Underway::Rebase(_) => ["rebase", "--abort"],
-            Underway::Merge(_) => ["merge", "--abort"],
-        }
+        [self.command(), "--abort"]
+    }
+
+    fn skip_args(&self) -> [&'static str; 2] {
+        [self.command(), "--skip"]
+    }
+
+    fn picks(&self) -> bool {
+        matches!(self, Underway::CherryPick(_) | Underway::Revert(_))
     }
 }
 
@@ -74,9 +96,13 @@ impl Repo {
         };
         let before = self.latest_stash();
         match run(&self.location, &underway.finish_args(), Exit::Success) {
-            Ok(_) => Ok(Continued::Finished(self.carried_since(before))),
+            Ok(_) => self.done_with(&underway, before).map(Continued::Finished),
             Err(_) if self.underway().is_some() && self.has_conflicts() => {
                 Ok(Continued::StoppedAgain)
+            }
+            Err(_) if underway.picks() && self.underway().is_some() => {
+                self.skip_underway()?;
+                self.done_with(&underway, before).map(Continued::Emptied)
             }
             Err(error) => Err(error),
         }
@@ -88,7 +114,22 @@ impl Repo {
         };
         let before = self.latest_stash();
         run(&self.location, &underway.abort_args(), Exit::Success)?;
-        Ok(self.carried_since(before))
+        self.done_with(&underway, before)
+    }
+
+    pub(super) fn skip_underway(&self) -> Result<()> {
+        match self.underway() {
+            Some(underway) => run(&self.location, &underway.skip_args(), Exit::Success).map(drop),
+            None => Ok(()),
+        }
+    }
+
+    fn done_with(&self, underway: &Underway, before: Option<ObjectId>) -> Result<Carried> {
+        if underway.picks() {
+            self.bring_back_set_aside()
+        } else {
+            Ok(self.carried_since(before))
+        }
     }
 }
 
@@ -98,8 +139,34 @@ pub(super) fn underway_in(repo: &gix::Repository) -> Option<Underway> {
             rebasing(repo).map(Underway::Rebase)
         }
         InProgress::Merge => merging(repo).map(Underway::Merge),
+        InProgress::CherryPick | InProgress::CherryPickSequence => {
+            picking(repo, CHERRY_PICK_HEAD).map(Underway::CherryPick)
+        }
+        InProgress::Revert | InProgress::RevertSequence => {
+            picking(repo, REVERT_HEAD).map(Underway::Revert)
+        }
         _ => None,
     }
+}
+
+fn picking(repo: &gix::Repository, head_file: &str) -> Option<Picking> {
+    let hex = read_trimmed(&repo.git_dir().join(head_file))?;
+    let id = ObjectId::from_hex(hex.as_bytes()).ok()?;
+    let subject = Commit::find(repo, id).map_or_else(|_| String::new(), |commit| commit.subject.to_string());
+    Some(Picking {
+        branch: head_branch(repo),
+        commit: Replaying {
+            id: short_id(id).to_string(),
+            subject,
+        },
+    })
+}
+
+fn head_branch(repo: &gix::Repository) -> String {
+    repo.head_name()
+        .ok()
+        .flatten()
+        .map_or_else(|| "HEAD".to_owned(), |name| name.shorten().to_string())
 }
 
 pub(super) fn rebased_branch(repo: &gix::Repository) -> Option<String> {
@@ -138,11 +205,7 @@ fn rebasing(repo: &gix::Repository) -> Option<Rebasing> {
 fn merging(repo: &gix::Repository) -> Option<Merging> {
     let git_dir = repo.git_dir();
     let head = read_trimmed(&git_dir.join("MERGE_HEAD"))?;
-    let into = repo
-        .head_name()
-        .ok()
-        .flatten()
-        .map_or_else(|| "HEAD".to_owned(), |name| name.shorten().to_string());
+    let into = head_branch(repo);
     let from = read_trimmed(&git_dir.join("MERGE_MSG"))
         .and_then(|message| quoted_name(&message))
         .or_else(|| {

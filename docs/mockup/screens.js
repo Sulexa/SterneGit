@@ -176,6 +176,58 @@ const Screens = (() => {
         }),
     },
     {
+      id: 'commit-menu',
+      title: 'Right-click on a commit',
+      about: "A right-click on a commit row in the graph opens its menu where the pointer is, without selecting it. Check out this commit checks out the commit itself: HEAD is detached and the head pill reads detached at its id; uncommitted changes in the way are stashed and brought back, as for a branch. Create branch here… and Create tag here… start a branch or a tag at the commit. Revert this commit adds a commit on main that undoes it; a merge is reverted against its first parent. Reset main to here opens a submenu that moves main to the commit: Soft keeps what main leaves behind staged, Mixed keeps it unstaged, and Hard asks first, then throws every uncommitted change away. Copy hash copies the full hash and Copy message the whole message, each with a notification. The HEAD commit has no Check out and no Reset. Every Git write runs like the branch menu's: one at a time, items disabled while one runs, then a notification such as Reverted b47d0a8 or Reset main to b47d0a8; its changes are unstaged. While a rebase, a merge, a cherry-pick or a revert waits, only Create tag here… and the two Copy items stay enabled, since Git won't switch branches then.",
+      source: 'src/repo/commit_menu.rs',
+      render: () =>
+        C.SterneGit({
+          topBar: topBar(),
+          tabStrip: tabStrip(),
+          body: commitSelected(),
+          overlays: C.CommitMenu({ commit: history.commits[1], current: history.head, left: 440, top: 186, hot: Texts.resetHere(history.head), reset: 'mixed' }),
+        }),
+    },
+    {
+      id: 'commit-menu-other-branch',
+      title: 'Right-click on a commit of another branch',
+      about: "On a commit that main doesn't hold, Revert gives way to Cherry-pick onto main, which copies the commit onto main as a new commit with the same message and author. A merge has no Cherry-pick. Git refuses to cherry-pick or revert over staged changes or over changes to the files it touches, so SterneGit stashes the uncommitted changes first and brings them back after. When a cherry-pick or a revert conflicts, the OperationBar shows it as for a merge: the conflicted files open in the MergeEditor, then Commit finishes it, or Abort puts main back. Meanwhile the changes wait in a stash named Set aside by SterneGit until the cherry-pick or revert is done, which Commit and Abort bring back. A commit whose changes main already has, or a resolution that leaves main as it was, adds nothing: the notification says main already has the changes. With a detached HEAD the menu says HEAD where it says main here.",
+      source: 'src/repo/commit_menu.rs',
+      render: () =>
+        C.SterneGit({
+          topBar: topBar(),
+          tabStrip: tabStrip(),
+          body: commitSelected(),
+          overlays: C.CommitMenu({ commit: history.commits[4], current: history.head, reachable: false, left: 440, top: 268, hot: Texts.cherryPick(history.head) }),
+        }),
+    },
+    {
+      id: 'reset-hard',
+      title: 'Reset hard',
+      about: "Hard: discard changes… always asks first, because Git keeps no copy of uncommitted changes. The question counts the tracked files whose changes are lost, and the commits that no other branch or tag holds, which leave the graph. Reset then runs git reset --hard; untracked files stay. Soft and Mixed don't ask, since every change stays in the files. When main ends up behind its upstream, the next Push is refused and offers Pull and push or Force push, as usual.",
+      source: 'src/repo/commit_menu.rs',
+      render: () =>
+        C.SterneGit({
+          topBar: topBar(),
+          tabStrip: tabStrip(),
+          body: commitSelected(),
+          overlays: C.ResetHardDialog({ branch: history.head, commit: history.commits[1], files: [...changes.staged, ...changes.unstaged].filter((change) => change.kind !== '?').length }),
+        }),
+    },
+    {
+      id: 'create-tag',
+      title: 'Create a tag',
+      about: "Create tag here… asks for a name and an optional message. With a message it makes an annotated tag, which keeps its author and date; without one, a lightweight tag. Create tag stays disabled while the name is empty, already a tag, or refused by Git, and the reason shows under the field. Push it to origin pushes the tag right after, since Push sends branches only; it is offered when the repository has a remote and stays as it was last left. Enter creates, Esc cancels. The tag shows at once in the left pane and on the commit's row.",
+      source: 'src/repo/tag_dialog.rs',
+      render: () =>
+        C.SterneGit({
+          topBar: topBar(),
+          tabStrip: tabStrip(),
+          body: commitSelected(),
+          overlays: C.TagDialog({ commit: history.commits[1], value: 'v0.3.0', remote: 'origin' }),
+        }),
+    },
+    {
       id: 'stashes',
       title: 'Stashes',
       about: 'Stashes get a section of their own in the left pane, between Remotes and Tags, newest first, each with its message as Git wrote it; it folds like the others and is left out when there is no stash. In the graph each stash is a row at the time it was made: a hollow square in the lane of the commit it was made on, joined to that commit, with a stash@{n} badge. Git also keeps a commit for the staged part of a stash and one for its untracked files; the graph leaves those out. Clicking a stash in the left pane or in the graph selects it, and the right pane shows what it changes in tracked files against the commit it was made on, as for any commit. The status bar counts the stashes, and says which one is selected; commit positions skip the stash rows.',

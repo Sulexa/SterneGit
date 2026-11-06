@@ -109,6 +109,12 @@ impl Repo {
         Ok(CommitDetails { body, patch })
     }
 
+    pub(crate) fn message(&self, id: ObjectId) -> Result<String> {
+        let local = self.local();
+        let commit = local.find_commit(id)?;
+        Ok(decode(commit.message_raw_sloppy()).trim_end().to_owned())
+    }
+
     #[cfg(test)]
     pub(crate) fn file_patch(&self, change: &FileChange, side: Side) -> Result<FilePatch> {
         self.file_patch_with(change, side, Whitespace::Compared)

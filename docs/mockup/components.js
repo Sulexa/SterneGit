@@ -170,10 +170,22 @@ const ConflictTexts = {
 const OperationTexts = {
   rebase: (op) => `Rebasing ${op.branch} onto ${op.onto}`,
   merge: (op) => `Merging ${op.from} into ${op.into}`,
-  abort: { rebase: 'Abort rebase', merge: 'Abort merge' },
-  abortTooltip: { rebase: 'Put the branch back where it was before the rebase', merge: 'Put the branch back where it was before the merge' },
-  go: { rebase: 'Continue', merge: 'Commit merge' },
-  goTooltip: { rebase: 'Commit the resolved changes and replay the next commits', merge: 'Commit the merge with its usual message' },
+  'cherry-pick': (op) => `Cherry-picking onto ${op.onto}`,
+  revert: (op) => `Reverting on ${op.branch}`,
+  abort: { rebase: 'Abort rebase', merge: 'Abort merge', 'cherry-pick': 'Abort cherry-pick', revert: 'Abort revert' },
+  abortTooltip: {
+    rebase: 'Put the branch back where it was before the rebase',
+    merge: 'Put the branch back where it was before the merge',
+    'cherry-pick': 'Put the branch back where it was before the cherry-pick',
+    revert: 'Put the branch back where it was before the revert',
+  },
+  go: { rebase: 'Continue', merge: 'Commit merge', 'cherry-pick': 'Commit', revert: 'Commit revert' },
+  goTooltip: {
+    rebase: 'Commit the resolved changes and replay the next commits',
+    merge: 'Commit the merge with its usual message',
+    'cherry-pick': "Commit the resolved changes with the picked commit's message and author",
+    revert: 'Commit the resolved changes with the usual Revert message',
+  },
   waiting: (n) => `Resolve the ${counted(n, 'conflicted file', 'conflicted files')} first`,
   noConflicts: 'No conflicts left',
 };
@@ -336,6 +348,35 @@ const Texts = {
   deleteStash: (name) => `Delete ${name}…`,
   deleteStashTitle: (name) => `Delete ${name}?`,
   deleteStashDescription: (message) => `Git keeps no other copy of “${message}”, so its changes are lost.`,
+  checkOutCommit: 'Check out this commit',
+  tagHere: 'Create tag here…',
+  revertCommit: 'Revert this commit',
+  revertMerge: 'Revert this merge',
+  cherryPick: (branch) => `Cherry-pick onto ${branch}`,
+  resetHere: (branch) => `Reset ${branch} to here`,
+  resetModes: { soft: 'Soft: keep changes staged', mixed: 'Mixed: keep changes unstaged', hard: 'Hard: discard changes…' },
+  copyHash: 'Copy hash',
+  copyMessage: 'Copy message',
+  messageCopied: 'Commit message copied',
+  checkedOutCommit: (id) => `Checked out ${id}: HEAD is detached`,
+  resetDone: (branch, id) => `Reset ${branch} to ${id}`,
+  reverted: (id) => `Reverted ${id}`,
+  cherryPicked: (id, branch) => `Cherry-picked ${id} onto ${branch}`,
+  resetHardTitle: (branch, id) => `Reset ${branch} to ${id} and discard changes?`,
+  resetHardFiles: (n) =>
+    n
+      ? `Every tracked file goes back to that commit: the uncommitted changes in ${counted(n, 'file', 'files')} are thrown away, and Git keeps no copy of them. Untracked files stay.`
+      : 'Every tracked file goes back to that commit. There are no uncommitted changes to lose.',
+  resetHardLost: (n) => `${counted(n, 'commit is', 'commits are')} on no other branch or tag, so ${n === 1 ? 'it leaves' : 'they leave'} the graph.`,
+  tagTitle: 'Create a tag',
+  tagDescription: (start) => `It points to ${start}. With a message it is an annotated tag, without one a lightweight tag.`,
+  tagPlaceholder: 'Tag name',
+  tagMessagePlaceholder: 'Message (optional)',
+  tagExists: (name) => `There is already a tag named ${name}.`,
+  pushTag: (remote) => `Push it to ${remote}`,
+  createTag: 'Create tag',
+  tagCreated: (name, id) => `Created tag ${name} at ${id}`,
+  tagPushed: (name, remote) => `Created tag ${name} and pushed it to ${remote}`,
   deleteBranch: (name) => `Delete ${name}…`,
   deleteRemoteBranch: (name, remote) => `Delete ${name} from ${remote}…`,
   deleteBranchTitle: (name) => `Delete ${name}?`,
@@ -1140,6 +1181,21 @@ function branchMenuItems({ label, current, mode = 'merge', pull }) {
 function stashMenuItems({ stash }) {
   const item = (text) => [text, ''];
   return [item(Texts.applyStash(stash.name)), item(Texts.popStash(stash.name)), '-', item(Texts.deleteStash(stash.name))];
+}
+
+const ResetModes = ['soft', 'mixed', 'hard'];
+
+function commitMenuItems({ commit, current, reachable = true, reset }) {
+  const item = (text) => [text, ''];
+  const branch = current || 'HEAD';
+  const modes = { items: ResetModes.map((mode) => item(Texts.resetModes[mode])), open: Boolean(reset), hot: reset && Texts.resetModes[reset] };
+  const undo = reachable ? item(commit.merge ? Texts.revertMerge : Texts.revertCommit) : !commit.merge && item(Texts.cherryPick(branch));
+  return menuGroups([
+    [!commit.head && item(Texts.checkOutCommit)],
+    [item(Texts.branchHere), item(Texts.tagHere)],
+    [undo, !commit.head && [Texts.resetHere(branch), '', modes]],
+    [item(Texts.copyHash), item(Texts.copyMessage)],
+  ]);
 }
 
 const typedOrigin = (origin) => origin.startsWith('{');
@@ -2177,10 +2233,8 @@ const C = {
     const { kind } = operation;
     const stuck = conflicts > 0;
     const glyph = stuck ? icon('triangle-alert', 'md', 'var(--yellow)') : icon('circle-check', 'md', 'var(--green)');
-    const step =
-      kind === 'rebase'
-        ? `<span class="muted">Commit ${operation.step} of ${operation.total}</span><span class="mono muted">${esc(operation.commit.id)}</span><span class="ellipsis">${esc(operation.commit.subject)}</span>`
-        : '';
+    const stopped = operation.commit ? `<span class="mono muted">${esc(operation.commit.id)}</span><span class="ellipsis">${esc(operation.commit.subject)}</span>` : '';
+    const step = kind === 'rebase' ? `<span class="muted">Commit ${operation.step} of ${operation.total}</span>${stopped}` : stopped;
     const state = stuck
       ? `<span class="conflict-count">${esc(counted(conflicts, 'conflicted file', 'conflicted files'))}</span>`
       : `<span class="resolved">${esc(OperationTexts.noConflicts)}</span>`;
@@ -2217,6 +2271,28 @@ const C = {
     return C.AlertDialog({ title: Texts.deleteStashTitle(stash.name), description: Texts.deleteStashDescription(stash.message), confirm: 'Delete', name: 'DeleteStashDialog' });
   },
 
+  CommitMenu({ commit, current, reachable = true, reset, left = 0, top = 0, hot }) {
+    return C.Menu({ items: commitMenuItems({ commit, current, reachable, reset }), left, top, hot, name: 'CommitMenu' });
+  },
+
+  ResetHardDialog({ branch, commit, files, lost = 0 }) {
+    const description = [Texts.resetHardFiles(files), lost && Texts.resetHardLost(lost)].filter(Boolean).join(' ');
+    return C.AlertDialog({ title: Texts.resetHardTitle(branch, commit.id), description, confirm: 'Reset', name: 'ResetHardDialog' });
+  },
+
+  TagDialog({ commit, value = '', message = '', problem, remote, push = false }) {
+    const name = C.Input({ value, placeholder: Texts.tagPlaceholder, focused: !message });
+    const hint = problem ? `<div class="xs problem">${esc(problem)}</div>` : '';
+    const body = C.Input({ value: message, placeholder: Texts.tagMessagePlaceholder, lines: 3, focused: Boolean(message) });
+    const pushBox = remote ? `<div class="h">${C.Checkbox({ label: Texts.pushTag(remote), checked: push })}</div>` : '';
+    const buttons =
+      C.Button({ label: 'Cancel', size: 'md' }) +
+      C.Button({ label: Texts.createTag, variant: 'primary', size: 'md', disabled: !value || Boolean(problem) });
+    const close = `<span class="close">${icon('close', 'sm')}</span>`;
+    const description = Texts.tagDescription(`${commit.id}, “${commit.subject}”`);
+    return `<div class="overlay"><div data-c="TagDialog" data-base="Dialog" class="dialog">${close}<div class="base semibold">${esc(Texts.tagTitle)}</div><div class="sm muted">${esc(description)}</div><div class="v field">${name}${hint}</div><div class="v field">${body}</div>${pushBox}<div class="footer stretch">${buttons}</div></div></div>`;
+  },
+
   DeleteBranchDialog({ label, only = 0 }) {
     if (label.kind === 'remote') {
       const { remote, branch } = remoteParts(label.name);
@@ -2246,13 +2322,12 @@ const C = {
   },
 
   Menu({ items, left = 0, top = 0, hot, name = 'Menu' }) {
-    const rows = items
-      .map((item) =>
-        item === '-'
-          ? '<div class="separator"></div>'
-          : `<div class="item${item[0] === hot ? ' hot' : ''}"><span class="label">${esc(item[0])}</span><span class="keys">${esc(item[1])}</span></div>`,
-      )
-      .join('');
+    const row = ([label, keys, sub]) => {
+      const end = sub ? icon('chevron-right', 'sm', 'var(--muted)') : `<span class="keys">${esc(keys)}</span>`;
+      const open = sub && sub.open ? C.Menu({ items: sub.items, left: 'calc(100% + 8px)', top: -5, hot: sub.hot }) : '';
+      return `<div class="item${label === hot ? ' hot' : ''}${sub ? ' parent' : ''}"><span class="label">${esc(label)}</span>${end}${open}</div>`;
+    };
+    const rows = items.map((item) => (item === '-' ? '<div class="separator"></div>' : row(item))).join('');
     const length = (value) => (typeof value === 'number' ? `${value}px` : value);
     return `<div data-c="${name}" data-base="PopupMenu" class="menu sm" style="left:${length(left)};top:${length(top)}">${rows}</div>`;
   },

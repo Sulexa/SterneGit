@@ -4,6 +4,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+use gix::ObjectId;
 use gpui_kit::{Context, EventEmitter, SharedString};
 
 use super::{
@@ -14,8 +15,8 @@ use crate::{
     accounts,
     git::{
         self, Attendance, Behind, CheckedOut, FileChange, History, PartAction, PullMode,
-        PullSource, RefLabel, RemoteBranch, Repo, Scope, Side, Stash, Underway, Version,
-        WorkingChanges,
+        PullSource, RefLabel, RemoteBranch, Repo, ResetMode, Scope, Side, Stash, Underway,
+        Version, WorkingChanges, short_id,
     },
     ui::{Failure, Job, Load, run_in_background},
 };
@@ -528,6 +529,96 @@ impl Repository {
             },
             cx,
         );
+    }
+
+    pub(crate) fn check_out_commit(&mut self, id: ObjectId, cx: &mut Context<Self>) {
+        let short = short_id(id).to_string();
+        self.write_and_report(
+            None,
+            operation::check_out_failed(&short),
+            move |repo| {
+                let carried = repo.check_out_commit(id)?;
+                Ok(operation::switched(operation::checked_out_commit(&short), &short, carried))
+            },
+            cx,
+        );
+    }
+
+    pub(crate) fn cherry_pick(&mut self, id: ObjectId, cx: &mut Context<Self>) {
+        let short = short_id(id).to_string();
+        let branch = self.checked_out_name();
+        self.write_and_report(
+            None,
+            operation::cherry_pick_failed(&short, &branch),
+            move |repo| {
+                repo.cherry_pick(id)
+                    .map(|picked| operation::cherry_picked(&short, &branch, picked))
+            },
+            cx,
+        );
+    }
+
+    pub(crate) fn revert(&mut self, id: ObjectId, cx: &mut Context<Self>) {
+        let short = short_id(id).to_string();
+        let branch = self.checked_out_name();
+        let merge = self.history().is_some_and(|history| {
+            history
+                .row_of(&id)
+                .is_some_and(|row| history.commits[row].parents.len() > 1)
+        });
+        self.write_and_report(
+            None,
+            operation::revert_failed(&short),
+            move |repo| {
+                repo.revert(id, merge)
+                    .map(|picked| operation::reverted(&short, &branch, picked))
+            },
+            cx,
+        );
+    }
+
+    pub(crate) fn reset(&mut self, id: ObjectId, mode: ResetMode, cx: &mut Context<Self>) {
+        let short = short_id(id).to_string();
+        let branch = self.checked_out_name();
+        self.write_and_report(
+            None,
+            operation::reset_failed(&branch, &short),
+            move |repo| {
+                repo.reset(id, mode)
+                    .map(|()| operation::reset_done(&branch, &short, mode))
+            },
+            cx,
+        );
+    }
+
+    pub(crate) fn create_tag(
+        &mut self,
+        name: String,
+        id: ObjectId,
+        message: Option<String>,
+        push_to: Option<String>,
+        cx: &mut Context<Self>,
+    ) {
+        let short = short_id(id).to_string();
+        self.write_and_report(
+            None,
+            operation::tag_failed(&name),
+            move |repo| {
+                repo.create_tag(&name, id, message.as_deref())?;
+                let pushed = push_to
+                    .as_deref()
+                    .map(|remote| (remote, repo.push_tag(remote, &name)));
+                Ok(operation::tag_created(&name, &short, pushed))
+            },
+            cx,
+        );
+    }
+
+    fn checked_out_name(&self) -> String {
+        self.history()
+            .and_then(|history| history.branch.as_deref())
+            .unwrap_or("HEAD")
+            .to_owned()
     }
 
     pub(crate) fn reached_repo(&self) -> Option<Repo> {

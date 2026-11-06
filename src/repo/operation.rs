@@ -2,8 +2,8 @@ use gpui_kit::SharedString;
 
 use crate::{
     git::{
-        Behind, Carried, CaughtUp, CheckedOut, Continued, Merged, Pulled, Pushed, Rebased,
-        RefLabel, Refusal, RemoteBranch, Tracking, Underway,
+        Behind, Carried, CaughtUp, CheckedOut, Continued, Merged, Picked, Pulled, Pushed,
+        Rebased, RefLabel, Refusal, RemoteBranch, ResetMode, Tracking, Underway,
     },
     ui::Failure,
 };
@@ -197,9 +197,56 @@ pub(crate) fn rebased(branch: &str, onto: &str, (rebased, carried): (Rebased, Ca
     put_back(done.into(), &format!("the rebased {branch}"), carried)
 }
 
+pub(crate) fn cherry_picked(id: &str, branch: &str, (picked, carried): (Picked, Carried)) -> Outcome {
+    let done = match picked {
+        Picked::Stopped => return Outcome::Stopped,
+        Picked::Committed => format!("Cherry-picked {id} onto {branch}"),
+        Picked::AlreadyThere => format!("{branch} already has the changes of {id}, so nothing was added"),
+    };
+    put_back(done.into(), &format!("the updated {branch}"), carried)
+}
+
+pub(crate) fn reverted(id: &str, branch: &str, (picked, carried): (Picked, Carried)) -> Outcome {
+    let done = match picked {
+        Picked::Stopped => return Outcome::Stopped,
+        Picked::Committed => format!("Reverted {id}"),
+        Picked::AlreadyThere => format!("The changes of {id} are already undone on {branch}"),
+    };
+    put_back(done.into(), &format!("the updated {branch}"), carried)
+}
+
+pub(crate) fn checked_out_commit(id: &str) -> SharedString {
+    format!("Checked out {id}: HEAD is detached").into()
+}
+
+pub(crate) fn reset_done(branch: &str, id: &str, mode: ResetMode) -> SharedString {
+    match mode {
+        ResetMode::Soft => format!("Reset {branch} to {id}; its changes are staged"),
+        ResetMode::Mixed => format!("Reset {branch} to {id}; its changes are unstaged"),
+        ResetMode::Hard => format!("Reset {branch} to {id}"),
+    }
+    .into()
+}
+
+pub(crate) fn tag_created(name: &str, id: &str, pushed: Option<(&str, anyhow::Result<()>)>) -> Outcome {
+    let created = format!("Created tag {name} at {id}");
+    match pushed {
+        None => Outcome::Done(created.into()),
+        Some((remote, Ok(()))) => {
+            Outcome::Done(format!("Created tag {name} and pushed it to {remote}").into())
+        }
+        Some((remote, Err(error))) => Outcome::Warning {
+            title: created.into(),
+            message: format!("Couldn't push it to {remote}: {}", Failure::git_reason(&error).message()).into(),
+        },
+    }
+}
+
 pub(crate) fn continued(underway: &Underway, continued: Continued) -> Outcome {
-    let Continued::Finished(carried) = continued else {
-        return Outcome::Stopped;
+    let (picked, carried) = match continued {
+        Continued::StoppedAgain => return Outcome::Stopped,
+        Continued::Finished(carried) => (Picked::Committed, carried),
+        Continued::Emptied(carried) => (Picked::AlreadyThere, carried),
     };
     match underway {
         Underway::Rebase(rebasing) => rebased(
@@ -212,6 +259,10 @@ pub(crate) fn continued(underway: &Underway, continued: Continued) -> Outcome {
             &merging.into,
             (Merged::WithMergeCommit, carried),
         ),
+        Underway::CherryPick(picking) => {
+            cherry_picked(&picking.commit.id, &picking.branch, (picked, carried))
+        }
+        Underway::Revert(picking) => reverted(&picking.commit.id, &picking.branch, (picked, carried)),
     }
 }
 
@@ -228,6 +279,9 @@ pub(crate) fn finish_failed(underway: &Underway, finish: Finish) -> SharedString
     let (what, _) = what_is_underway(underway);
     match (underway, finish) {
         (Underway::Merge(_), Finish::Continue) => "Couldn't commit the merge".into(),
+        (Underway::CherryPick(_) | Underway::Revert(_), Finish::Continue) => {
+            format!("Couldn't commit the {what}").into()
+        }
         (_, Finish::Continue) => format!("Couldn't continue the {what}").into(),
         (_, Finish::Abort) => format!("Couldn't abort the {what}").into(),
     }
@@ -241,6 +295,8 @@ fn what_is_underway(underway: &Underway) -> (&'static str, &str) {
     match underway {
         Underway::Rebase(rebasing) => ("rebase", &rebasing.branch),
         Underway::Merge(merging) => ("merge", &merging.into),
+        Underway::CherryPick(picking) => ("cherry-pick", &picking.branch),
+        Underway::Revert(picking) => ("revert", &picking.branch),
     }
 }
 
@@ -257,6 +313,22 @@ pub(crate) fn check_out_failed(branch: &str) -> SharedString {
 
 pub(crate) fn merge_failed(from: &str, into: &str) -> SharedString {
     format!("Couldn't merge {from} into {into}").into()
+}
+
+pub(crate) fn cherry_pick_failed(id: &str, branch: &str) -> SharedString {
+    format!("Couldn't cherry-pick {id} onto {branch}").into()
+}
+
+pub(crate) fn revert_failed(id: &str) -> SharedString {
+    format!("Couldn't revert {id}").into()
+}
+
+pub(crate) fn reset_failed(branch: &str, id: &str) -> SharedString {
+    format!("Couldn't reset {branch} to {id}").into()
+}
+
+pub(crate) fn tag_failed(name: &str) -> SharedString {
+    format!("Couldn't create the tag {name}").into()
 }
 
 pub(crate) fn rebase_failed(branch: &str, onto: &str) -> SharedString {
@@ -278,13 +350,65 @@ pub(crate) fn failure(error: &anyhow::Error) -> Failure {
 #[cfg(test)]
 mod tests {
     use super::{
-        Finish, Outcome, aborted, caught_up, checked_out, continued, deleted, failure,
-        finish_failed, merged, pulled, pulled_back, pushed, rebased, switched,
+        Finish, Outcome, aborted, caught_up, checked_out, cherry_picked, continued, deleted,
+        failure, finish_failed, merged, pulled, pulled_back, pushed, rebased, reverted,
+        switched, tag_created,
     };
     use crate::git::{
-        Behind, Carried, CaughtUp, CheckedOut, Continued, Merged, Merging, Pulled, Pushed,
-        Rebased, Rebasing, RefKind, RefLabel, Refusal, Tracking, Underway, fixtures::id,
+        Behind, Carried, CaughtUp, CheckedOut, Continued, Merged, Merging, Picked, Picking,
+        Pulled, Pushed, Rebased, Rebasing, RefKind, RefLabel, Refusal, Replaying, Tracking,
+        Underway, fixtures::id,
     };
+
+    #[test]
+    fn picking_and_reverting_say_what_happened_to_the_branch() {
+        assert_eq!(
+            cherry_picked("8ff3473", "main", (Picked::Committed, Carried::Along)),
+            Outcome::Done("Cherry-picked 8ff3473 onto main".into())
+        );
+        assert_eq!(
+            cherry_picked("8ff3473", "main", (Picked::AlreadyThere, Carried::Along)),
+            Outcome::Done("main already has the changes of 8ff3473, so nothing was added".into())
+        );
+        assert_eq!(
+            reverted("f1bbcd8", "main", (Picked::Stopped, Carried::Along)),
+            Outcome::Stopped
+        );
+        let picking = Underway::Revert(Picking {
+            branch: "main".into(),
+            commit: Replaying {
+                id: "f1bbcd8".into(),
+                subject: "Split the diff parser".into(),
+            },
+        });
+        assert_eq!(
+            continued(&picking, Continued::Finished(Carried::Along)),
+            Outcome::Done("Reverted f1bbcd8".into())
+        );
+        assert_eq!(
+            continued(&picking, Continued::Emptied(Carried::Along)),
+            Outcome::Done("The changes of f1bbcd8 are already undone on main".into())
+        );
+        assert_eq!(finish_failed(&picking, Finish::Continue), "Couldn't commit the revert");
+        assert_eq!(
+            aborted(&picking, Carried::Along),
+            Outcome::Done("Aborted the revert: main is back where it was".into())
+        );
+    }
+
+    #[test]
+    fn a_tag_that_could_not_be_pushed_is_still_created() {
+        assert_eq!(
+            tag_created("v0.3.0", "f1bbcd8", Some(("origin", Ok(())))),
+            Outcome::Done("Created tag v0.3.0 and pushed it to origin".into())
+        );
+        let Outcome::Warning { title, .. } =
+            tag_created("v0.3.0", "f1bbcd8", Some(("origin", Err(anyhow::anyhow!("offline")))))
+        else {
+            panic!("a failed push should warn");
+        };
+        assert_eq!(title, "Created tag v0.3.0 at f1bbcd8");
+    }
 
     fn main_tracking() -> Tracking {
         Tracking {

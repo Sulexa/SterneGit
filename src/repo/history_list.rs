@@ -11,7 +11,9 @@ use gpui_kit::{
     px, uniform_list,
 };
 
-use super::{branch_menu::BranchMenu, pulls::PullMarks, stash_menu::StashMenu};
+use super::{
+    branch_menu::BranchMenu, commit_menu::CommitMenu, pulls::PullMarks, stash_menu::StashMenu,
+};
 use crate::{
     actions::HISTORY_CONTEXT,
     git::{History, RefLabel, ShownRef, WorkingChanges},
@@ -39,6 +41,7 @@ pub(crate) struct HistoryList {
     on_check_out: Option<Handler<RefLabel>>,
     branch_menu: Option<BranchMenu>,
     stash_menu: Option<StashMenu>,
+    commit_menu: Option<CommitMenu>,
     marks: Arc<PullMarks>,
 }
 
@@ -48,6 +51,7 @@ struct RowActions {
     on_check_out: Option<Handler<RefLabel>>,
     branch_menu: Option<BranchMenu>,
     stash_menu: Option<StashMenu>,
+    commit_menu: Option<CommitMenu>,
     marks: Arc<PullMarks>,
 }
 
@@ -68,6 +72,7 @@ impl HistoryList {
             on_check_out: None,
             branch_menu: None,
             stash_menu: None,
+            commit_menu: None,
             marks: Arc::default(),
         }
     }
@@ -84,6 +89,11 @@ impl HistoryList {
 
     pub(crate) fn stash_menu(mut self, menu: StashMenu) -> Self {
         self.stash_menu = Some(menu);
+        self
+    }
+
+    pub(crate) fn commit_menu(mut self, menu: CommitMenu) -> Self {
+        self.commit_menu = Some(menu);
         self
     }
 
@@ -141,6 +151,7 @@ impl RenderOnce for HistoryList {
             on_check_out,
             branch_menu,
             stash_menu,
+            commit_menu,
             marks,
         } = self;
         let actions = RowActions {
@@ -148,6 +159,7 @@ impl RenderOnce for HistoryList {
             on_check_out,
             branch_menu,
             stash_menu,
+            commit_menu,
             marks,
         };
         let palette = Palette::new(cx);
@@ -288,12 +300,15 @@ fn commit_row(
         .when_some(actions.on_select.clone(), |row, on_select| {
             row.on_click(move |_, window, cx| on_select(&id, window, cx))
         });
-    match (stash, actions.stash_menu.clone()) {
-        (Some(stash), Some(stash_menu)) => {
+    match (stash, actions.stash_menu.clone(), actions.commit_menu.clone()) {
+        (Some(stash), Some(stash_menu), _) => {
             let right_clicked = stash.clone();
             row.context_menu(move |menu, _, _| stash_menu.build(menu, &right_clicked))
                 .into_any_element()
         }
+        (None, _, Some(commit_menu)) => row
+            .context_menu(move |menu, window, cx| commit_menu.build(menu, id, window, cx))
+            .into_any_element(),
         _ => row.into_any_element(),
     }
 }

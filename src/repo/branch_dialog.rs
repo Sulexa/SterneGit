@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use gix::ObjectId;
 use gpui_kit::{
     App, AppContext as _, Context, Entity, IntoElement, ParentElement as _, Render, Styled as _,
     Subscription, Window,
@@ -25,7 +26,7 @@ const WIDTH: f32 = 420.;
 const TITLE: &str = "Create a branch";
 const CREATE: &str = "Create branch";
 const PLACEHOLDER: &str = "Branch name";
-const REFUSED: &str = "Git doesn't accept this name: no spaces, and none of ~ ^ : ? * [ \\ or ..";
+pub(super) const REFUSED: &str = "Git doesn't accept this name: no spaces, and none of ~ ^ : ? * [ \\ or ..";
 
 struct BranchForm {
     name: Entity<InputState>,
@@ -101,6 +102,33 @@ pub(crate) fn open_branch_dialog(
         ),
     };
     let start = start.map(|label| label.revision(&history.refs));
+    open(repository, history, description, start, window, cx);
+}
+
+pub(crate) fn open_branch_dialog_at(
+    repository: Entity<Repository>,
+    id: ObjectId,
+    window: &mut Window,
+    cx: &mut App,
+) {
+    let Some(history) = repository.read(cx).history().cloned() else {
+        return;
+    };
+    let description = format!(
+        "It starts at {} and is checked out right away.          Uncommitted changes come along unless they clash with it.",
+        short_id(id)
+    );
+    open(repository, history, description, Some(id.to_string()), window, cx);
+}
+
+fn open(
+    repository: Entity<Repository>,
+    history: Arc<History>,
+    description: String,
+    start: Option<String>,
+    window: &mut Window,
+    cx: &mut App,
+) {
     let form = cx.new(|cx| BranchForm::new(history, window, cx));
     let name = form.read(cx).name.clone();
     window.open_dialog(cx, move |dialog, _, cx| {
@@ -135,7 +163,9 @@ pub(crate) fn open_branch_dialog(
                 true
             })
     });
-    name.update(cx, |state, cx| state.focus(window, cx));
+    window.defer(cx, move |window, cx| {
+        name.update(cx, |state, cx| state.focus(window, cx))
+    });
 }
 
 fn starting_point(history: &History) -> String {

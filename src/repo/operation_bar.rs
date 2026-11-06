@@ -13,7 +13,7 @@ use gpui_kit::{
 
 use super::operation::Finish;
 use crate::{
-    git::{Rebasing, Underway},
+    git::{Picking, Rebasing, Underway},
     ui::{Handler, Look as _, counted, handler},
 };
 
@@ -31,7 +31,7 @@ pub(crate) struct Wording {
 
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) struct Step {
-    pub(crate) position: SharedString,
+    pub(crate) position: Option<SharedString>,
     pub(crate) id: SharedString,
     pub(crate) subject: SharedString,
 }
@@ -54,13 +54,37 @@ pub(crate) fn wording(underway: &Underway) -> Wording {
             finish: "Commit merge",
             finish_tooltip: "Commit the merge with its usual message",
         },
+        Underway::CherryPick(picking) => Wording {
+            title: format!("Cherry-picking onto {}", picking.branch).into(),
+            step: Some(picked(picking)),
+            abort: "Abort cherry-pick",
+            abort_tooltip: "Put the branch back where it was before the cherry-pick",
+            finish: "Commit",
+            finish_tooltip: "Commit the resolved changes with the picked commit's message and author",
+        },
+        Underway::Revert(picking) => Wording {
+            title: format!("Reverting on {}", picking.branch).into(),
+            step: Some(picked(picking)),
+            abort: "Abort revert",
+            abort_tooltip: "Put the branch back where it was before the revert",
+            finish: "Commit revert",
+            finish_tooltip: "Commit the resolved changes with the usual Revert message",
+        },
+    }
+}
+
+fn picked(picking: &Picking) -> Step {
+    Step {
+        position: None,
+        id: picking.commit.id.clone().into(),
+        subject: picking.commit.subject.clone().into(),
     }
 }
 
 fn step(rebasing: &Rebasing) -> Option<Step> {
     let replaying = rebasing.replaying.as_ref()?;
     Some(Step {
-        position: format!("Commit {} of {}", rebasing.step, rebasing.total).into(),
+        position: Some(format!("Commit {} of {}", rebasing.step, rebasing.total).into()),
         id: replaying.id.clone().into(),
         subject: replaying.subject.clone().into(),
     })
@@ -136,7 +160,11 @@ impl RenderOnce for OperationBar {
             h_flex()
                 .gap_2()
                 .min_w_0()
-                .child(div().flex_none().text_color(muted).child(step.position.clone()))
+                .children(
+                    step.position
+                        .clone()
+                        .map(|position| div().flex_none().text_color(muted).child(position)),
+                )
                 .child(
                     div()
                         .flex_none()
@@ -195,7 +223,7 @@ impl RenderOnce for OperationBar {
 #[cfg(test)]
 mod tests {
     use super::{Step, waiting_for, wording};
-    use crate::git::{Merging, Rebasing, Replaying, Underway};
+    use crate::git::{Merging, Picking, Rebasing, Replaying, Underway};
 
     #[test]
     fn a_rebase_says_which_commit_of_how_many_stopped() {
@@ -214,7 +242,7 @@ mod tests {
         assert_eq!(
             words.step,
             Some(Step {
-                position: "Commit 2 of 3".into(),
+                position: Some("Commit 2 of 3".into()),
                 id: "3f2a91c".into(),
                 subject: "Show conflicted files in the changes list".into(),
             })
@@ -233,5 +261,31 @@ mod tests {
         assert_eq!(words.step, None);
         assert_eq!((words.abort, words.finish), ("Abort merge", "Commit merge"));
         assert_eq!(waiting_for(1), "Resolve the 1 conflicted file first");
+    }
+
+    #[test]
+    fn a_cherry_pick_and_a_revert_show_the_commit_without_a_position() {
+        let commit = Replaying {
+            id: "8ff3473".into(),
+            subject: "Render side-by-side diffs".into(),
+        };
+        let picking = Picking {
+            branch: "main".into(),
+            commit,
+        };
+        let words = wording(&Underway::CherryPick(picking.clone()));
+        assert_eq!(words.title, "Cherry-picking onto main");
+        assert_eq!(
+            words.step,
+            Some(Step {
+                position: None,
+                id: "8ff3473".into(),
+                subject: "Render side-by-side diffs".into(),
+            })
+        );
+        assert_eq!((words.abort, words.finish), ("Abort cherry-pick", "Commit"));
+        let words = wording(&Underway::Revert(picking));
+        assert_eq!(words.title, "Reverting on main");
+        assert_eq!((words.abort, words.finish), ("Abort revert", "Commit revert"));
     }
 }

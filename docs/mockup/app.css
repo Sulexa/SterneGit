@@ -1316,6 +1316,8 @@
 .menu > .item.hot { background: var(--accent); }
 .menu > .item > .label { flex: 1; }
 .menu > .item > .keys { color: var(--muted); font-size: 12px; }
+.menu > .item.parent { position: relative; }
+.menu > .item > .menu { width: max-content; }
 
 .menu > .separator {
   flex: none;

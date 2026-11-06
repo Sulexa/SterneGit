@@ -4,6 +4,7 @@ mod branch_menu;
 mod changes_list;
 mod commit_files;
 mod commit_form;
+mod commit_menu;
 mod commit_panel;
 mod compare;
 mod file_diff_panel;
@@ -24,6 +25,7 @@ mod refs_list;
 mod repository;
 mod stash_menu;
 mod status_bar;
+mod tag_dialog;
 mod toolbar;
 
 use std::{ffi::OsString, path::PathBuf, sync::Arc};
@@ -52,7 +54,7 @@ use crate::{
     },
     git::{
         Baseline, ChangeKind, Commit, FileChange, FileCommit, HISTORY_LIMIT, History, NamedRemote,
-        PullMode, RefLabel, Scope, Side, Stash, WorkingChanges, short_id,
+        PullMode, RefLabel, ResetMode, Scope, Side, Stash, WorkingChanges, short_id,
     },
     app::connectors::Connectors,
     hosting::{
@@ -65,7 +67,9 @@ use crate::{
     },
 };
 use behind_dialog::open_behind_dialog;
-use branch_dialog::open_branch_dialog;
+use branch_dialog::{open_branch_dialog, open_branch_dialog_at};
+use commit_menu::{CommitAction, CommitMenu, confirm_reset_hard, copy_commit_message};
+use tag_dialog::open_tag_dialog;
 use stash_menu::{StashAction, StashMenu};
 use branch_menu::{BranchAction, BranchMenu, PullOffers, confirm_delete};
 use changes_list::{ChangesList, SideFolds, SideScrolls, discard_question};
@@ -1082,6 +1086,49 @@ impl RepoView {
         ))
     }
 
+    fn commit_menu(&self, history: &Arc<History>, cx: &mut Context<Self>) -> CommitMenu {
+        let repository = self.repository.read(cx);
+        CommitMenu::new(
+            history.clone(),
+            repository.is_writing(),
+            repository.underway().is_some(),
+        )
+        .on_action(cx.listener(
+            |this, (id, action): &(ObjectId, CommitAction), window, cx| {
+                this.act_on_commit(*id, *action, window, cx)
+            },
+        ))
+    }
+
+    fn act_on_commit(
+        &mut self,
+        id: ObjectId,
+        action: CommitAction,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let repository = self.repository.clone();
+        match action {
+            CommitAction::CheckOut => {
+                repository.update(cx, |repository, cx| repository.check_out_commit(id, cx))
+            }
+            CommitAction::BranchHere => open_branch_dialog_at(repository, id, window, cx),
+            CommitAction::TagHere => open_tag_dialog(repository, id, window, cx),
+            CommitAction::Revert => {
+                repository.update(cx, |repository, cx| repository.revert(id, cx))
+            }
+            CommitAction::CherryPick => {
+                repository.update(cx, |repository, cx| repository.cherry_pick(id, cx))
+            }
+            CommitAction::Reset(ResetMode::Hard) => confirm_reset_hard(repository, id, window, cx),
+            CommitAction::Reset(mode) => {
+                repository.update(cx, |repository, cx| repository.reset(id, mode, cx))
+            }
+            CommitAction::CopyHash => copy_commit_hash(id, window, cx),
+            CommitAction::CopyMessage => copy_commit_message(&repository, id, window, cx),
+        }
+    }
+
     fn branch_menu(&self, history: &History, cx: &mut Context<Self>) -> BranchMenu {
         let marks = self.pull_marks(history, cx);
         let offers = self.pull_offers(marks, cx);
@@ -1270,6 +1317,7 @@ impl RepoView {
         let changes = self.repository.read(cx).changes().cloned();
         let branch_menu = self.branch_menu(&history, cx);
         let stash_menu = self.stash_menu(cx);
+        let commit_menu = self.commit_menu(&history, cx);
         let marks = self.pull_marks(&history, cx);
         HistoryList::new(
             history,
@@ -1278,6 +1326,7 @@ impl RepoView {
         )
         .branch_menu(branch_menu)
         .stash_menu(stash_menu)
+        .commit_menu(commit_menu)
         .marks(marks)
         .selected(self.target.commit())
         .uncommitted(changes, self.target.is_working_tree())

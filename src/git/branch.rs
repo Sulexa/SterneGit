@@ -1,5 +1,5 @@
 use anyhow::Result;
-use gix::bstr::BStr;
+use gix::{ObjectId, bstr::BStr};
 
 use super::{
     Carried, RefKind, RefLabel, Refusal, Repo, Tracking,
@@ -19,11 +19,20 @@ pub(crate) enum NameProblem {
 }
 
 pub(crate) fn new_branch_name<'a>(typed: &'a str, refs: &[RefLabel]) -> Result<&'a str, NameProblem> {
+    new_ref_name(typed, refs, RefKind::LocalBranch, BRANCHES)
+}
+
+pub(super) fn new_ref_name<'a>(
+    typed: &'a str,
+    refs: &[RefLabel],
+    kind: RefKind,
+    prefix: &str,
+) -> Result<&'a str, NameProblem> {
     let name = typed.trim();
     if name.is_empty() {
         return Err(NameProblem::Empty);
     }
-    let full = format!("{BRANCHES}{name}");
+    let full = format!("{prefix}{name}");
     let refused = name.starts_with('-')
         || NAMES_GIT_RESERVES.contains(&name)
         || gix::validate::reference::branch_name(BStr::new(&full)).is_err();
@@ -32,7 +41,7 @@ pub(crate) fn new_branch_name<'a>(typed: &'a str, refs: &[RefLabel]) -> Result<&
     }
     let taken = refs
         .iter()
-        .any(|label| label.kind == RefKind::LocalBranch && label.name.as_str() == name);
+        .any(|label| label.kind == kind && label.name.as_str() == name);
     if taken {
         return Err(NameProblem::Taken);
     }
@@ -55,6 +64,11 @@ impl Repo {
 
     pub(crate) fn check_out(&self, branch: &str) -> Result<Carried> {
         self.switch(&["switch", "--quiet", branch])
+    }
+
+    pub(crate) fn check_out_commit(&self, id: ObjectId) -> Result<Carried> {
+        let id = id.to_string();
+        self.switch(&["switch", "--quiet", "--detach", &id])
     }
 
     pub(crate) fn check_out_remote(
@@ -129,7 +143,7 @@ impl Repo {
     }
 }
 
-fn is_changes_in_the_way(error: &anyhow::Error) -> bool {
+pub(super) fn is_changes_in_the_way(error: &anyhow::Error) -> bool {
     error.downcast_ref::<Refusal>() == Some(&Refusal::ChangesInTheWay)
 }
 

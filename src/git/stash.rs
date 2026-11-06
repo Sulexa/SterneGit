@@ -3,11 +3,12 @@ use gix::ObjectId;
 use gpui_kit::SharedString;
 
 use super::{
-    Refusal, Repo,
+    Commit, Refusal, Repo,
     command::{Exit, run},
 };
 
 const STASH: &str = "refs/stash";
+const SET_ASIDE: &str = "Set aside by SterneGit until the cherry-pick or revert is done";
 const STASH_LEFT_UNAPPLIED: [&str; 3] = [
     "conflicts in index",
     "could not restore untracked files",
@@ -89,6 +90,27 @@ impl Repo {
 
     pub(super) fn reapply_stash(&self) -> Result<Carried> {
         self.bring_back(BringBack::DroppingTheStash, &stash_name(0))
+    }
+
+    pub(super) fn set_aside_until_done(&self) -> Result<bool> {
+        let before = self.latest_stash();
+        run(
+            &self.location,
+            &["stash", "push", "--include-untracked", "--quiet", "--message", SET_ASIDE],
+            Exit::Success,
+        )?;
+        Ok(self.latest_stash() != before)
+    }
+
+    pub(super) fn bring_back_set_aside(&self) -> Result<Carried> {
+        let set_aside = self.latest_stash().is_some_and(|id| {
+            Commit::find(&self.local(), id).is_ok_and(|stash| stash.subject.ends_with(SET_ASIDE))
+        });
+        if set_aside {
+            self.reapply_stash()
+        } else {
+            Ok(Carried::Along)
+        }
     }
 
     fn bring_back(&self, how: BringBack, stash: &str) -> Result<Carried> {
