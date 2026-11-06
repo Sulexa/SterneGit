@@ -41,13 +41,17 @@ impl Repo {
         }
     }
 
-    pub(crate) fn discard(&self, change: &FileChange) -> Result<()> {
-        if change.kind == ChangeKind::Untracked {
-            return Ok(std::fs::remove_file(
-                self.location.join(change.exact_path()),
-            )?);
+    pub(crate) fn discard(&self, changes: &[FileChange]) -> Result<()> {
+        let (untracked, tracked): (Vec<_>, Vec<_>) = changes
+            .iter()
+            .partition(|change| change.kind == ChangeKind::Untracked);
+        for change in untracked {
+            std::fs::remove_file(self.location.join(change.exact_path()))?;
         }
-        let names = nul_separated([change.name_as_git_wrote_it()]);
+        if tracked.is_empty() {
+            return Ok(());
+        }
+        let names = nul_separated(tracked.into_iter().map(FileChange::name_as_git_wrote_it));
         self.update_index(&["checkout", "--quiet"], Some(names), None)
     }
 

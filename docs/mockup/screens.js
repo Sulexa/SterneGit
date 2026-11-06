@@ -63,6 +63,7 @@ const Screens = (() => {
     });
 
   const firstUnstaged = changes.unstaged[0];
+  const pickedFiles = { side: 'unstaged', paths: changes.unstaged.slice(1).map((change) => change.path) };
   const ref = (name) => history.refs.find((label) => label.name === name);
 
   const gameTabs = [...tabs, { name: starfall.name, state: 'ready' }];
@@ -296,6 +297,60 @@ const Screens = (() => {
             wipSelected: true,
             right: C.ChangesList({ changes, pointed: { side: 'unstaged', path: firstUnstaged.path, left: 168, top: 16, hot: 'Discard changes…' } }),
           }),
+        }),
+    },
+    {
+      id: 'files-picked',
+      title: 'Several changed files picked',
+      about: 'A click on a file picks it alone and opens it, as before. Ctrl+click (Cmd+click on macOS) adds a file to the pick or takes it out; Shift+click picks every file shown from the last one clicked to this one, and Ctrl+Shift+click adds that run to the pick. Runs follow the order on screen, in a list or a tree, and skip files inside folded folders. A pick stays inside one list: Ctrl or Shift on a file in the other list starts a new pick there, and conflicted files are picked one at a time. Ctrl and Shift only change the pick; the middle pane keeps the file opened last. Here patch.rs was clicked, then notes.md Shift-clicked.',
+      source: 'src/repo/changes_list.rs',
+      render: () =>
+        C.SterneGit({
+          topBar: topBar(),
+          tabStrip: tabStrip(),
+          body: repo({
+            wipSelected: true,
+            middle: C.FileDiffPanel({ diff: fileDiff, mode: 'split' }),
+            right: C.ChangesList({ changes, open: openFile, picked: pickedFiles }),
+          }),
+        }),
+    },
+    {
+      id: 'files-menu',
+      title: 'Right-click on picked files',
+      about: 'A right-click on a picked file opens a menu that acts on every picked file: Stage 3 files (Unstage in the staged list), Discard 3 files…, Open 3 files with their default apps and Copy 3 paths, one per line. File history and Show in folder need a single file, so they are left out. Delete 3 files… replaces Discard when none of them is tracked, and Open is left out when one of them is deleted. A right-click on a file outside the pick picks it alone and opens the one-file menu, without opening the file.',
+      source: 'src/repo/changes_list.rs',
+      render: () =>
+        C.SterneGit({
+          topBar: topBar(),
+          tabStrip: tabStrip(),
+          body: repo({
+            wipSelected: true,
+            middle: C.FileDiffPanel({ diff: fileDiff, mode: 'split' }),
+            right: C.ChangesList({
+              changes,
+              open: openFile,
+              picked: pickedFiles,
+              pointed: { side: 'unstaged', path: changes.unstaged[2].path, left: 168, top: 16, hot: Texts.discardFiles(3) },
+            }),
+          }),
+        }),
+    },
+    {
+      id: 'discard-files',
+      title: 'Discard several files',
+      about: 'Discard 3 files… asks once for all of them. The question counts the files and says how many untracked ones are deleted; Discard puts each tracked file back as it is staged, or as it was committed, and deletes the untracked ones. Cancel or Esc keeps them all.',
+      source: 'src/repo/changes_list.rs',
+      render: () =>
+        C.SterneGit({
+          topBar: topBar(),
+          tabStrip: tabStrip(),
+          body: repo({
+            wipSelected: true,
+            middle: C.FileDiffPanel({ diff: fileDiff, mode: 'split' }),
+            right: C.ChangesList({ changes, open: openFile, picked: pickedFiles }),
+          }),
+          overlays: C.DiscardDialog({ changes: changes.unstaged.slice(1) }),
         }),
     },
     {

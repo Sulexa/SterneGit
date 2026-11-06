@@ -302,6 +302,12 @@ const Texts = {
   deleteTitle: (name) => `Delete ${name}?`,
   deleteDescription: (path) => `${path} isn't tracked by Git, so it can't be brought back once deleted.`,
   pathCopied: 'Path copied',
+  discardFilesTitle: (n) => `Discard the changes to ${n} files?`,
+  discardFilesDescription: (n) => `The unstaged changes in these ${n} files are thrown away. Git keeps no copy of them, so this can't be undone.`,
+  discardMixedDescription: (tracked, untracked) => `The unstaged changes in ${counted(tracked, 'file', 'files')} are thrown away and ${counted(untracked, 'untracked file is', 'untracked files are')} deleted. Git keeps no copy of them, so this can't be undone.`,
+  deleteFilesTitle: (n) => `Delete ${n} files?`,
+  deleteFilesDescription: (n) => `These ${n} files aren't tracked by Git, so they can't be brought back once deleted.`,
+  pathsCopied: (n) => `${n} paths copied`,
   branchTitle: 'Create a branch',
   branchDescription: (head) => `It starts at ${head}, where HEAD is, and is checked out right away. Uncommitted changes stay as they are.`,
   branchFromDescription: (start) => `It starts at ${start} and is checked out right away. Uncommitted changes come along unless they clash with it.`,
@@ -366,6 +372,11 @@ const Texts = {
   openFile: 'Open file',
   showInFolder: 'Show in folder',
   copyPath: 'Copy path',
+  moveFiles: (verb, n) => `${verb} ${n} files`,
+  discardFiles: (n) => `Discard ${n} files…`,
+  deleteFiles: (n) => `Delete ${n} files…`,
+  openFiles: (n) => `Open ${n} files`,
+  copyPaths: (n) => `Copy ${n} paths`,
   historyPosition: (at, n, name) => `Commit ${thousands(at)} of ${thousands(n)} changing ${name}`,
   renamedFrom: (path) => `Renamed from ${path}`,
   hear: (side) => `Hear ${side === 'before' ? 'the version before the change' : 'the changed version'}  Tab switches`,
@@ -1085,6 +1096,23 @@ function fileMenuItems({ change, side }) {
   return menuGroups([[move, discard], [committed], placeItems(change.kind)]);
 }
 
+function pickedMenuItems({ files, side }) {
+  const labels = SideLabels[side];
+  const n = files.length;
+  const untracked = files.every((change) => change.kind === '?');
+  const discard = labels.discards && [untracked ? Texts.deleteFiles(n) : Texts.discardFiles(n), ''];
+  const open = files.every((change) => change.kind !== 'D') && [Texts.openFiles(n), ''];
+  return menuGroups([[[Texts.moveFiles(labels.verb, n), ''], discard], [open, [Texts.copyPaths(n), '']]]);
+}
+
+function discardFilesQuestion(changes) {
+  const n = changes.length;
+  const untracked = changes.filter((change) => change.kind === '?').length;
+  if (untracked === n) return { title: Texts.deleteFilesTitle(n), description: Texts.deleteFilesDescription(n), confirm: 'Delete' };
+  const description = untracked ? Texts.discardMixedDescription(n - untracked, untracked) : Texts.discardFilesDescription(n);
+  return { title: Texts.discardFilesTitle(n), description, confirm: 'Discard' };
+}
+
 function commitFileMenuItems({ file }) {
   return menuGroups([[[Texts.fileHistory, '']], placeItems(file.kind)]);
 }
@@ -1508,8 +1536,9 @@ const C = {
     return C.Menu({ items: lineMenuItems({ side, selected, changed }), left, top, hot, name: 'LineMenu' });
   },
 
-  FileMenu({ change, side, left = 0, top = 0, hot }) {
-    return C.Menu({ items: fileMenuItems({ change, side }), left, top, hot, name: 'FileMenu' });
+  FileMenu({ change, side, picked = [], left = 0, top = 0, hot }) {
+    const items = picked.length > 1 ? pickedMenuItems({ files: picked, side }) : fileMenuItems({ change, side });
+    return C.Menu({ items, left, top, hot, name: 'FileMenu' });
   },
 
   CommitFileMenu({ file, left = 0, top = 0, hot }) {
@@ -1612,7 +1641,7 @@ const C = {
     );
   },
 
-  ChangesList({ changes, open, pointed, draft = {}, committing = false, writing = false, failure, view = 'list', collapsed = [], operation }) {
+  ChangesList({ changes, open, picked, pointed, draft = {}, committing = false, writing = false, failure, view = 'list', collapsed = [], operation }) {
     if (!changes) return `<div data-c="ChangesList" class="changes">${C.Loading({ message: Texts.readingChanges })}</div>`;
     const busy = writing || committing;
     const form = operation ? '' : C.CommitForm({ ...draft, staged: changes.staged.length, committing, writing, failure });
@@ -1629,14 +1658,16 @@ const C = {
       const action = labels.all ? C.Button({ label: labels.all, icon: labels.icon, variant: 'ghost', disabled: busy || !files.length }) : '';
       const head = C.SectionHeader({ title: `${labels.files} (${thousands(files.length)})`, action });
       const at = (place, change) => !!place && place.side === side && place.path === change.path;
+      const pickedHere = picked && picked.side === side ? files.filter((change) => picked.paths.includes(change.path)) : [];
+      const isPicked = (change) => (picked ? pickedHere.includes(change) : at(open, change));
       const row = (change, depth) =>
         C.ChangeRow({
           change,
           side,
           depth,
           writing: busy,
-          selected: at(open, change),
-          menu: at(pointed, change) ? C.FileMenu({ change, side, left: pointed.left, top: pointed.top, hot: pointed.hot }) : '',
+          selected: isPicked(change),
+          menu: at(pointed, change) ? C.FileMenu({ change, side, picked: isPicked(change) ? pickedHere : [], left: pointed.left, top: pointed.top, hot: pointed.hot }) : '',
         });
       const folder = (node, depth, open) =>
         C.FolderRow({ name: node.name, depth, open, trailing: C.Button({ icon: labels.icon, variant: 'ghost', disabled: busy, tooltip: labels.folderTooltip }) });
@@ -2247,7 +2278,8 @@ const C = {
     return `<div class="overlay"><div data-c="${name}"${base} class="dialog"><div class="base semibold">${esc(title)}</div><div class="sm muted">${esc(description)}</div><div class="footer">${buttons}</div></div></div>`;
   },
 
-  DiscardDialog({ change }) {
+  DiscardDialog({ change, changes = [] }) {
+    if (changes.length > 1) return C.AlertDialog(discardFilesQuestion(changes));
     const [name] = splitPath(change.path);
     const untracked = change.kind === '?';
     return C.AlertDialog({

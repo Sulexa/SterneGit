@@ -96,7 +96,7 @@ impl FileChange {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(crate) enum Side {
     Unstaged,
     Staged,

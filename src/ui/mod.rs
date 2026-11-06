@@ -8,6 +8,7 @@ mod load;
 mod look;
 mod notice;
 mod palette;
+mod picked;
 mod rows;
 mod side;
 mod text;
@@ -22,6 +23,7 @@ pub(crate) use load::{Failure, Job, Load, run_async_in_background, run_in_backgr
 pub(crate) use look::Look;
 pub(crate) use notice::{Notice, failure, hint, loading};
 pub(crate) use palette::Palette;
+pub(crate) use picked::{Pick, Picked, PickedFor};
 pub(crate) use rows::{
     FilePlace, ROW_HEIGHT, SectionHeader, file_row, folder_row, list_row, tree_line,
 };

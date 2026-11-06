@@ -327,8 +327,8 @@ impl Repository {
         self.write_to(move |repo| repo.apply_part(action, &patch), cx);
     }
 
-    pub(crate) fn discard(&mut self, change: FileChange, cx: &mut Context<Self>) {
-        self.write_to(move |repo| repo.discard(&change), cx);
+    pub(crate) fn discard(&mut self, changes: Vec<FileChange>, cx: &mut Context<Self>) {
+        self.write_to(move |repo| repo.discard(&changes), cx);
     }
 
     fn write_to(

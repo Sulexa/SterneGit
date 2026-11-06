@@ -3,7 +3,7 @@ use gpui_kit::SharedString;
 
 use crate::git::{History, Side, WorkingChanges};
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct OpenFile {
     pub(crate) side: Side,
     pub(crate) path: SharedString,
@@ -75,6 +75,13 @@ impl Target {
             Target::Commit { open, .. } | Target::Pull { open, .. } => open.take().is_some(),
             Target::WorkingTree { open } => open.take().is_some(),
             Target::Nothing => false,
+        }
+    }
+
+    pub(crate) fn working_file(&self) -> Option<&OpenFile> {
+        match self {
+            Target::WorkingTree { open } => open.as_ref(),
+            Target::Nothing | Target::Commit { .. } | Target::Pull { .. } => None,
         }
     }
 

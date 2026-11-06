@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use gpui_kit::{
     App, ClipboardItem, Window,
@@ -9,7 +9,7 @@ use gpui_kit::{
     prelude::FluentBuilder as _,
 };
 
-use crate::ui::Handler;
+use crate::ui::{Handler, thousands};
 
 pub(crate) fn history_item<T: 'static>(
     menu: PopupMenu,
@@ -34,12 +34,38 @@ pub(crate) fn on_disk_items(menu: PopupMenu, path: PathBuf, on_disk: bool) -> Po
             PopupMenuItem::new("Show in folder").on_click(move |_, _, cx| cx.reveal_path(&reveal)),
         )
     })
+    .item(PopupMenuItem::new("Copy path").on_click(move |_, window, cx| {
+        copy_paths(std::slice::from_ref(&path), window, cx)
+    }))
+}
+
+pub(crate) fn many_on_disk_items(menu: PopupMenu, paths: Vec<PathBuf>, on_disk: bool) -> PopupMenu {
+    let count = thousands(paths.len());
+    let open = paths.clone();
+    menu.when(on_disk, |menu| {
+        menu.item(
+            PopupMenuItem::new(format!("Open {count} files")).on_click(move |_, _, cx| {
+                for path in &open {
+                    cx.open_with_system(path)
+                }
+            }),
+        )
+    })
     .item(
-        PopupMenuItem::new("Copy path").on_click(move |_, window, cx| copy_path(&path, window, cx)),
+        PopupMenuItem::new(format!("Copy {count} paths"))
+            .on_click(move |_, window, cx| copy_paths(&paths, window, cx)),
     )
 }
 
-fn copy_path(path: &Path, window: &mut Window, cx: &mut App) {
-    cx.write_to_clipboard(ClipboardItem::new_string(path.display().to_string()));
-    window.push_notification("Path copied", cx);
+fn copy_paths(paths: &[PathBuf], window: &mut Window, cx: &mut App) {
+    let lines = paths
+        .iter()
+        .map(|path| path.display().to_string())
+        .collect::<Vec<_>>();
+    cx.write_to_clipboard(ClipboardItem::new_string(lines.join("\n")));
+    let copied = match paths {
+        [_] => "Path copied".to_owned(),
+        _ => format!("{} paths copied", thousands(paths.len())),
+    };
+    window.push_notification(copied, cx);
 }

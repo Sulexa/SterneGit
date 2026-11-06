@@ -59,7 +59,10 @@ use crate::{
         AccountQuestion, Fix, SignInStart, account_bar, account_question, open_publish,
         open_sign_in,
     },
-    ui::{self, Failure, FileView, Folded, Look as _, Notice, run_in_background, thousands},
+    ui::{
+        self, Failure, FileView, Folded, Look as _, Notice, Picked, PickedFor, run_in_background,
+        thousands,
+    },
 };
 use behind_dialog::open_behind_dialog;
 use branch_dialog::open_branch_dialog;
@@ -103,6 +106,7 @@ pub(crate) struct RepoView {
     target: Target,
     folded_refs: Folded<RefGroup>,
     folded_changes: SideFolds,
+    picked_changes: PickedFor<OpenFile>,
     commit_panel: Entity<CommitPanel>,
     commit_form: Entity<CommitForm>,
     file_diff: Entity<FileDiffPanel>,
@@ -190,6 +194,7 @@ impl RepoView {
             target: Target::Nothing,
             folded_refs: Folded::default(),
             folded_changes: SideFolds::default(),
+            picked_changes: PickedFor::default(),
             commit_panel,
             commit_form,
             file_diff,
@@ -312,6 +317,8 @@ impl RepoView {
         ) else {
             return;
         };
+        self.picked_changes
+            .retain(|file| changes.find(file.side, &file.path).is_some());
         let target = self.target.after_changes_read(&changes, &history);
         match target {
             Target::Commit { id, .. } if self.target.commit() != Some(id) => {
@@ -612,6 +619,7 @@ impl RepoView {
                 path: change.path.clone(),
             }),
         };
+        self.picked_changes = PickedFor::default();
         self.file_diff.update(cx, |panel, cx| {
             panel.open_working_file(&repo, change, side, cx)
         });
@@ -915,6 +923,7 @@ impl RepoView {
     }
 
     fn close_file(&mut self, cx: &mut Context<Self>) {
+        self.picked_changes = PickedFor::default();
         if self.whole_window_for_conflicts {
             self.whole_window = false;
             self.whole_window_for_conflicts = false;
@@ -1010,12 +1019,22 @@ impl RepoView {
             .update(cx, |repository, cx| repository.move_across(from, scope, cx));
     }
 
-    fn confirm_discard(&mut self, change: FileChange, window: &mut Window, cx: &mut Context<Self>) {
+    fn pick_changes(&mut self, picked: Picked<OpenFile>, cx: &mut Context<Self>) {
+        self.picked_changes = PickedFor::new(self.target.working_file().cloned(), picked);
+        cx.notify();
+    }
+
+    fn confirm_discard(
+        &mut self,
+        changes: Vec<FileChange>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let repository = self.repository.clone();
-        let question = discard_question(&change);
+        let question = discard_question(&changes);
         window.open_alert_dialog(cx, move |alert, _, _| {
             let repository = repository.clone();
-            let change = change.clone();
+            let changes = changes.clone();
             alert
                 .confirm()
                 .title(question.title.clone())
@@ -1023,7 +1042,7 @@ impl RepoView {
                 .ok_text(question.confirm)
                 .ok_variant(ButtonVariant::Danger)
                 .on_ok(move |_, _, cx| {
-                    repository.update(cx, |repository, cx| repository.discard(change.clone(), cx));
+                    repository.update(cx, |repository, cx| repository.discard(changes.clone(), cx));
                     true
                 })
         });
@@ -1280,6 +1299,7 @@ impl RepoView {
         )
         .root(repository.repo().map(|repo| Arc::from(repo.location())))
         .form_hidden(repository.underway().is_some())
+        .picked(self.picked_changes.current(open.as_ref()))
         .open(open)
         .writing(repository.is_writing())
         .on_open(
@@ -1290,8 +1310,11 @@ impl RepoView {
         .on_move(cx.listener(|this, (side, scope): &(Side, Scope), _, cx| {
             this.move_files(*side, scope.clone(), cx)
         }))
-        .on_discard(cx.listener(|this, change: &FileChange, window, cx| {
-            this.confirm_discard(change.clone(), window, cx)
+        .on_pick(cx.listener(|this, picked: &Picked<OpenFile>, _, cx| {
+            this.pick_changes(picked.clone(), cx)
+        }))
+        .on_discard(cx.listener(|this, changes: &Vec<FileChange>, window, cx| {
+            this.confirm_discard(changes.clone(), window, cx)
         }))
         .on_history(cx.listener(|this, change: &FileChange, window, cx| {
             this.open_working_file_history(change.clone(), window, cx)

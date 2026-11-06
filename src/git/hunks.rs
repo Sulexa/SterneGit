@@ -691,19 +691,20 @@ index 1111111..2222222 100644
     }
 
     #[test]
-    fn discarding_a_file_puts_back_what_is_staged_or_deletes_it_when_untracked() -> Result<()> {
+    fn discarding_files_puts_back_what_is_staged_and_deletes_the_untracked_ones() -> Result<()> {
         let scratch = ScratchRepo::new("discard-file")?;
         scratch.write("kept.txt", "one\n")?;
-        scratch.git(&["add", "kept.txt"])?;
+        scratch.write("other.txt", "one\n")?;
+        scratch.git(&["add", "kept.txt", "other.txt"])?;
         scratch.commit("first")?;
         scratch.write("kept.txt", "one\ntwo\n")?;
         scratch.git(&["add", "kept.txt"])?;
         scratch.write("kept.txt", "one\ntwo\nthree\n")?;
+        scratch.write("other.txt", "one\nchanged\n")?;
         scratch.write("fresh.txt", "new\n")?;
+        scratch.write("loose.txt", "new\n")?;
         let (repo, _) = scratch.open()?;
-        for change in repo.status()?.unstaged {
-            repo.discard(&change)?;
-        }
+        repo.discard(&repo.status()?.unstaged)?;
         let status = repo.status()?;
         assert!(status.unstaged.is_empty());
         assert_eq!(status.staged.len(), 1);
@@ -711,7 +712,12 @@ index 1111111..2222222 100644
             std::fs::read_to_string(scratch.dir.join("kept.txt"))?,
             "one\ntwo\n"
         );
+        assert_eq!(
+            std::fs::read_to_string(scratch.dir.join("other.txt"))?,
+            "one\n"
+        );
         assert!(!scratch.dir.join("fresh.txt").exists());
+        assert!(!scratch.dir.join("loose.txt").exists());
         Ok(())
     }
 }

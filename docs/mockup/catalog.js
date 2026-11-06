@@ -794,10 +794,10 @@ const Catalog = (() => {
           name: 'ChangeRow',
           code: 'repo::changes_list::change_row',
           source: 'src/repo/changes_list.rs',
-          about: 'A FileRow with a + or − that moves the file to the other list; a conflicted file has none. A right-click opens its FileMenu.',
+          about: 'A FileRow with a + or − that moves the file to the other list; a conflicted file has none. A click opens it, Ctrl+click and Shift+click add it or a run of files to the pick, which is highlighted like the open file. A right-click opens its FileMenu, for every picked file when it is one of them.',
           variants: [
             ['Unstaged', () => C.ChangeRow({ change: changes.unstaged[0], side: 'unstaged' }), { w: 480 }],
-            ['Open', () => C.ChangeRow({ change: changes.unstaged[1], side: 'unstaged', selected: true }), { w: 480 }],
+            ['Open or picked', () => C.ChangeRow({ change: changes.unstaged[1], side: 'unstaged', selected: true }), { w: 480 }],
             ['In a tree', () => C.ChangeRow({ change: changes.unstaged[1], side: 'unstaged', depth: 1 }), { w: 480 }],
             ['Staged', () => C.ChangeRow({ change: changes.staged[0], side: 'staged' }), { w: 480 }],
             ['Conflicted', () => C.ChangeRow({ change: statusConflicts.change, side: 'conflicted' }), { w: 480 }],
@@ -815,6 +815,9 @@ const Catalog = (() => {
             ['Unstaged, untracked', () => menuFrame(C.FileMenu({ change: changes.unstaged[3], side: 'unstaged' }))],
             ['Staged', () => menuFrame(C.FileMenu({ change: changes.staged[0], side: 'staged' }))],
             ['Unstaged, deleted', () => menuFrame(C.FileMenu({ change: { kind: 'D', path: 'docs/old.md' }, side: 'unstaged' }))],
+            ['3 unstaged picked', () => menuFrame(C.FileMenu({ change: changes.unstaged[1], side: 'unstaged', picked: changes.unstaged.slice(1) }))],
+            ['3 untracked picked', () => menuFrame(C.FileMenu({ change: changes.unstaged[3], side: 'unstaged', picked: ['a.md', 'b.md', 'c.md'].map((path) => ({ kind: '?', path })) }))],
+            ['2 staged picked', () => menuFrame(C.FileMenu({ change: changes.staged[0], side: 'staged', picked: changes.staged }))],
           ],
         },
         {
@@ -825,6 +828,9 @@ const Catalog = (() => {
           variants: [
             ['Tracked file', () => dialogFrame(C.DiscardDialog({ change: changes.unstaged[0] }))],
             ['Untracked file', () => dialogFrame(C.DiscardDialog({ change: changes.unstaged[3] }))],
+            ['Tracked files', () => dialogFrame(C.DiscardDialog({ changes: changes.unstaged.slice(0, 3) }))],
+            ['Tracked and untracked files', () => dialogFrame(C.DiscardDialog({ changes: changes.unstaged.slice(1) }))],
+            ['Untracked files', () => dialogFrame(C.DiscardDialog({ changes: ['a.md', 'b.md', 'c.md'].map((path) => ({ kind: '?', path })) }))],
           ],
         },
         {
