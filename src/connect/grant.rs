@@ -128,7 +128,15 @@ mod tests {
         );
         assert_eq!(asked.images, set(&["https://avatars.githubusercontent.com/"]));
         assert_eq!(asked.remote_hosts, set(&["github.com", "ssh.github.com", "{server.host}"]));
-        assert_eq!(asked.sign_in.len(), 2);
+        assert_eq!(
+            asked.sign_in,
+            set(&[
+                "https://github.com/login/device/code",
+                "https://github.com/login/oauth/access_token",
+                "{web}settings/tokens/new",
+                "{web}settings/tokens/new?scopes=repo,read:org,write:public_key,workflow&description=SterneGit",
+            ])
+        );
     }
 
     #[test]

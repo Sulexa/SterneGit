@@ -565,6 +565,7 @@ One method per operation, each built on one private `ask(op, input)`.
   - `repositories.get` and `repositories.create` (`/user/repos` or `/orgs/{owner}/repos`); `ssh_keys.list`, `ssh_keys.add` and `ssh_keys.host_keys` (`GET /meta`).
   - 19 cassettes, also replayed through the committed `dist/github.wasm` inside the sandbox by SterneGit's own tests.
 - **Built in milestone 5:** version 0.3.0 declares `pulls`, `pulls.create` and `pulls.merge`, with `pulls.list` and `pulls.get` in GraphQL, `pulls.for_branch`, `pulls.checks` (check runs and commit statuses, sent together), `pulls.conversation`, `pulls.comment`, `pulls.create` and `pulls.merge` in REST; 39 cassettes; 324,657 B of wasm (+38,362 B).
+- **Device flow, 2026-11-06:** version 0.3.1 lists the `device` sign-in first for github.com, with the SterneGit OAuth App's client ID `Ov23li4Gy6mcZEsgGOGB`, `https://github.com/login/device/code`, `https://github.com/login/oauth/access_token` and the scopes `repo read:org write:public_key workflow`. Only the manifest changed; the wasm is byte-identical. Enterprise Server keeps the pasted token and Credential Manager's token, since each server would need its own OAuth App.
 - **REST covers:**
   - lists, using `per_page=100` and the `Link` `rel="next"` URL as the cursor, checked to stay on the API endpoint;
   - repositories (`/user/repos` with `affiliation`, and search with `user:` and `org:` qualifiers);
@@ -676,7 +677,7 @@ Gitea needs no SterneGit change and should be about 700–900 lines.
 
 ## 14. Open items
 
-- **Your step:** register the SterneGit OAuth App on GitHub with "Enable Device Flow" ticked. Its client ID goes in `connector.json`, as a `device` sign-in with `device_code_url`, `token_url` and `scopes`. SterneGit's device flow is built and tested against a local fake OAuth server; the Add account dialog offers it as soon as the manifest does.
+- **Done 2026-11-06:** the SterneGit OAuth App is registered on GitHub with "Enable Device Flow" ticked, and its client ID is in `connector.json` (section 9). GitHub answered a code request and an `authorization_pending` poll for it. A full sign-in through the app, approved on github.com, is still to be done by hand.
 - **Done in milestone 4:** `Identity` carries the user's `id`, so account ids are `<connector>:<host>:<user id>`.
 - **Unverified:**
   - whether macOS curl trusts roots added to the Keychain;

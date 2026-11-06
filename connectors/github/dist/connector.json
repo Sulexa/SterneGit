@@ -2,7 +2,7 @@
   "interface": { "abi": 1, "protocol": "1.0" },
   "id": "github",
   "name": "GitHub",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "module": "github.wasm",
   "features": ["repositories", "repositories.create", "ssh_keys", "pulls", "pulls.create", "pulls.merge"],
   "ssh_key_type": "ed25519",
@@ -20,6 +20,14 @@
       "images": ["https://avatars.githubusercontent.com/"],
       "remotes": [{ "hosts": ["github.com", "ssh.github.com"], "path": "{owner}/{name}" }],
       "sign_in": [
+        {
+          "method": "device",
+          "token": { "kind": "bearer" },
+          "client_id": "Ov23li4Gy6mcZEsgGOGB",
+          "device_code_url": "https://github.com/login/device/code",
+          "token_url": "https://github.com/login/oauth/access_token",
+          "scopes": ["repo", "read:org", "write:public_key", "workflow"]
+        },
         {
           "method": "pasted_token",
           "token": { "kind": "bearer" },

@@ -470,8 +470,12 @@ mod tests {
         };
         assert_eq!(dot_com.token_endpoints, ["api", "graphql"]);
         assert_eq!(dot_com.remotes[0].hosts, ["github.com", "ssh.github.com"]);
-        assert_eq!(dot_com.sign_in[0].method, SignInMethod::PastedToken);
+        assert_eq!(dot_com.sign_in[0].method, SignInMethod::Device);
         assert_eq!(dot_com.sign_in[0].scheme, TokenScheme::Bearer);
+        assert_eq!(dot_com.sign_in[0].client_id.as_deref(), Some("Ov23li4Gy6mcZEsgGOGB"));
+        assert_eq!(dot_com.sign_in[0].scopes, ["repo", "read:org", "write:public_key", "workflow"]);
+        assert_eq!(dot_com.sign_in[1].method, SignInMethod::PastedToken);
+        assert!(enterprise.sign_in.iter().all(|sign_in| sign_in.method != SignInMethod::Device));
         assert_eq!(enterprise.fields[0].kind, FieldKind::Url);
         assert_eq!(
             enterprise.endpoints[0],
