@@ -1591,3 +1591,20 @@
 .method-choice { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; }
 .method-choice.chosen { border-color: var(--ring); background: var(--list-hover); }
 .method-choice > .radio { flex: none; width: 190px; }
+
+.worktree-name { flex: none; max-width: 112px; }
+.worktree-dirty { gap: 4px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.worktree-dirty > .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--yellow); }
+.section-header.opens { cursor: pointer; }
+.section-header.opens:hover,
+.section-header.opens.hot { background: var(--list-hover); color: var(--foreground); }
+.section-header > .opens-icon { display: flex; color: var(--muted); }
+.worktree-bar { flex: none; display: flex; align-items: center; gap: 10px; padding: 8px 8px 8px 12px; border-bottom: 1px solid var(--border); background: var(--title-bar); }
+.dialog.worktrees { width: 800px; }
+.worktree-tools { gap: 4px; margin-top: 12px; }
+.worktree-list { margin-top: 6px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.list-row.worktree-list-row { height: 52px; gap: 10px; }
+.worktree-list-row + .worktree-list-row { border-top: 1px solid var(--border); }
+.worktree-list-row > .chips { flex: none; gap: 6px; }
+.commit-row > .worktree-summary { flex: none; width: 304px; }
+.worktree-warn { gap: 6px; margin-top: 10px; color: var(--yellow); }

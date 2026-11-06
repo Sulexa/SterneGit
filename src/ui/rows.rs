@@ -2,7 +2,9 @@ use gpui_kit::{
     AnyElement, App, Div, ElementId, Hsla, InteractiveElement as _, IntoElement, ParentElement as _,
     Pixels, RenderOnce, SharedString, StatefulInteractiveElement as _, Styled as _, Window,
     assets::IconName,
-    component::{ActiveTheme as _, Icon, Sizable as _, StyledExt as _, h_flex, list::ListItem},
+    component::{
+        ActiveTheme as _, Icon, Sizable as _, StyledExt as _, h_flex, list::ListItem, tooltip::Tooltip,
+    },
     div,
     prelude::FluentBuilder as _,
     px,
@@ -159,6 +161,7 @@ pub(crate) struct SectionHeader {
     action: Option<AnyElement>,
     open: Option<bool>,
     on_toggle: Option<Handler<()>>,
+    opens: Option<(SharedString, Handler<()>)>,
 }
 
 impl SectionHeader {
@@ -170,7 +173,17 @@ impl SectionHeader {
             action: None,
             open: None,
             on_toggle: None,
+            opens: None,
         }
+    }
+
+    pub(crate) fn opens(
+        mut self,
+        tooltip: impl Into<SharedString>,
+        callback: impl Fn(&(), &mut Window, &mut App) + 'static,
+    ) -> Self {
+        self.opens = Some((tooltip.into(), handler(callback)));
+        self
     }
 
     pub(crate) fn color(mut self, color: Hsla) -> Self {
@@ -204,24 +217,53 @@ impl SectionHeader {
 
 impl RenderOnce for SectionHeader {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+        let theme = cx.theme();
+        let (muted, hover, foreground) = (theme.muted_foreground, theme.list_hover, theme.foreground);
+        let Self {
+            title,
+            color,
+            count,
+            action,
+            open,
+            on_toggle,
+            opens,
+        } = self;
+        let fold = open.map(|open| {
+            div()
+                .id("fold")
+                .flex_none()
+                .child(fold_icon(open))
+                .when_some(on_toggle.clone().filter(|_| opens.is_some()), |this, on_toggle| {
+                    this.on_click(move |_, window, cx| {
+                        cx.stop_propagation();
+                        on_toggle(&(), window, cx)
+                    })
+                })
+        });
         h_flex()
-            .id(self.title.clone())
+            .id(title.clone())
             .w_full()
             .h(ROW_HEIGHT)
             .px_3()
             .gap_2()
             .xs_text()
             .font_medium()
-            .text_color(self.color.unwrap_or(cx.theme().muted_foreground))
-            .when_some(self.open, |this, open| {
-                this.gap_1p5().child(fold_icon(open))
-            })
-            .child(self.title)
+            .text_color(color.unwrap_or(muted))
+            .when(open.is_some(), |this| this.gap_1p5())
+            .children(fold)
+            .child(title)
             .child(div().flex_1())
-            .children(self.count.map(thousands))
-            .children(self.action)
-            .when_some(self.on_toggle, |this, on_toggle| {
-                this.on_click(move |_, window, cx| on_toggle(&(), window, cx))
+            .children(count.map(thousands))
+            .children(action)
+            .map(|this| match opens {
+                Some((tooltip, on_open)) => this
+                    .hover(move |style| style.bg(hover).text_color(foreground))
+                    .child(Icon::new(IconName::Maximize2).xsmall())
+                    .tooltip(move |window, cx| Tooltip::new(tooltip.clone()).build(window, cx))
+                    .on_click(move |_, window, cx| on_open(&(), window, cx)),
+                None => this.when_some(on_toggle, |this, on_toggle| {
+                    this.on_click(move |_, window, cx| on_toggle(&(), window, cx))
+                }),
             })
     }
 }

@@ -266,6 +266,8 @@ const Catalog = (() => {
             ['Open', () => C.SectionHeader({ title: 'Branches', count: 5, open: true }), { w: 224 }],
             ['Folded', () => C.SectionHeader({ title: 'Tags', count: 2, open: false }), { w: 224 }],
             ['With an action', () => C.SectionHeader({ title: 'Unstaged files (4)', action: C.Button({ label: 'Stage all', icon: 'plus', variant: 'ghost' }) }), { w: 480 }],
+            ['Opens a panel', () => C.SectionHeader({ title: WorktreeTexts.section, count: 5, open: true, opens: WorktreeTexts.headerTooltip }), { w: 224 }],
+            ['Opens a panel, pointed', () => C.SectionHeader({ title: WorktreeTexts.section, count: 5, open: true, opens: WorktreeTexts.headerTooltip, hot: true }), { w: 224 }],
           ],
         },
         {
@@ -1293,7 +1295,119 @@ const Catalog = (() => {
       ],
     },
     pullsGroup(),
+    worktreesGroup(),
   ];
+
+  function worktreesGroup() {
+    const { list, inGraph } = Sample.worktrees;
+    const [mainTree, diffView, blame, dreamy, stashUi] = list;
+    const graphRow = (name) => {
+      const at = inGraph.wipRow(name);
+      return () => C.WorktreeChangesRow({ tree: inGraph.commits[at].wip, graph: inGraph.commits[at].graph, width: graphWidth(inGraph.commits) });
+    };
+    return {
+      key: 'worktrees',
+      title: 'Worktrees',
+      about: 'The Worktrees section of the left pane, every worktree in the graph, and the Worktrees panel to add and clean them up.',
+      items: [
+        {
+          name: 'WorktreeRow',
+          code: 'repo::refs_list::worktree_row',
+          source: 'src/repo/refs_list.rs',
+          about: 'One worktree in the Worktrees section of the RefsList: a folder icon, the folder name, then its branch or the commit it is detached at, then its state. Bold for the worktree this tab shows. A click selects it in the graph, a double-click opens it in a new tab, a right-click opens its WorktreeMenu.',
+          variants: [
+            ['This tab, with changes', () => C.WorktreeRow({ tree: mainTree, here: true }), { w: 224 }],
+            ['Another worktree, selected', () => C.WorktreeRow({ tree: diffView, selected: true }), { w: 224 }],
+            ['Locked', () => C.WorktreeRow({ tree: blame }), { w: 224 }],
+            ['Detached', () => C.WorktreeRow({ tree: dreamy }), { w: 224 }],
+            ['Folder missing', () => C.WorktreeRow({ tree: stashUi }), { w: 224 }],
+          ],
+        },
+        {
+          name: 'WorktreeChangesRow',
+          code: 'repo::history_list::worktree_changes_row',
+          source: 'src/repo/history_list.rs',
+          about: "Another worktree's uncommitted changes, as a graph row right above the commit its HEAD is on: a dashed hollow dot, a badge with its name, and what changed. A click shows its changes in the ChangesList with a WorktreeBar; a right-click opens its WorktreeMenu.",
+          variants: [
+            ['On a branch', graphRow('diff-view'), { w: row }],
+            ['Detached, in a lane of its own', graphRow('dreamy-grothendieck'), { w: row }],
+          ],
+        },
+        {
+          name: 'WorktreeBar',
+          code: 'repo::worktree_bar::worktree_bar',
+          source: 'src/repo/worktree_bar.rs',
+          about: "Above the ChangesList when it shows another worktree's changes: its name, branch and path, then Show in folder and Open in a new tab.",
+          variants: [
+            ['On a branch', () => C.WorktreeBar({ tree: diffView }), { w: 480 }],
+            ['Detached', () => C.WorktreeBar({ tree: dreamy }), { w: 480 }],
+          ],
+        },
+        {
+          name: 'WorktreeMenu',
+          code: 'repo::worktree_menu::WorktreeMenu',
+          source: 'src/repo/worktree_menu.rs',
+          about: "Right-click on a WorktreeRow, a WorktreeChangesRow or a worktree badge. Open in a new tab switches to the worktree's tab when it is already open.",
+          variants: [
+            ['Another worktree', () => menuFrame(C.WorktreeMenu({ tree: diffView }))],
+            ['Locked', () => menuFrame(C.WorktreeMenu({ tree: blame }))],
+            ['The main worktree, from another tab', () => menuFrame(C.WorktreeMenu({ tree: mainTree }))],
+            ['Folder missing', () => menuFrame(C.WorktreeMenu({ tree: stashUi }))],
+          ],
+        },
+        {
+          name: 'WorktreeDialog',
+          code: 'repo::worktree_dialog::open_worktree_dialog',
+          source: 'src/repo/worktree_dialog.rs',
+          about: 'New worktree…: an existing branch or a new one, and the folder, suggested next to the repository.',
+          variants: [
+            ['Existing branch', () => bigDialog(C.WorktreeDialog({ branch: 'topic/tabs', folder: 'E:\\Projects\\sternegit-worktrees\\tabs', parent: 'E:\\Projects\\sternegit-worktrees' }), 470, 640)],
+            ['New branch, opened in a tab', () => bigDialog(C.WorktreeDialog({ fresh: true, name: 'fix/tab-order', from: 'main', folder: 'E:\\Projects\\sternegit-worktrees\\tab-order', parent: 'E:\\Projects\\sternegit-worktrees', openTab: true }), 450, 640)],
+            ['Branch taken', () => bigDialog(C.WorktreeDialog({ branch: 'feature/diff-view', folder: 'E:\\Projects\\sternegit-worktrees\\diff-view', parent: 'E:\\Projects\\sternegit-worktrees', problem: WorktreeTexts.inUse('feature/diff-view', 'diff-view') }), 450, 640)],
+            ['Folder not empty', () => bigDialog(C.WorktreeDialog({ branch: 'topic/tabs', folder: 'E:\\Projects\\website', parent: 'E:\\Projects\\sternegit-worktrees', folderProblem: WorktreeTexts.notEmpty }), 470, 640)],
+          ],
+        },
+        {
+          name: 'RemoveWorktreeDialog',
+          code: 'repo::worktree_menu::confirm_remove',
+          source: 'src/repo/worktree_menu.rs',
+          about: 'Remove worktree… asks first: it deletes the folder. Also delete the branch is offered only for a merged branch.',
+          variants: [
+            ['With changes, branch not merged', () => dialogFrame(C.RemoveWorktreeDialog({ tree: diffView }))],
+            ['Clean, branch merged', () => dialogFrame(C.RemoveWorktreeDialog({ tree: { ...stashUi, missing: false }, merged: true }))],
+            ['Detached', () => dialogFrame(C.RemoveWorktreeDialog({ tree: dreamy }))],
+          ],
+        },
+        {
+          name: 'LockWorktreeDialog',
+          code: 'repo::worktree_menu::open_lock_dialog',
+          source: 'src/repo/worktree_menu.rs',
+          about: 'Lock… asks for an optional reason, which the lock icon of the WorktreeRow shows when hovered.',
+          variants: [
+            ['Empty', () => dialogFrame(C.LockWorktreeDialog({ tree: dreamy }))],
+            ['With a reason', () => dialogFrame(C.LockWorktreeDialog({ tree: dreamy, reason: 'on the backup drive' }))],
+          ],
+        },
+        {
+          name: 'WorktreeListRow',
+          code: 'repo::worktrees_panel::WorktreesPanel::row',
+          source: 'src/repo/worktrees_panel.rs',
+          about: 'One worktree in the WorktreesDialog: a box to tick it, its name, branch and path, what to know before removing it, and Open in a new tab.',
+          variants: list.map((tree) => [tree.name, () => C.WorktreeListRow({ tree, here: tree.main, picked: tree === dreamy }), { w: 760 }]),
+        },
+        {
+          name: 'WorktreesDialog',
+          code: 'repo::worktrees_panel::open_worktrees_panel',
+          source: 'src/repo/worktrees_panel.rs',
+          about: 'The Worktrees panel, opened by a click on the header of the Worktrees section: every worktree of the repository, to add one or remove several at once.',
+          variants: [
+            ['Two ticked', () => bigDialog(C.WorktreesDialog({ repository: inGraph.name, list, here: 'sternegit', picked: [dreamy.name, stashUi.name] }), 560, 840)],
+            ['Nothing ticked', () => bigDialog(C.WorktreesDialog({ repository: inGraph.name, list, here: 'sternegit' }), 540, 840)],
+          ],
+        },
+      ],
+    };
+  }
 
   function pullsGroup() {
     const { list, shown, details, failing, failingDetails, fork, forkDetails, mergedSha } = Sample.pulls;

@@ -304,6 +304,7 @@ pub(crate) struct ChangesList {
     rows: BySide<Rc<[FileTreeRow]>>,
     form: AnyView,
     form_hidden: bool,
+    header: Option<AnyElement>,
     open: Option<OpenFile>,
     scrolls: SideScrolls,
     actions: RowActions,
@@ -330,6 +331,7 @@ impl ChangesList {
             rows,
             form: form.into(),
             form_hidden: false,
+            header: None,
             open: None,
             scrolls,
             actions: RowActions {
@@ -344,6 +346,11 @@ impl ChangesList {
                 on_fold: None,
             },
         }
+    }
+
+    pub(crate) fn header(mut self, header: Option<AnyElement>) -> Self {
+        self.header = header;
+        self
     }
 
     pub(crate) fn root(mut self, root: Option<Arc<Path>>) -> Self {
@@ -563,6 +570,7 @@ impl RenderOnce for ChangesList {
         };
         v_flex()
             .pane()
+            .children(self.header)
             .when(!self.form_hidden, |this| this.child(self.form))
             .children(lists)
             .into_any_element()

@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{path::Path, sync::Arc};
 
 use gix::ObjectId;
 use gpui_kit::{
@@ -6,7 +6,7 @@ use gpui_kit::{
     SharedString, StatefulInteractiveElement as _, Styled as _, UniformListScrollHandle, Window,
     assets::IconName,
     component::{
-        ActiveTheme as _, Icon, Sizable as _, h_flex, menu::ContextMenuExt as _,
+        ActiveTheme as _, Icon, Sizable as _, StyledExt as _, h_flex, menu::ContextMenuExt as _,
         scroll::Scrollbar, tooltip::Tooltip,
     },
     div,
@@ -17,16 +17,29 @@ use gpui_kit::{
 use super::{
     branch_menu::BranchMenu,
     pulls::{PullMarks, PullsSection},
-    ref_tree::{RefGroup, RefTreeRow, Section, last_segment, ref_tree},
+    ref_tree::{Listed, RefGroup, RefTreeRow, Section, last_segment, ref_tree},
     stash_menu::StashMenu,
+    worktree_menu::WorktreeMenu,
 };
 use crate::{
-    git::{AheadBehind, History, RefKind, RefLabel, Stash},
+    git::{AheadBehind, History, RefKind, RefLabel, Stash, Worktree},
     ui::{
-        Folded, Handler, Look as _, PullMark, SectionHeader, counted, handler, is_double_click,
-        list_row, pull_chip, thousands, tree_line,
+        Folded, Handler, Look as _, PullMark, SectionHeader, checked_out_in, counted, handler,
+        is_double_click, list_row, pull_chip, thousands, tree_line,
     },
 };
+
+const PANEL_TOOLTIP: &str = "Open the Worktrees panel to add and clean up worktrees";
+
+#[derive(Clone)]
+pub(crate) struct WorktreeSection {
+    pub(crate) changed: Vec<usize>,
+    pub(crate) selected: Option<Arc<Path>>,
+    pub(crate) menu: WorktreeMenu,
+    pub(crate) on_select: Handler<Arc<Path>>,
+    pub(crate) on_open: Handler<Arc<Path>>,
+    pub(crate) on_open_panel: Handler<()>,
+}
 
 #[derive(IntoElement)]
 pub(crate) struct RefsList {
@@ -41,6 +54,7 @@ pub(crate) struct RefsList {
     branch_menu: Option<BranchMenu>,
     stash_menu: Option<StashMenu>,
     pulls: Option<PullsSection>,
+    worktrees: Option<WorktreeSection>,
     marks: Arc<PullMarks>,
 }
 
@@ -50,8 +64,15 @@ impl RefsList {
         folded: &Folded<RefGroup>,
         scroll: UniformListScrollHandle,
     ) -> Self {
+        let listed = Listed {
+            stashes: history.stashes.len(),
+            worktrees: match history.worktrees.len() {
+                0 | 1 => 0,
+                listed => listed,
+            },
+        };
         Self {
-            rows: ref_tree(&history.refs, history.stashes.len(), folded),
+            rows: ref_tree(&history.refs, listed, folded),
             history,
             selected: None,
             scroll,
@@ -62,8 +83,14 @@ impl RefsList {
             branch_menu: None,
             stash_menu: None,
             pulls: None,
+            worktrees: None,
             marks: Arc::default(),
         }
+    }
+
+    pub(crate) fn worktrees(mut self, section: WorktreeSection) -> Self {
+        self.worktrees = Some(section);
+        self
     }
 
     pub(crate) fn pulls(mut self, pulls: Option<PullsSection>, marks: Arc<PullMarks>) -> Self {
@@ -134,6 +161,7 @@ impl RenderOnce for RefsList {
             branch_menu,
             stash_menu,
             pulls,
+            worktrees,
             marks,
         } = self;
         let pull_rows = pulls.as_ref().map_or(0, PullsSection::len);
@@ -144,6 +172,7 @@ impl RenderOnce for RefsList {
             on_toggle,
             branch_menu,
             stash_menu,
+            worktrees,
         };
         div()
             .id("refs")
@@ -176,6 +205,7 @@ struct RowHandlers {
     on_toggle: Option<Handler<RefGroup>>,
     branch_menu: Option<BranchMenu>,
     stash_menu: Option<StashMenu>,
+    worktrees: Option<WorktreeSection>,
 }
 
 fn ref_tree_row(
@@ -193,13 +223,20 @@ fn ref_tree_row(
         on_toggle,
         branch_menu,
         stash_menu,
+        worktrees,
     } = handlers;
     match row {
         &RefTreeRow::Section {
             section,
             count,
             open,
-        } => section_header(section, count, open, on_toggle.clone()),
+        } => section_header(
+            section,
+            count,
+            open,
+            on_toggle.clone(),
+            worktrees.as_ref().map(|section| section.on_open_panel.clone()),
+        ),
         RefTreeRow::Folder {
             kind,
             path,
@@ -227,6 +264,7 @@ fn ref_tree_row(
             stash_menu.clone(),
             cx,
         ),
+        &RefTreeRow::Worktree { ix } => worktree_row(&history.worktrees[ix], ix, worktrees.as_ref(), cx),
     }
 }
 
@@ -234,6 +272,7 @@ fn section_title(section: Section) -> &'static str {
     match section {
         Section::Refs(RefKind::LocalBranch) => "Branches",
         Section::Refs(RefKind::RemoteBranch) => "Remotes",
+        Section::Worktrees => "Worktrees",
         Section::Stashes => "Stashes",
         Section::Refs(RefKind::Tag) => "Tags",
     }
@@ -258,6 +297,7 @@ fn section_header(
     count: usize,
     open: bool,
     on_toggle: Option<Handler<RefGroup>>,
+    on_open_panel: Option<Handler<()>>,
 ) -> AnyElement {
     let group = RefGroup::Section(section);
     SectionHeader::new(section_title(section))
@@ -265,6 +305,9 @@ fn section_header(
         .open(open)
         .when_some(on_toggle, |header, on_toggle| {
             header.on_toggle(move |_, window, cx| on_toggle(&group, window, cx))
+        })
+        .when_some(on_open_panel.filter(|_| section == Section::Worktrees), |header, on_open| {
+            header.opens(PANEL_TOOLTIP, move |_, window, cx| on_open(&(), window, cx))
         })
         .into_any_element()
 }
@@ -337,7 +380,11 @@ fn ref_row(
                 .flex_1(),
             )
             .children(mark.map(|mark| pull_chip(mark, cx)))
-            .children(ahead_behind(label, cx)),
+            .children(ahead_behind(label, cx))
+            .children(label.worktree.clone().map(|worktree| {
+                let words = checked_out_in(&worktree);
+                state_icon("elsewhere", IconName::FolderGit, cx.theme().muted_foreground, words)
+            })),
     )
     .on_click(move |event, window, cx| {
         if let Some(on_reveal) = &on_reveal {
@@ -428,6 +475,94 @@ fn stash_row(
         }
         None => row.into_any_element(),
     }
+}
+
+fn worktree_row(
+    worktree: &Worktree,
+    ix: usize,
+    section: Option<&WorktreeSection>,
+    cx: &App,
+) -> AnyElement {
+    let theme = cx.theme();
+    let (muted, yellow) = (theme.muted_foreground, theme.yellow);
+    let changed = section
+        .and_then(|section| section.changed.get(ix).copied())
+        .unwrap_or_default();
+    let selected = section
+        .and_then(|section| section.selected.as_deref())
+        .is_some_and(|selected| *selected == *worktree.location);
+    let checked_out = worktree.checked_out();
+    let state = if worktree.is_missing {
+        let gone = format!("{} is gone. Forget this worktree to free its branch.", worktree.location.display());
+        Some(state_icon("missing", IconName::TriangleAlert, yellow, gone))
+    } else if let Some(reason) = &worktree.lock {
+        let because = match reason.is_empty() {
+            true => "Locked".to_owned(),
+            false => format!("Locked: {reason}"),
+        };
+        Some(state_icon("locked", IconName::Lock, muted, because))
+    } else {
+        None
+    };
+    let dirty = (changed > 0).then(|| {
+        let words = counted(changed, "changed file", "changed files");
+        h_flex()
+            .id("changed")
+            .flex_none()
+            .gap_1()
+            .xs_text()
+            .text_color(muted)
+            .child(div().size(gpui_kit::px(6.)).rounded_full().bg(yellow))
+            .child(thousands(changed))
+            .tooltip(move |window, cx| Tooltip::new(words.clone()).build(window, cx))
+    });
+    let name = div()
+        .flex_none()
+        .max_w(gpui_kit::px(112.))
+        .truncate()
+        .sm_text()
+        .when(worktree.is_here, |this| this.font_semibold())
+        .when(worktree.is_missing, |this| this.text_color(muted))
+        .child(worktree.name.clone());
+    let row = list_row(SharedString::from(format!("worktree/{ix}")), selected)
+        .px_3()
+        .child(
+            h_flex()
+                .id("worktree")
+                .w_full()
+                .min_w_0()
+                .gap_1p5()
+                .child(div().flex_none().size_3())
+                .child(muted_icon(IconName::FolderGit, cx))
+                .child(name)
+                .child(div().flex_1().min_w_0().truncate().xs_text().text_color(muted).child(checked_out))
+                .children(state)
+                .children(dirty),
+        );
+    let Some(section) = section else {
+        return row.into_any_element();
+    };
+    let location = worktree.location.clone();
+    let on_select = section.on_select.clone();
+    let on_open = (!worktree.is_here && !worktree.is_missing).then(|| section.on_open.clone());
+    let menu = section.menu.clone();
+    let right_clicked = worktree.clone();
+    row.on_click(move |event, window, cx| {
+        on_select(&location, window, cx);
+        if let Some(on_open) = on_open.as_ref().filter(|_| is_double_click(event)) {
+            on_open(&location, window, cx)
+        }
+    })
+    .context_menu(move |popup, _, _| menu.build(popup, &right_clicked))
+    .into_any_element()
+}
+
+fn state_icon(id: &'static str, icon: IconName, color: gpui_kit::Hsla, words: String) -> impl IntoElement {
+    div()
+        .id(id)
+        .flex_none()
+        .child(Icon::new(icon).xsmall().text_color(color))
+        .tooltip(move |window, cx| Tooltip::new(words.clone()).build(window, cx))
 }
 
 fn muted_icon(name: IconName, cx: &App) -> Icon {

@@ -1,6 +1,8 @@
 use std::{
     cmp::Reverse,
     collections::{BinaryHeap, HashMap},
+    path::Path,
+    sync::Arc,
     time::{Duration, Instant},
 };
 
@@ -17,9 +19,11 @@ use super::{
     graph::{self, Graph},
     refs::{self, RefDigest, RefLabel, ShownRef},
     stash::{Stash, stash_ids_newest_first, stash_name},
+    status::WorkingChanges,
     text::decode,
     time::format_time,
     underway::rebased_branch,
+    worktree::{Worktree, WorktreeChanges, changes_elsewhere, read_worktrees},
 };
 
 pub(crate) const HISTORY_LIMIT: usize = 10_000;
@@ -52,6 +56,20 @@ impl Commit {
     fn joined_to_its_base_only(mut self) -> Self {
         self.parents.truncate(1);
         self
+    }
+
+    fn standing_for_changes_on_it(&self, id: ObjectId) -> Self {
+        Self {
+            id,
+            short_id: SharedString::default(),
+            parents: vec![self.id],
+            subject: SharedString::default(),
+            author: SharedString::default(),
+            author_email: SharedString::default(),
+            authored: SharedString::default(),
+            committed: SharedString::default(),
+            committed_at: self.committed_at,
+        }
     }
 
     fn of(id: ObjectId, parents: Vec<ObjectId>, commit: &gix::Commit<'_>) -> Result<Self> {
@@ -96,12 +114,15 @@ pub(crate) struct History {
     pub(crate) commits: Vec<Commit>,
     pub(crate) refs: Vec<RefLabel>,
     pub(crate) stashes: Vec<Stash>,
+    pub(crate) worktrees: Vec<Worktree>,
+    pub(crate) worktree_changes: Vec<WorktreeChanges>,
     pub(crate) graph: Graph,
     pub(crate) truncated: bool,
     pub(crate) elapsed: Duration,
     pub(crate) digest: RefDigest,
     rows: HashMap<ObjectId, usize>,
     stash_rows: Vec<usize>,
+    worktree_rows: Vec<(usize, usize)>,
     refs_by_commit: HashMap<ObjectId, Vec<usize>>,
 }
 
@@ -142,31 +163,45 @@ struct Walked {
 }
 
 impl History {
-    pub(crate) fn read(repo: &gix::Repository, started: Instant) -> Result<Self> {
+    pub(crate) fn read(repo: &gix::Repository, started: Instant, here: &Path) -> Result<Self> {
         let digest_never_newer_than_what_is_read = RefDigest::of(repo)?;
         let head = Head::read(repo)?;
+        let worktrees = read_worktrees(repo, here);
+        let worktree_changes = changes_elsewhere(&worktrees);
         let mut refs = refs::read_labels(repo, head.name.as_ref())?;
+        mark_checked_out_elsewhere(&mut refs, &worktrees);
         refs::count_from_upstreams(repo, &mut refs);
         let (stashes, stashed): (Vec<Stash>, Vec<Commit>) = read_stashes(repo).into_iter().unzip();
         let bases = stashed.iter().filter_map(|stash| stash.parents.first().copied());
-        let mut walked = walk_newest_first(repo, tips(&refs, head.id, bases))?;
+        let heads_elsewhere = worktrees
+            .iter()
+            .filter(|worktree| !worktree.is_here)
+            .filter_map(|worktree| worktree.head);
+        let mut walked = walk_newest_first(repo, tips(&refs, head.id, bases.chain(heads_elsewhere)))?;
         add_stash_rows(&mut walked.commits, stashed);
+        add_changes_rows(&mut walked.commits, &worktrees, &worktree_changes);
         Ok(Self::new(
             head,
             in_date_order(walked.commits),
             refs,
             stashes,
+            Elsewhere {
+                worktrees,
+                changes: worktree_changes,
+            },
             walked.truncated,
             digest_never_newer_than_what_is_read,
             started,
         ))
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn new(
         head: Head,
         commits: Vec<Commit>,
         refs: Vec<RefLabel>,
         stashes: Vec<Stash>,
+        elsewhere: Elsewhere,
         truncated: bool,
         digest: RefDigest,
         started: Instant,
@@ -182,6 +217,13 @@ impl History {
             .collect();
         stash_rows.sort_unstable();
         stash_rows.dedup();
+        let mut worktree_rows: Vec<(usize, usize)> = elsewhere
+            .worktrees
+            .iter()
+            .enumerate()
+            .filter_map(|(ix, worktree)| rows.get(&worktree.changes_row()).map(|&row| (row, ix)))
+            .collect();
+        worktree_rows.sort_unstable();
         let graph = graph::layout(
             commits
                 .iter()
@@ -198,12 +240,15 @@ impl History {
             commits,
             refs,
             stashes,
+            worktrees: elsewhere.worktrees,
+            worktree_changes: elsewhere.changes,
             graph,
             truncated,
             elapsed: started.elapsed(),
             digest,
             rows,
             stash_rows,
+            worktree_rows,
             refs_by_commit,
         }
     }
@@ -213,7 +258,62 @@ impl History {
     }
 
     pub(crate) fn newest(&self) -> Option<ObjectId> {
-        self.commits.first().map(|commit| commit.id)
+        (0..self.commits.len())
+            .find(|&row| self.worktree_on_row(row).is_none())
+            .map(|row| self.commits[row].id)
+    }
+
+    pub(crate) fn worktree_on_row(&self, row: usize) -> Option<&Worktree> {
+        let at = self.worktree_rows.binary_search_by_key(&row, |&(row, _)| row).ok()?;
+        Some(&self.worktrees[self.worktree_rows[at].1])
+    }
+
+    pub(crate) fn changes_row_of(&self, location: &Path) -> Option<usize> {
+        self.worktree_rows
+            .iter()
+            .find(|&&(_, ix)| *self.worktrees[ix].location == *location)
+            .map(|&(row, _)| row)
+    }
+
+    pub(crate) fn worktree(&self, location: &Path) -> Option<&Worktree> {
+        self.worktrees
+            .iter()
+            .find(|worktree| *worktree.location == *location)
+    }
+
+    pub(crate) fn here(&self) -> Option<&Worktree> {
+        self.worktrees.iter().find(|worktree| worktree.is_here)
+    }
+
+    pub(crate) fn main_worktree(&self) -> Option<&Worktree> {
+        self.worktrees.iter().find(|worktree| worktree.is_main)
+    }
+
+    pub(crate) fn detached_worktrees_on(&self, id: &ObjectId) -> impl Iterator<Item = &Worktree> {
+        self.worktrees.iter().filter(move |worktree| {
+            !worktree.is_here
+                && worktree.branch.is_none()
+                && worktree.head == Some(*id)
+                && self.changes_row_of(&worktree.location).is_none()
+        })
+    }
+
+    pub(crate) fn changes_read_in(&self, location: &Path) -> Option<&Arc<WorkingChanges>> {
+        self.worktree_changes
+            .iter()
+            .find(|read| *read.location == *location)
+            .map(|read| &read.changes)
+    }
+
+    pub(crate) fn shows_changes_of(&self, location: &Path, head: Option<ObjectId>) -> bool {
+        self.changes_row_of(location).is_some()
+            && self.worktree(location).is_some_and(|worktree| worktree.head == head)
+    }
+
+    pub(crate) fn locations_with_changes_rows(&self) -> impl Iterator<Item = &Arc<Path>> {
+        self.worktree_rows
+            .iter()
+            .map(|&(_, ix)| &self.worktrees[ix].location)
     }
 
     pub(crate) fn stash_index(&self, id: &ObjectId) -> Option<usize> {
@@ -225,7 +325,7 @@ impl History {
     }
 
     pub(crate) fn commit_count(&self) -> usize {
-        self.commits.len() - self.stash_rows.len()
+        self.commits.len() - self.stash_rows.len() - self.worktree_rows.len()
     }
 
     pub(crate) fn place_of(&self, id: &ObjectId) -> Option<RowPlace> {
@@ -238,9 +338,12 @@ impl History {
         }
         let row = self.row_of(id)?;
         let stash_rows_above = self.stash_rows.partition_point(|&stash_row| stash_row < row);
+        let changes_rows_above = self
+            .worktree_rows
+            .partition_point(|&(changes_row, _)| changes_row < row);
         Some(RowPlace {
             kind: RowKind::Commit,
-            number: row - stash_rows_above + 1,
+            number: row - stash_rows_above - changes_rows_above + 1,
             count: self.commit_count(),
         })
     }
@@ -289,6 +392,36 @@ fn read_stashes(repo: &gix::Repository) -> Vec<(Stash, Commit)> {
             Some((stash, commit))
         })
         .collect()
+}
+
+struct Elsewhere {
+    worktrees: Vec<Worktree>,
+    changes: Vec<WorktreeChanges>,
+}
+
+fn mark_checked_out_elsewhere(refs: &mut [RefLabel], worktrees: &[Worktree]) {
+    for label in refs.iter_mut().filter(|label| label.kind == refs::RefKind::LocalBranch) {
+        label.worktree = worktrees
+            .iter()
+            .find(|worktree| !worktree.is_here && worktree.branch.as_deref() == Some(label.name.as_str()))
+            .map(|worktree| worktree.name.clone());
+    }
+}
+
+fn add_changes_rows(commits: &mut Vec<Commit>, worktrees: &[Worktree], read: &[WorktreeChanges]) {
+    for worktree in worktrees {
+        let changed = read
+            .iter()
+            .any(|read| read.location == worktree.location && !read.changes.is_empty());
+        let Some(head) = worktree.head.filter(|_| changed) else {
+            continue;
+        };
+        let Some(base) = commits.iter().find(|commit| commit.id == head) else {
+            continue;
+        };
+        let row = base.standing_for_changes_on_it(worktree.changes_row());
+        commits.push(row);
+    }
 }
 
 fn add_stash_rows(commits: &mut Vec<Commit>, stashed: Vec<Commit>) {
@@ -412,6 +545,10 @@ pub(crate) mod fixtures {
             commits,
             Vec::new(),
             Vec::new(),
+            super::Elsewhere {
+                worktrees: Vec::new(),
+                changes: Vec::new(),
+            },
             false,
             RefDigest::default(),
             Instant::now(),
@@ -531,6 +668,36 @@ mod tests {
         let base = history.commits[stash].parents[0];
         assert!(history.row_of(&base).is_some());
         assert_eq!(history.commits.len(), 3);
+        Ok(())
+    }
+
+    #[test]
+    fn another_worktree_with_changes_gets_a_row_above_its_head_that_is_not_counted() -> Result<()> {
+        let scratch = ScratchRepo::new("worktree-row")?;
+        scratch.commit("first")?;
+        scratch.git(&["branch", "topic"])?;
+        scratch.commit("second")?;
+        let linked = scratch.dir.with_file_name(format!(
+            "{}-linked",
+            scratch.dir.file_name().expect("a folder").to_string_lossy()
+        ));
+        let _ = std::fs::remove_dir_all(&linked);
+        scratch.git(&["worktree", "add", "--quiet", &linked.display().to_string(), "topic"])?;
+        let (_, clean) = scratch.open()?;
+        assert_eq!(clean.commits.len(), 2);
+        let topic = clean.refs.iter().find(|label| label.name.as_str() == "topic").expect("topic");
+        assert_eq!(topic.worktree.as_ref(), Some(&clean.worktrees[1].name));
+        assert!(!topic.can_be_checked_out());
+        std::fs::write(linked.join("new.txt"), "new")?;
+        let (_, changed) = scratch.open()?;
+        let row = changed.changes_row_of(&changed.worktrees[1].location).expect("a changes row");
+        assert_eq!(changed.commits.len(), 3);
+        assert_eq!(changed.commit_count(), 2);
+        assert_eq!(changed.commits[row].parents, [changed.worktrees[1].head.expect("a head")]);
+        assert_eq!(changed.row_of(&changed.commits[row].parents[0]), Some(row + 1));
+        assert!(changed.worktree_on_row(row).is_some());
+        assert_ne!(changed.newest(), Some(changed.commits[row].id));
+        scratch.git(&["worktree", "remove", "--force", &linked.display().to_string()])?;
         Ok(())
     }
 

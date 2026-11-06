@@ -72,6 +72,7 @@ mod tests {
             is_head: false,
             upstream: upstream.map(|upstream| upstream.to_owned().into()),
             from_upstream: None,
+            worktree: None,
         }
     }
 

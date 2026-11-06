@@ -322,6 +322,61 @@ const Sample = (() => {
     description: 'git status marks them UU. The list gives them a U badge\nand the comparison shows the file with its markers.',
   };
 
+  const worktrees = (() => {
+    const none = { unstaged: [], staged: [] };
+    const diffViewChanges = {
+      unstaged: [
+        { kind: 'M', path: 'src/repo/file_diff_panel.rs' },
+        { kind: 'M', path: 'src/repo/patch_view.rs' },
+        { kind: '?', path: 'docs/mockup/split.png' },
+      ],
+      staged: [],
+    };
+    const list = [
+      { name: 'sternegit', path: 'E:\\Projects\\sternegit', branch: 'main', row: 0, main: true, changes, changed: '2026-11-04 11:02' },
+      { name: 'diff-view', path: 'E:\\Projects\\sternegit-worktrees\\diff-view', branch: 'feature/diff-view', row: 2, changes: diffViewChanges, changed: '2026-11-04 10:48' },
+      { name: 'blame', path: 'E:\\Projects\\sternegit-worktrees\\blame', branch: 'feature/blame', row: 9, locked: 'kept for the blame benchmark', changes: none, changed: '2026-11-01 22:40' },
+      { name: 'dreamy-grothendieck', path: 'E:\\Projects\\sternegit\\.claude\\worktrees\\dreamy-grothendieck', row: 5, merged: true, changes: { unstaged: [{ kind: '?', path: 'notes/tab-order.md' }], staged: [] }, changed: '2026-11-03 12:15' },
+      { name: 'stash-ui', path: 'D:\\Temp\\stash-ui', branch: 'feature/stash', row: 8, merged: true, missing: true, changes: none, changed: '2026-11-02 10:30' },
+    ].map((tree) => ({ ...tree, id: commits[tree.row].id }));
+
+    const seenFrom = (name) => {
+      const here = list.find((tree) => tree.name === name);
+      const others = list.filter((tree) => tree !== here);
+      const elsewhere = Object.fromEntries(others.filter((tree) => tree.branch).map((tree) => [tree.branch, tree.name]));
+      const detached = Object.fromEntries(others.filter((tree) => !tree.branch).map((tree) => [tree.row, tree.name]));
+      return {
+        ...history,
+        head: here.branch,
+        elsewhere,
+        refs: refs.map((label) => ({ ...label, head: label.name === here.branch, worktree: elsewhere[label.name] })),
+        commits: commits.map((commit, row) => ({
+          ...commit,
+          head: row === here.row,
+          worktree: detached[row],
+          refs: commit.refs.map(([refName, kind]) => (refName === here.branch ? [refName, kind, true] : [refName, kind])),
+        })),
+      };
+    };
+
+    const withChanges = (view, wips) => {
+      const shown = [];
+      view.commits.forEach((commit, row) => {
+        const wip = wips.find((each) => each.at === row);
+        if (wip) shown.push({ wip: wip.tree, graph: wip.graph, refs: [], subject: '', id: '' });
+        shown.push(wip ? { ...commit, graph: wip.rejoined, worktree: undefined } : commit);
+      });
+      const rowOf = (row) => row + wips.filter((each) => each.at <= row).length;
+      return { ...view, commits: shown, refs: view.refs.map((label) => ({ ...label, row: rowOf(label.row) })), wipRow: (name) => shown.findIndex((commit) => commit.wip && commit.wip.name === name) };
+    };
+
+    const dreamyChanges = { tree: list[3], at: 5, graph: [3, 4, 'P0 P1 P2 O3'], rejoined: [2, 4, 'P0 P1 I2 I3 O2'] };
+    const inGraph = withChanges(seenFrom('sternegit'), [{ tree: list[1], at: 2, graph: [1, 2, 'P0 O1'], rejoined: [1, 2, 'P0 I1 O1'] }, dreamyChanges]);
+    const inGraphFromDiffView = withChanges(seenFrom('diff-view'), [{ tree: list[0], at: 0, graph: [0, 1, 'O0'], rejoined: [0, 1, 'I0 O0'] }, dreamyChanges]);
+
+    return { list, diffViewChanges, inGraph, inGraphFromDiffView };
+  })();
+
   const tabs = [
     { name: 'sternegit', state: 'ready' },
     { name: 'website', state: 'ready' },
@@ -854,5 +909,6 @@ const Sample = (() => {
     rebasing, rebase, merge, starfallMerge, rebaseChanges, rebaseOneLeft, rebaseResolved, statusConflicts, statusMerged, slimeConflict, starfallConflicts,
     hosting,
     pulls,
+    worktrees,
   };
 })();

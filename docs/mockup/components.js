@@ -76,6 +76,7 @@ const IconPaths = {
   'git-pull-request': '<circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><path d="M6 9v12"/>',
   'git-pull-request-draft': '<circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M18 6V5"/><path d="M18 11v-1"/><path d="M6 9v12"/>',
   'git-pull-request-closed': '<circle cx="6" cy="6" r="3"/><path d="M6 9v12"/><path d="m21 3-6 6"/><path d="m21 9-6-6"/><path d="M18 11.5V15"/><circle cx="18" cy="18" r="3"/>',
+  'folder-git': '<path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/><circle cx="12" cy="13" r="2"/><path d="M14 13h3"/><path d="M7 13h3"/>',
   'list-filter': '<path d="M3 6h18"/><path d="M7 12h10"/><path d="M10 18h4"/>',
   'circle-minus': '<circle cx="12" cy="12" r="10"/><path d="M8 12h8"/>',
   eye: '<path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/>',
@@ -103,7 +104,7 @@ const ChangeColors = {
   U: 'var(--magenta)',
 };
 
-const RefIcons = { local: 'git-branch', remote: 'cloud', tag: 'tag', stash: 'archive' };
+const RefIcons = { local: 'git-branch', remote: 'cloud', tag: 'tag', stash: 'archive', worktree: 'folder-git' };
 
 const TreeIcons = {
   local: { top: 'folder', folder: 'folder', ref: 'git-branch' },
@@ -638,6 +639,68 @@ const MergeLooks = {
   closed: { icon: 'git-pull-request-closed', color: 'var(--red)', title: () => 'Closed without merging', about: () => 'Reopen it on the server to merge it.' },
 };
 
+const WorktreeTexts = {
+  section: 'Worktrees',
+  headerTooltip: 'Open the Worktrees panel to add and clean up worktrees',
+  rowTooltip: (tree, where) => `${tree.path}\n${where}`,
+  lockedBecause: (reason) => `Locked: ${reason}`,
+  missingTooltip: (path) => `${path} is gone. Forget this worktree to free its branch.`,
+  detached: (id) => `detached at ${id}`,
+  elsewhere: (name) => `Checked out in the worktree ${name}`,
+  thisTab: 'This tab',
+  main: 'Main worktree',
+  changed: (n) => counted(n, 'changed file', 'changed files'),
+  locked: 'Locked',
+  missing: 'Folder missing',
+  merged: (into) => `Merged into ${into}`,
+  openInTab: 'Open in a new tab',
+  showInFolder: 'Show in folder',
+  copyPath: 'Copy path',
+  lock: 'Lock…',
+  lockTitle: (name) => `Lock the worktree ${name}`,
+  lockAbout: "A locked worktree is never forgotten by git worktree prune, even while its folder is on a drive that isn't plugged in, and can't be removed until it is unlocked.",
+  lockPlaceholder: 'Reason (optional)',
+  lockConfirm: 'Lock',
+  unlock: 'Unlock',
+  forget: 'Forget this worktree',
+  remove: 'Remove worktree…',
+  newWorktree: 'New worktree…',
+  newFor: (branch) => `New worktree for ${branch}…`,
+  openWorktree: (name) => `Open the worktree ${name}`,
+  dialogTitle: 'New worktree',
+  dialogAbout: 'Another folder with its own checkout of this repository. Commits, branches and stashes are shared with every worktree; the files, the staged changes and HEAD are its own.',
+  existing: 'Existing branch',
+  fresh: 'New branch',
+  branch: 'Branch',
+  oneCheckout: 'A branch can be checked out in one worktree at a time. Remote branches get a local branch that tracks them.',
+  branchName: 'Name',
+  from: 'Starting from',
+  folder: 'Folder',
+  browse: 'Browse…',
+  folderHint: (parent) => `Next to the repository, in ${parent}, named after the branch`,
+  openAfter: 'Open it in a new tab',
+  create: 'Create worktree',
+  inUse: (branch, name) => `${branch} is already checked out in ${name}`,
+  notEmpty: "This folder already exists and isn't empty",
+  removeTitle: (name) => `Remove the worktree ${name}?`,
+  removeFolder: (path) => `Deletes the folder ${path}.`,
+  removeChanges: (n) => `Its ${counted(n, 'uncommitted change is', 'uncommitted changes are')} lost.`,
+  removeKeeps: (branch) => `Its commits stay on ${branch}.`,
+  deleteBranch: (branch) => `Also delete the branch ${branch}`,
+  deleteBranchUnmerged: (branch, into) => `${branch} isn't merged into ${into}, so it is kept`,
+  removeConfirm: 'Remove',
+  manageTitle: (repository) => `Worktrees of ${repository}`,
+  manageAbout: 'Every folder that checks out this repository. Removing one deletes its folder; its commits stay on its branch.',
+  selectMerged: 'Select merged',
+  forgetMissing: 'Forget missing folders',
+  removeSelected: (n) => (n ? `Remove ${counted(n, 'worktree', 'worktrees')}` : 'Remove'),
+  lostWarning: (n) => `${counted(n, 'worktree has', 'worktrees have')} uncommitted changes, which are lost.`,
+  close: 'Close',
+  uncommitted: 'Uncommitted changes',
+  openTabTooltip: 'Open this worktree in a new tab',
+  showTooltip: 'Show the folder in the file manager',
+};
+
 const PullTexts = {
   section: 'Pull requests',
   filters: { open: 'Open', closed: 'Closed', all: 'All' },
@@ -1163,19 +1226,36 @@ function remoteParts(name) {
   return { remote, branch: rest.join('/') };
 }
 
-function branchMenuItems({ label, current, mode = 'merge', pull }) {
+function branchMenuItems({ label, current, mode = 'merge', pull, worktree = false }) {
   const remote = label.kind === 'remote' && remoteParts(label.name);
   const checkedOut = Boolean(label.head);
+  const elsewhere = label.worktree;
   const item = (text) => [text, ''];
   const groups = [
-    !checkedOut && [item(Texts.checkOut(remote ? remote.branch : label.name))],
+    !checkedOut && [item(elsewhere ? WorktreeTexts.openWorktree(elsewhere) : Texts.checkOut(remote ? remote.branch : label.name))],
     !remote && [item(checkedOut ? Texts.pullWithMode(pullMode(mode).label) : Texts.pullFastForward), item(Texts.push)],
     pull && [item(pull === 'create' ? PullTexts.createItem : PullTexts.showItem(pull.number))],
     current && !checkedOut && [item(Texts.merge(label.name, current)), item(Texts.rebase(current, label.name))],
-    [item(Texts.branchHere)],
-    !checkedOut && [item(remote ? Texts.deleteRemoteBranch(remote.branch, remote.remote) : Texts.deleteBranch(label.name))],
+    [item(Texts.branchHere), worktree && !checkedOut && !elsewhere && item(WorktreeTexts.newFor(remote ? remote.branch : label.name))].filter(Boolean),
+    !checkedOut && !elsewhere && [item(remote ? Texts.deleteRemoteBranch(remote.branch, remote.remote) : Texts.deleteBranch(label.name))],
   ].filter(Boolean);
   return groups.flatMap((group, ix) => (ix ? ['-', ...group] : group));
+}
+
+function changedCount(tree) {
+  const changes = tree.changes || { unstaged: [], staged: [] };
+  return new Set([...(changes.conflicted || []), ...changes.staged, ...changes.unstaged].map((change) => change.path)).size;
+}
+
+function worktreeMenuItems({ tree, here = false }) {
+  const item = (text) => [text, ''];
+  if (tree.missing) return menuGroups([[item(WorktreeTexts.forget)], [item(WorktreeTexts.copyPath)]]);
+  return menuGroups([
+    [!here && item(WorktreeTexts.openInTab)],
+    [item(WorktreeTexts.showInFolder), item(WorktreeTexts.copyPath)],
+    [!tree.main && item(tree.locked ? WorktreeTexts.unlock : WorktreeTexts.lock)],
+    [!tree.main && !here && !tree.locked && item(WorktreeTexts.remove)],
+  ]);
 }
 
 function stashMenuItems({ stash }) {
@@ -1316,7 +1396,7 @@ const C = {
     return `<img data-c="AppLogo" class="app-logo" src="logo.svg" width="${size}" height="${size}" alt="SterneGit">`;
   },
 
-  TopBar({ platform = 'windows', repository, head, openMenu } = {}) {
+  TopBar({ platform = 'windows', repository, head, openMenu, worktree } = {}) {
     const mac = platform === 'mac';
     const lights = mac
       ? '<div class="traffic-lights"><span style="background:#ff5f57"></span><span style="background:#febc2e"></span><span style="background:#28c840"></span></div>'
@@ -1324,8 +1404,9 @@ const C = {
     const pill = head
       ? `<div class="h head-pill">${icon('git-branch', 'xs')}<div class="ellipsis">${esc(head)}</div></div>`
       : '';
+    const tree = worktree ? `<div class="h head-pill" title="${esc(WorktreeTexts.section)}">${icon('folder-git', 'xs')}<div class="ellipsis">${esc(worktree)}</div></div>` : '';
     const repo = repository
-      ? `<div class="h" style="gap:8px"><div class="sm medium ellipsis">${esc(repository)}</div>${pill}</div>`
+      ? `<div class="h" style="gap:8px"><div class="sm medium ellipsis">${esc(repository)}</div>${tree}${pill}</div>`
       : '';
     return `<div data-c="TopBar" data-base="TitleBar" class="top-bar${mac ? ' mac' : ''}">${lights}<div class="content">${C.AppLogo()}${mac ? '' : C.AppMenuBar({ open: openMenu })}<div class="fill"></div>${repo}</div>${mac ? '' : C.WindowControls()}</div>`;
   },
@@ -1356,15 +1437,19 @@ const C = {
     return `<div data-c="${name}"${baseAttribute} class="${classes}">${content}</div>`;
   },
 
-  SectionHeader({ title, count, action, open }) {
+  SectionHeader({ title, count, action, open, opens, hot = false }) {
     const foldable = open !== undefined;
     const shownCount = count === undefined ? '' : `<span>${thousands(count)}</span>`;
-    return `<div data-c="SectionHeader" class="section-header${foldable ? ' foldable' : ''}">${foldable ? twisty(open) : ''}<span class="title ellipsis">${esc(title)}</span>${shownCount}${action || ''}</div>`;
+    const panel = opens ? `<span class="opens-icon">${icon('maximize-2', 'xs')}</span>` : '';
+    const classes = ['section-header', foldable && 'foldable', opens && 'opens', hot && 'hot'].filter(Boolean).join(' ');
+    const title_ = opens ? ` title="${esc(opens)}"` : '';
+    return `<div data-c="SectionHeader" class="${classes}"${title_}>${foldable ? twisty(open) : ''}<span class="title ellipsis">${esc(title)}</span>${shownCount}${panel}${action || ''}</div>`;
   },
 
-  RefBadge({ name, kind, head = false, synced = false, color = LaneColors[0], pull }) {
-    const icons = icon(RefIcons[kind], 'xs') + (synced ? icon(RefIcons.remote, 'xs') : '');
-    return `<div data-c="RefBadge" class="ref-badge${head ? ' head' : ''}" style="--c:${color}"><div class="icons">${icons}</div><div class="name ellipsis">${esc(name)}</div>${pull ? pullChip(pull) : ''}</div>`;
+  RefBadge({ name, kind, head = false, synced = false, color = LaneColors[0], pull, worktree }) {
+    const icons = icon(RefIcons[kind], 'xs') + (synced ? icon(RefIcons.remote, 'xs') : '') + (worktree ? icon(RefIcons.worktree, 'xs') : '');
+    const title = worktree ? ` title="${esc(WorktreeTexts.elsewhere(worktree))}"` : '';
+    return `<div data-c="RefBadge" class="ref-badge${head ? ' head' : ''}" style="--c:${color}"${title}><div class="icons">${icons}</div><div class="name ellipsis">${esc(name)}</div>${pull ? pullChip(pull) : ''}</div>`;
   },
 
   ChangeBadge({ kind }) {
@@ -1394,7 +1479,7 @@ const C = {
     return `<span data-c="Deletions" class="deletions${extraClass ? ` ${extraClass}` : ''}">−${thousands(count)}</span>`;
   },
 
-  GraphCell({ graph, merge = false, head = false, stash = false, width }) {
+  GraphCell({ graph, merge = false, head = false, stash = false, wip = false, width }) {
     const [node, lanes, spec] = graph;
     const w = width || lanes * LaneWidth + 2 * GraphMargin;
     const x = laneX;
@@ -1408,12 +1493,15 @@ const C = {
               ? `M${x(lane)} 0 L${x(node)} 14`
               : `M${x(lane)} 0 C${x(lane)} 14 ${x(lane)} 14 ${x(node)} 14`
             : lane === node
-              ? `M${x(node)} ${stash ? 18.5 : 14} L${x(node)} 28`
+              ? `M${x(node)} ${stash || wip ? 18.5 : 14} L${x(node)} 28`
               : `M${x(node)} 14 C${x(lane)} 14 ${x(lane)} 14 ${x(lane)} 28`;
-      return `<path d="${d}" fill="none" style="stroke:${color(lane)}" stroke-width="2"/>`;
+      const dashed = wip && kind === 'O' ? ' stroke-dasharray="3 3"' : '';
+      return `<path d="${d}" fill="none" style="stroke:${color(lane)}" stroke-width="2"${dashed}/>`;
     });
     const radius = merge ? 4.5 * 0.7 : 4.5;
-    const dot = stash
+    const dot = wip
+      ? `<circle cx="${x(node)}" cy="14" r="4.5" fill="none" style="stroke:${color(node)}" stroke-width="1.5" stroke-dasharray="2.4 2"/>`
+      : stash
       ? `<rect x="${x(node) - 4.5}" y="9.5" width="9" height="9" rx="1.5" fill="none" style="stroke:${color(node)}" stroke-width="1.5"/>`
       : `<circle cx="${x(node)}" cy="14" r="${radius}" style="fill:${color(node)}"/>`;
     const ring = head ? `<circle cx="${x(node)}" cy="14" r="7.5" fill="none" style="stroke:${color(node)}" stroke-width="1.5"/>` : '';
@@ -1450,7 +1538,8 @@ const C = {
   RefRow({ label, name = label.name, depth = 0, selected = false }) {
     const apart = label.ahead || label.behind ? C.AheadBehind(label) : '';
     const pull = label.pull ? pullChip(label.pull) : '';
-    const content = `<div class="h fill tree-row" style="padding-left:${depth * TreeIndent}px">${twisty(null)}${icon(TreeIcons[label.kind].ref, 'sm', 'var(--muted)')}<div class="fill ellipsis sm${label.head ? ' semibold' : ''}">${esc(name)}</div>${pull}${apart}</div>`;
+    const elsewhere = label.worktree ? `<span class="none h" title="${esc(WorktreeTexts.elsewhere(label.worktree))}">${icon('folder-git', 'xs', 'var(--muted)')}</span>` : '';
+    const content = `<div class="h fill tree-row" style="padding-left:${depth * TreeIndent}px">${twisty(null)}${icon(TreeIcons[label.kind].ref, 'sm', 'var(--muted)')}<div class="fill ellipsis sm${label.head ? ' semibold' : ''}">${esc(name)}</div>${pull}${apart}${elsewhere}</div>`;
     return C.ListRow({ content, selected, name: 'RefRow' });
   },
 
@@ -1460,12 +1549,26 @@ const C = {
     return C.ListRow({ content, name: 'RefFolderRow' });
   },
 
+  WorktreeRow({ tree, here = false, selected = false }) {
+    const where = tree.branch || WorktreeTexts.detached(tree.id);
+    const n = changedCount(tree);
+    const status = tree.missing
+      ? `<span class="none h" title="${esc(WorktreeTexts.missingTooltip(tree.path))}">${icon('triangle-alert', 'xs', 'var(--yellow)')}</span>`
+      : join([
+          tree.locked && `<span class="none h" title="${esc(WorktreeTexts.lockedBecause(tree.locked))}">${icon('lock', 'xs', 'var(--muted)')}</span>`,
+          n && `<span class="none h xs worktree-dirty" title="${esc(WorktreeTexts.changed(n))}"><span class="dot"></span>${thousands(n)}</span>`,
+        ]);
+    const name = `<span class="worktree-name ellipsis sm${here ? ' semibold' : ''}${tree.missing ? ' muted' : ''}">${esc(tree.name)}</span>`;
+    const content = `<div class="h fill tree-row" title="${esc(WorktreeTexts.rowTooltip(tree, where))}">${twisty(null)}${icon('folder-git', 'sm', 'var(--muted)')}${name}<span class="fill ellipsis xs muted">${esc(where)}</span>${status}</div>`;
+    return C.ListRow({ content, selected, name: 'WorktreeRow' });
+  },
+
   StashRow({ stash, selected = false }) {
     const content = `<div class="h fill tree-row">${twisty(null)}${icon('archive', 'sm', 'var(--muted)')}<div class="fill ellipsis sm">${esc(stash.message)}</div></div>`;
     return C.ListRow({ content, selected, name: 'StashRow' });
   },
 
-  RefsList({ refs, stashes = [], selectedRow, collapsed = [], pulls }) {
+  RefsList({ refs, stashes = [], selectedRow, collapsed = [], pulls, worktrees }) {
     const closed = new Set(collapsed);
     const nodes = (kind, list, depth) =>
       list
@@ -1488,15 +1591,24 @@ const C = {
       const open = !closed.has(kind);
       return treeGroup(open, C.SectionHeader({ title, count: items.length, open }), nodes(kind, refTree(items), 0));
     });
+    const worktreeSection = () => {
+      if (!worktrees) return '';
+      const open = !closed.has('worktree');
+      const rows = worktrees.list.map((tree) => C.WorktreeRow({ tree, here: tree.name === worktrees.here, selected: tree.name === worktrees.selected })).join('');
+      const header = C.SectionHeader({ title: WorktreeTexts.section, count: worktrees.list.length, open, opens: WorktreeTexts.headerTooltip, hot: worktrees.hot });
+      return treeGroup(open, header, rows);
+    };
+    sections.splice(1, 0, worktreeSection());
     const pullSection = pulls ? C.PullsSection({ ...pulls, open: !closed.has('pulls') }) : '';
     return `<div data-c="RefsList" class="refs">${pullSection}${sections.join('')}</div>`;
   },
 
-  CommitRow({ commit, selected = false, width, pulls = {} }) {
+  CommitRow({ commit, selected = false, width, pulls = {}, elsewhere = {} }) {
     const color = LaneColors[commit.graph[0] % LaneColors.length];
-    const refs = foldSyncedRefs(commit.refs);
+    const refs = foldSyncedRefs(commit.refs).map((label) => (label.kind === 'local' && elsewhere[label.name] ? { ...label, worktree: elsewhere[label.name] } : label));
     const stashBadge = commit.stash ? C.RefBadge({ name: commit.stash, kind: 'stash', color }) : '';
-    const badges = stashBadge + refs.slice(0, 3).map((label) => C.RefBadge({ ...label, color, pull: label.kind === 'local' ? pulls[label.name] : undefined })).join('');
+    const treeBadge = commit.worktree ? C.RefBadge({ name: commit.worktree, kind: 'worktree', color }) : '';
+    const badges = stashBadge + treeBadge + refs.slice(0, 3).map((label) => C.RefBadge({ ...label, color, pull: label.kind === 'local' ? pulls[label.name] : undefined })).join('');
     const more = refs.length > 3 ? `<div class="none xs muted">+${refs.length - 3}</div>` : '';
     const subject = commit.subject
       ? `<div class="fill ellipsis sm">${esc(commit.subject)}</div>`
@@ -1518,10 +1630,25 @@ const C = {
     return C.ListRow({ content, selected, extraClass: 'uncommitted-row', name: 'UncommittedRow' });
   },
 
+  WorktreeChangesRow({ tree, graph, width, selected = false }) {
+    const color = LaneColors[graph[0] % LaneColors.length];
+    const content =
+      C.GraphCell({ graph, width, wip: true }) +
+      `<div class="labels">${C.RefBadge({ name: tree.name, kind: 'worktree', color })}<div class="fill ellipsis sm italic">${esc(WorktreeTexts.uncommitted)}</div></div>` +
+      `<div class="xs muted ellipsis worktree-summary">${esc(summarize(tree.changes))}</div>`;
+    return C.ListRow({ content, selected, extraClass: 'commit-row', name: 'WorktreeChangesRow' });
+  },
+
   HistoryList({ history, selectedRow, changes, wipSelected = false }) {
     const width = graphWidth(history.commits);
     const wip = changes && (changes.conflicted?.length || changes.unstaged.length || changes.staged.length) ? C.UncommittedRow({ changes, selected: wipSelected }) : '';
-    const rows = history.commits.map((commit, ix) => C.CommitRow({ commit, selected: ix === selectedRow, width, pulls: history.pulls })).join('');
+    const rows = history.commits
+      .map((commit, ix) =>
+        commit.wip
+          ? C.WorktreeChangesRow({ tree: commit.wip, graph: commit.graph, width, selected: ix === selectedRow })
+          : C.CommitRow({ commit, selected: ix === selectedRow, width, pulls: history.pulls, elsewhere: history.elsewhere }),
+      )
+      .join('');
     const thumb = Math.max(20, Math.round((28 / history.total) * 800));
     return `<div data-c="HistoryList" class="history v">${wip}<div class="fill" style="position:relative;overflow:hidden">${rows}<div class="scrollbar" style="top:2px;height:${thumb}px"></div></div></div>`;
   },
@@ -1697,10 +1824,10 @@ const C = {
     );
   },
 
-  ChangesList({ changes, open, picked, pointed, draft = {}, committing = false, writing = false, failure, view = 'list', collapsed = [], operation }) {
+  ChangesList({ changes, open, picked, pointed, draft = {}, committing = false, writing = false, failure, view = 'list', collapsed = [], operation, worktree }) {
     if (!changes) return `<div data-c="ChangesList" class="changes">${C.Loading({ message: Texts.readingChanges })}</div>`;
     const busy = writing || committing;
-    const form = operation ? '' : C.CommitForm({ ...draft, staged: changes.staged.length, committing, writing, failure });
+    const form = (worktree ? C.WorktreeBar({ tree: worktree }) : '') + (operation ? '' : C.CommitForm({ ...draft, staged: changes.staged.length, committing, writing, failure }));
     const conflicted = changes.conflicted || [];
     if (!conflicted.length && !changes.unstaged.length && !changes.staged.length) {
       return `<div data-c="ChangesList" class="changes">${form}<div class="fill v">${C.Hint({ message: Texts.noChanges })}</div></div>`;
@@ -2259,8 +2386,83 @@ const C = {
     );
   },
 
-  BranchMenu({ label, current, mode, left = 0, top = 0, hot, pull }) {
-    return C.Menu({ items: branchMenuItems({ label, current, mode, pull }), left, top, hot, name: 'BranchMenu' });
+  BranchMenu({ label, current, mode, left = 0, top = 0, hot, pull, worktree }) {
+    return C.Menu({ items: branchMenuItems({ label, current, mode, pull, worktree }), left, top, hot, name: 'BranchMenu' });
+  },
+
+  WorktreeMenu({ tree, here = false, left = 0, top = 0, hot }) {
+    return C.Menu({ items: worktreeMenuItems({ tree, here }), left, top, hot, name: 'WorktreeMenu' });
+  },
+
+  LockWorktreeDialog({ tree, reason = '' }) {
+    const field = `<div class="v field">${C.Input({ value: reason, placeholder: WorktreeTexts.lockPlaceholder, focused: true })}</div>`;
+    const buttons = C.Button({ label: 'Cancel', size: 'md' }) + C.Button({ label: WorktreeTexts.lockConfirm, variant: 'primary', size: 'md' });
+    const close = `<span class="close">${icon('close', 'sm')}</span>`;
+    return `<div class="overlay"><div data-c="LockWorktreeDialog" data-base="Dialog" class="dialog wide">${close}<div class="base semibold">${esc(WorktreeTexts.lockTitle(tree.name))}</div><div class="sm muted">${esc(WorktreeTexts.lockAbout)}</div>${field}<div class="footer stretch">${buttons}</div></div></div>`;
+  },
+
+  WorktreeDialog({ branch, fresh = false, name = '', from = 'main', folder, parent, openTab = false, problem, folderProblem }) {
+    const lead = (glyph) => `<span class="prefix">${icon(glyph, 'sm', 'var(--muted)')}</span>`;
+    const radios = `<div class="h radios">${C.Radio({ label: WorktreeTexts.existing, checked: !fresh })}${C.Radio({ label: WorktreeTexts.fresh, checked: fresh })}</div>`;
+    const branchFields = fresh
+      ? `<div class="h" style="gap:12px;align-items:flex-start"><div class="fill v">${formField({ label: WorktreeTexts.branchName, control: C.Input({ value: name, placeholder: Texts.branchPlaceholder, focused: true }), problem })}</div><div class="v none" style="width:200px">${formField({ label: WorktreeTexts.from, control: C.Select({ value: from, lead: lead('git-branch') }) })}</div></div>`
+      : formField({ label: WorktreeTexts.branch, control: C.Select({ value: branch, lead: lead('git-branch') }), problem, hint: WorktreeTexts.oneCheckout });
+    const folderField = formField({ label: WorktreeTexts.folder, control: withButton(C.Input({ value: folder }), C.Button({ label: WorktreeTexts.browse, size: 'md' })), problem: folderProblem, hint: WorktreeTexts.folderHint(parent) });
+    const after = `<div class="h">${C.Checkbox({ label: WorktreeTexts.openAfter, checked: openTab })}</div>`;
+    const body = `<div class="form">${radios}${branchFields}${folderField}${after}</div>`;
+    const ready = !problem && !folderProblem && (!fresh || name);
+    const buttons = C.Button({ label: 'Cancel', size: 'md' }) + C.Button({ label: WorktreeTexts.create, icon: 'folder-plus', variant: 'primary', size: 'md', disabled: !ready });
+    return dialogShell({ name: 'WorktreeDialog', title: WorktreeTexts.dialogTitle, description: WorktreeTexts.dialogAbout, body, buttons, size: 'wider' });
+  },
+
+  RemoveWorktreeDialog({ tree, merged = false, into = 'main' }) {
+    const n = changedCount(tree);
+    const description = [WorktreeTexts.removeFolder(tree.path), n && WorktreeTexts.removeChanges(n), tree.branch && WorktreeTexts.removeKeeps(tree.branch)].filter(Boolean).join(' ');
+    const note = merged ? '' : `<div class="xs muted" style="padding-left:20px">${esc(WorktreeTexts.deleteBranchUnmerged(tree.branch, into))}</div>`;
+    const box = tree.branch ? `<div class="v" style="gap:4px;margin-top:12px">${C.Checkbox({ label: WorktreeTexts.deleteBranch(tree.branch), checked: merged, disabled: !merged })}${note}</div>` : '';
+    const buttons = C.Button({ label: 'Cancel', size: 'md' }) + C.Button({ label: WorktreeTexts.removeConfirm, variant: 'danger', size: 'md' });
+    return `<div class="overlay"><div data-c="RemoveWorktreeDialog" data-base="AlertDialog" class="dialog wide"><div class="base semibold">${esc(WorktreeTexts.removeTitle(tree.name))}</div><div class="sm muted">${esc(description)}</div>${box}<div class="footer">${buttons}</div></div></div>`;
+  },
+
+  WorktreeBar({ tree }) {
+    const where = tree.branch || WorktreeTexts.detached(tree.id);
+    const buttons = C.Button({ icon: 'folder-open', variant: 'ghost', tooltip: WorktreeTexts.showTooltip }) + C.Button({ icon: 'external-link', variant: 'ghost', tooltip: WorktreeTexts.openTabTooltip });
+    return `<div data-c="WorktreeBar" class="worktree-bar">${icon('folder-git', 'md', 'var(--muted)')}<div class="v fill" style="min-width:0"><div class="h" style="gap:8px"><span class="sm medium">${esc(tree.name)}</span><span class="h xs muted" style="gap:4px">${tree.branch ? icon('git-branch', 'xs') : ''}${esc(where)}</span></div><div class="xs muted ellipsis">${esc(tree.path)}</div></div>${buttons}</div>`;
+  },
+
+  WorktreeListRow({ tree, picked = false, here = false }) {
+    const n = changedCount(tree);
+    const fixed = tree.main || here || Boolean(tree.locked);
+    const where = tree.branch ? `${icon('git-branch', 'xs')}<span class="ellipsis">${esc(tree.branch)}</span>` : `<span class="ellipsis">${esc(WorktreeTexts.detached(tree.id))}</span>`;
+    const chips = join([
+      tree.main && C.Chip({ label: WorktreeTexts.main }),
+      here && C.Chip({ label: WorktreeTexts.thisTab, color: 'var(--blue)' }),
+      tree.missing && C.Chip({ label: WorktreeTexts.missing, icon: 'triangle-alert', color: 'var(--red)' }),
+      n && C.Chip({ label: WorktreeTexts.changed(n), color: 'var(--yellow)' }),
+      tree.merged && C.Chip({ label: WorktreeTexts.merged('main'), icon: 'git-merge', color: 'var(--magenta)' }),
+      tree.locked && C.Chip({ label: WorktreeTexts.locked, icon: 'lock' }),
+    ]);
+    const open = here || tree.missing ? '<span class="none" style="width:20px"></span>' : C.Button({ icon: 'external-link', variant: 'ghost', tooltip: WorktreeTexts.openTabTooltip });
+    const content =
+      C.Checkbox({ label: '', checked: picked, disabled: fixed }) +
+      icon('folder-git', 'md', 'var(--muted)') +
+      `<div class="v fill" style="min-width:0"><div class="h" style="gap:8px"><span class="sm medium">${esc(tree.name)}</span><span class="h xs muted" style="gap:4px;min-width:0">${where}</span></div><div class="xs muted ellipsis">${esc(tree.path)}</div></div>` +
+      `<div class="h chips">${chips}</div>` +
+      open;
+    return C.ListRow({ content, selected: picked, extraClass: 'worktree-list-row', name: 'WorktreeListRow' });
+  },
+
+  WorktreesDialog({ repository, list, here, picked = [] }) {
+    const rows = list.map((tree) => C.WorktreeListRow({ tree, here: tree.name === here, picked: picked.includes(tree.name) })).join('');
+    const lost = list.filter((tree) => picked.includes(tree.name) && changedCount(tree)).length;
+    const warn = lost ? `<div class="h xs worktree-warn">${icon('triangle-alert', 'xs')}<span>${esc(WorktreeTexts.lostWarning(lost))}</span></div>` : '';
+    const tools = `<div class="h worktree-tools"><span class="fill xs muted">${esc(counted(list.length, 'worktree', 'worktrees'))}</span>${C.Button({ label: WorktreeTexts.selectMerged, size: 'sm', variant: 'ghost' })}${C.Button({ label: WorktreeTexts.forgetMissing, size: 'sm', variant: 'ghost' })}</div>`;
+    const buttons =
+      `<div class="h fill">${C.Button({ label: WorktreeTexts.newWorktree, icon: 'folder-plus', size: 'md' })}</div>` +
+      C.Button({ label: WorktreeTexts.close, size: 'md' }) +
+      C.Button({ label: WorktreeTexts.removeSelected(picked.length), icon: 'trash-2', variant: 'danger', size: 'md', disabled: !picked.length });
+    const body = `${tools}<div class="v worktree-list">${rows}</div>${warn}`;
+    return dialogShell({ name: 'WorktreesDialog', title: WorktreeTexts.manageTitle(repository), description: WorktreeTexts.manageAbout, body, buttons, size: 'worktrees' });
   },
 
   StashMenu({ stash, left = 0, top = 0, hot }) {

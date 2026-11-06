@@ -38,6 +38,15 @@ impl<T> Tabs<T> {
         self.items.len() - 1
     }
 
+    pub(crate) fn insert(&mut self, ix: usize, item: T) -> usize {
+        let ix = ix.min(self.items.len());
+        self.items.insert(ix, item);
+        if ix <= self.active && self.items.len() > 1 {
+            self.active += 1;
+        }
+        ix
+    }
+
     pub(crate) fn replace(&mut self, ix: usize, item: T) {
         if let Some(slot) = self.items.get_mut(ix) {
             *slot = item;
@@ -122,6 +131,16 @@ mod tests {
         assert!(tabs.close(0));
         assert!(tabs.is_empty());
         assert_eq!(tabs.active(), None);
+    }
+
+    #[test]
+    fn a_tab_inserted_left_of_the_active_one_keeps_the_same_tab_active() {
+        let mut tabs = tabs(&["a", "b", "c"], 1);
+        assert_eq!(tabs.insert(1, "new"), 1);
+        assert_eq!(tabs.active(), Some(&"b"));
+        assert_eq!(tabs.insert(9, "last"), 4);
+        assert_eq!(tabs.active(), Some(&"b"));
+        assert_eq!(tabs.iter().copied().collect::<Vec<_>>(), ["a", "new", "b", "c", "last"]);
     }
 
     #[test]

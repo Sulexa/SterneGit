@@ -1153,5 +1153,87 @@ const Screens = (() => {
         },
       ];
     })(),
+    ...(() => {
+      const { list, diffViewChanges, inGraph, inGraphFromDiffView } = Sample.worktrees;
+      const [, diffView, , dreamy] = list;
+      const diffViewRow = inGraph.wipRow('diff-view');
+      const graphView = (section = {}) =>
+        C.RepoView({
+          left: C.RefsList({ refs: inGraph.refs, selectedRow: null, collapsed, worktrees: { list, here: 'sternegit', selected: 'diff-view', ...section } }),
+          middle: C.HistoryList({ history: inGraph, selectedRow: diffViewRow, changes }),
+          right: C.ChangesList({ changes: diffViewChanges, worktree: diffView }),
+          status: C.RepoStatusBar({ summary: historySummary(inGraph) }),
+        });
+      const overGraph = (overlays = '', section) => C.SterneGit({ topBar: topBar(), tabStrip: tabStrip(), body: graphView(section), overlays });
+      const worktreeTabs = [tabs[0], { name: diffView.name, state: 'ready', icon: 'folder-git' }, ...tabs.slice(1)];
+      return [
+        {
+          id: 'worktrees-in-graph',
+          title: 'Worktrees — the section and the graph',
+          about: "When the repository has more than one worktree, the left pane gets a Worktrees section under Branches. Each row is a worktree folder: its name, then its branch, or detached at and the commit, then a yellow dot with its number of changed files, a lock when it is locked, or a warning when its folder is gone; hovering the lock or the warning says why. This tab's worktree is in bold. A click on a row selects that worktree in the graph: its row of changes when it has some, otherwise the commit its HEAD is on. A double-click opens it in a new tab. A click on the section's header opens the Worktrees panel; its chevron folds the section as for the others. The graph shows the uncommitted changes of every worktree, not only this tab's, which stay pinned on top. Each other worktree with changed files gets its own row right above the commit its HEAD is on: a dashed hollow dot joined to that commit, a badge with the folder name, and what changed. A detached worktree whose lane is taken gets a lane of its own, like dreamy-grothendieck. A clean worktree shows in the graph only through the folder icon on its branch, or a badge of its own when it is detached. Selecting a worktree's changes shows them on the right, under a bar with its name, branch and path, and buttons to show the folder or open it in a new tab; staging, discarding and Commit act in that folder. Pull, Push, Branch and Stash still act on this tab's worktree. SterneGit reads the status of every worktree, side by side, along with its own every few seconds; a worktree that gains or loses changes, or moves its HEAD, rereads the graph.",
+          source: 'src/repo/refs_list.rs',
+          render: () => overGraph(),
+        },
+        {
+          id: 'worktree-row-menu',
+          title: 'Worktrees — right-click on a worktree',
+          about: "A right-click on a worktree, in the section, on its row of changes in the graph or on its badge, opens its menu where the pointer is. Open in a new tab opens the folder in a tab right after the repository's, or switches to that tab when it is already open. Show in folder and Copy path work as for a file. Lock… asks for a reason and keeps git worktree prune from forgetting it, for a folder on a drive that isn't always there; Unlock undoes it. Remove worktree… asks first. The main worktree has no Lock and no Remove, a locked one no Remove until it is unlocked, and this tab's worktree no Open and no Remove. A worktree whose folder is gone has only Forget this worktree, which forgets that one worktree and frees its branch, and Copy path.",
+          source: 'src/repo/worktree_menu.rs',
+          render: () => overGraph(C.WorktreeMenu({ tree: diffView, left: 150, top: 420, hot: WorktreeTexts.openInTab })),
+        },
+        {
+          id: 'worktrees-manage',
+          title: 'Worktrees — the Worktrees panel',
+          about: "A click on the Worktrees header opens this panel: every worktree of the repository, to add one or clean up the ones tools and old reviews leave behind. Each row has its folder name, branch and path, then what to know before removing it: changed files, merged into the current branch, locked, or folder missing, then a button to open it in a new tab. Select merged ticks every worktree whose branch or detached commit is merged; Forget missing folders runs git worktree prune. Remove deletes the ticked folders, and warns first when some have uncommitted changes. The main worktree, this tab's and locked ones can't be ticked. New worktree… opens the New worktree dialog on a new branch starting from HEAD's branch. Esc or Close goes back.",
+          source: 'src/repo/worktrees_panel.rs',
+          render: () => overGraph(C.WorktreesDialog({ repository: inGraph.name, list, here: 'sternegit', picked: [dreamy.name, 'stash-ui'] }), { hot: true }),
+        },
+        {
+          id: 'worktree-tab',
+          title: 'Worktrees — a worktree in its own tab',
+          about: "Open in a new tab opens the worktree as Open Repository… opens a folder, in a tab right after its repository's, with a folder icon and the folder's name. The top bar shows the repository, the worktree and its branch. The tab reads history and refs itself; HEAD, the uncommitted changes pinned on top and the staged files are the worktree's own, so Commit, Pull, Push and Stash act there. Its Worktrees section puts it in bold. The other worktrees, the main one included, show in its graph as everywhere: here main has its own row of changes, and its badge carries the folder icon. Closing the tab leaves the folder alone.",
+          source: 'src/app/window.rs',
+          render: () =>
+            C.SterneGit({
+              topBar: C.TopBar({ repository: inGraphFromDiffView.name, worktree: diffView.name, head: inGraphFromDiffView.head }),
+              tabStrip: C.TabStrip({ tabs: worktreeTabs, active: 1 }),
+              body: C.RepoView({
+                left: C.RefsList({ refs: inGraphFromDiffView.refs, selectedRow: null, collapsed, worktrees: { list, here: 'diff-view' } }),
+                middle: C.HistoryList({ history: inGraphFromDiffView, selectedRow: null, changes: diffViewChanges, wipSelected: true }),
+                right: C.ChangesList({ changes: diffViewChanges }),
+                status: C.RepoStatusBar({ summary: historySummary(inGraphFromDiffView) }),
+              }),
+            }),
+        },
+        {
+          id: 'worktree-branch-menu',
+          title: 'Worktrees — new worktree from a branch',
+          about: "The BranchMenu of a local or remote branch gains New worktree for …, under Create branch here…. It opens the New worktree dialog with that branch picked. Git won't check out one branch in two worktrees, so a branch already checked out in a worktree has Open the worktree in place of Check out, and no Delete.",
+          source: 'src/repo/branch_menu.rs',
+          render: () => overGraph(C.BranchMenu({ label: inGraph.refs.find((label) => label.name === 'topic/tabs'), current: inGraph.head, left: 92, top: 336, hot: WorktreeTexts.newFor('topic/tabs'), worktree: true })),
+        },
+        {
+          id: 'create-worktree',
+          title: 'Worktrees — the New worktree dialog',
+          about: "Opened by New worktree for … in a BranchMenu, or New worktree… in the Worktrees panel. Existing branch checks out a branch, local or remote; branches already checked out in a worktree are listed but can't be picked, and say where. New branch asks for a name and where it starts, HEAD by default. The folder is suggested next to the repository, in sternegit-worktrees, named after the last part of the branch, so it never shows up as untracked files in the main worktree; Browse… picks another. Create worktree runs git worktree add; the new worktree then shows in the section and in the graph through its branch, and in a new tab too when Open it in a new tab is ticked, which stays as it was last left. Create stays disabled while the branch is taken, the name is refused by Git, or the folder exists and isn't empty; the reason shows under the field. Enter creates, Esc cancels.",
+          source: 'src/repo/worktree_dialog.rs',
+          render: () => overGraph(C.WorktreeDialog({ branch: 'topic/tabs', folder: 'E:\\Projects\\sternegit-worktrees\\tabs', parent: 'E:\\Projects\\sternegit-worktrees' })),
+        },
+        {
+          id: 'lock-worktree',
+          title: 'Worktrees — lock a worktree',
+          about: "Lock… asks for an optional reason, then runs git worktree lock. The worktree's row then shows a lock, whose tooltip gives the reason, its menu offers Unlock in place of Lock, and Remove worktree… waits until it is unlocked.",
+          source: 'src/repo/worktree_menu.rs',
+          render: () => overGraph(C.LockWorktreeDialog({ tree: dreamy, reason: 'on the backup drive' })),
+        },
+        {
+          id: 'remove-worktree',
+          title: 'Worktrees — remove a worktree',
+          about: "Remove worktree… always asks, because it deletes the folder and Git keeps no copy of its uncommitted changes. The question names the folder, counts the changes that are lost, and says the commits stay on the branch. Also delete the branch is offered when the branch is merged into the current one, and stays off otherwise. Remove runs git worktree remove --force, then deletes the branch if asked; a tab open on the worktree closes.",
+          source: 'src/repo/worktree_menu.rs',
+          render: () => overGraph(C.RemoveWorktreeDialog({ tree: diffView })),
+        },
+      ];
+    })(),
   ];
 })();

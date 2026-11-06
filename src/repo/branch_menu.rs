@@ -29,6 +29,8 @@ pub(crate) enum BranchAction {
     Merge,
     Rebase,
     BranchHere,
+    NewWorktree,
+    OpenWorktree,
     Delete,
     ShowPull(u64),
     CreatePull,
@@ -105,16 +107,22 @@ impl BranchMenu {
         let checked_out = label.is_head;
         let local = label.kind == RefKind::LocalBranch;
         let another_branch_is_checked_out = self.checked_out.is_some() && !checked_out;
+        let elsewhere = label.worktree.is_some();
+        let worktree = match (checked_out, elsewhere) {
+            (false, false) => vec![BranchHere, NewWorktree],
+            _ => vec![BranchHere],
+        };
         [
             label.can_be_checked_out().then(|| vec![CheckOut]),
+            elsewhere.then(|| vec![OpenWorktree]),
             local.then(|| vec![Pull, Push]),
             self.pulls
                 .as_ref()
                 .and_then(|offers| offers.offered(label))
                 .map(|action| vec![action]),
             another_branch_is_checked_out.then(|| vec![Merge, Rebase]),
-            Some(vec![BranchHere]),
-            (!checked_out).then(|| vec![Delete]),
+            Some(worktree),
+            (!checked_out && !elsewhere).then(|| vec![Delete]),
         ]
         .into_iter()
         .flatten()
@@ -133,6 +141,11 @@ impl BranchMenu {
             BranchAction::Merge => format!("Merge {} into {checked_out}", label.name),
             BranchAction::Rebase => format!("Rebase {checked_out} onto {}", label.name),
             BranchAction::BranchHere => BRANCH_HERE.to_owned(),
+            BranchAction::NewWorktree => format!("New worktree for {}…", label.local_name()),
+            BranchAction::OpenWorktree => format!(
+                "Open the worktree {}",
+                label.worktree.as_deref().unwrap_or_default()
+            ),
             BranchAction::ShowPull(number) => format!("Show pull request #{number}"),
             BranchAction::CreatePull => CREATE_PULL.to_owned(),
             BranchAction::Delete => match label.on_remote() {
@@ -241,6 +254,7 @@ mod tests {
             is_head,
             upstream: None,
             from_upstream: None,
+            worktree: None,
         }
     }
 
@@ -272,7 +286,7 @@ mod tests {
                     "Merge feature/blame into main",
                     "Rebase main onto feature/blame"
                 ],
-                vec!["Create branch here…"],
+                vec!["Create branch here…", "New worktree for feature/blame…"],
                 vec!["Delete feature/blame…"],
             ]
         );
@@ -318,7 +332,7 @@ mod tests {
                     "Merge origin/feature/diff-view into main",
                     "Rebase main onto origin/feature/diff-view"
                 ],
-                vec!["Create branch here…"],
+                vec!["Create branch here…", "New worktree for feature/diff-view…"],
                 vec!["Delete feature/diff-view from origin…"],
             ]
         );
@@ -333,8 +347,28 @@ mod tests {
             [
                 vec![CheckOut],
                 vec![Pull, Push],
-                vec![BranchHere],
+                vec![BranchHere, NewWorktree],
                 vec![Delete]
+            ]
+        );
+    }
+
+    #[test]
+    fn a_branch_checked_out_in_another_worktree_opens_it_instead_of_checking_out_or_deleting() {
+        let elsewhere = RefLabel {
+            worktree: Some("diff-view".into()),
+            ..label("feature/diff-view", RefKind::LocalBranch, false)
+        };
+        assert_eq!(
+            texts(&on_main(), &elsewhere),
+            [
+                vec!["Open the worktree diff-view"],
+                vec!["Pull (fast-forward only)", "Push"],
+                vec![
+                    "Merge feature/diff-view into main",
+                    "Rebase main onto feature/diff-view"
+                ],
+                vec!["Create branch here…"],
             ]
         );
     }

@@ -5,7 +5,7 @@ use crate::{
         Behind, Carried, CaughtUp, CheckedOut, Continued, Merged, Picked, Pulled, Pushed,
         Rebased, RefLabel, Refusal, RemoteBranch, ResetMode, Tracking, Underway,
     },
-    ui::Failure,
+    ui::{Failure, thousands},
 };
 
 const DIVERGED_ADVICE: &str = "Choose Fast-forward if possible or Rebase in the Pull menu.";
@@ -53,6 +53,10 @@ pub(crate) enum Finish {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum Outcome {
     Done(SharedString),
+    WorktreeAdded {
+        done: SharedString,
+        open: Option<std::path::PathBuf>,
+    },
     Warning {
         title: SharedString,
         message: SharedString,
@@ -326,6 +330,50 @@ pub(crate) fn revert_failed(id: &str) -> SharedString {
 pub(crate) fn reset_failed(branch: &str, id: &str) -> SharedString {
     format!("Couldn't reset {branch} to {id}").into()
 }
+
+pub(crate) fn worktree_added(name: &str, checked_out: &str) -> SharedString {
+    format!("Created the worktree {name} on {checked_out}").into()
+}
+
+pub(crate) fn worktree_add_failed(name: &str) -> SharedString {
+    format!("Couldn't create the worktree {name}").into()
+}
+
+pub(crate) fn worktrees_removed(names: &[SharedString], deleted_branch: Option<&str>) -> SharedString {
+    match (names, deleted_branch) {
+        ([name], None) => format!("Removed the worktree {name}"),
+        ([name], Some(branch)) => format!("Removed the worktree {name} and the branch {branch}"),
+        _ => format!("Removed {} worktrees", thousands(names.len())),
+    }
+    .into()
+}
+
+pub(crate) fn worktree_remove_failed(names: &[SharedString]) -> SharedString {
+    match names {
+        [name] => format!("Couldn't remove the worktree {name}"),
+        _ => "Couldn't remove every worktree".to_owned(),
+    }
+    .into()
+}
+
+pub(crate) fn worktree_locked(name: &str, locked: bool) -> SharedString {
+    match locked {
+        true => format!("Locked the worktree {name}"),
+        false => format!("Unlocked the worktree {name}"),
+    }
+    .into()
+}
+
+pub(crate) fn worktree_lock_failed(name: &str, locked: bool) -> SharedString {
+    match locked {
+        true => format!("Couldn't lock the worktree {name}"),
+        false => format!("Couldn't unlock the worktree {name}"),
+    }
+    .into()
+}
+
+pub(crate) const FORGOT_MISSING_WORKTREES: &str = "Forgot the worktrees whose folder is gone";
+pub(crate) const FORGET_MISSING_FAILED: &str = "Couldn't forget the missing worktrees";
 
 pub(crate) fn tag_failed(name: &str) -> SharedString {
     format!("Couldn't create the tag {name}").into()
@@ -650,6 +698,7 @@ mod tests {
             is_head: false,
             upstream: None,
             from_upstream: None,
+            worktree: None,
         };
         assert_eq!(
             deleted(&label("origin/feature/x", RefKind::RemoteBranch)),

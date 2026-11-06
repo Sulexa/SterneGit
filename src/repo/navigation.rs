@@ -1,3 +1,5 @@
+use std::{path::Path, sync::Arc};
+
 use gix::ObjectId;
 use gpui_kit::SharedString;
 
@@ -10,7 +12,7 @@ pub(crate) struct OpenFile {
 }
 
 impl OpenFile {
-    fn follow(&self, changes: &WorkingChanges) -> Option<OpenFile> {
+    pub(crate) fn follow(&self, changes: &WorkingChanges) -> Option<OpenFile> {
         [self.side, self.side.other()].into_iter().find_map(|side| {
             changes.find(side, &self.path).map(|change| OpenFile {
                 side,
@@ -29,6 +31,10 @@ pub(crate) enum Target {
         open: Option<SharedString>,
     },
     WorkingTree {
+        open: Option<OpenFile>,
+    },
+    Worktree {
+        location: Arc<Path>,
         open: Option<OpenFile>,
     },
     Pull {
@@ -51,21 +57,28 @@ impl Target {
     pub(crate) fn commit(&self) -> Option<ObjectId> {
         match self {
             Target::Commit { id, .. } => Some(*id),
-            Target::Nothing | Target::WorkingTree { .. } | Target::Pull { .. } => None,
+            Target::Nothing | Target::WorkingTree { .. } | Target::Worktree { .. } | Target::Pull { .. } => None,
         }
     }
 
     pub(crate) fn pull(&self) -> Option<u64> {
         match self {
             Target::Pull { number, .. } => Some(*number),
-            Target::Nothing | Target::Commit { .. } | Target::WorkingTree { .. } => None,
+            Target::Nothing | Target::Commit { .. } | Target::WorkingTree { .. } | Target::Worktree { .. } => None,
+        }
+    }
+
+    pub(crate) fn worktree(&self) -> Option<&Arc<Path>> {
+        match self {
+            Target::Worktree { location, .. } => Some(location),
+            Target::Nothing | Target::Commit { .. } | Target::WorkingTree { .. } | Target::Pull { .. } => None,
         }
     }
 
     pub(crate) fn has_open_file(&self) -> bool {
         match self {
             Target::Commit { open, .. } | Target::Pull { open, .. } => open.is_some(),
-            Target::WorkingTree { open } => open.is_some(),
+            Target::WorkingTree { open } | Target::Worktree { open, .. } => open.is_some(),
             Target::Nothing => false,
         }
     }
@@ -73,15 +86,25 @@ impl Target {
     pub(crate) fn close_file(&mut self) -> bool {
         match self {
             Target::Commit { open, .. } | Target::Pull { open, .. } => open.take().is_some(),
-            Target::WorkingTree { open } => open.take().is_some(),
+            Target::WorkingTree { open } | Target::Worktree { open, .. } => open.take().is_some(),
             Target::Nothing => false,
         }
     }
 
     pub(crate) fn working_file(&self) -> Option<&OpenFile> {
         match self {
-            Target::WorkingTree { open } => open.as_ref(),
+            Target::WorkingTree { open } | Target::Worktree { open, .. } => open.as_ref(),
             Target::Nothing | Target::Commit { .. } | Target::Pull { .. } => None,
+        }
+    }
+
+    pub(crate) fn with_working_file(&self, file: OpenFile) -> Target {
+        match self {
+            Target::Worktree { location, .. } => Target::Worktree {
+                location: location.clone(),
+                open: Some(file),
+            },
+            _ => Target::WorkingTree { open: Some(file) },
         }
     }
 
@@ -101,6 +124,14 @@ impl Target {
                 head_or_working_tree(history)
             }
             Target::WorkingTree { .. } => self.clone(),
+            Target::Worktree { location, .. } if history.changes_row_of(location).is_some() => {
+                self.clone()
+            }
+            Target::Worktree { location, .. } => history
+                .worktree(location)
+                .and_then(|worktree| worktree.head)
+                .filter(|head| history.row_of(head).is_some())
+                .map_or_else(|| commit_or_nothing(head_or_newest(history)), Target::at_commit),
             Target::Commit { id, .. } if history.row_of(id).is_some() => self.clone(),
             Target::Commit { .. } => commit_or_nothing(history.newest()),
             Target::Pull { .. } => self.clone(),
@@ -126,7 +157,11 @@ impl Target {
         match (self, step) {
             (Target::Pull { .. }, _) => None,
             (Target::WorkingTree { .. }, Step::Older) => Some(Target::at_commit(newest)),
-            (Target::WorkingTree { .. }, Step::Newer) => None,
+            (Target::WorkingTree { .. } | Target::Worktree { .. }, Step::Newer) => None,
+            (Target::Worktree { location, .. }, Step::Older) => history
+                .changes_row_of(location)
+                .and_then(|row| history.commits.get(row + 1))
+                .map(|commit| Target::at_commit(commit.id)),
             (Target::Commit { id, .. }, Step::Newer) if *id == newest && has_changes => {
                 Some(Target::WorkingTree { open: None })
             }
@@ -135,11 +170,19 @@ impl Target {
                     .commit()
                     .and_then(|id| history.row_of(&id))
                     .unwrap_or(0);
-                let row = match step {
-                    Step::Newer => row.saturating_sub(1),
-                    Step::Older => (row + 1).min(history.commits.len() - 1),
-                };
-                Some(Target::at_commit(history.commits[row].id))
+                let last = history.commits.len() - 1;
+                let mut row = row;
+                loop {
+                    let next = match step {
+                        Step::Newer => row.checked_sub(1),
+                        Step::Older => Some(row + 1).filter(|next| *next <= last),
+                    };
+                    match next {
+                        Some(next) if history.worktree_on_row(next).is_some() => row = next,
+                        Some(next) => break Some(Target::at_commit(history.commits[next].id)),
+                        None => break self.commit().map(Target::at_commit),
+                    }
+                }
             }
         }
     }

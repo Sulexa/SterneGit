@@ -45,6 +45,7 @@ pub(crate) struct RefLabel {
     pub(crate) is_head: bool,
     pub(crate) upstream: Option<SharedString>,
     pub(crate) from_upstream: Option<AheadBehind>,
+    pub(crate) worktree: Option<SharedString>,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -77,7 +78,7 @@ impl RefLabel {
     }
 
     pub(crate) fn can_be_checked_out(&self) -> bool {
-        self.is_branch() && !self.is_head
+        self.is_branch() && !self.is_head && self.worktree.is_none()
     }
 
     pub(crate) fn full_name(&self) -> String {
@@ -127,7 +128,19 @@ impl RefDigest {
             }
         }
         stash_ids_newest_first(repo).hash(&mut hasher);
+        hash_worktrees(repo, &mut hasher);
         Ok(Self(hasher.finish()))
+    }
+}
+
+fn hash_worktrees(repo: &gix::Repository, hasher: &mut DefaultHasher) {
+    let head_file = |git_dir: &std::path::Path| std::fs::read(git_dir.join("HEAD")).ok();
+    head_file(&repo.current_dir().join(repo.common_dir())).hash(hasher);
+    for proxy in repo.worktrees().unwrap_or_default() {
+        proxy.git_dir().hash(hasher);
+        head_file(proxy.git_dir()).hash(hasher);
+        proxy.is_locked().hash(hasher);
+        proxy.is_prunable().hash(hasher);
     }
 }
 
@@ -166,6 +179,7 @@ pub(crate) fn read_labels(
             is_head,
             upstream,
             from_upstream: None,
+            worktree: None,
         });
     }
     labels.sort_by(|a, b| {
@@ -360,6 +374,7 @@ mod tests {
             is_head,
             upstream: None,
             from_upstream: None,
+            worktree: None,
         };
         assert!(label("topic", RefKind::LocalBranch, false).can_be_checked_out());
         assert!(label("origin/topic", RefKind::RemoteBranch, false).can_be_checked_out());

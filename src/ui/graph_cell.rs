@@ -1,6 +1,6 @@
 use gpui_kit::{
-    Bounds, ContentMask, Hsla, IntoElement, ParentElement as _, PathBuilder, Pixels, Point,
-    Styled as _, Window, canvas, div, fill, point, px, size, transparent_black,
+    BorderStyle, Bounds, ContentMask, Hsla, IntoElement, ParentElement as _, PathBuilder, Pixels,
+    Point, Styled as _, Window, canvas, div, fill, point, px, size, transparent_black,
 };
 
 use super::{
@@ -18,18 +18,20 @@ const HEAD_RING_GAP: Pixels = px(3.);
 const LINE_WIDTH: Pixels = px(2.);
 const RING_WIDTH: Pixels = px(1.5);
 const STASH_CORNER: Pixels = px(1.5);
+const CHANGES_DASH: Pixels = px(3.);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum GraphNode {
     Commit,
     Head,
     Stash,
+    Changes,
 }
 
 impl GraphNode {
     fn line_leaves_below(self, middle: Pixels) -> Pixels {
         match self {
-            GraphNode::Stash => middle + NODE_RADIUS,
+            GraphNode::Stash | GraphNode::Changes => middle + NODE_RADIUS,
             GraphNode::Commit | GraphNode::Head => middle,
         }
     }
@@ -111,8 +113,11 @@ fn paint_row(
                     from
                 }
                 Edge::Out { to } => {
-                    path.move_to(point(x(node), shape.line_leaves_below(middle)));
-                    if to == node {
+                    let leaves = shape.line_leaves_below(middle);
+                    path.move_to(point(x(node), leaves));
+                    if to == node && shape == GraphNode::Changes {
+                        dash_down(&mut path, point(x(node), leaves), bottom);
+                    } else if to == node {
                         path.line_to(point(x(node), bottom));
                     } else {
                         bend_down_to_parent(&mut path, point(x(to), middle), point(x(to), bottom));
@@ -128,6 +133,10 @@ fn paint_row(
         let center = point(x(node), middle);
         if shape == GraphNode::Stash {
             paint_square(window, center, color(node));
+            return;
+        }
+        if shape == GraphNode::Changes {
+            paint_dashed_ring(window, center, NODE_RADIUS, color(node));
             return;
         }
         let radius = if row.is_merge {
@@ -158,6 +167,28 @@ fn paint_square(window: &mut Window, center: Point<Pixels>, color: Hsla) {
         .border_widths(RING_WIDTH)
         .border_color(color),
     );
+}
+
+fn dash_down(path: &mut PathBuilder, from: Point<Pixels>, bottom: Pixels) {
+    let mut top = from.y;
+    while top < bottom {
+        let end = top + CHANGES_DASH;
+        path.move_to(point(from.x, top));
+        path.line_to(point(from.x, if end < bottom { end } else { bottom }));
+        top = end + CHANGES_DASH;
+    }
+}
+
+fn paint_dashed_ring(window: &mut Window, center: Point<Pixels>, radius: Pixels, color: Hsla) {
+    let mut ring = fill(
+        Bounds::centered_at(center, size(radius * 2., radius * 2.)),
+        transparent_black(),
+    )
+    .corner_radii(radius)
+    .border_widths(RING_WIDTH)
+    .border_color(color);
+    ring.border_style = BorderStyle::Dashed;
+    window.paint_quad(ring);
 }
 
 fn bend_into_commit(path: &mut PathBuilder, corner: Point<Pixels>, commit: Point<Pixels>) {

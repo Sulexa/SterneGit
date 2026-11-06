@@ -16,7 +16,7 @@ use crate::{
     git::{
         self, Attendance, Behind, CheckedOut, FileChange, History, PartAction, PullMode,
         PullSource, RefLabel, RemoteBranch, Repo, ResetMode, Scope, Side, Stash, Underway,
-        Version, WorkingChanges, short_id,
+        Version, WorkingChanges, WorktreeChanges, WorktreeStart, changes_elsewhere, short_id,
     },
     ui::{Failure, Job, Load, run_in_background},
 };
@@ -53,19 +53,31 @@ struct Opened {
 }
 
 impl Opened {
-    fn read(path: &Path) -> anyhow::Result<Self> {
-        let (repo, history) = Repo::open(path)?;
+    fn read(path: &Path, reading: &Reading) -> anyhow::Result<Self> {
+        let (repo, history) = match reading {
+            Reading::WholeRepository => {
+                let (repo, history) = Repo::open(path)?;
+                (repo, Arc::new(history))
+            }
+            Reading::ChangesOnly(history) => (Repo::open_worktree(path)?, history.clone()),
+        };
         let root = resolve(repo.location());
         let pull_mode = repo.pull_mode();
         let has_stash = repo.has_stash();
         Ok(Self {
             repo,
-            history: Arc::new(history),
+            history,
             root,
             pull_mode,
             has_stash,
         })
     }
+}
+
+#[derive(Clone)]
+enum Reading {
+    WholeRepository,
+    ChangesOnly(Arc<History>),
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -76,8 +88,12 @@ enum StatusCheck {
 
 pub(crate) struct Repository {
     path: PathBuf,
+    linked_worktree: bool,
+    reading: Reading,
     opened: Load<Opened>,
     changes: Option<Arc<WorkingChanges>>,
+    elsewhere: Vec<WorktreeChanges>,
+    worktree_check: Job,
     status_read: Job,
     ref_check: Job,
     fetch: Job,
@@ -97,10 +113,22 @@ impl EventEmitter<RepositoryEvent> for Repository {}
 
 impl Repository {
     pub(crate) fn new(path: PathBuf) -> Self {
+        Self::reading(path, Reading::WholeRepository)
+    }
+
+    pub(crate) fn changes_of_worktree(location: PathBuf, history: Arc<History>) -> Self {
+        Self::reading(location, Reading::ChangesOnly(history))
+    }
+
+    fn reading(path: PathBuf, reading: Reading) -> Self {
         Self {
+            linked_worktree: git::is_linked_worktree(&path),
             path,
+            reading,
             opened: Load::Idle,
             changes: None,
+            elsewhere: Vec::new(),
+            worktree_check: Job::default(),
             status_read: Job::default(),
             ref_check: Job::default(),
             fetch: Job::default(),
@@ -119,6 +147,10 @@ impl Repository {
 
     pub(crate) fn path(&self) -> &Path {
         &self.path
+    }
+
+    pub(crate) fn is_linked_worktree(&self) -> bool {
+        self.linked_worktree
     }
 
     pub(crate) fn name(&self) -> SharedString {
@@ -157,6 +189,13 @@ impl Repository {
 
     pub(crate) fn changes(&self) -> Option<&Arc<WorkingChanges>> {
         self.changes.as_ref()
+    }
+
+    pub(crate) fn changes_elsewhere(&self, location: &Path) -> Option<&Arc<WorkingChanges>> {
+        self.elsewhere
+            .iter()
+            .find(|read| *read.location == *location)
+            .map(|read| &read.changes)
     }
 
     pub(crate) fn has_changes(&self) -> bool {
@@ -221,12 +260,16 @@ impl Repository {
 
     pub(crate) fn refresh(&mut self, cx: &mut Context<Self>) {
         let path = self.path.clone();
+        let reading = self.reading.clone();
         let task = run_in_background(
             cx,
-            move || Opened::read(&path),
+            move || Opened::read(&path, &reading),
             |this, result, cx| {
                 this.opened.finish(result);
-                if this.opened.value().is_some() {
+                if let Some(opened) = this.opened.value() {
+                    if matches!(this.reading, Reading::WholeRepository) {
+                        this.elsewhere = opened.history.worktree_changes.clone();
+                    }
                     this.read_status(StatusCheck::Forced, cx);
                     if std::mem::take(&mut this.push_once_read) {
                         this.push(cx);
@@ -245,6 +288,10 @@ impl Repository {
 
     pub(crate) fn check_for_changes(&mut self, cx: &mut Context<Self>) {
         self.read_status(StatusCheck::UnlessBusy, cx);
+        if matches!(self.reading, Reading::ChangesOnly(_)) {
+            return;
+        }
+        self.check_worktrees(cx);
         if self.opened.is_loading() || self.ref_check.is_running() {
             return;
         }
@@ -266,6 +313,35 @@ impl Repository {
             },
         );
         self.ref_check.run(task);
+    }
+
+    fn check_worktrees(&mut self, cx: &mut Context<Self>) {
+        if self.worktree_check.is_running() || self.opened.is_loading() {
+            return;
+        }
+        let Some(history) = self.history().cloned() else {
+            return;
+        };
+        if history.worktrees.iter().all(|worktree| worktree.is_here) {
+            return;
+        }
+        let worktrees = history.worktrees.clone();
+        let task = run_in_background(
+            cx,
+            move || changes_elsewhere(&worktrees),
+            |this, read, cx| {
+                this.worktree_check.finish();
+                let moved = this
+                    .history()
+                    .is_some_and(|history| changes_rows_moved(history, &read));
+                this.elsewhere = read;
+                if moved && !this.opened.is_loading() {
+                    this.refresh(cx);
+                }
+                cx.notify();
+            },
+        );
+        self.worktree_check.run(task);
     }
 
     pub(crate) fn fetch_if_older_than(&mut self, age: Duration, cx: &mut Context<Self>) {
@@ -614,6 +690,89 @@ impl Repository {
         );
     }
 
+    pub(crate) fn add_worktree(
+        &mut self,
+        folder: PathBuf,
+        start: WorktreeStart,
+        open: bool,
+        cx: &mut Context<Self>,
+    ) {
+        let name = git::folder_name(&folder).to_string();
+        self.write_and_report(
+            None,
+            operation::worktree_add_failed(&name),
+            move |repo| {
+                repo.add_worktree(&folder, &start)?;
+                let checked_out = match &start {
+                    WorktreeStart::Branch(branch) | WorktreeStart::Tracking { branch, .. } => branch,
+                    WorktreeStart::NewBranch { name, .. } => name,
+                };
+                Ok(Outcome::WorktreeAdded {
+                    done: operation::worktree_added(&name, checked_out),
+                    open: open.then_some(folder),
+                })
+            },
+            cx,
+        );
+    }
+
+    pub(crate) fn remove_worktrees(
+        &mut self,
+        removed: Vec<(PathBuf, SharedString)>,
+        delete_branch: Option<String>,
+        cx: &mut Context<Self>,
+    ) {
+        let names: Vec<SharedString> = removed.iter().map(|(_, name)| name.clone()).collect();
+        self.write_and_report(
+            None,
+            operation::worktree_remove_failed(&names),
+            move |repo| {
+                for (location, _) in &removed {
+                    repo.remove_worktree(location)?;
+                }
+                if let Some(branch) = &delete_branch {
+                    repo.delete_branch(branch)?;
+                }
+                Ok(operation::worktrees_removed(&names, delete_branch.as_deref()))
+            },
+            cx,
+        );
+    }
+
+    pub(crate) fn lock_worktree(
+        &mut self,
+        location: PathBuf,
+        name: SharedString,
+        reason: Option<String>,
+        cx: &mut Context<Self>,
+    ) {
+        let locked = reason.is_some();
+        self.write_and_report(
+            None,
+            operation::worktree_lock_failed(&name, locked),
+            move |repo| {
+                match &reason {
+                    Some(reason) => repo.lock_worktree(&location, reason)?,
+                    None => repo.unlock_worktree(&location)?,
+                }
+                Ok(operation::worktree_locked(&name, locked))
+            },
+            cx,
+        );
+    }
+
+    pub(crate) fn forget_missing_worktrees(&mut self, cx: &mut Context<Self>) {
+        self.write_and_report(
+            None,
+            operation::FORGET_MISSING_FAILED.into(),
+            |repo| {
+                repo.forget_missing_worktrees()
+                    .map(|()| SharedString::from(operation::FORGOT_MISSING_WORKTREES))
+            },
+            cx,
+        );
+    }
+
     fn checked_out_name(&self) -> String {
         self.history()
             .and_then(|history| history.branch.as_deref())
@@ -873,6 +1032,21 @@ impl Repository {
         cx.emit(RepositoryEvent::ChangesRead);
         cx.notify();
     }
+}
+
+fn changes_rows_moved(history: &History, read: &[WorktreeChanges]) -> bool {
+    let shown_in_history = |read: &&WorktreeChanges| {
+        !read.changes.is_empty()
+            && read
+                .changes
+                .head
+                .is_some_and(|head| history.row_of(&head).is_some())
+    };
+    let changed: Vec<&WorktreeChanges> = read.iter().filter(shown_in_history).collect();
+    changed.len() != history.locations_with_changes_rows().count()
+        || changed
+            .iter()
+            .any(|read| !history.shows_changes_of(&read.location, read.changes.head))
 }
 
 fn resolve(path: &Path) -> PathBuf {

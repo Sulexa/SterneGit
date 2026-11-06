@@ -50,7 +50,8 @@ gpui_kit::assets::icon_assets!(
         GitPullRequestClosed,
         ListFilter,
         CircleMinus,
-        MessageSquare
+        MessageSquare,
+        FolderGit
     ]
 );
 

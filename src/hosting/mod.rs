@@ -18,7 +18,7 @@ pub(crate) use clone_dialog::open_clone_dialog;
 pub(crate) use clone_view::{CloneEvent, CloneJob, CloneView};
 pub(crate) use failure::{Fix, Trouble};
 pub(crate) use new_repository::open_new_repository;
-pub(crate) use parts::{Note, Picker, field};
+pub(crate) use parts::{Note, Picker, boxed, chip, field};
 pub(crate) use publish::open_publish;
 pub(crate) use settings_tab::{Page, SettingsTab};
 pub(crate) use sign_in::{SignInStart, open_sign_in};

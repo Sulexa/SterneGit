@@ -249,7 +249,9 @@ fn pull_mode_menu(
 
 pub(crate) fn notification(operated: &Operated) -> Option<Notification> {
     Some(match &operated.outcome {
-        Ok(Outcome::Done(message)) => Notification::success(message.clone()),
+        Ok(Outcome::Done(message) | Outcome::WorktreeAdded { done: message, .. }) => {
+            Notification::success(message.clone())
+        }
         Ok(Outcome::Warning { title, message }) => Notification::warning(message.clone())
             .title(title.clone())
             .autohide(false),

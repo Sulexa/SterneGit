@@ -32,6 +32,7 @@ mod time;
 mod underway;
 pub(crate) mod url_settings;
 mod version;
+mod worktree;
 
 use std::{
     path::{Path, PathBuf},
@@ -74,6 +75,10 @@ pub(crate) use underway::{Continued, Picking, Rebasing, Underway};
 #[cfg(test)]
 pub(crate) use underway::{Merging, Replaying};
 pub(crate) use version::{Conflicted, Revision, Version};
+pub(crate) use worktree::{
+    Worktree, WorktreeChanges, WorktreeStart, changes_elsewhere, folder_is_free, folder_of_worktrees,
+    is_linked_worktree, suggested_folder,
+};
 
 const OBJECT_CACHE_BYTES: usize = 4 * 1024 * 1024;
 
@@ -92,7 +97,7 @@ impl Repo {
         let mut repo = gix::discover(path)
             .with_context(|| format!("{} isn't inside a Git repository", path.display()))?;
         decode_each_commit_once(&mut repo);
-        let history = History::read(&repo, started)?;
+        let history = History::read(&repo, started, &top_folder_of(&repo))?;
         Ok((Self::new(repo), history))
     }
 

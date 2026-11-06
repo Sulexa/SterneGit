@@ -36,7 +36,7 @@ use crate::{
         open_new_repository,
     },
     net::services::ConnectorId,
-    repo::{RepoView, Repository},
+    repo::{RepoView, RepoViewEvent, Repository},
     ui::{Look as _, Notice},
 };
 
@@ -53,6 +53,7 @@ struct RepoTab {
     view: Entity<RepoView>,
     repository: Entity<Repository>,
     _title_follows_repository: Subscription,
+    _opens_worktrees: Subscription,
 }
 
 enum Tab {
@@ -198,11 +199,42 @@ impl SterneGit {
             this.update_title(window, cx);
             cx.notify();
         });
+        let opens_worktrees = cx.subscribe_in(&view, window, |this, view, event, window, cx| match event {
+            RepoViewEvent::OpenWorktree(folder) => this.open_worktree(view, folder.clone(), window, cx),
+        });
         RepoTab {
             view,
             repository,
             _title_follows_repository: title_follows_repository,
+            _opens_worktrees: opens_worktrees,
         }
+    }
+
+    fn open_worktree(
+        &mut self,
+        from: &Entity<RepoView>,
+        folder: PathBuf,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let resolved = std::fs::canonicalize(&folder).unwrap_or_else(|_| folder.clone());
+        let existing = self.tabs.position(|tab| {
+            tab.repository()
+                .is_some_and(|repository| repository.read(cx).shows(&resolved))
+        });
+        let ix = match existing {
+            Some(ix) => ix,
+            None => {
+                let after = self
+                    .tabs
+                    .position(|tab| matches!(tab, Tab::Repo(tab) if tab.view == *from))
+                    .map_or(usize::MAX, |ix| ix + 1);
+                let tab = self.new_tab(folder, window, cx);
+                self.tabs.insert(after, Tab::Repo(tab))
+            }
+        };
+        self.activate(ix, window, cx);
+        self.save_tabs(cx);
     }
 
     fn activate(&mut self, ix: usize, window: &mut Window, cx: &mut Context<Self>) {
@@ -400,11 +432,19 @@ impl SterneGit {
 
     fn top_bar(&self, cx: &App) -> TopBar {
         let active = self.tabs.active().and_then(Tab::repository).map(|tab| tab.read(cx));
+        let linked = active
+            .and_then(|repository| repository.history())
+            .filter(|history| history.here().is_some_and(|here| !here.is_main));
         let name = match self.tabs.active() {
             Some(Tab::Cloning { view, .. }) => Some(view.read(cx).name()),
-            _ => active.map(|repository| repository.name()),
+            _ => linked
+                .and_then(|history| history.main_worktree().map(|main| main.name.clone()))
+                .or_else(|| active.map(|repository| repository.name())),
         };
-        TopBar::new(self.menu_bar.clone()).repository(name, active.and_then(|repository| repository.head_label()))
+        let worktree = linked.and_then(|history| history.here().map(|here| here.name.clone()));
+        TopBar::new(self.menu_bar.clone())
+            .repository(name, active.and_then(|repository| repository.head_label()))
+            .worktree(worktree)
     }
 
     fn tab_strip(&self, cx: &mut Context<Self>) -> TabStrip {
@@ -424,7 +464,9 @@ impl SterneGit {
                     TabLabel {
                         name: repository.name(),
                         state,
-                        icon: None,
+                        icon: repository
+                            .is_linked_worktree()
+                            .then_some(IconName::FolderGit),
                     }
                 }
                 Tab::Settings(_) => TabLabel {

@@ -8,12 +8,14 @@ use crate::{
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(crate) enum Section {
     Refs(RefKind),
+    Worktrees,
     Stashes,
 }
 
 impl Section {
-    const IN_ORDER: [Section; 4] = [
+    const IN_ORDER: [Section; 5] = [
         Section::Refs(RefKind::LocalBranch),
+        Section::Worktrees,
         Section::Refs(RefKind::RemoteBranch),
         Section::Stashes,
         Section::Refs(RefKind::Tag),
@@ -46,11 +48,19 @@ pub(crate) enum RefTreeRow {
     Stash {
         ix: usize,
     },
+    Worktree {
+        ix: usize,
+    },
+}
+
+pub(crate) struct Listed {
+    pub(crate) stashes: usize,
+    pub(crate) worktrees: usize,
 }
 
 pub(crate) fn ref_tree(
     refs: &[RefLabel],
-    stashes: usize,
+    listed: Listed,
     folded: &Folded<RefGroup>,
 ) -> Vec<RefTreeRow> {
     let mut rows = Vec::new();
@@ -59,7 +69,8 @@ pub(crate) fn ref_tree(
         let start = first;
         let count = match section {
             Section::Refs(kind) => refs[start..].partition_point(|label| label.kind == kind),
-            Section::Stashes => stashes,
+            Section::Worktrees => listed.worktrees,
+            Section::Stashes => listed.stashes,
         };
         if count == 0 {
             continue;
@@ -77,8 +88,13 @@ pub(crate) fn ref_tree(
                     add_section(&mut rows, kind, &refs[start..first], start, folded);
                 }
             }
-            Section::Stashes if open => rows.extend((0..stashes).map(|ix| RefTreeRow::Stash { ix })),
-            Section::Stashes => {}
+            Section::Stashes if open => {
+                rows.extend((0..listed.stashes).map(|ix| RefTreeRow::Stash { ix }))
+            }
+            Section::Worktrees if open => {
+                rows.extend((0..listed.worktrees).map(|ix| RefTreeRow::Worktree { ix }))
+            }
+            Section::Stashes | Section::Worktrees => {}
         }
     }
     rows
@@ -147,7 +163,7 @@ pub(crate) fn last_segment(path: &str) -> &str {
 mod tests {
     use gpui_kit::SharedString;
 
-    use super::{RefGroup, RefTreeRow, Section, last_segment, ref_tree};
+    use super::{Listed, RefGroup, RefTreeRow, Section, last_segment, ref_tree};
     use crate::{
         git::{
             RefKind::{self, LocalBranch, RemoteBranch, Tag},
@@ -167,6 +183,7 @@ mod tests {
                 is_head: false,
                 upstream: None,
                 from_upstream: None,
+                worktree: None,
             })
             .collect()
     }
@@ -224,10 +241,17 @@ mod tests {
         ])
     }
 
+    fn listing(stashes: usize) -> Listed {
+        Listed {
+            stashes,
+            worktrees: 0,
+        }
+    }
+
     #[test]
     fn names_split_into_folders_at_each_slash() {
         assert_eq!(
-            ref_tree(&sample(), 0, &Folded::default()),
+            ref_tree(&sample(), listing(0), &Folded::default()),
             [
                 section(LocalBranch, 4, true),
                 folder(LocalBranch, "feature", 0, true),
@@ -254,7 +278,7 @@ mod tests {
             RefGroup::Section(Section::Refs(Tag)),
         ]);
         assert_eq!(
-            ref_tree(&sample(), 0, &folded),
+            ref_tree(&sample(), listing(0), &folded),
             [
                 section(LocalBranch, 4, false),
                 section(RemoteBranch, 2, true),
@@ -270,7 +294,7 @@ mod tests {
     #[test]
     fn a_folded_folder_hides_everything_inside_it_and_nothing_after_it() {
         let folded = folded([RefGroup::Folder(RemoteBranch, "origin".into())]);
-        let rows = ref_tree(&sample(), 0, &folded);
+        let rows = ref_tree(&sample(), listing(0), &folded);
         assert_eq!(
             rows[7..],
             [
@@ -287,15 +311,15 @@ mod tests {
         let group = RefGroup::Folder(LocalBranch, "feature".into());
         let folded = folded([group.clone(), group]);
         assert_eq!(
-            ref_tree(&sample(), 0, &folded),
-            ref_tree(&sample(), 0, &Folded::default())
+            ref_tree(&sample(), listing(0), &folded),
+            ref_tree(&sample(), listing(0), &Folded::default())
         );
     }
 
     #[test]
     fn stashes_sit_between_remotes_and_tags_without_folders() {
         assert_eq!(
-            ref_tree(&sample(), 2, &Folded::default())[12..],
+            ref_tree(&sample(), listing(2), &Folded::default())[12..],
             [
                 stashes(2, true),
                 stash(0),
@@ -310,7 +334,7 @@ mod tests {
     fn folded_stashes_keep_their_header_and_count() {
         let folded = folded([RefGroup::Section(Section::Stashes)]);
         assert_eq!(
-            ref_tree(&sample(), 2, &folded)[12..],
+            ref_tree(&sample(), listing(2), &folded)[12..],
             [stashes(2, false), section(Tag, 1, true), leaf(6, 0)]
         );
     }
@@ -324,7 +348,7 @@ mod tests {
             ("fixes", LocalBranch),
         ]);
         assert_eq!(
-            ref_tree(&refs, 0, &Folded::default()),
+            ref_tree(&refs, listing(0), &Folded::default()),
             [
                 section(LocalBranch, 4, true),
                 leaf(0, 0),

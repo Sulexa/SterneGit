@@ -198,6 +198,10 @@ impl FileDiffPanel {
         }
     }
 
+    pub(crate) fn use_repository(&mut self, repository: Entity<Repository>) {
+        self.repository = repository;
+    }
+
     pub(crate) fn place(&mut self, place: FilePlace, cx: &mut Context<Self>) {
         if self.place != place {
             self.place = place;

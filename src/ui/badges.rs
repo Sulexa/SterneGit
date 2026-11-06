@@ -74,10 +74,28 @@ pub(crate) fn ref_badge(shown: ShownRef, color: Hsla, pull: Option<PullMark>, cx
                     .xsmall()
                     .text_color(color),
             )
+        })
+        .when(label.worktree.is_some(), |this| {
+            this.child(Icon::new(IconName::FolderGit).xsmall().text_color(color))
         });
+    let elsewhere = label.worktree.clone();
     badge(icons, label.name.clone(), label.is_head, color, cx)
         .when_some(pull, |badge, pull| badge.child(pull_chip(pull, cx)))
         .id(label.full_name())
+        .when_some(elsewhere, |badge, worktree| {
+            badge.tooltip(move |window, cx| {
+                Tooltip::new(checked_out_in(&worktree)).build(window, cx)
+            })
+        })
+}
+
+pub(crate) fn checked_out_in(worktree: &str) -> String {
+    format!("Checked out in the worktree {worktree}")
+}
+
+pub(crate) fn worktree_badge(name: SharedString, color: Hsla, cx: &App) -> Stateful<Div> {
+    let icon = Icon::new(IconName::FolderGit).xsmall().text_color(color);
+    badge(icon, name.clone(), false, color, cx).id(SharedString::from(format!("worktree/{name}")))
 }
 
 pub(crate) fn stash_badge(name: SharedString, color: Hsla, cx: &App) -> AnyElement {

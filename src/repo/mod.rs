@@ -27,15 +27,23 @@ mod stash_menu;
 mod status_bar;
 mod tag_dialog;
 mod toolbar;
+mod worktree_bar;
+mod worktree_dialog;
+mod worktree_menu;
+mod worktrees_panel;
 
-use std::{ffi::OsString, path::PathBuf, sync::Arc};
+use std::{
+    ffi::OsString,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use sternegit_protocol::{PullSummary, StateFilter};
 use gix::ObjectId;
 use gpui_kit::{
-    AnyElement, AppContext as _, Context, Entity, FocusHandle, InteractiveElement as _,
-    IntoElement, ParentElement as _, Render, ScrollStrategy, SharedString, Subscription, Task,
-    UniformListScrollHandle, Window,
+    AnyElement, App, AppContext as _, ClipboardItem, Context, Entity, EventEmitter, FocusHandle,
+    InteractiveElement as _, IntoElement, ParentElement as _, Render, ScrollStrategy,
+    SharedString, Subscription, Task, UniformListScrollHandle, Window,
     component::{
         WindowExt as _,
         button::{Button, ButtonVariant},
@@ -54,7 +62,7 @@ use crate::{
     },
     git::{
         Baseline, ChangeKind, Commit, FileChange, FileCommit, HISTORY_LIMIT, History, NamedRemote,
-        PullMode, RefLabel, ResetMode, Scope, Side, Stash, WorkingChanges, short_id,
+        PullMode, RefLabel, ResetMode, Scope, Side, Stash, WorkingChanges, Worktree, short_id,
     },
     app::connectors::Connectors,
     hosting::{
@@ -62,8 +70,8 @@ use crate::{
         open_sign_in,
     },
     ui::{
-        self, Failure, FileView, Folded, Look as _, Notice, Picked, PickedFor, run_in_background,
-        thousands,
+        self, Failure, FileView, Folded, Handler, Look as _, Notice, Picked, PickedFor, handler,
+        run_in_background, thousands,
     },
 };
 use behind_dialog::open_behind_dialog;
@@ -88,10 +96,14 @@ use pulls::{
     SectionState, filter_label, marks_for, open_create_pull,
 };
 use ref_tree::RefGroup;
-use refs_list::RefsList;
+use refs_list::{RefsList, WorktreeSection};
 pub(crate) use repository::{Repository, RepositoryEvent};
 use status_bar::RepoStatusBar;
 use toolbar::{RepoToolbar, ToolbarState, notification};
+use worktree_bar::worktree_bar;
+use worktree_dialog::open_worktree_dialog;
+use worktree_menu::{WorktreeAction, WorktreeMenu, confirm_remove, open_lock_dialog};
+use worktrees_panel::open_worktrees_panel;
 
 #[derive(Clone)]
 enum Openable {
@@ -105,14 +117,43 @@ struct PullPane {
     _subscriptions: [Subscription; 2],
 }
 
+pub(crate) enum RepoViewEvent {
+    OpenWorktree(PathBuf),
+}
+
+struct Working {
+    repository: Entity<Repository>,
+    commit_form: Entity<CommitForm>,
+    folded: SideFolds,
+    scrolls: SideScrolls,
+    picked: PickedFor<OpenFile>,
+}
+
+impl Working {
+    fn new(repository: Entity<Repository>, commit_form: Entity<CommitForm>) -> Self {
+        Self {
+            repository,
+            commit_form,
+            folded: SideFolds::default(),
+            scrolls: SideScrolls::default(),
+            picked: PickedFor::default(),
+        }
+    }
+}
+
+struct Elsewhere {
+    location: Arc<Path>,
+    working: Working,
+    _events: Subscription,
+}
+
 pub(crate) struct RepoView {
     repository: Entity<Repository>,
     target: Target,
     folded_refs: Folded<RefGroup>,
-    folded_changes: SideFolds,
-    picked_changes: PickedFor<OpenFile>,
+    here: Working,
+    elsewhere: Option<Elsewhere>,
     commit_panel: Entity<CommitPanel>,
-    commit_form: Entity<CommitForm>,
     file_diff: Entity<FileDiffPanel>,
     file_history: Option<FileHistory>,
     whole_window: bool,
@@ -122,7 +163,6 @@ pub(crate) struct RepoView {
     file_history_focus: FocusHandle,
     history_scroll: UniformListScrollHandle,
     refs_scroll: UniformListScrollHandle,
-    changes_scrolls: SideScrolls,
     remote_urls: Vec<String>,
     account_question: Option<AccountQuestion>,
     question_dismissed: bool,
@@ -132,6 +172,8 @@ pub(crate) struct RepoView {
     pulls_folded: bool,
     _subscriptions: [Subscription; 7],
 }
+
+impl EventEmitter<RepoViewEvent> for RepoView {}
 
 impl RepoView {
     pub(crate) fn new(path: PathBuf, window: &mut Window, cx: &mut Context<Self>) -> Self {
@@ -149,6 +191,9 @@ impl RepoView {
                 RepositoryEvent::Operated(operated) => {
                     match &operated.outcome {
                         Ok(Outcome::Stopped) => this.follow_conflicts = true,
+                        Ok(Outcome::WorktreeAdded { open: Some(folder), .. }) => {
+                            cx.emit(RepoViewEvent::OpenWorktree(folder.clone()))
+                        }
                         Ok(Outcome::Behind(behind)) => open_behind_dialog(
                             this.repository.clone(),
                             behind.clone(),
@@ -194,13 +239,12 @@ impl RepoView {
             cx.observe(&pulls, |_, _, cx| cx.notify()),
         ];
         Self {
-            repository,
+            repository: repository.clone(),
             target: Target::Nothing,
             folded_refs: Folded::default(),
-            folded_changes: SideFolds::default(),
-            picked_changes: PickedFor::default(),
+            here: Working::new(repository.clone(), commit_form),
+            elsewhere: None,
             commit_panel,
-            commit_form,
             file_diff,
             file_history: None,
             whole_window: false,
@@ -210,7 +254,6 @@ impl RepoView {
             file_history_focus: cx.focus_handle(),
             history_scroll: UniformListScrollHandle::new(),
             refs_scroll: UniformListScrollHandle::new(),
-            changes_scrolls: SideScrolls::default(),
             remote_urls: Vec::new(),
             account_question: None,
             question_dismissed: false,
@@ -299,6 +342,14 @@ impl RepoView {
             Some(history) => self.target.after_history_read(history, changes),
             None => Target::Nothing,
         };
+        let worktree_gone = self.elsewhere.as_ref().is_some_and(|elsewhere| {
+            repository
+                .history()
+                .is_none_or(|history| history.worktree(&elsewhere.location).is_none())
+        });
+        if worktree_gone {
+            self.elsewhere = None;
+        }
         match surviving {
             Target::Commit { id, .. } => self.show_commit(id, cx),
             Target::Nothing => {
@@ -321,7 +372,8 @@ impl RepoView {
         ) else {
             return;
         };
-        self.picked_changes
+        self.here
+            .picked
             .retain(|file| changes.find(file.side, &file.path).is_some());
         let target = self.target.after_changes_read(&changes, &history);
         match target {
@@ -334,8 +386,12 @@ impl RepoView {
                     Some((file.side, change.clone()))
                 });
                 self.target = Target::WorkingTree { open };
+                let here = self.repository.clone();
                 self.file_diff.update(cx, |panel, cx| match followed {
-                    Some((side, change)) => panel.open_working_file(&repo, change, side, cx),
+                    Some((side, change)) => {
+                        panel.use_repository(here);
+                        panel.open_working_file(&repo, change, side, cx)
+                    }
                     None => panel.close(cx),
                 });
             }
@@ -426,6 +482,211 @@ impl RepoView {
         }
     }
 
+    fn working(&self) -> &Working {
+        match (&self.target, &self.elsewhere) {
+            (Target::Worktree { location, .. }, Some(elsewhere)) if elsewhere.location == *location => {
+                &elsewhere.working
+            }
+            _ => &self.here,
+        }
+    }
+
+    fn working_mut(&mut self) -> &mut Working {
+        let shows_elsewhere = match (&self.target, &self.elsewhere) {
+            (Target::Worktree { location, .. }, Some(elsewhere)) => elsewhere.location == *location,
+            _ => false,
+        };
+        match (&mut self.elsewhere, shows_elsewhere) {
+            (Some(elsewhere), true) => &mut elsewhere.working,
+            _ => &mut self.here,
+        }
+    }
+
+    fn changed_in(&self, worktree: &Worktree, cx: &App) -> usize {
+        let repository = self.repository.read(cx);
+        let changes = match worktree.is_here {
+            true => repository.changes(),
+            false => repository.changes_elsewhere(&worktree.location),
+        };
+        changes.map_or(0, |changes| changes.file_count())
+    }
+
+    fn select_worktree(&mut self, location: Arc<Path>, window: &mut Window, cx: &mut Context<Self>) {
+        let repository = self.repository.read(cx);
+        let Some(history) = repository.history().cloned() else {
+            return;
+        };
+        let Some(worktree) = history.worktree(&location).cloned() else {
+            return;
+        };
+        let changed = self.changed_in(&worktree, cx) > 0;
+        let head = match worktree.is_here {
+            true => history.head_id,
+            false => worktree.head,
+        }
+        .filter(|head| history.row_of(head).is_some());
+        match (worktree.is_here, changed && !worktree.is_missing, head) {
+            (true, true, _) => self.select_working_tree(cx),
+            (false, true, _) => self.show_worktree(location, history, window, cx),
+            (_, false, Some(head)) => {
+                if let Some(row) = history.row_of(&head) {
+                    self.reveal_row(head, row, cx)
+                }
+            }
+            (_, false, None) => {}
+        }
+    }
+
+    fn show_worktree(
+        &mut self,
+        location: Arc<Path>,
+        history: Arc<History>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.target.worktree() == Some(&location) {
+            self.close_file(cx);
+            return;
+        }
+        if self.elsewhere.as_ref().is_none_or(|elsewhere| elsewhere.location != location) {
+            let folder = location.to_path_buf();
+            let repository = cx.new(|_| Repository::changes_of_worktree(folder, history.clone()));
+            let commit_form = cx.new(|cx| CommitForm::new(repository.clone(), window, cx));
+            let events = cx.subscribe(&repository, |this, _, event, cx| match event {
+                RepositoryEvent::ChangesRead => this.on_worktree_changes_read(cx),
+                RepositoryEvent::Committed => this
+                    .repository
+                    .update(cx, |repository, cx| repository.refresh(cx)),
+                _ => {}
+            });
+            repository.update(cx, |repository, cx| repository.refresh(cx));
+            self.elsewhere = Some(Elsewhere {
+                location: location.clone(),
+                working: Working::new(repository, commit_form),
+                _events: events,
+            });
+        }
+        self.close_file(cx);
+        self.target = Target::Worktree {
+            location: location.clone(),
+            open: None,
+        };
+        self.pull_pane = None;
+        if let Some(row) = history.changes_row_of(&location) {
+            self.history_scroll
+                .scroll_to_item(row, ScrollStrategy::Nearest);
+        }
+        cx.notify();
+    }
+
+    fn on_worktree_changes_read(&mut self, cx: &mut Context<Self>) {
+        let Some(elsewhere) = &self.elsewhere else {
+            return;
+        };
+        let repository = elsewhere.working.repository.clone();
+        let read = repository.read(cx);
+        let (Some(repo), Some(changes)) = (read.repo().cloned(), read.changes().cloned()) else {
+            return;
+        };
+        if let Some(elsewhere) = &mut self.elsewhere {
+            elsewhere
+                .working
+                .picked
+                .retain(|file| changes.find(file.side, &file.path).is_some());
+        }
+        let shown = self.elsewhere.as_ref().map(|elsewhere| elsewhere.location.clone());
+        if let Target::Worktree { location, open } = &self.target
+            && Some(location) == shown.as_ref()
+        {
+            let open = open.as_ref().and_then(|file| file.follow(&changes));
+            let followed = open.as_ref().and_then(|file| {
+                let change = changes.find(file.side, &file.path)?;
+                Some((file.side, change.clone()))
+            });
+            self.target = Target::Worktree {
+                location: location.clone(),
+                open,
+            };
+            self.file_diff.update(cx, |panel, cx| match followed {
+                Some((side, change)) => {
+                    panel.use_repository(repository);
+                    panel.open_working_file(&repo, change, side, cx)
+                }
+                None => panel.close(cx),
+            });
+            self.place_file(cx);
+        }
+        cx.notify();
+    }
+
+    fn worktree_menu(&self, cx: &mut Context<Self>) -> WorktreeMenu {
+        WorktreeMenu::new(self.repository.read(cx).is_writing()).on_action(cx.listener(
+            |this, (worktree, action): &(Worktree, WorktreeAction), window, cx| {
+                this.act_on_worktree(worktree.clone(), *action, window, cx)
+            },
+        ))
+    }
+
+    fn opens_worktree_tabs(cx: &mut Context<Self>) -> Handler<Arc<Path>> {
+        handler(cx.listener(|_, location: &Arc<Path>, _, cx| {
+            cx.emit(RepoViewEvent::OpenWorktree(location.to_path_buf()))
+        }))
+    }
+
+    fn worktree_section(&self, history: &History, cx: &mut Context<Self>) -> WorktreeSection {
+        WorktreeSection {
+            changed: history
+                .worktrees
+                .iter()
+                .map(|worktree| self.changed_in(worktree, cx))
+                .collect(),
+            selected: self.target.worktree().cloned(),
+            menu: self.worktree_menu(cx),
+            on_select: handler(cx.listener(|this, location: &Arc<Path>, window, cx| {
+                this.select_worktree(location.clone(), window, cx)
+            })),
+            on_open: Self::opens_worktree_tabs(cx),
+            on_open_panel: handler(cx.listener(|this, _: &(), window, cx| {
+                this.show_worktrees_panel(window, cx)
+            })),
+        }
+    }
+
+    fn show_worktrees_panel(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let on_open = Self::opens_worktree_tabs(cx);
+        open_worktrees_panel(self.repository.clone(), on_open, window, cx);
+    }
+
+    fn act_on_worktree(
+        &mut self,
+        worktree: Worktree,
+        action: WorktreeAction,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let location = PathBuf::from(&*worktree.location);
+        let repository = self.repository.clone();
+        match action {
+            WorktreeAction::OpenInTab => cx.emit(RepoViewEvent::OpenWorktree(location)),
+            WorktreeAction::ShowInFolder => cx.reveal_path(&location),
+            WorktreeAction::CopyPath => {
+                cx.write_to_clipboard(ClipboardItem::new_string(location.display().to_string()));
+                window.push_notification("Path copied", cx);
+            }
+            WorktreeAction::Lock => open_lock_dialog(repository, worktree, window, cx),
+            WorktreeAction::Unlock => repository.update(cx, |repository, cx| {
+                repository.lock_worktree(location, worktree.name.clone(), None, cx)
+            }),
+            WorktreeAction::Remove => {
+                let changed = self.changed_in(&worktree, cx);
+                confirm_remove(repository, worktree, changed, window, cx)
+            }
+            WorktreeAction::Forget => repository.update(cx, |repository, cx| {
+                repository.remove_worktrees(vec![(location, worktree.name.clone())], None, cx)
+            }),
+        }
+    }
+
     fn select_pull(&mut self, number: u64, window: &mut Window, cx: &mut Context<Self>) {
         if self.target.pull() == Some(number) {
             self.close_file(cx);
@@ -496,7 +757,9 @@ impl RepoView {
         *open = Some(path.clone());
         let label: SharedString = format!("#{number}").into();
         view.update(cx, |view, cx| view.mark_open(Some(path), cx));
+        let here = self.repository.clone();
         self.file_diff.update(cx, |panel, cx| {
+            panel.use_repository(here);
             panel.open_commit_file(head, Baseline::Commit(merge_base), label, file, cx)
         });
         self.place_file(cx);
@@ -606,7 +869,8 @@ impl RepoView {
     }
 
     fn open_working_file(&mut self, side: Side, change: FileChange, cx: &mut Context<Self>) {
-        let Some(repo) = self.repository.read(cx).repo().cloned() else {
+        let repository = self.working().repository.clone();
+        let Some(repo) = repository.read(cx).repo().cloned() else {
             return;
         };
         let conflicted = change.kind == ChangeKind::Conflicted;
@@ -617,14 +881,13 @@ impl RepoView {
             self.whole_window = false;
             self.whole_window_for_conflicts = false;
         }
-        self.target = Target::WorkingTree {
-            open: Some(OpenFile {
-                side,
-                path: change.path.clone(),
-            }),
-        };
-        self.picked_changes = PickedFor::default();
+        self.target = self.target.with_working_file(OpenFile {
+            side,
+            path: change.path.clone(),
+        });
+        self.working_mut().picked = PickedFor::default();
         self.file_diff.update(cx, |panel, cx| {
+            panel.use_repository(repository);
             panel.open_working_file(&repo, change, side, cx)
         });
         self.place_file(cx);
@@ -648,7 +911,9 @@ impl RepoView {
         let parent = self.commit_panel.read(cx).first_parent_of(id);
         self.commit_panel
             .update(cx, |panel, cx| panel.mark_open(Some(path), cx));
+        let here = self.repository.clone();
         self.file_diff.update(cx, |panel, cx| {
+            panel.use_repository(here);
             panel.open_commit_file(id, Baseline::FirstParent(parent), short_id(id), file, cx)
         });
         self.place_file(cx);
@@ -814,8 +1079,8 @@ impl RepoView {
         let view = FileView::current(cx);
         let unfolded = Folded::default();
         match &self.target {
-            Target::WorkingTree { .. } => {
-                let Some(changes) = self.repository.read(cx).changes().cloned() else {
+            Target::WorkingTree { .. } | Target::Worktree { .. } => {
+                let Some(changes) = self.working().repository.read(cx).changes().cloned() else {
                     return Vec::new();
                 };
                 let conflicted = changes
@@ -867,7 +1132,10 @@ impl RepoView {
 
     fn open_position(&self, files: &[Openable]) -> Option<usize> {
         files.iter().position(|file| match (file, &self.target) {
-            (Openable::Working(side, change), Target::WorkingTree { open: Some(open) }) => {
+            (
+                Openable::Working(side, change),
+                Target::WorkingTree { open: Some(open) } | Target::Worktree { open: Some(open), .. },
+            ) => {
                 *side == open.side && change.path == open.path
             }
             (Openable::Commit(file), Target::Commit { open: Some(path), .. })
@@ -927,7 +1195,7 @@ impl RepoView {
     }
 
     fn close_file(&mut self, cx: &mut Context<Self>) {
-        self.picked_changes = PickedFor::default();
+        self.working_mut().picked = PickedFor::default();
         if self.whole_window_for_conflicts {
             self.whole_window = false;
             self.whole_window_for_conflicts = false;
@@ -967,7 +1235,7 @@ impl RepoView {
         match self.target.step(step, history, repository.has_changes()) {
             Some(Target::Commit { id, .. }) => self.select_commit(id, cx),
             Some(Target::WorkingTree { .. }) => self.select_working_tree(cx),
-            Some(Target::Nothing | Target::Pull { .. }) | None => {}
+            Some(Target::Nothing | Target::Pull { .. } | Target::Worktree { .. }) | None => {}
         }
     }
 
@@ -1014,17 +1282,20 @@ impl RepoView {
     }
 
     fn toggle_change_fold(&mut self, side: Side, folder: SharedString, cx: &mut Context<Self>) {
-        self.folded_changes.of_mut(side).toggle(folder);
+        self.working_mut().folded.of_mut(side).toggle(folder);
         cx.notify();
     }
 
     fn move_files(&mut self, from: Side, scope: Scope, cx: &mut Context<Self>) {
-        self.repository
+        self.working()
+            .repository
+            .clone()
             .update(cx, |repository, cx| repository.move_across(from, scope, cx));
     }
 
     fn pick_changes(&mut self, picked: Picked<OpenFile>, cx: &mut Context<Self>) {
-        self.picked_changes = PickedFor::new(self.target.working_file().cloned(), picked);
+        let open = self.target.working_file().cloned();
+        self.working_mut().picked = PickedFor::new(open, picked);
         cx.notify();
     }
 
@@ -1034,7 +1305,7 @@ impl RepoView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let repository = self.repository.clone();
+        let repository = self.working().repository.clone();
         let question = discard_question(&changes);
         window.open_alert_dialog(cx, move |alert, _, _| {
             let repository = repository.clone();
@@ -1174,6 +1445,19 @@ impl RepoView {
                 let start = (!label.is_head).then_some(label);
                 open_branch_dialog(repository, start, window, cx)
             }
+            BranchAction::NewWorktree => open_worktree_dialog(repository, Some(label), window, cx),
+            BranchAction::OpenWorktree => {
+                let location = repository.read(cx).history().and_then(|history| {
+                    history
+                        .worktrees
+                        .iter()
+                        .find(|worktree| Some(&worktree.name) == label.worktree.as_ref())
+                        .map(|worktree| worktree.location.to_path_buf())
+                });
+                if let Some(location) = location {
+                    cx.emit(RepoViewEvent::OpenWorktree(location))
+                }
+            }
             BranchAction::Delete => confirm_delete(repository, label, window, cx),
             BranchAction::ShowPull(number) => self.select_pull(number, window, cx),
             BranchAction::CreatePull => self.create_pull(label, window, cx),
@@ -1258,7 +1542,7 @@ impl RepoView {
                     .size(rem * 30.)
                     .size_range(rem * 22. ..rem * 90.)
                     .child(match (&self.target, self.pull_pane.as_ref().map(|pane| pane.view.clone())) {
-                        (Target::WorkingTree { open }, _) => {
+                        (Target::WorkingTree { open } | Target::Worktree { open, .. }, _) => {
                             self.changes_list(open.clone(), cx).into_any_element()
                         }
                         (Target::Commit { .. }, _) => self.commit_panel.clone().into_any_element(),
@@ -1296,8 +1580,10 @@ impl RepoView {
         let stash_menu = self.stash_menu(cx);
         let marks = self.pull_marks(&history, cx);
         let section = self.pulls_section(cx);
+        let worktrees = self.worktree_section(&history, cx);
         RefsList::new(history, &self.folded_refs, self.refs_scroll.clone())
             .pulls(section, marks)
+            .worktrees(worktrees)
             .selected(self.target.commit())
             .branch_menu(branch_menu)
             .stash_menu(stash_menu)
@@ -1319,6 +1605,19 @@ impl RepoView {
         let stash_menu = self.stash_menu(cx);
         let commit_menu = self.commit_menu(&history, cx);
         let marks = self.pull_marks(&history, cx);
+        let worktree_menu = self.worktree_menu(cx);
+        let elsewhere: Vec<_> = history
+            .worktrees
+            .iter()
+            .filter_map(|worktree| {
+                let changes = self.repository.read(cx).changes_elsewhere(&worktree.location)?;
+                Some(crate::git::WorktreeChanges {
+                    location: worktree.location.clone(),
+                    changes: changes.clone(),
+                })
+            })
+            .collect();
+        let selected_worktree = self.target.worktree().cloned();
         HistoryList::new(
             history,
             self.middle_focus.clone(),
@@ -1330,6 +1629,10 @@ impl RepoView {
         .marks(marks)
         .selected(self.target.commit())
         .uncommitted(changes, self.target.is_working_tree())
+        .worktrees(elsewhere, selected_worktree.as_deref(), worktree_menu)
+        .on_select_worktree(cx.listener(|this, location: &Arc<Path>, window, cx| {
+            this.select_worktree(location.clone(), window, cx)
+        }))
         .on_select_commit(cx.listener(|this, id: &ObjectId, _, cx| this.select_commit(*id, cx)))
         .on_select_uncommitted(cx.listener(|this, _: &(), _, cx| this.select_working_tree(cx)))
         .on_check_out(cx.listener(|this, label: &RefLabel, window, cx| {
@@ -1338,17 +1641,24 @@ impl RepoView {
     }
 
     fn changes_list(&self, open: Option<OpenFile>, cx: &mut Context<Self>) -> ChangesList {
-        let repository = self.repository.read(cx);
+        let header = self.target.worktree().and_then(|location| {
+            let history = self.repository.read(cx).history()?.clone();
+            let worktree = history.worktree(location)?;
+            Some(worktree_bar(worktree, Self::opens_worktree_tabs(cx), cx))
+        });
+        let working = self.working();
+        let repository = working.repository.read(cx);
         ChangesList::new(
             repository.changes().cloned(),
-            self.commit_form.clone(),
+            working.commit_form.clone(),
             FileView::current(cx),
-            &self.folded_changes,
-            self.changes_scrolls.clone(),
+            &working.folded,
+            working.scrolls.clone(),
         )
+        .header(header)
         .root(repository.repo().map(|repo| Arc::from(repo.location())))
         .form_hidden(repository.underway().is_some())
-        .picked(self.picked_changes.current(open.as_ref()))
+        .picked(working.picked.current(open.as_ref()))
         .open(open)
         .writing(repository.is_writing())
         .on_open(
