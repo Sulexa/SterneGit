@@ -194,6 +194,12 @@
 
 .top-bar.mac > .content { padding-left: 84px; }
 
+.app-logo {
+  flex: none;
+  display: block;
+  image-rendering: pixelated;
+}
+
 .menu-bar {
   display: flex;
   align-items: center;

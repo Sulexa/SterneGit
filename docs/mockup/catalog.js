@@ -399,6 +399,18 @@ const Catalog = (() => {
           variants: [['Layout', () => Screens.find((screen) => screen.id === 'history').render(), { scale: 0.5 }]],
         },
         {
+          name: 'AppLogo',
+          code: 'app::logo::logo',
+          source: 'src/app/logo/mod.rs',
+          about: 'A common tern\'s head in profile, drawn pixel by pixel on a 16 × 16 grid: black cap, orange bill with a black tip, shaded nape. The top bar paints it cell by cell, snapped to device pixels; the build turns the same grid into the Windows icon of the exe, its window and its taskbar button, at 16, 32, 48 and 256 px. Every size is a whole multiple of the grid, so each stays sharp.',
+          variants: [
+            ['16 px, top bar', () => C.AppLogo()],
+            ['32 px', () => C.AppLogo({ size: 32 })],
+            ['48 px', () => C.AppLogo({ size: 48 })],
+            ['256 px', () => C.AppLogo({ size: 256 })],
+          ],
+        },
+        {
           name: 'TopBar',
           code: 'app::top_bar::TopBar',
           source: 'src/app/top_bar.rs',

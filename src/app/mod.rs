@@ -1,4 +1,5 @@
 pub(crate) mod connectors;
+mod logo;
 mod saved_tabs;
 mod tab_strip;
 mod tabs;

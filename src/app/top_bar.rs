@@ -9,6 +9,7 @@ use gpui_kit::{
     px,
 };
 
+use super::logo::logo;
 use crate::ui::Look as _;
 
 #[derive(IntoElement)]
@@ -41,7 +42,7 @@ impl TopBar {
 impl RenderOnce for TopBar {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let theme = cx.theme();
-        let (muted, border, primary) = (theme.muted_foreground, theme.border, theme.primary);
+        let (muted, border) = (theme.muted_foreground, theme.border);
         let head = self.head;
         TitleBar::new().child(
             h_flex()
@@ -49,7 +50,7 @@ impl RenderOnce for TopBar {
                 .px_1()
                 .pr_3()
                 .gap_2()
-                .child(Icon::new(IconName::GitMerge).small().text_color(primary))
+                .child(logo())
                 .when_some(self.menu_bar, |this, menu_bar| {
                     this.child(div().flex_none().h_full().child(menu_bar))
                 })

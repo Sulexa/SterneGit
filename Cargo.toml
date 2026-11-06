@@ -24,6 +24,10 @@ wasmi = { version = "~2.0.0", default-features = false, features = ["std", "vali
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.62.2", features = ["Win32_Foundation", "Win32_Security_Credentials"] }
 
+[build-dependencies]
+crc32fast = "1.5.4"
+miniz_oxide = "0.8.9"
+
 [dev-dependencies]
 wat = { version = "1.228.0", default-features = false }
 

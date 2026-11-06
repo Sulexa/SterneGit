@@ -1228,6 +1228,10 @@ const C = {
     return `<div data-c="AppMenuBar" class="menu-bar">${items.join('')}</div>`;
   },
 
+  AppLogo({ size = 16 } = {}) {
+    return `<img data-c="AppLogo" class="app-logo" src="logo.svg" width="${size}" height="${size}" alt="SterneGit">`;
+  },
+
   TopBar({ platform = 'windows', repository, head, openMenu } = {}) {
     const mac = platform === 'mac';
     const lights = mac
@@ -1239,7 +1243,7 @@ const C = {
     const repo = repository
       ? `<div class="h" style="gap:8px"><div class="sm medium ellipsis">${esc(repository)}</div>${pill}</div>`
       : '';
-    return `<div data-c="TopBar" data-base="TitleBar" class="top-bar${mac ? ' mac' : ''}">${lights}<div class="content">${icon('git-merge', 'sm', 'var(--primary)')}${mac ? '' : C.AppMenuBar({ open: openMenu })}<div class="fill"></div>${repo}</div>${mac ? '' : C.WindowControls()}</div>`;
+    return `<div data-c="TopBar" data-base="TitleBar" class="top-bar${mac ? ' mac' : ''}">${lights}<div class="content">${C.AppLogo()}${mac ? '' : C.AppMenuBar({ open: openMenu })}<div class="fill"></div>${repo}</div>${mac ? '' : C.WindowControls()}</div>`;
   },
 
   Tab({ name, state = 'ready', active = false, icon: glyph }) {
