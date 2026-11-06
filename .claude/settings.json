@@ -8,7 +8,7 @@
             "shell": "bash",
             "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"$CLAUDE_PROJECT_DIR/scripts/build-and-relaunch.ps1\"",
             "timeout": 1200,
-            "statusMessage": "Building FastGit"
+            "statusMessage": "Building SterneGit"
           }
         ]
       }

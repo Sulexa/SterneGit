@@ -1,4 +1,4 @@
-use fastgit_sdk::{AccountContext, Failure, NewSshKey, Request, SshKey};
+use sternegit_sdk::{AccountContext, Failure, NewSshKey, Request, SshKey};
 use serde_json::{Value, json};
 
 use crate::{

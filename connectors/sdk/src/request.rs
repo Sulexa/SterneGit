@@ -1,4 +1,4 @@
-use fastgit_protocol::{Failure, RequestHead, ResponseHead};
+use sternegit_protocol::{Failure, RequestHead, ResponseHead};
 use serde::{Serialize, de::DeserializeOwned};
 
 use crate::host;
@@ -96,7 +96,7 @@ pub struct Response {
 
 impl Response {
     fn unframed(framed: &[u8]) -> Self {
-        let (head, body) = ResponseHead::unframe(framed).expect("FastGit frames every response");
+        let (head, body) = ResponseHead::unframe(framed).expect("SterneGit frames every response");
         Self {
             status: head.status,
             headers: head.headers,

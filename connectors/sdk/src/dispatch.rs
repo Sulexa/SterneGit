@@ -1,4 +1,4 @@
-use fastgit_protocol::{
+use sternegit_protocol::{
     AccountContext, Answer, Call, Done, Failure, Hello, PROTOCOL, RepoRef,
     ops::{
         AddComment, AddReply, AddSshKey, CreatePull, CreateRepository, GetPull, GetRepository,
@@ -16,7 +16,7 @@ pub fn dispatch(connector: &impl Connector, input: &[u8]) -> Vec<u8> {
     match serde_json::from_slice::<Call<Value>>(input) {
         Ok(call) => route(connector, call),
         Err(error) => answer::<Done>(Err(misunderstood(format!(
-            "FastGit's call can't be read: {error}"
+            "SterneGit's call can't be read: {error}"
         )))),
     }
 }
@@ -133,7 +133,7 @@ fn hello() -> Hello {
 
 fn decoded<O: Op>(input: Value) -> Result<O::Input, Failure> {
     serde_json::from_value(input).map_err(|error| {
-        misunderstood(format!("FastGit's input to {} can't be read: {error}", O::NAME))
+        misunderstood(format!("SterneGit's input to {} can't be read: {error}", O::NAME))
     })
 }
 

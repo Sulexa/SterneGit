@@ -12,8 +12,8 @@ pub use connector::Connector;
 pub use dispatch::dispatch;
 #[cfg(target_arch = "wasm32")]
 pub use dispatch::serve;
-pub use fastgit_protocol as protocol;
-pub use fastgit_protocol::{
+pub use sternegit_protocol as protocol;
+pub use sternegit_protocol::{
     AccountContext, Anchor, BranchQuery, Check, CheckState, CloneUrls, Comment, CommitQuery,
     ConversationQuery, Cursor, Draft, FetchSpec, Failure, FieldError, Identity, Line, Merge,
     MergeMethod, Mergeability, Merged, NewComment, NewPull, NewReply, NewRepository, NewSshKey,
@@ -33,7 +33,7 @@ macro_rules! export {
     ($connector:expr) => {
         #[cfg(target_arch = "wasm32")]
         #[unsafe(no_mangle)]
-        pub extern "C" fn fastgit_call(input_len: i32) -> i32 {
+        pub extern "C" fn sternegit_call(input_len: i32) -> i32 {
             $crate::serve(&$connector, input_len)
         }
 

@@ -1,4 +1,4 @@
-use fastgit_sdk::{
+use sternegit_sdk::{
     AccountContext, CloneUrls, Failure, NewRepository, Owner, OwnerKind, Page, RepoRef, Repository,
     RepositoryQuery, Request, Visibility,
 };
@@ -179,7 +179,7 @@ fn visibility(item: &Value) -> Visibility {
 
 #[cfg(test)]
 mod tests {
-    use fastgit_sdk::{OwnerKind, Visibility};
+    use sternegit_sdk::{OwnerKind, Visibility};
     use serde_json::json;
 
     use super::{organization_owner, visibility};

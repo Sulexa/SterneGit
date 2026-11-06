@@ -1,9 +1,9 @@
 use std::{ffi::OsString, path::PathBuf};
 
 #[cfg(any(windows, target_os = "macos"))]
-const PRODUCT: &str = "FastGit";
+const PRODUCT: &str = "SterneGit";
 #[cfg(all(unix, not(target_os = "macos")))]
-const PRODUCT: &str = "fastgit";
+const PRODUCT: &str = "sternegit";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Folder {
@@ -78,7 +78,7 @@ mod tests {
     #[test]
     fn settings_saved_tabs_and_installed_connectors_live_in_roaming_app_data() {
         let vars = with(&[("APPDATA", r"C:\Users\me\AppData\Roaming")]);
-        let roaming = PathBuf::from(r"C:\Users\me\AppData\Roaming\FastGit");
+        let roaming = PathBuf::from(r"C:\Users\me\AppData\Roaming\SterneGit");
         assert_eq!(Folder::Config.path_from(&vars), Some(roaming.clone()));
         assert_eq!(Folder::State.path_from(&vars), Some(roaming.clone()));
         assert_eq!(Folder::Data.path_from(&vars), Some(roaming));
@@ -90,7 +90,7 @@ mod tests {
         let vars = with(&[("LOCALAPPDATA", r"C:\Users\me\AppData\Local")]);
         assert_eq!(
             Folder::Local.path_from(&vars),
-            Some(PathBuf::from(r"C:\Users\me\AppData\Local\FastGit"))
+            Some(PathBuf::from(r"C:\Users\me\AppData\Local\SterneGit"))
         );
     }
 
@@ -106,19 +106,19 @@ mod tests {
         let vars = with(&[("HOME", "/home/me"), ("XDG_RUNTIME_DIR", "/run/user/1000")]);
         assert_eq!(
             Folder::Config.path_from(&vars),
-            Some(PathBuf::from("/home/me/.config/fastgit"))
+            Some(PathBuf::from("/home/me/.config/sternegit"))
         );
         assert_eq!(
             Folder::State.path_from(&vars),
-            Some(PathBuf::from("/home/me/.local/state/fastgit"))
+            Some(PathBuf::from("/home/me/.local/state/sternegit"))
         );
         assert_eq!(
             Folder::Data.path_from(&vars),
-            Some(PathBuf::from("/home/me/.local/share/fastgit"))
+            Some(PathBuf::from("/home/me/.local/share/sternegit"))
         );
         assert_eq!(
             Folder::Session.path_from(&vars),
-            Some(PathBuf::from("/run/user/1000/fastgit"))
+            Some(PathBuf::from("/run/user/1000/sternegit"))
         );
     }
 }

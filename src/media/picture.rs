@@ -24,7 +24,7 @@ impl Picture {
         let format = image::guess_format(bytes)
             .ok()
             .or_else(|| extension.and_then(ImageFormat::from_extension))
-            .context("FastGit can't tell what kind of picture this is")?;
+            .context("SterneGit can't tell what kind of picture this is")?;
         let decoded = decoded(bytes, format)
             .with_context(|| format!("Couldn't read this {} picture", format_name(format)))?;
         let color = color_name(decoded.color());
@@ -92,7 +92,7 @@ fn decoded(bytes: &[u8], format: ImageFormat) -> Result<DynamicImage> {
         ImageFormat::Tga => DynamicImage::from_decoder(TgaDecoder::new(reader)?)?,
         ImageFormat::Ico => DynamicImage::from_decoder(IcoDecoder::new(reader)?)?,
         ImageFormat::Qoi => DynamicImage::from_decoder(QoiDecoder::new(reader)?)?,
-        _ => bail!("FastGit doesn't draw {} pictures", format_name(format)),
+        _ => bail!("SterneGit doesn't draw {} pictures", format_name(format)),
     })
 }
 

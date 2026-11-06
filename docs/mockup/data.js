@@ -20,7 +20,7 @@ const Sample = (() => {
     'Initial commit',
   ];
   const authors = ['Alex Martin', 'Sam Lee', 'Robin Chen'];
-  const emails = { 'Alex Martin': 'alex@fastgit.dev', 'Sam Lee': 'sam@fastgit.dev', 'Robin Chen': 'robin@fastgit.dev' };
+  const emails = { 'Alex Martin': 'alex@sternegit.dev', 'Sam Lee': 'sam@sternegit.dev', 'Robin Chen': 'robin@sternegit.dev' };
   const hex = (seed) => ((seed * 2654435761) >>> 0).toString(16).padStart(8, '0').slice(0, 7);
 
   const commits = [
@@ -60,7 +60,7 @@ const Sample = (() => {
   const collapsed = ['remote:upstream'];
 
   const history = {
-    name: 'fastgit',
+    name: 'sternegit',
     head: 'main',
     total: 1284,
     readMs: 38,
@@ -323,7 +323,7 @@ const Sample = (() => {
   };
 
   const tabs = [
-    { name: 'fastgit', state: 'ready' },
+    { name: 'sternegit', state: 'ready' },
     { name: 'website', state: 'ready' },
     { name: 'linux', state: 'reading' },
   ];
@@ -667,14 +667,14 @@ const Sample = (() => {
       id: 'github:github.com:583231',
       login: 'alex-martin',
       name: 'Alex Martin',
-      email: 'alex@fastgit.dev',
+      email: 'alex@sternegit.dev',
       service: 'GitHub',
       server: 'github.com',
       method: 'device',
       scopes: githubScopes,
-      key: { title: 'FastGit on DESKTOP-7Q2K', type: 'ed25519', fingerprint: 'SHA256:q3V2pXbN0c8m1Lr7tWkY4fJ9sHdE6aUoZiG5yCvBn2Q', file: 'github-github.com-583231_ed25519' },
+      key: { title: 'SterneGit on DESKTOP-7Q2K', type: 'ed25519', fingerprint: 'SHA256:q3V2pXbN0c8m1Lr7tWkY4fJ9sHdE6aUoZiG5yCvBn2Q', file: 'github-github.com-583231_ed25519' },
       owners: ['starfall-games'],
-      using: ['E:\\Projects\\fastgit', 'E:\\Projects\\website'],
+      using: ['E:\\Projects\\sternegit', 'E:\\Projects\\website'],
     },
     {
       id: 'github:github.com:9120447',
@@ -704,7 +704,7 @@ const Sample = (() => {
   ];
 
   const serverKeys = [
-    { title: 'FastGit on DESKTOP-7Q2K', fingerprint: 'SHA256:q3V2pXbN0c8m1Lr7tWkY4fJ9sHdE6aUoZiG5yCvBn2Q', added: '2026-11-06', fastgit: true },
+    { title: 'SterneGit on DESKTOP-7Q2K', fingerprint: 'SHA256:q3V2pXbN0c8m1Lr7tWkY4fJ9sHdE6aUoZiG5yCvBn2Q', added: '2026-11-06', sternegit: true },
     { title: 'Laptop', fingerprint: 'SHA256:Hk81bR0vXyQe3sTnPwU5mZ7cLd2fGa9jK4oIi6NtVrE', added: '2025-03-14' },
     { title: 'Deploy key for the website', fingerprint: 'SHA256:W2nJx5eYp8RtQ0vLsK3dM7cBu1hZa6gFo9iT4wPyNqE', added: '2024-09-02', readOnly: true },
   ];
@@ -738,7 +738,7 @@ const Sample = (() => {
     { id: 'github', name: 'GitHub', version: '0.1.0', origin: 'bundled', standing: 'ready', grant: githubGrant, accounts: 3 },
     { id: 'gitlab', name: 'GitLab', version: '1.2.0', origin: 'installed', standing: 'waiting', grant: gitlabGrant, accounts: 0 },
     { id: 'gitea', name: 'Gitea', version: '0.3.1', was: '0.3.0', origin: 'installed', standing: 'updated', grant: { reach: [{ origin: '{server}/api/v1/', token: true, typed: true }], images: [], remotes: ['{server.host}'], signIn: [], features: ['Browse and clone repositories'] }, accounts: 1 },
-    { id: 'azure-devops', name: 'Azure DevOps', version: '0.9.0', origin: 'installed', standing: 'unusable', problem: 'Needs a newer FastGit: it speaks protocol 2.0, and this FastGit speaks 1.0.' },
+    { id: 'azure-devops', name: 'Azure DevOps', version: '0.9.0', origin: 'installed', standing: 'unusable', problem: 'Needs a newer SterneGit: it speaks protocol 2.0, and this SterneGit speaks 1.0.' },
     { id: 'bitbucket', name: 'Bitbucket', version: '0.2.0', origin: 'installed', standing: 'failed', problem: 'Stopped while starting: it ran out of time.', log: ['info  hello from bitbucket 0.2.0', 'debug building the route table', 'debug building the route table'] },
   ];
 
@@ -746,18 +746,18 @@ const Sample = (() => {
 
   const owners = [
     { login: 'alex-martin', kind: 'user', visibilities: ['public', 'private'], canInitialize: true },
-    { login: 'fastgit-org', kind: 'organization', visibilities: ['public', 'private', 'internal'], canInitialize: true },
+    { login: 'sternegit-org', kind: 'organization', visibilities: ['public', 'private', 'internal'], canInitialize: true },
     { login: 'starfall-games', kind: 'organization', visibilities: ['public'], canInitialize: true, cannotCreate: true },
   ];
 
   const repositories = [
-    { owner: 'fastgit-org', name: 'fastgit', description: 'A lightweight Git client for Linux, macOS and Windows', visibility: 'public', updated: '2026-11-06' },
-    { owner: 'fastgit-org', name: 'connectors', description: 'Community connectors for FastGit', visibility: 'public', updated: '2026-11-05' },
+    { owner: 'sternegit-org', name: 'sternegit', description: 'A lightweight Git client for Linux, macOS and Windows', visibility: 'public', updated: '2026-11-06' },
+    { owner: 'sternegit-org', name: 'connectors', description: 'Community connectors for SterneGit', visibility: 'public', updated: '2026-11-05' },
     { owner: 'alex-martin', name: 'starfall', description: 'A tiny space shooter made in Unity', visibility: 'private', updated: '2026-11-04' },
-    { owner: 'fastgit-org', name: 'website', description: 'fastgit.dev', visibility: 'public', updated: '2026-11-02' },
+    { owner: 'sternegit-org', name: 'website', description: 'sternegit.dev', visibility: 'public', updated: '2026-11-02' },
     { owner: 'alex-martin', name: 'gpui-kit', description: 'UI components for GPUI', visibility: 'public', updated: '2026-10-28', fork: true },
     { owner: 'alex-martin', name: 'dotfiles', description: '', visibility: 'private', updated: '2026-10-19' },
-    { owner: 'fastgit-org', name: 'design', description: 'Logos, icons and screenshots', visibility: 'internal', updated: '2026-09-30' },
+    { owner: 'sternegit-org', name: 'design', description: 'Logos, icons and screenshots', visibility: 'internal', updated: '2026-09-30' },
     { owner: 'alex-martin', name: 'advent-2025', description: 'Advent of Code 2025 in Rust', visibility: 'public', updated: '2025-12-25', archived: true },
     { owner: 'alex-martin', name: 'notes', description: '', visibility: 'private', updated: '2025-11-12' },
   ];

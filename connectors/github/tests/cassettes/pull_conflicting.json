@@ -10,8 +10,8 @@
     }
   },
   "repo": {
-    "owner": "fastgit-org",
-    "name": "fastgit"
+    "owner": "sternegit-org",
+    "name": "sternegit"
   },
   "input": {
     "number": 139
@@ -42,7 +42,7 @@
               "title": "Speed up the blame view",
               "state": "OPEN",
               "isDraft": false,
-              "url": "https://github.com/fastgit-org/fastgit/pull/139",
+              "url": "https://github.com/sternegit-org/sternegit/pull/139",
               "createdAt": "2026-10-27T08:30:00Z",
               "updatedAt": "2026-11-03T12:05:51Z",
               "reviewDecision": "CHANGES_REQUESTED",
@@ -56,9 +56,9 @@
               "headRefName": "perf/blame",
               "headRefOid": "d93b1f7a2c5e8b4d0f6a3c9e1b7d5f2a8c4e0b6d",
               "headRepository": {
-                "name": "fastgit",
+                "name": "sternegit",
                 "owner": {
-                  "login": "fastgit-org"
+                  "login": "sternegit-org"
                 }
               },
               "commits": {
@@ -98,23 +98,23 @@
           "branch": "main",
           "sha": "7d3f9b1e5a2c8d4f0b6e3a9c1d7f5b2e8a4c0d6f",
           "repo": {
-            "owner": "fastgit-org",
-            "name": "fastgit"
+            "owner": "sternegit-org",
+            "name": "sternegit"
           }
         },
         "head": {
           "branch": "perf/blame",
           "sha": "d93b1f7a2c5e8b4d0f6a3c9e1b7d5f2a8c4e0b6d",
           "repo": {
-            "owner": "fastgit-org",
-            "name": "fastgit"
+            "owner": "sternegit-org",
+            "name": "sternegit"
           }
         },
         "review": "changes_requested",
         "checks": "failure",
         "created_at": "2026-10-27T08:30:00Z",
         "updated_at": "2026-11-03T12:05:51Z",
-        "web_url": "https://github.com/fastgit-org/fastgit/pull/139"
+        "web_url": "https://github.com/sternegit-org/sternegit/pull/139"
       },
       "body": "Blame now reads each file once and reuses the walk for every hunk.",
       "base_sha": "7d3f9b1e5a2c8d4f0b6e3a9c1d7f5b2e8a4c0d6f",

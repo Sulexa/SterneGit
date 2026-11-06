@@ -24,7 +24,7 @@
         {
           "id": 2,
           "key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl",
-          "title": "FastGit on DESKTOP-7Q2K",
+          "title": "SterneGit on DESKTOP-7Q2K",
           "created_at": "2026-11-06T10:00:00Z",
           "verified": true,
           "read_only": false
@@ -44,7 +44,7 @@
     "ok": [
       {
         "id": "2",
-        "title": "FastGit on DESKTOP-7Q2K",
+        "title": "SterneGit on DESKTOP-7Q2K",
         "key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl",
         "created_at": "2026-11-06T10:00:00Z",
         "read_only": false

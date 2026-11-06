@@ -183,7 +183,7 @@ mod tests {
             read_progress("remote: Counting objects: 100% (4/4), done."),
             Some(Progress { phase: "Counting objects".into(), percent: Some(100), done: Some(4), total: Some(4) })
         );
-        assert_eq!(read_progress("Cloning into 'fastgit'..."), None);
+        assert_eq!(read_progress("Cloning into 'sternegit'..."), None);
         assert_eq!(read_progress("remote: Enumerating objects: 5, done."), None);
     }
 
@@ -191,7 +191,7 @@ mod tests {
     fn a_clone_copies_the_history_and_keeps_the_ssh_command_it_was_given() -> anyhow::Result<()> {
         let origin = ScratchRepo::new("clone-origin")?;
         origin.commit("First")?;
-        let target = std::env::temp_dir().join(format!("fastgit-clone-target-{}", std::process::id()));
+        let target = std::env::temp_dir().join(format!("sternegit-clone-target-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&target);
         let request = CloneRequest {
             url: origin.location(),
@@ -212,7 +212,7 @@ mod tests {
 
     #[test]
     fn a_failed_clone_reports_gits_reason() {
-        let target = std::env::temp_dir().join(format!("fastgit-clone-missing-{}", std::process::id()));
+        let target = std::env::temp_dir().join(format!("sternegit-clone-missing-{}", std::process::id()));
         let request = CloneRequest {
             url: target.join("nowhere").display().to_string(),
             folder: target.clone(),
@@ -226,7 +226,7 @@ mod tests {
 
     #[test]
     fn a_stopped_clone_leaves_no_folder_behind() {
-        let target = std::env::temp_dir().join(format!("fastgit-clone-stopped-{}", std::process::id()));
+        let target = std::env::temp_dir().join(format!("sternegit-clone-stopped-{}", std::process::id()));
         let stop = Stop::default();
         stop.now();
         let request = CloneRequest {
@@ -242,7 +242,7 @@ mod tests {
 
     #[test]
     fn a_new_repository_gets_its_folder_and_an_origin() -> anyhow::Result<()> {
-        let folder = std::env::temp_dir().join(format!("fastgit-init-{}", std::process::id())).join("starfall");
+        let folder = std::env::temp_dir().join(format!("sternegit-init-{}", std::process::id())).join("starfall");
         let _ = std::fs::remove_dir_all(folder.parent().unwrap());
         assert!(is_empty_or_missing(&folder));
         init(&folder)?;

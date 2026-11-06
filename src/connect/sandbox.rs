@@ -3,7 +3,7 @@ use wasmi::{
 };
 
 pub(super) const MEMORY_EXPORT: &str = "memory";
-pub(super) const ENTRY_EXPORT: &str = "fastgit_call";
+pub(super) const ENTRY_EXPORT: &str = "sternegit_call";
 pub(super) const FUEL_PER_SLICE: u64 = 20_000_000;
 pub(super) const MEMORY_LIMIT_BYTES: usize = 64 * 1024 * 1024;
 

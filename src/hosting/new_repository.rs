@@ -30,7 +30,7 @@ use crate::{
 
 const WIDTH: f32 = 520.;
 const TITLE: &str = "New repository";
-const ABOUT: &str = "FastGit makes the folder, runs git init in it and opens it in a new tab.";
+const ABOUT: &str = "SterneGit makes the folder, runs git init in it and opens it in a new tab.";
 const NAME: &str = "Name";
 const FOLDER: &str = "Folder";
 const BROWSE: &str = "Browse…";
@@ -206,7 +206,7 @@ impl Render for NewRepositoryForm {
                     DESCRIPTION,
                     description,
                     Some(Note::Plain(
-                        format!("FastGit creates it empty on {service} and adds it as origin. Your first push sends your branch there.").into(),
+                        format!("SterneGit creates it empty on {service} and adds it as origin. Your first push sends your branch there.").into(),
                     )),
                     cx,
                 ));

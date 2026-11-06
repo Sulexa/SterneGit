@@ -14,8 +14,8 @@ use crate::{
 };
 
 const CONNECTOR_TEST_FLAG: &str = "--connector-test";
-const USAGE: &str = "Usage: fastgit [--check] [repository]\n       \
-                     fastgit --connector-test <folder> [cassette]";
+const USAGE: &str = "Usage: sternegit [--check] [repository]\n       \
+                     sternegit --connector-test <folder> [cassette]";
 const HELP: &str = "Brings back the tabs open last time, plus the repository containing the given path.\n\
                     --check reads the history without opening a window and reports how long it took.\n\
                     --connector-test starts the connector in the folder in its sandbox, without a window,\n\

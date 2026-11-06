@@ -1,4 +1,4 @@
-use fastgit_protocol::{NewPull, PullSummary};
+use sternegit_protocol::{NewPull, PullSummary};
 use gpui_kit::{
     App, AppContext as _, Context, Entity, InteractiveElement as _, IntoElement, ParentElement as _, Render, SharedString,
     Styled as _, Subscription, Task, Window,
@@ -83,12 +83,12 @@ pub(crate) fn push_note(label: &str, push: &Push, remote: &str) -> Option<String
     match push {
         Push::Nothing => None,
         Push::Commits(count) => Some(format!(
-            "{label} has {} that {remote} doesn't. FastGit pushes {} first.",
+            "{label} has {} that {remote} doesn't. SterneGit pushes {} first.",
             counted(*count, "commit", "commits"),
             if *count == 1 { "it" } else { "them" }
         )),
         Push::Publish => Some(format!(
-            "{label} isn't on {remote} yet. FastGit pushes it first and makes {remote}/{label} its upstream."
+            "{label} isn't on {remote} yet. SterneGit pushes it first and makes {remote}/{label} its upstream."
         )),
     }
 }
@@ -481,11 +481,11 @@ mod tests {
     fn the_dialog_says_what_it_pushes_first() {
         assert_eq!(
             push_note("topic/tabs", &Push::Publish, "origin").as_deref(),
-            Some("topic/tabs isn't on origin yet. FastGit pushes it first and makes origin/topic/tabs its upstream.")
+            Some("topic/tabs isn't on origin yet. SterneGit pushes it first and makes origin/topic/tabs its upstream.")
         );
         assert_eq!(
             push_note("feature/stash", &Push::Commits(1), "origin").as_deref(),
-            Some("feature/stash has 1 commit that origin doesn't. FastGit pushes it first.")
+            Some("feature/stash has 1 commit that origin doesn't. SterneGit pushes it first.")
         );
         assert_eq!(push_note("main", &Push::Nothing, "origin"), None);
     }

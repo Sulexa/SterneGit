@@ -91,7 +91,7 @@ impl Render for RemoveForm {
         v_flex()
             .gap_3()
             .child(div().sm_text().text_color(muted).child(format!(
-                "FastGit forgets the account and deletes its token{store}.{key}"
+                "SterneGit forgets the account and deletes its token{store}.{key}"
             )))
             .children(using)
             .children(self.problem.clone().map(|problem| div().xs_text().text_color(red).child(problem)))

@@ -10,8 +10,8 @@
     }
   },
   "repo": {
-    "owner": "fastgit-org",
-    "name": "fastgit"
+    "owner": "sternegit-org",
+    "name": "sternegit"
   },
   "input": {
     "number": 999

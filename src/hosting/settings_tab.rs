@@ -1,4 +1,4 @@
-use fastgit_protocol::SshKey;
+use sternegit_protocol::SshKey;
 use gpui_kit::{
     AnyElement, App, Context, FocusHandle, Focusable, InteractiveElement as _, IntoElement,
     ParentElement as _, Render, SharedString, StatefulInteractiveElement as _, Styled as _,

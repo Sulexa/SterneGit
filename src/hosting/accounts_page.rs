@@ -43,22 +43,22 @@ const TOKEN: &str = "Token";
 const SSH_KEY: &str = "SSH key";
 const CREATE_KEY: &str = "Create SSH key…";
 const COPY_PUBLIC_KEY: &str = "Copy public key";
-const FASTGIT_KEY: &str = "FastGit's key";
+const STERNEGIT_KEY: &str = "SterneGit's key";
 const READ_ONLY: &str = "Read-only";
 const REMOTE_OWNERS: &str = "Remote owners";
 const REMOTE_OWNERS_ABOUT: &str =
-    "When another account also fits a remote, FastGit uses this one for these owners' repositories.";
-const NO_OWNERS: &str = "None yet: FastGit asks when two accounts fit a remote.";
+    "When another account also fits a remote, SterneGit uses this one for these owners' repositories.";
+const NO_OWNERS: &str = "None yet: SterneGit asks when two accounts fit a remote.";
 const FORGET: &str = "Forget";
 const NO_ACCOUNTS: &str = "No accounts yet";
 const NO_ACCOUNTS_ABOUT: &str = "Add one to clone your repositories, publish new ones and add SSH keys. \
      Git keeps using your own credentials meanwhile.";
 const NO_SCOPES: &str = "None reported";
 #[cfg(windows)]
-const ACCOUNTS_ABOUT: &str = "FastGit signs in to hosting services to clone, create and publish repositories. \
+const ACCOUNTS_ABOUT: &str = "SterneGit signs in to hosting services to clone, create and publish repositories. \
      It keeps their tokens in Windows Credential Manager under its own names, apart from the credentials Git uses in a terminal.";
 #[cfg(not(windows))]
-const ACCOUNTS_ABOUT: &str = "FastGit signs in to hosting services to clone, create and publish repositories. \
+const ACCOUNTS_ABOUT: &str = "SterneGit signs in to hosting services to clone, create and publish repositories. \
      It keeps their tokens apart from the credentials Git uses in a terminal.";
 
 pub(crate) fn service_label(account: &Account, cx: &App) -> String {
@@ -69,9 +69,9 @@ pub(crate) fn service_label(account: &Account, cx: &App) -> String {
 
 fn token_place(account: &AccountId) -> String {
     if cfg!(windows) {
-        format!("In Windows Credential Manager as FastGit/{}", account.as_str())
+        format!("In Windows Credential Manager as SterneGit/{}", account.as_str())
     } else {
-        "In FastGit's token folder for this login session".to_owned()
+        "In SterneGit's token folder for this login session".to_owned()
     }
 }
 
@@ -233,7 +233,7 @@ impl SettingsTab {
         );
         let ssh = group(
             SSH_KEY,
-            Some(format!("The key FastGit made for this account, then the other keys {service} lists for it.").into()),
+            Some(format!("The key SterneGit made for this account, then the other keys {service} lists for it.").into()),
             self.key_rows(&account, &service, cx),
             cx,
         );
@@ -324,7 +324,7 @@ impl SettingsTab {
                                     h_flex()
                                         .gap_1p5()
                                         .child(div().sm_text().font_semibold().ellipsis().child(title))
-                                        .when(on_server.is_some(), |this| this.child(chip(FASTGIT_KEY, Some(blue), cx))),
+                                        .when(on_server.is_some(), |this| this.child(chip(STERNEGIT_KEY, Some(blue), cx))),
                                 )
                                 .child(
                                     h_flex()
@@ -365,7 +365,7 @@ impl SettingsTab {
                                 .min_w_0()
                                 .sm_text()
                                 .text_color(muted)
-                                .child(format!("No SSH key yet. FastGit can make one and add it to {service}, so this account's clones can use SSH.")),
+                                .child(format!("No SSH key yet. SterneGit can make one and add it to {service}, so this account's clones can use SSH.")),
                         )
                         .when(offers_keys, |this| {
                             this.child(Button::new("create-ssh-key").small().label(CREATE_KEY).on_click(

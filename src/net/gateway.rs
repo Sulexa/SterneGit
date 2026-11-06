@@ -16,7 +16,7 @@ use super::{
 };
 use crate::accounts::{Account, AccountBook, AccountId, Secrets, Token};
 
-const USER_AGENT: (&str, &str) = ("User-Agent", concat!("FastGit/", env!("CARGO_PKG_VERSION")));
+const USER_AGENT: (&str, &str) = ("User-Agent", concat!("SterneGit/", env!("CARGO_PKG_VERSION")));
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(30);
 const REQUESTS_AT_ONCE_PER_ACCOUNT: usize = 4;
 const REDIRECTS_FOLLOWED: usize = 5;
@@ -351,7 +351,7 @@ mod tests {
         let sent = recorder.sent();
         assert_eq!(header(&sent[0], "authorization"), Some("Bearer gho_secret"));
         assert_eq!(header(&sent[1], "authorization"), None);
-        assert!(header(&sent[0], "user-agent").unwrap().starts_with("FastGit/"));
+        assert!(header(&sent[0], "user-agent").unwrap().starts_with("SterneGit/"));
     }
 
     #[test]

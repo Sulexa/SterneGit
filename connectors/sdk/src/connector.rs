@@ -1,4 +1,4 @@
-use fastgit_protocol::{
+use sternegit_protocol::{
     AccountContext, BranchQuery, Check, Comment, CommitQuery, ConversationQuery, Failure,
     Identity, Merge, Merged, NewComment, NewPull, NewReply, NewRepository, NewSshKey, Owner, Page,
     PullDetails, PullNumber, PullSummary, PullsQuery, RepoRef, Repository, RepositoryQuery,

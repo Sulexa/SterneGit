@@ -76,7 +76,7 @@ mod tests {
             assert_eq!(
                 on_disk,
                 pin.files(),
-                "{} differs from the SHA256SUMS FastGit embeds; run scripts/build-connectors.ps1 and rebuild",
+                "{} differs from the SHA256SUMS SterneGit embeds; run scripts/build-connectors.ps1 and rebuild",
                 dist.display()
             );
         }

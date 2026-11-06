@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use fastgit_protocol::{PullSummary, StateFilter};
+use sternegit_protocol::{PullSummary, StateFilter};
 use gpui_kit::{
     AnyElement, App, InteractiveElement as _, IntoElement, ParentElement as _, SharedString,
     StatefulInteractiveElement as _, Styled as _,
@@ -314,7 +314,7 @@ fn row_tooltip(pull: &PullSummary) -> String {
 mod tests {
     use std::sync::Arc;
 
-    use fastgit_protocol::StateFilter;
+    use sternegit_protocol::StateFilter;
 
     use super::{PullsSection, SectionState};
     use crate::repo::pulls::samples::pull;
@@ -337,7 +337,7 @@ mod tests {
     #[test]
     fn rows_count_the_header_then_pulls_then_load_more() {
         let listed = |count: usize, more: bool| SectionState::Listed {
-            pulls: (0..count).map(|ix| pull(ix as u64, "topic", "fastgit-org")).collect::<Arc<[_]>>(),
+            pulls: (0..count).map(|ix| pull(ix as u64, "topic", "sternegit-org")).collect::<Arc<[_]>>(),
             more,
             loading_more: false,
         };

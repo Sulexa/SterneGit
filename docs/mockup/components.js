@@ -212,7 +212,7 @@ const Menus = {
     ['Next Tab', 'Ctrl+Tab'],
     ['Previous Tab', 'Ctrl+Shift+Tab'],
   ],
-  About: [['About FastGit', '']],
+  About: [['About SterneGit', '']],
 };
 
 const PullModes = [
@@ -277,7 +277,7 @@ const FoldLimit = 20;
 
 const Texts = {
   welcomeTitle: 'Open a Git repository',
-  welcomeDescription: 'FastGit reads history straight from the repository on disk. Each repository opens in its own tab.',
+  welcomeDescription: 'SterneGit reads history straight from the repository on disk. Each repository opens in its own tab.',
   openFailedTitle: "Couldn't open this repository",
   readingHistory: 'Reading history…',
   selectCommit: 'Select a commit to see its changes.',
@@ -321,7 +321,7 @@ const Texts = {
   forcePush: 'Force push',
   pulledAndPushed: (branch, upstream) => `Pulled ${upstream} into ${branch}, then pushed ${branch} to ${upstream}`,
   forcePushed: (branch, upstream) => `Force pushed ${branch} to ${upstream}`,
-  movedAgain: (upstream) => `${upstream} moved again since FastGit fetched it, so nothing was overwritten. Push again to see what it has now.`,
+  movedAgain: (upstream) => `${upstream} moved again since SterneGit fetched it, so nothing was overwritten. Push again to see what it has now.`,
   merge: (from, into) => `Merge ${from} into ${into}`,
   rebase: (branch, onto) => `Rebase ${branch} onto ${onto}`,
   branchHere: 'Create branch here…',
@@ -335,7 +335,7 @@ const Texts = {
   deleteBranchTitle: (name) => `Delete ${name}?`,
   deleteMerged: (name) => `Every commit of ${name} is on another branch or tag too, so nothing is lost.`,
   deleteUnmerged: (name, n) => `${counted(n, 'commit is', 'commits are')} on no other branch or tag. Deleting ${name} loses ${n === 1 ? 'it' : 'them'}.`,
-  deleteUncounted: (name) => `${name} points to a commit older than the newest ${thousands(Texts.historyLimit)} shown, so FastGit can't tell whether deleting it loses any commits.`,
+  deleteUncounted: (name) => `${name} points to a commit older than the newest ${thousands(Texts.historyLimit)} shown, so SterneGit can't tell whether deleting it loses any commits.`,
   deleteRemoteTitle: (name, remote) => `Delete ${name} from ${remote}?`,
   deleteRemoteDescription: (name, remote) => `The branch is removed from ${remote} for everyone who uses it. A local ${name}, if you have one, stays.`,
   branchPlaceholder: 'Branch name',
@@ -355,12 +355,12 @@ const Texts = {
   nextChange: 'Next change  Alt+Down',
   previousFile: 'Previous file  Alt+Left',
   nextFile: 'Next file  Alt+Right',
-  lfs: 'Stored with Git LFS: FastGit compares the file, not its pointer',
+  lfs: 'Stored with Git LFS: SterneGit compares the file, not its pointer',
   backdrop: 'What shows behind transparent pixels',
   showAbove: (n) => `Show ${n} lines above`,
   showBelow: (n) => `Show ${n} lines below`,
   expandLines: (n) => `Expand ${counted(n, 'unchanged line', 'unchanged lines')}`,
-  cannotShow: (type) => `FastGit can’t draw ${type} files`,
+  cannotShow: (type) => `SterneGit can’t draw ${type} files`,
   cannotShowDescription: 'Open each version in the app that made it, or hand both to the diff tool set in Git’s diff.tool.',
   fileHistory: 'File history',
   openFile: 'Open file',
@@ -397,7 +397,7 @@ const HostTexts = {
   settings: 'Settings',
   accounts: 'Accounts',
   connectors: 'Connectors',
-  accountsAbout: "FastGit signs in to hosting services to clone, create and publish repositories. It keeps their tokens in Windows Credential Manager under its own names, apart from the credentials Git uses in a terminal.",
+  accountsAbout: "SterneGit signs in to hosting services to clone, create and publish repositories. It keeps their tokens in Windows Credential Manager under its own names, apart from the credentials Git uses in a terminal.",
   addAccount: 'Add account…',
   noAccounts: 'No accounts yet',
   noAccountsAbout: 'Add one to clone your repositories, publish new ones and add SSH keys. Git keeps using your own credentials meanwhile.',
@@ -408,22 +408,22 @@ const HostTexts = {
   method: 'Method',
   scopes: 'Scopes',
   tokenKept: 'Token',
-  tokenWhere: (id) => `In Windows Credential Manager as FastGit/${id}`,
+  tokenWhere: (id) => `In Windows Credential Manager as SterneGit/${id}`,
   sshKey: 'SSH key',
-  sshKeyAbout: (service) => `The key FastGit made for this account, then the other keys ${service} lists for it.`,
-  fastgitKey: "FastGit's key",
+  sshKeyAbout: (service) => `The key SterneGit made for this account, then the other keys ${service} lists for it.`,
+  sternegitKey: "SterneGit's key",
   readOnly: 'Read-only',
-  noKey: (service) => `No SSH key yet. FastGit can make one and add it to ${service}, so this account's clones can use SSH.`,
+  noKey: (service) => `No SSH key yet. SterneGit can make one and add it to ${service}, so this account's clones can use SSH.`,
   createKey: 'Create SSH key…',
   copyPublicKey: 'Copy public key',
   added: (date) => `Added ${date}`,
   usedBy: (n) => (n ? `Used by ${counted(n, 'repository', 'repositories')}` : 'Not used by any repository yet'),
   remoteOwners: 'Remote owners',
-  remoteOwnersAbout: "When another account also fits a remote, FastGit uses this one for these owners' repositories.",
-  noOwners: 'None yet: FastGit asks when two accounts fit a remote.',
+  remoteOwnersAbout: "When another account also fits a remote, SterneGit uses this one for these owners' repositories.",
+  noOwners: 'None yet: SterneGit asks when two accounts fit a remote.',
   forget: 'Forget',
-  connectorsAbout: 'Connectors let FastGit talk to hosting services. Each one runs in a sandbox: it reaches only the servers listed for it, and FastGit adds the token to its requests, so it never sees one.',
-  connectorsFolder: 'To install a connector, copy its folder into %APPDATA%\\FastGit\\connectors and restart FastGit.',
+  connectorsAbout: 'Connectors let SterneGit talk to hosting services. Each one runs in a sandbox: it reaches only the servers listed for it, and SterneGit adds the token to its requests, so it never sees one.',
+  connectorsFolder: 'To install a connector, copy its folder into %APPDATA%\\SterneGit\\connectors and restart SterneGit.',
   openFolder: 'Open folder',
   bundled: 'Bundled',
   installed: 'Installed',
@@ -432,11 +432,11 @@ const HostTexts = {
   reaches: (hosts, typed) => `Reaches ${[hosts.join(', '), typed && (hosts.length ? 'servers you add' : 'the servers you add')].filter(Boolean).join(' and ')}`,
   approveTitle: (name, version) => `Approve ${name} ${version}?`,
   moreTitle: (name, version, was) => `${name} ${version} asks for more than ${was} did`,
-  installedIn: (id) => `Installed in %APPDATA%\\FastGit\\connectors\\${id}`,
-  approvalWarning: (name) => `Approve only a connector you trust. Once approved, it acts on your ${name} accounts as far as their tokens allow, through FastGit. It can't read your files, your SSH keys or your other accounts.`,
+  installedIn: (id) => `Installed in %APPDATA%\\SterneGit\\connectors\\${id}`,
+  approvalWarning: (name) => `Approve only a connector you trust. Once approved, it acts on your ${name} accounts as far as their tokens allow, through SterneGit. It can't read your files, your SSH keys or your other accounts.`,
   sameAsBefore: (was) => `Everything else stays as you approved it for ${was}.`,
   reach: 'Servers it can reach',
-  reachAbout: 'Requests anywhere else fail before they leave FastGit.',
+  reachAbout: 'Requests anywhere else fail before they leave SterneGit.',
   withToken: 'With your token',
   withoutToken: 'Without a token',
   serverSlot: 'server you add',
@@ -450,54 +450,54 @@ const HostTexts = {
   notNow: 'Not now',
   newGrant: 'New',
   waitingTitle: (name, version) => `${name} ${version} is waiting for your approval`,
-  waitingMessage: "It was copied into FastGit's connectors folder. Nothing of it runs until you approve it.",
+  waitingMessage: "It was copied into SterneGit's connectors folder. Nothing of it runs until you approve it.",
   addAccountTitle: 'Add an account',
   service: 'Service',
   serverAddress: 'Server address',
   methodDevice: 'Sign in with the browser',
   methodDeviceAbout: 'GitHub shows a short code to confirm. Recommended.',
   methodToken: 'Paste a token',
-  methodTokenAbout: 'Make a token on GitHub with the scopes FastGit needs.',
+  methodTokenAbout: 'Make a token on GitHub with the scopes SterneGit needs.',
   methodCredential: "Use Git Credential Manager's token",
   methodCredentialAbout: (host) => `Reuse the token Git already has for ${host}.`,
   signInTo: (service) => `Sign in to ${service}`,
-  deviceOpened: (page) => `FastGit opened ${page} in your browser. Enter this code there:`,
+  deviceOpened: (page) => `SterneGit opened ${page} in your browser. Enter this code there:`,
   copy: 'Copy',
-  waitingForYou: (service) => `Waiting for you to approve FastGit on ${service}…`,
+  waitingForYou: (service) => `Waiting for you to approve SterneGit on ${service}…`,
   openAgain: 'Open the page again',
   expired: 'The code expired after 15 minutes. Nothing was saved.',
   newCode: 'Get a new code',
   denied: (service) => `${service} says you declined. Nothing was saved.`,
   tryAgain: 'Try again',
   tokenTitle: (service) => `Sign in to ${service} with a token`,
-  tokenAbout: (scopes) => `Create a classic token with the scopes ${scopes}, then paste it here. FastGit checks it before saving it.`,
+  tokenAbout: (scopes) => `Create a classic token with the scopes ${scopes}, then paste it here. SterneGit checks it before saving it.`,
   createToken: 'Create a token on GitHub',
   tokenLabel: 'Token',
   tokenRefused: (service) => `${service} refused this token: it may have expired or been revoked.`,
-  tokenLacks: (scope) => `This token lacks ${scope}, so FastGit can't add SSH keys with it. Signing in works anyway.`,
+  tokenLacks: (scope) => `This token lacks ${scope}, so SterneGit can't add SSH keys with it. Signing in works anyway.`,
   signInButton: 'Sign in',
   checking: 'Checking…',
   credentialTitle: "Use Git Credential Manager's token?",
-  credentialAbout: (host) => `Git Credential Manager has a token for ${host}. FastGit copies it into its own entry in Windows Credential Manager and signs in with it; Git Credential Manager keeps its copy. These tokens usually can't add SSH keys: sign in with the browser for that.`,
+  credentialAbout: (host) => `Git Credential Manager has a token for ${host}. SterneGit copies it into its own entry in Windows Credential Manager and signs in with it; Git Credential Manager keeps its copy. These tokens usually can't add SSH keys: sign in with the browser for that.`,
   useToken: 'Use this token',
   keyTitle: (login) => `Create an SSH key for ${login}`,
-  keyAbout: (type, service) => `FastGit makes an ${type} key without a passphrase in %LOCALAPPDATA%\\FastGit\\ssh, adds its public half to ${service}, and uses it only in the repositories you clone or publish with this account.`,
+  keyAbout: (type, service) => `SterneGit makes an ${type} key without a passphrase in %LOCALAPPDATA%\\SterneGit\\ssh, adds its public half to ${service}, and uses it only in the repositories you clone or publish with this account.`,
   keyLabel: (service) => `Title on ${service}`,
   keyForbidden: (service, scope) => `${service} refused: this account's token lacks the ${scope} scope.`,
   createAndAdd: 'Create and add',
   removeTitle: (login) => `Remove ${login}?`,
-  removeAbout: (service) => `FastGit forgets the account and deletes its token from Windows Credential Manager. It deletes its copy of the SSH key too; ${service} keeps the public half until you delete it there.`,
+  removeAbout: (service) => `SterneGit forgets the account and deletes its token from Windows Credential Manager. It deletes its copy of the SSH key too; ${service} keeps the public half until you delete it there.`,
   removeUsing: (n) => `${counted(n, 'repository uses', 'repositories use')} this account's SSH key:`,
   undoSshCommand: 'Remove core.sshCommand from them, so they use your own SSH setup again',
   remove: 'Remove',
-  choiceText: (host, owner, n) => `${n === 2 ? 'Two' : thousands(n)} accounts fit ${host}/${owner}. Which one should FastGit use for ${owner}'s repositories?`,
+  choiceText: (host, owner, n) => `${n === 2 ? 'Two' : thousands(n)} accounts fit ${host}/${owner}. Which one should SterneGit use for ${owner}'s repositories?`,
   use: 'Use',
   choiceLater: "Not now: Git keeps using your own credentials",
   cloneTitle: 'Clone a repository',
   url: 'URL',
   addAccountShort: 'Add account…',
   repositoryUrl: 'Repository URL',
-  urlHint: 'Anything git clone accepts: https://, ssh:// or user@host:path. When an account fits the URL, FastGit lends Git its token.',
+  urlHint: 'Anything git clone accepts: https://, ssh:// or user@host:path. When an account fits the URL, SterneGit lends Git its token.',
   allOwners: 'All owners',
   searchIn: (login) => `Search ${login}'s repositories`,
   loadMore: 'Load more',
@@ -510,7 +510,7 @@ const HostTexts = {
   receiving: (percent, done, total) => `Receiving objects: ${percent}% (${thousands(done)} of ${thousands(total)})`,
   cancel: 'Cancel',
   newTitle: 'New repository',
-  newAbout: 'FastGit makes the folder, runs git init in it and opens it in a new tab.',
+  newAbout: 'SterneGit makes the folder, runs git init in it and opens it in a new tab.',
   name: 'Name',
   folder: 'Folder',
   creates: (path) => `Creates ${path}`,
@@ -519,11 +519,11 @@ const HostTexts = {
   visibility: 'Visibility',
   description: 'Description',
   optional: 'Optional',
-  hostedHint: (service) => `FastGit creates it empty on ${service} and adds it as origin. Your first push sends your branch there.`,
+  hostedHint: (service) => `SterneGit creates it empty on ${service} and adds it as origin. Your first push sends your branch there.`,
   create: 'Create',
   publishTitle: (name) => `Publish ${name}`,
-  publishAbout: (name, branch) => `${name} has no remote yet. FastGit creates it on your account, adds it as origin and pushes ${branch} to it.`,
-  publishNoAccount: (name) => `${name} has no remote yet. Add an account to create it there; FastGit then adds it as origin and pushes.`,
+  publishAbout: (name, branch) => `${name} has no remote yet. SterneGit creates it on your account, adds it as origin and pushes ${branch} to it.`,
+  publishNoAccount: (name) => `${name} has no remote yet. Add an account to create it there; SterneGit then adds it as origin and pushes.`,
   account: 'Account',
   nameTaken: (owner, name) => `${owner} already has a repository named ${name}.`,
   publish: 'Publish',
@@ -533,7 +533,7 @@ const HostTexts = {
 const Failures = {
   signedOut: { title: 'GitHub refused the token of alex-acme', message: 'It expired or was revoked. Sign in again to keep using this account.', action: 'Sign in again' },
   forbidden: { title: "alex-martin's token can't do this", message: 'It lacks the write:public_key scope. Sign in with the browser to get a token that has it.', action: 'Sign in with the browser', tone: 'warning' },
-  rateLimited: { title: "GitHub's rate limit for alex-martin is used up", message: 'FastGit asks again after 14:32, when GitHub resets it.', tone: 'wait' },
+  rateLimited: { title: "GitHub's rate limit for alex-martin is used up", message: 'SterneGit asks again after 14:32, when GitHub resets it.', tone: 'wait' },
   notFound: { title: 'Not found on GitHub', message: 'The repository was deleted or renamed, or this account can’t see it.' },
   net: { title: "Couldn't reach api.github.com", message: 'curl: (6) Could not resolve host: api.github.com', action: 'Retry' },
   stopped: { title: 'The GitHub connector stopped', message: 'It ran out of time. Its last log lines:', log: ['debug GET /user/repos?per_page=100&affiliation=owner,collaborator,organization_member', 'debug 100 repositories, next page', 'warn  sorting 2,400 repositories'], action: 'Copy log' },
@@ -577,7 +577,7 @@ const MergeMethodLabels = {
 const MergeLooks = {
   ready: { icon: 'circle-check', color: 'var(--green)', title: () => 'Ready to merge', about: (pull) => `No conflicts with ${pull.base}, and the checks the repository requires passed.`, can: true },
   failing: { icon: 'triangle-alert', color: 'var(--yellow)', title: () => 'Some checks failed', about: () => "The repository doesn't require them, so it can still be merged.", can: true },
-  checking: { icon: 'loader', spin: true, color: 'var(--muted)', title: () => 'Checking whether it can merge…', about: () => 'The server is still working it out. FastGit asks again after the next fetch.' },
+  checking: { icon: 'loader', spin: true, color: 'var(--muted)', title: () => 'Checking whether it can merge…', about: () => 'The server is still working it out. SterneGit asks again after the next fetch.' },
   conflicts: { icon: 'circle-x', color: 'var(--red)', title: (pull) => `Conflicts with ${pull.base}`, about: (pull) => `Merge ${pull.base} into ${pull.head} or rebase it, resolve the conflicts, then push.` },
   behind: { icon: 'arrow-down', color: 'var(--yellow)', title: (pull) => `${pull.base} moved on`, about: (pull) => `The repository requires ${pull.head} to contain ${pull.base}: merge it in or rebase, then push.` },
   draft: { icon: 'git-pull-request-draft', color: 'var(--muted)', title: () => 'Still a draft', about: () => 'Mark it ready for review on the server to merge it.' },
@@ -616,7 +616,7 @@ const PullTexts = {
   noComments: 'No comments yet.',
   commentPlaceholder: 'Write a comment',
   comment: 'Comment',
-  plainText: 'Sent as you type it. FastGit shows comments as plain text.',
+  plainText: 'Sent as you type it. SterneGit shows comments as plain text.',
   merge: 'Merge…',
   changesIn: (n) => `Changes in #${n}`,
   sinceBase: (n, base) => `${counted(n, 'commit', 'commits')} since ${base}, where it branched off`,
@@ -633,8 +633,8 @@ const PullTexts = {
   description: 'Description',
   draft: 'Create as draft',
   draftAbout: "Can't be merged until it is marked ready for review",
-  pushFirst: (branch, n, remote) => `${branch} has ${counted(n, 'commit', 'commits')} that ${remote} doesn't. FastGit pushes ${n === 1 ? 'it' : 'them'} first.`,
-  publishFirst: (branch, remote) => `${branch} isn't on ${remote} yet. FastGit pushes it first and makes ${remote}/${branch} its upstream.`,
+  pushFirst: (branch, n, remote) => `${branch} has ${counted(n, 'commit', 'commits')} that ${remote} doesn't. SterneGit pushes ${n === 1 ? 'it' : 'them'} first.`,
+  publishFirst: (branch, remote) => `${branch} isn't on ${remote} yet. SterneGit pushes it first and makes ${remote}/${branch} its upstream.`,
   compared: (n, files) => `${counted(n, 'commit', 'commits')} and ${counted(files, 'file', 'files')} changed since it branched off`,
   create: 'Create pull request',
   alreadyOpen: (n) => `A pull request from this branch is already open: #${n}.`,
@@ -648,7 +648,7 @@ const PullTexts = {
   mergedMessage: (head) => `${head} isn't needed any more.`,
   deleteBranchTooltip: 'Delete it from the remote, and here unless it is checked out or holds other commits',
   deleteBranch: 'Delete branch',
-  movedOn: (head) => `${head} moved since FastGit read it, so nothing was merged. Look at the new commits first.`,
+  movedOn: (head) => `${head} moved since SterneGit read it, so nothing was merged. Look at the new commits first.`,
   checkedOutHead: (branch, upstream) => `Checked out ${branch}, tracking ${upstream}`,
   checkedOutFork: (branch, owner) => `Checked out ${branch} from ${owner}'s fork, without an upstream`,
   choosing: 'Pick an account above to see pull requests',
@@ -1173,7 +1173,7 @@ function dialogShell({ name, title, description, body = '', buttons, size = 'wid
 }
 
 function protocolToggle(hasKey) {
-  const ssh = C.Button({ label: 'SSH', variant: 'ghost', size: 'sm', selected: false, disabled: !hasKey, tooltip: hasKey ? 'Clone over SSH with the account\'s FastGit key' : HostTexts.sshNeedsKey });
+  const ssh = C.Button({ label: 'SSH', variant: 'ghost', size: 'sm', selected: false, disabled: !hasKey, tooltip: hasKey ? 'Clone over SSH with the account\'s SterneGit key' : HostTexts.sshNeedsKey });
   return `<div class="h toggle-group">${C.Button({ label: 'HTTPS', variant: 'ghost', size: 'sm', selected: true })}${ssh}</div>`;
 }
 
@@ -2313,7 +2313,7 @@ const C = {
   },
 
   SshKeyRow({ key, local = false }) {
-    const chips = [key.fastgit && C.Chip({ label: HostTexts.fastgitKey, color: 'var(--blue)' }), key.readOnly && C.Chip({ label: HostTexts.readOnly })].filter(Boolean).join('');
+    const chips = [key.sternegit && C.Chip({ label: HostTexts.sternegitKey, color: 'var(--blue)' }), key.readOnly && C.Chip({ label: HostTexts.readOnly })].filter(Boolean).join('');
     const side = local ? C.Button({ label: HostTexts.copyPublicKey, icon: 'copy', size: 'sm', variant: 'ghost' }) : `<span class="xs muted none">${esc(HostTexts.added(key.added))}</span>`;
     const second = local ? `${esc(key.type)} · ${esc(key.fingerprint)} · <span class="text">${esc(HostTexts.usedBy(key.using))}</span>` : esc(key.fingerprint);
     return `<div data-c="SshKeyRow" class="row">${icon('key-round', 'md', 'var(--muted)')}<div class="v fill"><div class="h" style="gap:6px"><span class="sm medium ellipsis">${esc(key.title)}</span>${chips}</div><div class="xs muted mono ellipsis">${second}</div></div>${side}</div>`;
@@ -2333,9 +2333,9 @@ const C = {
       ],
     });
     const local = account.key
-      ? C.SshKeyRow({ key: { ...account.key, fastgit: true, using: account.using.length }, local: true })
+      ? C.SshKeyRow({ key: { ...account.key, sternegit: true, using: account.using.length }, local: true })
       : `<div class="row">${icon('key-round', 'md', 'var(--muted)')}<span class="sm muted fill">${esc(HostTexts.noKey(account.service))}</span>${C.Button({ label: HostTexts.createKey, size: 'sm' })}</div>`;
-    const others = keys.filter((key) => !key.fastgit).map((key) => C.SshKeyRow({ key }));
+    const others = keys.filter((key) => !key.sternegit).map((key) => C.SshKeyRow({ key }));
     const ssh = C.GroupBox({ title: HostTexts.sshKey, about: HostTexts.sshKeyAbout(account.service), rows: [local, ...others] });
     const owners = account.owners.length
       ? account.owners.map((owner) => `<div class="row">${icon('building', 'md', 'var(--muted)')}<span class="sm fill">${esc(`${account.server}/${owner}`)}</span>${C.Button({ label: HostTexts.forget, size: 'sm', variant: 'ghost' })}</div>`)
@@ -2438,7 +2438,7 @@ const C = {
   },
 
   SshKeyDialog({ account, forbidden = false }) {
-    const field = formField({ label: HostTexts.keyLabel(account.service), control: C.Input({ value: 'FastGit on DESKTOP-7Q2K', focused: true }), problem: forbidden ? HostTexts.keyForbidden(account.service, 'write:public_key') : null });
+    const field = formField({ label: HostTexts.keyLabel(account.service), control: C.Input({ value: 'SterneGit on DESKTOP-7Q2K', focused: true }), problem: forbidden ? HostTexts.keyForbidden(account.service, 'write:public_key') : null });
     const buttons = forbidden
       ? C.Button({ label: HostTexts.cancel, size: 'md' }) + C.Button({ label: HostTexts.methodDevice, icon: 'log-in', variant: 'primary', size: 'md' })
       : C.Button({ label: HostTexts.cancel, size: 'md' }) + C.Button({ label: HostTexts.createAndAdd, icon: 'key-round', variant: 'primary', size: 'md' });
@@ -2671,7 +2671,7 @@ const C = {
       .join('');
     const methodField = formField({ label: PullTexts.method, control: `<div class="v method-choices">${choices}</div>` });
     const squashTitle = `${pull.title} (#${pull.number})`;
-    const mergeTitle = `Merge pull request #${pull.number} from fastgit-org/${pull.head}`;
+    const mergeTitle = `Merge pull request #${pull.number} from sternegit-org/${pull.head}`;
     const squashMessage = ['* Render side-by-side diffs with syntax colors', '* Keep each side\'s scroll per file', '* Measure the exe after adding syntect'].join('\n');
     const words =
       method === 'rebase'
@@ -2683,7 +2683,7 @@ const C = {
     return dialogShell({ name: 'MergePullDialog', title: PullTexts.mergeTitle(pull.number), description: PullTexts.mergeAbout(pull.head, pull.base, details.headSha), body: `<div class="form">${methodField}${words}</div>${failure}`, buttons, size: 'wider' });
   },
 
-  FastGit({ topBar, tabStrip = '', body, overlays = '' }) {
-    return `<div data-c="FastGit" class="fg fg-window">${topBar}${tabStrip}<div class="fill v">${body}</div>${overlays}</div>`;
+  SterneGit({ topBar, tabStrip = '', body, overlays = '' }) {
+    return `<div data-c="SterneGit" class="fg fg-window">${topBar}${tabStrip}<div class="fill v">${body}</div>${overlays}</div>`;
   },
 };

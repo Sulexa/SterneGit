@@ -2,11 +2,11 @@
 
 ## Summary
 
-Each connector is a Luau script plus a JSON manifest. FastGit runs it in its own sandboxed state through mlua 0.12 (`luau` and `async`, without `serialize`). All states share one connector thread that starts at launch. Calls run as coroutines that are suspended during HTTP requests, so idle connectors run no code. Scripts never see tokens: a per-call account handle reaches only that account's servers. Returned values are checked into Rust types, naming the bad field. A 985-line GitHub connector (REST plus GraphQL) passed every check against recorded responses: the four sample operations, pagination, every error kind, concurrency, cancellation, an endless loop and a memory hog. Luau adds 2.2 MB of exe and about 1 MiB of RAM per connector, where Lua 5.4 would add 1.1 MB and 0.15 MiB. I recommend Luau for its sandbox, type syntax and error lines.
+Each connector is a Luau script plus a JSON manifest. SterneGit runs it in its own sandboxed state through mlua 0.12 (`luau` and `async`, without `serialize`). All states share one connector thread that starts at launch. Calls run as coroutines that are suspended during HTTP requests, so idle connectors run no code. Scripts never see tokens: a per-call account handle reaches only that account's servers. Returned values are checked into Rust types, naming the bad field. A 985-line GitHub connector (REST plus GraphQL) passed every check against recorded responses: the four sample operations, pagination, every error kind, concurrency, cancellation, an endless loop and a memory hog. Luau adds 2.2 MB of exe and about 1 MiB of RAM per connector, where Lua 5.4 would add 1.1 MB and 0.15 MiB. I recommend Luau for its sandbox, type syntax and error lines.
 
 ## Measured numbers
 
-The probes are separate binaries built with FastGit's release profile. The baseline links serde_json (`preserve_order`, `raw_value`), anyhow, futures and url, and (de)serializes the interface types through serde_json. Times are medians of 5 runs × 30 iterations, on a Ryzen 9 5950X with Windows 11 that other sessions kept about 50% busy.
+The probes are separate binaries built with SterneGit's release profile. The baseline links serde_json (`preserve_order`, `raw_value`), anyhow, futures and url, and (de)serializes the interface types through serde_json. Times are medians of 5 runs × 30 iterations, on a Ryzen 9 5950X with Windows 11 that other sessions kept about 50% busy.
 
 | | Luau (chosen) | Lua 5.4.9 |
 |---|---|---|
@@ -27,7 +27,7 @@ The probes are separate binaries built with FastGit's release profile. The basel
 | Threads | +1 (44 KiB private) | +1 |
 | Clean build of the vendored C or C++ | 74.5 s (parallel, on a loaded machine) | 6.9 s |
 
-Estimated, not measured: inside FastGit the delta should be a little lower, since parking_lot, bstr, futures-util and rustc-hash are already linked. macOS and Linux weren't built. A bare Luau state holds 322 KiB, because its allocator takes a 16 or 32 KB page per size class, a `const` in `lmem.cpp`.
+Estimated, not measured: inside SterneGit the delta should be a little lower, since parking_lot, bstr, futures-util and rustc-hash are already linked. macOS and Linux weren't built. A bare Luau state holds 322 KiB, because its allocator takes a 16 or 32 KB page per size class, a `const` in `lmem.cpp`.
 
 ## 1. Engine and sandbox
 
@@ -36,7 +36,7 @@ Estimated, not measured: inside FastGit the delta should be a little lower, sinc
 **Why Luau over Lua 5.4:**
 
 1. **It was built for hostile scripts, at Roblox.** It has no `io` or `package`, `os` holds only clock and date functions, and `debug` only `info` and `traceback`. `luaL_sandbox` makes globals and libraries read-only and gives each script its own environment. Interrupts fire at calls and loop back-edges. PUC Lua leaves sandboxing to the embedder, and has had memory-safety bugs reachable from source (CVE-2022-28805, CVE-2022-33099).
-2. **Its types are syntax.** LuaLS types are `---@` comments, which FastGit's no-comments rule forbids.
+2. **Its types are syntax.** LuaLS types are `---@` comments, which SterneGit's no-comments rule forbids.
 3. **Its error lines survive host calls.** Lua 5.4 lost the script line behind a tail call into `account:request`, where Luau kept `tests.luau:10: in function 'elsewhere'`.
 
 The price is +1.14 MB of exe, +0.85 MiB per connector and +1.6 ms per start. If footprint wins, Lua 5.4 fits behind the same interface.
@@ -46,21 +46,21 @@ The price is +1.14 MB of exe, +0.85 MiB per connector and +1.6 ms per start. If 
 1. `Lua::new_with(COROUTINE | TABLE | STRING | UTF8 | MATH | BIT | BUFFER)`.
 2. Remove `require`, `loadstring`, `collectgarbage`, `getfenv`, `setfenv`, `newproxy`, `gcinfo` and `string.dump`. mlua gives every Luau state a filesystem `require` (`FsRequirer`) by default.
 3. Route `print` to the connector's log.
-4. Install `fastgit` and call `sandbox(true)`.
+4. Install `sternegit` and call `sandbox(true)`.
 5. Load the script with `ChunkMode::Text` only, because Luau doesn't verify bytecode.
 6. Call `set_memory_limit(64 MiB)`.
 
-**Stopping a connector.** The interrupt checks the clock every 64 ticks. A call that runs 1 s without awaiting fails with `Stopped`, and one that allocates past the limit fails with `MemoryError`. The state stays usable. After three failures in a row FastGit closes the connector, and **Restart** builds a new state.
+**Stopping a connector.** The interrupt checks the clock every 64 ticks. A call that runs 1 s without awaiting fails with `Stopped`, and one that allocates past the limit fails with `MemoryError`. The state stays usable. After three failures in a row SterneGit closes the connector, and **Restart** builds a new state.
 
 **One state per connector.** A state per call would cost 2.5 ms and 1 MiB each time, and a state per account would multiply the memory. Per-call handles already isolate the accounts.
 
-**Build.** FastGit already compiles C++ through cc on Windows (vswhom-sys) and C on Linux (freetype-sys). Linux would also need g++ or clang++.
+**Build.** SterneGit already compiles C++ through cc on Windows (vswhom-sys) and C on Linux (freetype-sys). Linux would also need g++ or clang++.
 
 ## 2. Package, manifest and approval
 
 ```
 connectors/github/connector.json   connectors/github/main.luau   connectors/github/.luaurc   connectors/github/tests/*.json
-connectors/sdk/fastgit.d.luau      connectors/sdk/template/
+connectors/sdk/sternegit.d.luau      connectors/sdk/template/
 ```
 
 `.luaurc` sets `{"languageMode": "strict"}`, so the source needs no `--!strict` line.
@@ -97,7 +97,7 @@ GitLab's token method declares `{"kind": "header", "name": "PRIVATE-TOKEN"}`, an
 
 ## 3. The host–connector interface
 
-`connectors/sdk/fastgit.d.luau` holds these declarations. At start, FastGit checks that every declared feature has its functions.
+`connectors/sdk/sternegit.d.luau` holds these declarations. At start, SterneGit checks that every declared feature has its functions.
 
 ```luau
 type Request = { method: string?, url: string, query: { [string]: any }?, headers: { [string]: string }?, json: any? }
@@ -107,7 +107,7 @@ declare class Account
 	login: string?
 	function request(self, request: Request): Response
 end
-declare fastgit: { interface: number, log: (string, string) -> (), now: () -> number, fail: (Failure) -> never,
+declare sternegit: { interface: number, log: (string, string) -> (), now: () -> number, fail: (Failure) -> never,
 	json: { array: <T>({ T }?) -> { T }, decode: (string) -> any, encode: (any) -> string }, url: { encode: (string) -> string } }
 
 type Page<T> = { items: { T }, next: string? }
@@ -165,10 +165,10 @@ type Connector = {
 }
 ```
 
-- **Publishing** is `create_repository`, then FastGit adds the remote and pushes.
+- **Publishing** is `create_repository`, then SterneGit adds the remote and pushes.
 - **Cursors** are opaque: a Link URL, an `endCursor` or a `$skip`.
 - **Network failures** are the host's `NetError` and bypass the script.
-- **Shapes.** A returned value becomes a `serde_json::Value`: keys must be strings or `1..n`, depth is at most 64, and functions and userdata are refused. `serde_path_to_error` then deserializes it, ignoring unknown fields. Measured: `path: "items[0].clone", problem: "missing field `https`"`. `fastgit.json.array` marks an empty array.
+- **Shapes.** A returned value becomes a `serde_json::Value`: keys must be strings or `1..n`, depth is at most 64, and functions and userdata are refused. `serde_path_to_error` then deserializes it, ignoring unknown fields. Measured: `path: "items[0].clone", problem: "missing field `https`"`. `sternegit.json.array` marks an empty array.
 
 ## 4. Four operations
 
@@ -181,7 +181,7 @@ local function send(account: Account, request: Request): Response
 	if response.status >= 200 and response.status < 300 then
 		return response
 	end
-	return fastgit.fail(failure_of(response))
+	return sternegit.fail(failure_of(response))
 end
 
 local function next_link(link: string?): string?
@@ -259,7 +259,7 @@ end
 function connector.merge(account: Account, repo: RepoRef, number: number, merge: Merge): Merged
 	local method = MERGE_METHODS[merge.method]
 	if method == nil then
-		return fastgit.fail({
+		return sternegit.fail({
 			kind = "invalid",
 			message = "GitHub cannot merge that way",
 			fields = { { field = "method", message = "must be merge, squash or rebase" } },
@@ -322,12 +322,12 @@ fn shaped<T: DeserializeOwned>(lua: &Lua, value: Value) -> Result<T, (String, St
 
 ## 5. Versioning
 
-`interface` in the manifest is the major version. `fastgit.interface` gives the host's major.minor, and `fastgit.has(name)` tests for an optional host function.
+`interface` in the manifest is the major version. `sternegit.interface` gives the host's major.minor, and `sternegit.has(name)` tests for an optional host function.
 
-- **Minor versions only add** optional fields, optional exports, host functions and enum values. Returned enums deserialize through `#[serde(other)] Unknown`, so a newer connector can't break an older FastGit.
+- **Minor versions only add** optional fields, optional exports, host functions and enum values. Returned enums deserialize through `#[serde(other)] Unknown`, so a newer connector can't break an older SterneGit.
 - **Features gate the UI.** Without `ssh_keys`, a connector gets no SSH key button.
-- **A newer major** shows "needs a newer FastGit". A connector only a minor ahead starts.
-- **An older major** runs through a Rust adapter, one major back. Anything older shows "written for an older FastGit".
+- **A newer major** shows "needs a newer SterneGit". A connector only a minor ahead starts.
+- **An older major** runs through a Rust adapter, one major back. Anything older shows "written for an older SterneGit".
 
 ## 6. Async and lifecycle
 
@@ -337,7 +337,7 @@ The connector thread runs `smol::block_on(executor.run(serve(jobs)))` on an `asy
 - **Cancellation.** `Reply<T>` holds the host's `CancelOnDrop`. Dropping a `Load` or `Job` drops its `Task` and the `Reply`, `Cancel` fires, and a `select` on the connector thread drops the call. mlua terminates and recycles the coroutine. In the probe the in-flight request was dropped, and the state answered the next call.
 - **Launch.** `app::run` spawns the thread after the window opens. Discovery and the 3 ms per connector happen there, so the first frame and the history read don't wait.
 
-## 7. FastGit side
+## 7. SterneGit side
 
 ```
 src/connect/  mod.rs Connectors · found.rs · manifest.rs · grant.rs · thread.rs · sandbox.rs · bridge.rs · handle.rs · shapes.rs · failure.rs
@@ -365,28 +365,28 @@ pub(crate) enum ConnectorError { Failed(Failure), Network(NetError), Stopped(Sto
 
 - **REST** handles repositories (`/user/repos` with `affiliation`, and search with `user:` and `org:`), creating repositories, SSH keys, creating PRs, the PR for a branch (`?head=owner:branch`), checks (`check-runs` plus `status`) and the conversation. A review is one atomic `POST …/reviews`. A merge is `PUT …/merge` with `sha` as a guard, so a 409 becomes `conflict`.
 - **GraphQL** handles what REST can't: listing PRs (it has a `MERGED` state and cursors), getting mergeability, merge methods and `viewerDidAuthor` (no approving your own PR) in one query, and review threads with resolved state, replies and resolving.
-- **Pagination and checkout.** REST follows `Link rel="next"` and GraphQL follows `endCursor`. `fetch` is `{ ref = "refs/pull/N/head", sha = headRefOid }`: FastGit fetches the ref from the base remote, checks the commit, then checks out or diffs `base_sha...sha` itself. Enterprise Server uses `{address}/api/v3` and `{address}/api/graphql`.
+- **Pagination and checkout.** REST follows `Link rel="next"` and GraphQL follows `endCursor`. `fetch` is `{ ref = "refs/pull/N/head", sha = headRefOid }`: SterneGit fetches the ref from the base remote, checks the commit, then checks out or diffs `base_sha...sha` itself. Enterprise Server uses `{address}/api/v3` and `{address}/api/graphql`.
 - **Errors.** 401 becomes `signed_out`. 403 or 429 with `x-ratelimit-remaining: 0` or `retry-after` becomes `rate_limited`, and the probe got 117 s from the reset header. 403 or 404 without the scope in `x-accepted-oauth-scopes` becomes `missing_permission { needed }`, and any other 404 becomes `not_found`. 422 becomes `invalid`, per field. Each kind was checked against a recorded response.
 
 ## 9. Platform check
 
-- **GitLab.** `owner` is a namespace path, slashes included, and merge requests filter by `opened|closed|merged|all`. Discussion positions carry `old_line` and `new_line`, which is why `LineRef` holds both sides: GitLab needs both for unchanged lines, and FastGit knows them from its own diff. A review is draft notes plus `bulk_publish` using `diff_refs`. Approving is `POST …/approve`, and `verdicts` hides request changes where the server lacks it. The head is `refs/merge-requests/:iid/head`, and the merge methods come from `merge_method` and `squash_option`.
+- **GitLab.** `owner` is a namespace path, slashes included, and merge requests filter by `opened|closed|merged|all`. Discussion positions carry `old_line` and `new_line`, which is why `LineRef` holds both sides: GitLab needs both for unchanged lines, and SterneGit knows them from its own diff. A review is draft notes plus `bulk_publish` using `diff_refs`. Approving is `POST …/approve`, and `verdicts` hides request changes where the server lacks it. The head is `refs/merge-requests/:iid/head`, and the merge methods come from `merge_method` and `squash_option`.
 - **Azure DevOps.** `owner` is `org/project`. Its `*.visualstudio.com` hosts need `*.` patterns in manifests. `threadContext` left and right map to `LineRef` old and new, the thread status maps to resolved, and the connector maps iterations to commits. Votes are 10 for approve and −5 for request changes. `refs/pull/N/merge` is the merge commit, so `fetch.url` points at the source repository's `sourceRefName`. With no documented SSH key API, the connector doesn't declare `ssh_keys`.
-- **What doesn't fit, absorbed by additions.** Azure's review isn't atomic, so `failed` gains a `posted` count and FastGit keeps the unsent drafts. Azure can merge asynchronously, so `Merged` gains `queued`. Visibility is per project, so owners gain `visibilities` and `can_initialize`.
+- **What doesn't fit, absorbed by additions.** Azure's review isn't atomic, so `failed` gains a `posted` count and SterneGit keeps the unsent drafts. Azure can merge asynchronously, so `Merged` gains `queued`. Visibility is per project, so owners gain `visibilities` and `can_initialize`.
 - **Gitea** has a GitHub-like REST API and no GraphQL. I estimate 500–600 lines, since about 250 of GitHub's 985 lines are GraphQL.
 
 ## 10. Author experience
 
-The SDK gives authors `fastgit.d.luau` for luau-lsp, where a misspelled field is an editor error in strict mode. It also ships a template: a manifest, stubs and one recorded case. `src/cli.rs` gains two modes that use the app's own sandbox:
+The SDK gives authors `sternegit.d.luau` for luau-lsp, where a misspelled field is an editor error in strict mode. It also ships a template: a manifest, stubs and one recorded case. `src/cli.rs` gains two modes that use the app's own sandbox:
 
-- `fastgit --connector-check <folder>` validates the manifest, compiles the script and compares its exports with its features.
-- `fastgit --connector-run <folder> <case.json>` replays recorded exchanges. It prints the shaped result or the error and the requests made, and flags unrecorded ones.
+- `sternegit --connector-check <folder>` validates the manifest, compiles the script and compares its exports with its features.
+- `sternegit --connector-run <folder> <case.json>` replays recorded exchanges. It prints the shaped result or the error and the requests made, and flags unrecorded ones.
 
-Errors carry lines, as measured: `broken/main.luau:4: Expected ')' (to close '(' at line 3), got 'end'`, and `tests.luau:8: attempt to index nil with 'name'` with a traceback. `print` and `fastgit.log` go to the host's token-scrubbed log.
+Errors carry lines, as measured: `broken/main.luau:4: Expected ')' (to close '(' at line 3), got 'end'`, and `tests.luau:8: attempt to index nil with 'name'` with a traceback. `print` and `sternegit.log` go to the host's token-scrubbed log.
 
 Non-Lua authors must write Luau: roblox-ts targets Roblox APIs, and TypeScriptToLua is untested against Luau. That is the main weakness against the Wasm designs.
 
-## 11. Testing in FastGit
+## 11. Testing in SterneGit
 
 `cargo test` needs no network:
 

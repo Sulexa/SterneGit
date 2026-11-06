@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use fastgit_protocol::{Cursor, Page, PullState, PullSummary, RepoRef, StateFilter};
+use sternegit_protocol::{Cursor, Page, PullState, PullSummary, RepoRef, StateFilter};
 use gpui_kit::{App, Context, Entity, SharedString, Subscription, Task};
 
 use super::super::repository::{Repository, RepositoryEvent};

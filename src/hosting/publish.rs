@@ -95,7 +95,7 @@ impl Render for PublishForm {
             return v_flex()
                 .gap_3()
                 .child(div().sm_text().text_color(muted).child(format!(
-                    "{} has no remote yet. Add an account to create it there; FastGit then adds it as origin and pushes.",
+                    "{} has no remote yet. Add an account to create it there; SterneGit then adds it as origin and pushes.",
                     self.shown
                 )))
                 .child(
@@ -123,7 +123,7 @@ impl Render for PublishForm {
         v_flex()
             .gap_4()
             .child(div().sm_text().text_color(muted).child(format!(
-                "{} has no remote yet. FastGit creates it on your account, adds it as origin and pushes {} to it.",
+                "{} has no remote yet. SterneGit creates it on your account, adds it as origin and pushes {} to it.",
                 self.shown, self.branch
             )))
             .child(field(ACCOUNT, account, None, cx))

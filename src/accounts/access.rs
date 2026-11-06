@@ -114,7 +114,7 @@ mod tests {
         let access = access_for(
             &book,
             &remotes(&["https://github.com/a/b.git", "git@github.com:a/b.git"]),
-            Some(PathBuf::from("fastgit")),
+            Some(PathBuf::from("sternegit")),
             Attendance::Attended,
         );
         assert_eq!(access.scopes, [scoped("https://github.com", "github:github.com:1")]);
@@ -133,7 +133,7 @@ mod tests {
                 "https://github.com/work-organisation/other.git",
                 "https://github.com/someone/fork.git",
             ]),
-            Some(PathBuf::from("fastgit")),
+            Some(PathBuf::from("sternegit")),
             Attendance::Unattended,
         );
         assert_eq!(
@@ -150,11 +150,11 @@ mod tests {
         let access = access_for(
             &book,
             &remotes(&["https://gitlab.com/a/b.git", "/local/path"]),
-            Some(PathBuf::from("fastgit")),
+            Some(PathBuf::from("sternegit")),
             Attendance::Attended,
         );
         assert_eq!(access, Access {
-            helper: Some(PathBuf::from("fastgit")),
+            helper: Some(PathBuf::from("sternegit")),
             ..Access::default()
         });
     }

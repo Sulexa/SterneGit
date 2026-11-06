@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use fastgit_protocol::{
+use sternegit_protocol::{
     ABI, Hello, PROTOCOL,
     ops::{Greet, Op as _},
     speaks_same_major,
@@ -93,7 +93,7 @@ impl Started {
             .map_err(refusal)?;
         if !speaks_same_major(&hello.protocol) {
             return Err(Stop::Refused(format!(
-                "The connector speaks protocol {}, and this FastGit speaks {PROTOCOL}",
+                "The connector speaks protocol {}, and this SterneGit speaks {PROTOCOL}",
                 hello.protocol
             )));
         }
@@ -130,7 +130,7 @@ fn refuse_foreign_imports(module: &Module) -> Result<(), Stop> {
         };
         if !fits {
             return Err(Stop::Refused(format!(
-                "The module imports {}::{}, which FastGit doesn't offer",
+                "The module imports {}::{}, which SterneGit doesn't offer",
                 import.module(),
                 import.name()
             )));
@@ -161,7 +161,7 @@ fn require_exports(module: &Module) -> Result<(), Stop> {
 
 #[cfg(test)]
 mod tests {
-    use fastgit_protocol::Hello;
+    use sternegit_protocol::Hello;
 
     use super::Started;
     use crate::connect::{
@@ -181,7 +181,7 @@ mod tests {
         Started::start(fake_connector(), wasm, FakeHost::quiet()).map(|(_, greeting)| greeting.hello)
     }
 
-    const EXPORTS: &str = r#"(memory (export "memory") 1) (func (export "fastgit_call") (param i32) (result i32) (i32.const 0))"#;
+    const EXPORTS: &str = r#"(memory (export "memory") 1) (func (export "sternegit_call") (param i32) (result i32) (i32.const 0))"#;
 
     #[test]
     fn a_module_importing_wasi_is_refused_by_name() {
@@ -190,23 +190,23 @@ mod tests {
         ));
         assert_eq!(
             refusal(&wasi),
-            "The module imports wasi_snapshot_preview1::fd_write, which FastGit doesn't offer"
+            "The module imports wasi_snapshot_preview1::fd_write, which SterneGit doesn't offer"
         );
     }
 
     #[test]
     fn imports_must_match_abi_1_exactly() {
         for (import, shown) in [
-            (r#"(import "fastgit:1" "take" (func (param i64)))"#, "fastgit:1::take"),
-            (r#"(import "fastgit:1" "now" (func (result i32)))"#, "fastgit:1::now"),
-            (r#"(import "fastgit:1" "spawn" (func))"#, "fastgit:1::spawn"),
-            (r#"(import "fastgit:2" "take" (func (param i32)))"#, "fastgit:2::take"),
-            (r#"(import "fastgit:1" "take" (global i32))"#, "fastgit:1::take"),
+            (r#"(import "sternegit:1" "take" (func (param i64)))"#, "sternegit:1::take"),
+            (r#"(import "sternegit:1" "now" (func (result i32)))"#, "sternegit:1::now"),
+            (r#"(import "sternegit:1" "spawn" (func))"#, "sternegit:1::spawn"),
+            (r#"(import "sternegit:2" "take" (func (param i32)))"#, "sternegit:2::take"),
+            (r#"(import "sternegit:1" "take" (global i32))"#, "sternegit:1::take"),
         ] {
-            let module = wasm(&format!(r#"(module {import} (memory (export "memory") 1) (func (export "fastgit_call") (param i32) (result i32) (i32.const 0)))"#));
+            let module = wasm(&format!(r#"(module {import} (memory (export "memory") 1) (func (export "sternegit_call") (param i32) (result i32) (i32.const 0)))"#));
             assert_eq!(
                 refusal(&module),
-                format!("The module imports {shown}, which FastGit doesn't offer")
+                format!("The module imports {shown}, which SterneGit doesn't offer")
             );
         }
     }
@@ -219,10 +219,10 @@ mod tests {
 
     #[test]
     fn a_module_without_its_memory_or_entry_point_is_refused() {
-        let no_memory = wasm(r#"(module (func (export "fastgit_call") (param i32) (result i32) (i32.const 0)))"#);
+        let no_memory = wasm(r#"(module (func (export "sternegit_call") (param i32) (result i32) (i32.const 0)))"#);
         assert_eq!(refusal(&no_memory), "The module exports no memory");
-        let wrong_entry = wasm(r#"(module (memory (export "memory") 1) (func (export "fastgit_call") (param i64) (result i32) (i32.const 0)))"#);
-        assert_eq!(refusal(&wrong_entry), "The module exports no fastgit_call(i32) -> i32");
+        let wrong_entry = wasm(r#"(module (memory (export "memory") 1) (func (export "sternegit_call") (param i64) (result i32) (i32.const 0)))"#);
+        assert_eq!(refusal(&wrong_entry), "The module exports no sternegit_call(i32) -> i32");
     }
 
     #[test]
@@ -244,7 +244,7 @@ mod tests {
         let newer = answering(r#"{"ok":{"protocol":"2.0","sdk":"9.0.0"}}"#);
         assert_eq!(
             start(&newer),
-            Err(Stop::Refused("The connector speaks protocol 2.0, and this FastGit speaks 1.0".into()))
+            Err(Stop::Refused("The connector speaks protocol 2.0, and this SterneGit speaks 1.0".into()))
         );
         let minor = answering(r#"{"ok":{"protocol":"1.7","sdk":"1.7.0","later":true}}"#);
         assert_eq!(start(&minor).unwrap().protocol, "1.7");

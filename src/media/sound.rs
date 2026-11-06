@@ -36,7 +36,7 @@ impl Sound {
         let stream = MediaSourceStream::new(Box::new(Cursor::new(bytes)), Default::default());
         let mut format = symphonia::default::get_probe()
             .probe(&hint, stream, FormatOptions::default(), MetadataOptions::default())
-            .context("FastGit can't read this kind of sound")?;
+            .context("SterneGit can't read this kind of sound")?;
         let track = format
             .default_track(TrackType::Audio)
             .context("This file has no sound in it")?;
@@ -49,7 +49,7 @@ impl Sound {
             .clone();
         let mut decoder = symphonia::default::get_codecs()
             .make_audio_decoder(&params, &AudioDecoderOptions::default())
-            .context("FastGit can't decode this kind of sound")?;
+            .context("SterneGit can't decode this kind of sound")?;
         let mut samples: Vec<i16> = Vec::new();
         let mut packet_samples: Vec<i16> = Vec::new();
         let mut rate = params.sample_rate.unwrap_or(0);

@@ -5,7 +5,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use fastgit_protocol::{
+use sternegit_protocol::{
     Cassette, Exchange,
     ops::{self, Op, Visit},
 };
@@ -113,7 +113,7 @@ fn play(
     }
 
     let (op, on_repository) = ops::visit(&cassette.op, Described)
-        .ok_or_else(|| format!("FastGit never calls {}", cassette.op))?;
+        .ok_or_else(|| format!("SterneGit never calls {}", cassette.op))?;
     let account = host
         .account_id()
         .ok_or_else(|| "The cassette names no account".to_owned())?;
@@ -162,7 +162,7 @@ mod tests {
     const IDENTITY: &str = r#"{"ok":{"id":"1","login":"octo","name":null,"avatar_url":null,"scopes":[]}}"#;
 
     fn folder(name: &str, manifest: Value, wasm: &[u8]) -> PathBuf {
-        let folder = std::env::temp_dir().join(format!("fastgit-trial-{name}-{}", std::process::id()));
+        let folder = std::env::temp_dir().join(format!("sternegit-trial-{name}-{}", std::process::id()));
         let _ = fs::remove_dir_all(&folder);
         fs::create_dir_all(&folder).unwrap();
         fs::write(folder.join("connector.json"), manifest.to_string()).unwrap();
@@ -268,14 +268,14 @@ mod tests {
     }
 
     #[test]
-    fn a_cassette_calling_an_operation_fastgit_never_calls_is_refused() {
+    fn a_cassette_calling_an_operation_sternegit_never_calls_is_refused() {
         let folder = folder("unknown-op", manifest(), &two_faced(IDENTITY));
         let path = folder.join("teleport.json");
         let cassette = json!({ "op": "teleport", "account": { "id": "fake:example.com:1", "login": "octo", "endpoints": { "api": "https://api.example.com/v1/" } } });
         fs::write(&path, cassette.to_string()).unwrap();
         assert_eq!(
             try_connector(&folder, Some(&path)).err(),
-            Some("FastGit never calls teleport".to_owned())
+            Some("SterneGit never calls teleport".to_owned())
         );
         fs::remove_dir_all(folder).unwrap();
     }

@@ -65,7 +65,7 @@ impl AccountBook {
     }
 
     pub(crate) fn save(&self) -> io::Result<()> {
-        let file = file().ok_or_else(|| io::Error::other("There is no folder for FastGit's settings"))?;
+        let file = file().ok_or_else(|| io::Error::other("There is no folder for SterneGit's settings"))?;
         self.write_to(&file)
     }
 
@@ -167,7 +167,7 @@ mod tests {
 
     fn scratch(name: &str) -> PathBuf {
         let folder =
-            std::env::temp_dir().join(format!("fastgit-book-{name}-{}", std::process::id()));
+            std::env::temp_dir().join(format!("sternegit-book-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&folder);
         folder
     }
@@ -179,7 +179,7 @@ mod tests {
         let mut book = AccountBook::default();
         book.put(fixtures::github("1"));
         book.put(fixtures::github("2"));
-        book.choose("github.com", "/fastgit-org/", fixtures::github("2").id);
+        book.choose("github.com", "/sternegit-org/", fixtures::github("2").id);
         book.write_to(&file).unwrap();
         let read = AccountBook::read_from(&file);
         let _ = std::fs::remove_dir_all(&folder);
@@ -188,7 +188,7 @@ mod tests {
             read.owners,
             [OwnerChoice {
                 host: "github.com".into(),
-                owner: "fastgit-org".into(),
+                owner: "sternegit-org".into(),
                 account: fixtures::github("2").id,
             }]
         );
@@ -205,11 +205,11 @@ mod tests {
     }
 
     #[test]
-    fn signing_in_again_keeps_what_fastgit_set_up_for_the_account() {
+    fn signing_in_again_keeps_what_sternegit_set_up_for_the_account() {
         let mut book = AccountBook::default();
         let mut known = fixtures::github("1");
         known.ssh_key = Some("C:/keys/github-github.com-1_ed25519".into());
-        known.ssh_repositories = vec!["E:/Projects/fastgit".into()];
+        known.ssh_repositories = vec!["E:/Projects/sternegit".into()];
         known.clone_over_ssh = true;
         book.put(known.clone());
         let mut again = fixtures::github("1");
@@ -245,7 +245,7 @@ mod tests {
     }
 
     #[test]
-    fn entries_a_newer_fastgit_wrote_survive_a_rewrite() {
+    fn entries_a_newer_sternegit_wrote_survive_a_rewrite() {
         let folder = scratch("unreadable");
         let file = JsonFile::at(folder.join("accounts.json"));
         let strange = json!({ "id": "something-else", "shape": "new" });

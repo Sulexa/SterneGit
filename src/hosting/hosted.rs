@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use fastgit_protocol::{Failure, NewRepository, Owner, Visibility};
+use sternegit_protocol::{Failure, NewRepository, Owner, Visibility};
 use gpui_kit::{
     AnyElement, App, AppContext as _, Context, Entity, IntoElement, ParentElement as _,
     SharedString, Styled as _, Subscription, Task, Window,
@@ -356,7 +356,7 @@ pub(crate) fn name_problem(error: &CallError, owner: &str, name: &str, login: &s
 
 #[cfg(test)]
 mod tests {
-    use fastgit_protocol::{FieldError, Failure};
+    use sternegit_protocol::{FieldError, Failure};
 
     use super::name_problem;
     use crate::connect::CallError;

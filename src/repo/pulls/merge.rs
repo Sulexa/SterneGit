@@ -1,4 +1,4 @@
-use fastgit_protocol::{Merge, MergeMethod, PullDetails};
+use sternegit_protocol::{Merge, MergeMethod, PullDetails};
 use gpui_kit::{
     App, AppContext as _, Context, Entity, IntoElement, ParentElement as _, Render, SharedString,
     Styled as _, Task, Window,
@@ -266,8 +266,8 @@ mod tests {
     fn the_commit_words_are_filled_in_as_github_would() {
         assert_eq!(squash_title("Render side-by-side diffs", 12), "Render side-by-side diffs (#12)");
         assert_eq!(
-            merge_title(12, "fastgit-org", "feature/diff-view"),
-            "Merge pull request #12 from fastgit-org/feature/diff-view"
+            merge_title(12, "sternegit-org", "feature/diff-view"),
+            "Merge pull request #12 from sternegit-org/feature/diff-view"
         );
         assert_eq!(
             squash_message(&["Add two".to_owned(), "Add a file".to_owned()]),

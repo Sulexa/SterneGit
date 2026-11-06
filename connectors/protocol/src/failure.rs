@@ -68,7 +68,7 @@ impl fmt::Display for Failure {
                 write!(f, "Stopped after posting {posted}: {failure}")
             }
             Failure::Protocol { message } => write!(f, "Misunderstood: {message}"),
-            Failure::Unknown => f.write_str("Failed for a reason this FastGit doesn't know"),
+            Failure::Unknown => f.write_str("Failed for a reason this SterneGit doesn't know"),
         }
     }
 }

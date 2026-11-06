@@ -54,7 +54,7 @@ const NOT_A_TOKEN: &str = "That doesn't look like a token: paste it whole, witho
 const CREDENTIAL_TITLE: &str = "Use Git Credential Manager's token?";
 const KEYS_SCOPE: &str = "write:public_key";
 const ALL_KEYS_SCOPE: &str = "admin:public_key";
-const NO_SERVICES: &str = "No connector is ready yet. FastGit starts them a moment after it opens.";
+const NO_SERVICES: &str = "No connector is ready yet. SterneGit starts them a moment after it opens.";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum SignInStart {
@@ -243,7 +243,7 @@ impl SignIn {
         let signed = format!("Signed in as {} on {label}", account.login);
         let notification = match lacks_keys {
             true => Notification::warning(format!(
-                "This token lacks {KEYS_SCOPE}, so FastGit can't add SSH keys with it. Signing in works anyway."
+                "This token lacks {KEYS_SCOPE}, so SterneGit can't add SSH keys with it. Signing in works anyway."
             ))
             .title(signed),
             false => Notification::success(signed),
@@ -412,7 +412,7 @@ impl SignIn {
             .unwrap_or_else(|| "this server".to_owned());
         let options = [
             (SignInMethod::Device, IconName::LogIn, "Sign in with the browser".to_owned(), format!("{label} shows a short code to confirm. Recommended.")),
-            (SignInMethod::PastedToken, IconName::KeyRound, "Paste a token".to_owned(), format!("Make a token on {label} with the scopes FastGit needs.")),
+            (SignInMethod::PastedToken, IconName::KeyRound, "Paste a token".to_owned(), format!("Make a token on {label} with the scopes SterneGit needs.")),
             (SignInMethod::GitCredential, IconName::ShieldCheck, "Use Git Credential Manager's token".to_owned(), format!("Reuse the token Git already has for {host}.")),
         ];
         let rows = options
@@ -526,13 +526,13 @@ impl SignIn {
         });
         let status = match device {
             Device::Asking => h_flex().gap_2().child(Spinner::new().small()).child(div().text_color(muted).child(format!("Asking {label} for a code…"))),
-            Device::Waiting(_) => h_flex().gap_2().child(Spinner::new().small()).child(div().text_color(muted).child(format!("Waiting for you to approve FastGit on {label}…"))),
+            Device::Waiting(_) => h_flex().gap_2().child(Spinner::new().small()).child(div().text_color(muted).child(format!("Waiting for you to approve SterneGit on {label}…"))),
             Device::Expired(_) => h_flex().gap_2().child(Icon::new(IconName::Clock).small().text_color(yellow)).child("The code expired. Nothing was saved."),
             Device::Denied(_) => h_flex().gap_2().child(Icon::new(IconName::CircleX).small().text_color(red)).child(format!("{label} says you declined. Nothing was saved.")),
         };
         let page = code.map(|code| {
             let page = code.verification_uri.as_str().trim_start_matches("https://").trim_end_matches('/').to_owned();
-            format!("FastGit opened {page} in your browser. Enter this code there:")
+            format!("SterneGit opened {page} in your browser. Enter this code there:")
         });
         v_flex()
             .children(page.map(|page| div().sm_text().text_color(muted).child(page)))
@@ -603,7 +603,7 @@ impl Render for SignIn {
                     .and_then(|drafted| drafted.account.server.host_str().map(str::to_owned))
                     .unwrap_or_default();
                 Some(format!(
-                    "Git Credential Manager may have a token for {host}. FastGit copies it into its own entry and signs in with it; \
+                    "Git Credential Manager may have a token for {host}. SterneGit copies it into its own entry and signs in with it; \
                      Git Credential Manager keeps its copy. These tokens usually can't add SSH keys{}.",
                     if self.offers(SignInMethod::Device) { ": sign in with the browser for that" } else { "" }
                 ))
@@ -665,9 +665,9 @@ fn token_about(sign_in: &SignIn, cx: &App) -> String {
         .and_then(|url| scopes_asked(&url));
     match scopes {
         Some(scopes) => format!(
-            "Create a classic token with the scopes {scopes}, then paste it here. FastGit checks it before saving it."
+            "Create a classic token with the scopes {scopes}, then paste it here. SterneGit checks it before saving it."
         ),
-        None => "Create a token, then paste it here. FastGit checks it before saving it.".to_owned(),
+        None => "Create a token, then paste it here. SterneGit checks it before saving it.".to_owned(),
     }
 }
 
@@ -693,7 +693,7 @@ fn device_flow(drafted: &Draft, cx: &App) -> Option<DeviceFlow> {
 
 fn refusal(error: &CallError, label: &str) -> SharedString {
     match error {
-        CallError::Failed(fastgit_protocol::Failure::SignedOut) => {
+        CallError::Failed(sternegit_protocol::Failure::SignedOut) => {
             format!("{label} refused this token: it may have expired or been revoked.").into()
         }
         error => Trouble::described(error, "this token", label, "the server", Vec::new()).message,
@@ -724,7 +724,7 @@ mod tests {
 
     #[test]
     fn the_scopes_a_token_needs_are_read_from_its_creation_page() {
-        let url = Url::parse("https://github.com/settings/tokens/new?scopes=repo,read:org,write:public_key,workflow&description=FastGit").unwrap();
+        let url = Url::parse("https://github.com/settings/tokens/new?scopes=repo,read:org,write:public_key,workflow&description=SterneGit").unwrap();
         assert_eq!(scopes_asked(&url).as_deref(), Some("repo, read:org, write:public_key and workflow"));
         assert_eq!(scopes_asked(&Url::parse("https://ghe.example/settings/tokens/new").unwrap()), None);
     }

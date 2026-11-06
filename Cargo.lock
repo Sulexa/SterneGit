@@ -1769,38 +1769,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "fastgit"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "base64 0.22.1",
- "cpal",
- "fastgit-protocol",
- "futures",
- "gix",
- "gpui-kit",
- "image",
- "serde",
- "serde_json",
- "serde_path_to_error",
- "sha2 0.11.1",
- "smol",
- "symphonia",
- "url",
- "wasmi",
- "wat",
- "windows 0.62.2",
-]
-
-[[package]]
-name = "fastgit-protocol"
-version = "1.0.0"
-dependencies = [
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "fastrand"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7523,6 +7491,38 @@ name = "static_assertions"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
+
+[[package]]
+name = "sternegit"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "base64 0.22.1",
+ "cpal",
+ "futures",
+ "gix",
+ "gpui-kit",
+ "image",
+ "serde",
+ "serde_json",
+ "serde_path_to_error",
+ "sha2 0.11.1",
+ "smol",
+ "sternegit-protocol",
+ "symphonia",
+ "url",
+ "wasmi",
+ "wat",
+ "windows 0.62.2",
+]
+
+[[package]]
+name = "sternegit-protocol"
+version = "1.0.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
 
 [[package]]
 name = "str_indices"

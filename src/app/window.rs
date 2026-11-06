@@ -47,7 +47,7 @@ const SETTINGS: &str = "Settings";
 const REVIEW: &str = "Review…";
 const WELCOME_TITLE: &str = "Open a Git repository";
 const WELCOME_ABOUT: &str =
-    "FastGit reads history straight from the repository on disk. Each repository opens in its own tab.";
+    "SterneGit reads history straight from the repository on disk. Each repository opens in its own tab.";
 
 struct RepoTab {
     view: Entity<RepoView>,
@@ -73,7 +73,7 @@ impl Tab {
     }
 }
 
-pub(crate) struct FastGit {
+pub(crate) struct SterneGit {
     tabs: Tabs<Tab>,
     menu_bar: Option<Entity<AppMenuBar>>,
     announced: BTreeSet<ConnectorId>,
@@ -82,7 +82,7 @@ pub(crate) struct FastGit {
     _connectors: Subscription,
 }
 
-impl FastGit {
+impl SterneGit {
     pub(crate) fn new(path: Option<PathBuf>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         Theme::change(ThemeMode::Dark, Some(window), cx);
         let menu_bar = draws_its_own_menu_bar(cx).then(|| AppMenuBar::new(cx));
@@ -243,10 +243,10 @@ impl FastGit {
 
     fn update_title(&self, window: &mut Window, cx: &App) {
         let title = match self.tabs.active() {
-            Some(Tab::Repo(tab)) => format!("{} — FastGit", tab.repository.read(cx).name()),
-            Some(Tab::Settings(_)) => format!("{SETTINGS} — FastGit"),
-            Some(Tab::Cloning { view, .. }) => format!("{} — FastGit", view.read(cx).name()),
-            None => "FastGit".to_owned(),
+            Some(Tab::Repo(tab)) => format!("{} — SterneGit", tab.repository.read(cx).name()),
+            Some(Tab::Settings(_)) => format!("{SETTINGS} — SterneGit"),
+            Some(Tab::Cloning { view, .. }) => format!("{} — SterneGit", view.read(cx).name()),
+            None => "SterneGit".to_owned(),
         };
         window.set_window_title(&title);
     }
@@ -349,7 +349,7 @@ impl FastGit {
             self.announced.insert(id.clone());
             let this = cx.entity().downgrade();
             let notification = Notification::info(
-                "It was copied into FastGit's connectors folder. Nothing of it runs until you approve it.",
+                "It was copied into SterneGit's connectors folder. Nothing of it runs until you approve it.",
             )
             .title(format!("{name} {version} is waiting for your approval"))
             .action(move |_, _, cx| {
@@ -390,7 +390,7 @@ impl FastGit {
     fn show_about(window: &mut Window, cx: &mut App) {
         window.open_alert_dialog(cx, |alert, _, _| {
             alert
-                .title(format!("FastGit {}", env!("CARGO_PKG_VERSION")))
+                .title(format!("SterneGit {}", env!("CARGO_PKG_VERSION")))
                 .description(
                     "A lightweight Git client for Linux, macOS and Windows, \
                      built with GPUI and gitoxide.",
@@ -476,7 +476,7 @@ fn home_folder() -> Option<PathBuf> {
         .map(PathBuf::from)
 }
 
-impl Render for FastGit {
+impl Render for SterneGit {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let body = match self.tabs.active() {
             Some(Tab::Repo(tab)) => tab.view.clone().into_any_element(),
@@ -485,7 +485,7 @@ impl Render for FastGit {
             None => self.welcome(cx),
         };
         v_flex()
-            .id("fastgit")
+            .id("sternegit")
             .key_context(WINDOW_CONTEXT)
             .pane()
             .bg(cx.theme().background)

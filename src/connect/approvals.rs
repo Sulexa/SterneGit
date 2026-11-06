@@ -160,7 +160,7 @@ mod tests {
     use crate::{connect::grant::Grant, net::services::ConnectorId};
 
     fn scratch(name: &str) -> PathBuf {
-        let folder = std::env::temp_dir().join(format!("fastgit-approvals-{name}-{}", std::process::id()));
+        let folder = std::env::temp_dir().join(format!("sternegit-approvals-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&folder);
         folder
     }
@@ -189,13 +189,13 @@ mod tests {
     }
 
     #[test]
-    fn recording_again_replaces_and_keeps_what_fastgit_does_not_know() {
+    fn recording_again_replaces_and_keeps_what_sternegit_does_not_know() {
         let folder = scratch("unknown");
         std::fs::create_dir_all(&folder).unwrap();
         let path = folder.join("connectors.json");
         let written = json!({
             "version": 1,
-            "from_a_newer_fastgit": true,
+            "from_a_newer_sternegit": true,
             "connectors": [
                 { "id": "gitea", "version": "1.0.0", "files": {}, "grant": {}, "pinned_by": "me" },
                 { "id": "broken" }
@@ -208,7 +208,7 @@ mod tests {
         approvals.record(newer).unwrap();
         let reread: serde_json::Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
         let _ = std::fs::remove_dir_all(&folder);
-        assert_eq!(reread["from_a_newer_fastgit"], true);
+        assert_eq!(reread["from_a_newer_sternegit"], true);
         assert_eq!(reread["connectors"][0]["version"], "1.1.0");
         assert_eq!(reread["connectors"][0]["pinned_by"], "me");
         assert_eq!(reread["connectors"][1], json!({ "id": "broken" }));

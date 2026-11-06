@@ -3,7 +3,7 @@ use std::{
     time::SystemTime,
 };
 
-use fastgit_protocol::{AccountContext, Cassette, Exchange, Reel};
+use sternegit_protocol::{AccountContext, Cassette, Exchange, Reel};
 use futures::{FutureExt as _, future::BoxFuture};
 use url::Url;
 
@@ -144,7 +144,7 @@ fn view_of(account: &AccountContext) -> Result<AccountView, String> {
 
 #[cfg(test)]
 mod tests {
-    use fastgit_protocol::Cassette;
+    use sternegit_protocol::Cassette;
     use serde_json::json;
 
     use super::ReplayHost;

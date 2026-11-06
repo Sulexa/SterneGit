@@ -41,7 +41,7 @@ impl Reply {
     }
 
     pub(crate) fn unauthorized() -> Self {
-        Self::status(401).header("WWW-Authenticate", "Basic realm=\"fastgit-test\"")
+        Self::status(401).header("WWW-Authenticate", "Basic realm=\"sternegit-test\"")
     }
 
     pub(crate) fn header(mut self, name: &str, value: &str) -> Self {

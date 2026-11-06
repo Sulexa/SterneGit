@@ -1,6 +1,6 @@
 use std::fs;
 
-use fastgit_sdk::{
+use sternegit_sdk::{
     AccountContext, Connector, Failure, Identity, Level, Page, Person, PullState, PullSummary,
     PullsQuery, RepoRef, Request, SDK_VERSION, Tip, check, dispatch, export, log,
     protocol::{
@@ -135,7 +135,7 @@ fn a_request_the_cassette_lacks_fails_loudly() {
 fn an_exchange_the_connector_never_asked_for_fails_the_check() {
     let mut extra = cassette("who_am_i");
     extra.exchanges.push(cassette("pulls_list").exchanges[0].clone());
-    let folder = std::env::temp_dir().join(format!("fastgit-sdk-{}", std::process::id()));
+    let folder = std::env::temp_dir().join(format!("sternegit-sdk-{}", std::process::id()));
     fs::create_dir_all(&folder).unwrap();
     let path = folder.join("extra.json");
     fs::write(&path, serde_json::to_string(&extra).unwrap()).unwrap();
@@ -192,13 +192,13 @@ fn a_call_or_input_of_the_wrong_shape_is_misunderstood() {
         wrong_input["err"]["message"]
             .as_str()
             .unwrap()
-            .starts_with("FastGit's input to pulls.list can't be read")
+            .starts_with("SterneGit's input to pulls.list can't be read")
     );
     let garbage = answered(&Toy, "not json");
     assert!(
         garbage["err"]["message"]
             .as_str()
             .unwrap()
-            .starts_with("FastGit's call can't be read")
+            .starts_with("SterneGit's call can't be read")
     );
 }

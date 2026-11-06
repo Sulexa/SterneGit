@@ -128,8 +128,8 @@ mod tests {
     #[test]
     fn the_same_email_in_another_case_or_with_spaces_gives_the_same_picture() {
         assert_eq!(
-            Identicon::of(" Robin@FastGit.dev "),
-            Identicon::of("robin@fastgit.dev")
+            Identicon::of(" Robin@SterneGit.dev "),
+            Identicon::of("robin@sternegit.dev")
         );
     }
 
@@ -139,9 +139,9 @@ mod tests {
             let identicon = Identicon::of(email);
             (identicon.hue_degrees(), identicon.pattern())
         };
-        assert_eq!(drawn("alex@fastgit.dev"), (305, 0b111110110000100));
-        assert_eq!(drawn("sam@fastgit.dev"), (53, 0b101111000010011));
-        assert_eq!(drawn("robin@fastgit.dev"), (103, 0b110100100100111));
+        assert_eq!(drawn("alex@sternegit.dev"), (231, 0b11111100));
+        assert_eq!(drawn("sam@sternegit.dev"), (164, 0b10110011001001));
+        assert_eq!(drawn("robin@sternegit.dev"), (187, 0b100001011010));
     }
 
     #[test]
@@ -159,8 +159,8 @@ mod tests {
 
     #[test]
     fn a_pattern_bit_lights_a_left_cell_and_its_mirror() {
-        let identicon = Identicon::of("sam@fastgit.dev");
+        let identicon = Identicon::of("sam@sternegit.dev");
         let top_row = identicon.cells().filter(|&(_, row)| row == 0).collect::<Vec<_>>();
-        assert_eq!(top_row, [(0, 0), (1, 0), (3, 0), (4, 0)]);
+        assert_eq!(top_row, [(0, 0), (4, 0)]);
     }
 }

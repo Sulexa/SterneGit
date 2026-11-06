@@ -1,5 +1,5 @@
 [package]
-name = "fastgit-github"
+name = "sternegit-github"
 version = "0.3.0"
 edition = "2024"
 publish = false
@@ -8,11 +8,11 @@ publish = false
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-fastgit-sdk = { path = "../sdk" }
+sternegit-sdk = { path = "../sdk" }
 serde_json = "1.0.154"
 
 [build-dependencies]
-fastgit-sdk = { path = "../sdk" }
+sternegit-sdk = { path = "../sdk" }
 
 [profile.release]
 opt-level = "s"

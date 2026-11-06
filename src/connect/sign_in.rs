@@ -1,6 +1,6 @@
 use std::{collections::BTreeMap, sync::Arc};
 
-use fastgit_protocol::{Failure, Identity};
+use sternegit_protocol::{Failure, Identity};
 use serde_json::Map;
 use url::Url;
 
@@ -123,7 +123,7 @@ pub(crate) async fn identify(
     drop(lent);
     signed_in(draft, &identity?).ok_or_else(|| {
         CallError::Failed(Failure::Protocol {
-            message: "The connector named no user FastGit can keep".to_owned(),
+            message: "The connector named no user SterneGit can keep".to_owned(),
         })
     })
 }
@@ -196,7 +196,7 @@ fn server_of(service: &Service, values: &BTreeMap<String, String>) -> Result<Url
 mod tests {
     use std::collections::BTreeMap;
 
-    use fastgit_protocol::Identity;
+    use sternegit_protocol::Identity;
 
     use super::{draft, signed_in, typed_server};
     use crate::{
@@ -246,7 +246,7 @@ mod tests {
         );
         assert_eq!(
             drafted.url("create_url").unwrap().as_str(),
-            "https://github.com/settings/tokens/new?scopes=repo,read:org,write:public_key,workflow&description=FastGit"
+            "https://github.com/settings/tokens/new?scopes=repo,read:org,write:public_key,workflow&description=SterneGit"
         );
     }
 

@@ -1,4 +1,4 @@
-use fastgit_sdk::{AccountContext, Failure, Request, Response};
+use sternegit_sdk::{AccountContext, Failure, Request, Response};
 use serde_json::{Value, json};
 
 use crate::refusal::{rate_limit_wait, succeeded};
@@ -59,7 +59,7 @@ fn failure(response: &Response, errors: &[Value]) -> Failure {
 
 #[cfg(test)]
 mod tests {
-    use fastgit_sdk::{Failure, Response};
+    use sternegit_sdk::{Failure, Response};
     use serde_json::{Value, json};
 
     use super::failure;

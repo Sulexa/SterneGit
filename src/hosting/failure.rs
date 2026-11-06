@@ -1,6 +1,6 @@
 use std::time::{Duration, SystemTime};
 
-use fastgit_protocol::Failure;
+use sternegit_protocol::Failure;
 use gpui_kit::{
     AnyElement, App, IntoElement, ParentElement as _, SharedString, Styled as _,
     assets::IconName,
@@ -90,14 +90,14 @@ impl Trouble {
             ),
             CallError::Failed(Failure::RateLimited { retry_after_seconds }) => trouble(
                 format!("{service}'s rate limit for {login} is used up"),
-                format!("FastGit asks again {}.", in_minutes(Duration::from_secs(*retry_after_seconds))),
+                format!("SterneGit asks again {}.", in_minutes(Duration::from_secs(*retry_after_seconds))),
                 Fix::Nothing,
                 Tone::Wait,
             ),
             CallError::Net(NetError::RateLimitedUntil(until)) => trouble(
                 format!("{service}'s rate limit for {login} is used up"),
                 format!(
-                    "FastGit asks again {}.",
+                    "SterneGit asks again {}.",
                     in_minutes(until.duration_since(SystemTime::now()).unwrap_or_default())
                 ),
                 Fix::Nothing,
@@ -190,7 +190,7 @@ fn in_minutes(wait: Duration) -> String {
 
 #[cfg(test)]
 mod tests {
-    use fastgit_protocol::Failure;
+    use sternegit_protocol::Failure;
 
     use super::{Fix, Tone, Trouble};
     use crate::{
@@ -221,9 +221,9 @@ mod tests {
     }
 
     #[test]
-    fn a_rate_limit_says_when_fastgit_asks_again() {
+    fn a_rate_limit_says_when_sternegit_asks_again() {
         let trouble = described(CallError::Failed(Failure::RateLimited { retry_after_seconds: 600 }));
-        assert_eq!(trouble.message, "FastGit asks again in 10 minutes.");
+        assert_eq!(trouble.message, "SterneGit asks again in 10 minutes.");
         assert_eq!(trouble.tone, Tone::Wait);
     }
 

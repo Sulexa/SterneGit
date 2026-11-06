@@ -70,7 +70,7 @@ pub(crate) struct ConnectorFolders {
 }
 
 impl ConnectorFolders {
-    pub(crate) fn of_this_fastgit() -> Self {
+    pub(crate) fn of_this_sternegit() -> Self {
         Self {
             bundled: std::env::current_exe()
                 .ok()
@@ -391,7 +391,7 @@ pub(crate) mod tests {
     }
 
     fn scratch(name: &str) -> PathBuf {
-        let folder = std::env::temp_dir().join(format!("fastgit-catalog-{name}-{}", std::process::id()));
+        let folder = std::env::temp_dir().join(format!("sternegit-catalog-{name}-{}", std::process::id()));
         let _ = fs::remove_dir_all(&folder);
         fs::create_dir_all(&folder).unwrap();
         folder

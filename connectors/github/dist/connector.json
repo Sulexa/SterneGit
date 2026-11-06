@@ -23,7 +23,7 @@
         {
           "method": "pasted_token",
           "token": { "kind": "bearer" },
-          "create_url": "{web}settings/tokens/new?scopes=repo,read:org,write:public_key,workflow&description=FastGit"
+          "create_url": "{web}settings/tokens/new?scopes=repo,read:org,write:public_key,workflow&description=SterneGit"
         },
         { "method": "git_credential", "token": { "kind": "bearer" } }
       ]

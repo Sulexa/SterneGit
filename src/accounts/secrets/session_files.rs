@@ -101,7 +101,7 @@ mod tests {
 
     #[test]
     fn a_token_written_to_the_session_folder_reads_back_until_erased() {
-        let folder = std::env::temp_dir().join(format!("fastgit-session-{}", std::process::id()));
+        let folder = std::env::temp_dir().join(format!("sternegit-session-{}", std::process::id()));
         let secrets = SessionFiles::at(folder.clone());
         let account = AccountId::new("github", "github.com:8443", "1").unwrap();
         assert_eq!(secrets.read(&account).unwrap(), None);
@@ -119,7 +119,7 @@ mod tests {
     fn only_the_user_can_read_the_token_files() {
         use std::os::unix::fs::PermissionsExt as _;
 
-        let folder = std::env::temp_dir().join(format!("fastgit-private-{}", std::process::id()));
+        let folder = std::env::temp_dir().join(format!("sternegit-private-{}", std::process::id()));
         let secrets = SessionFiles::at(folder.clone());
         let account = AccountId::new("github", "github.com", "1").unwrap();
         secrets.write(&account, "octo", &Token::new("gho_1").unwrap()).unwrap();

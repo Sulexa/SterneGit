@@ -4,7 +4,7 @@ use std::{
     sync::{Arc, PoisonError, RwLock, RwLockReadGuard},
 };
 
-use fastgit_protocol::RepoRef;
+use sternegit_protocol::RepoRef;
 use gpui_kit::{App, AppContext as _, BorrowAppContext as _, Global};
 
 use crate::{
@@ -239,7 +239,7 @@ pub(crate) fn mark_seen(cx: &mut App, id: &ConnectorId) {
 pub(crate) fn note_failure(cx: &mut App, account: &AccountId, error: &CallError) {
     let signed_out = matches!(
         error,
-        CallError::Failed(fastgit_protocol::Failure::SignedOut) | CallError::Net(NetError::NotSignedIn)
+        CallError::Failed(sternegit_protocol::Failure::SignedOut) | CallError::Net(NetError::NotSignedIn)
     );
     if !signed_out || Connectors::of(cx).is_signed_out(account) {
         return;
@@ -277,7 +277,7 @@ fn run() -> Running {
         Arc::clone(&transport),
     ));
     let host: Arc<dyn HostServices> = gateway.clone();
-    let mut catalog = Catalog::discover(&ConnectorFolders::of_this_fastgit(), Approvals::load());
+    let mut catalog = Catalog::discover(&ConnectorFolders::of_this_sternegit(), Approvals::load());
     catalog.start(&host);
     Running {
         catalog,
@@ -290,5 +290,5 @@ fn run() -> Running {
 }
 
 fn not_ready() -> io::Error {
-    io::Error::other("FastGit is still starting its connectors")
+    io::Error::other("SterneGit is still starting its connectors")
 }

@@ -102,16 +102,16 @@ mod tests {
     #[test]
     fn without_scopes_git_gets_no_extra_settings() {
         let access = Access {
-            helper: Some(PathBuf::from("fastgit")),
+            helper: Some(PathBuf::from("sternegit")),
             ..Access::default()
         };
         assert!(access.config_args().is_empty());
     }
 
     #[test]
-    fn each_scope_clears_the_users_helpers_there_and_names_fastgit_instead() {
+    fn each_scope_clears_the_users_helpers_there_and_names_sternegit_instead() {
         let access = Access {
-            helper: Some(PathBuf::from(r"C:\Program Files\Fast'Git\fastgit.exe")),
+            helper: Some(PathBuf::from(r"C:\Program Files\Sterne'Git\sternegit.exe")),
             scopes: vec![scoped("https://github.com/work-org", "github:github.com:2")],
             attendance: Attendance::Attended,
         };
@@ -121,7 +121,7 @@ mod tests {
                 "-c",
                 "credential.https://github.com/work-org.helper=",
                 "-c",
-                r"credential.https://github.com/work-org.helper=!'C:/Program Files/Fast'\''Git/fastgit.exe' --git-credential 'github:github.com:2'",
+                r"credential.https://github.com/work-org.helper=!'C:/Program Files/Sterne'\''Git/sternegit.exe' --git-credential 'github:github.com:2'",
             ]
         );
     }
@@ -136,7 +136,7 @@ mod tests {
     }
 
     fn scratch(name: &str) -> PathBuf {
-        let folder = std::env::temp_dir().join(format!("fastgit access {name} {}", std::process::id()));
+        let folder = std::env::temp_dir().join(format!("sternegit access {name} {}", std::process::id()));
         let _ = std::fs::remove_dir_all(&folder);
         std::fs::create_dir_all(&folder).unwrap();
         folder
@@ -162,16 +162,16 @@ mod tests {
     }
 
     #[test]
-    fn git_asks_fastgit_inside_its_scope_and_the_users_own_helper_outside_it() {
+    fn git_asks_sternegit_inside_its_scope_and_the_users_own_helper_outside_it() {
         let server = TestServer::start(|seen| match seen.header("authorization") {
             None => Reply::unauthorized(),
             Some(_) => Reply::status(404),
         });
         let folder = scratch("helper");
-        let helper = folder.join("fake fastgit.sh");
+        let helper = folder.join("fake sternegit.sh");
         std::fs::write(
             &helper,
-            "#!/bin/sh\necho username=fastgit-user\necho password=fastgit-token\n",
+            "#!/bin/sh\necho username=sternegit-user\necho password=sternegit-token\n",
         )
         .unwrap();
         std::fs::write(
@@ -194,7 +194,7 @@ mod tests {
                 .filter(|seen| seen.target.starts_with(path))
                 .find_map(|seen| seen.header("authorization").map(str::to_owned))
         };
-        assert_eq!(sent_to("/work-org/"), Some(basic("fastgit-user", "fastgit-token")));
+        assert_eq!(sent_to("/work-org/"), Some(basic("sternegit-user", "sternegit-token")));
         assert_eq!(sent_to("/someone/"), Some(basic("decoy", "decoy-token")));
     }
 }

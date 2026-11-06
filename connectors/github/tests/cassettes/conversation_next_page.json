@@ -10,8 +10,8 @@
     }
   },
   "repo": {
-    "owner": "fastgit-org",
-    "name": "fastgit"
+    "owner": "sternegit-org",
+    "name": "sternegit"
   },
   "input": {
     "number": 142,
@@ -40,8 +40,8 @@
         {
           "id": 2463120577,
           "node_id": "IC_kwDOM1a2b86SvX0577",
-          "html_url": "https://github.com/fastgit-org/fastgit/pull/142#issuecomment-2463120577",
-          "issue_url": "https://api.github.com/repos/fastgit-org/fastgit/issues/142",
+          "html_url": "https://github.com/sternegit-org/sternegit/pull/142#issuecomment-2463120577",
+          "issue_url": "https://api.github.com/repos/sternegit-org/sternegit/issues/142",
           "user": null,
           "created_at": "2026-11-03T19:02:11Z",
           "updated_at": "2026-11-03T19:02:11Z",
@@ -51,8 +51,8 @@
         {
           "id": 2463198834,
           "node_id": "IC_kwDOM1a2b86SvX8834",
-          "html_url": "https://github.com/fastgit-org/fastgit/pull/142#issuecomment-2463198834",
-          "issue_url": "https://api.github.com/repos/fastgit-org/fastgit/issues/142",
+          "html_url": "https://github.com/sternegit-org/sternegit/pull/142#issuecomment-2463198834",
+          "issue_url": "https://api.github.com/repos/sternegit-org/sternegit/issues/142",
           "user": {
             "login": "robin-chen",
             "id": 6031927,
@@ -83,7 +83,7 @@
           "body": "Does this also show pull requests from forks?",
           "created_at": "2026-11-03T19:02:11Z",
           "reply_to": null,
-          "web_url": "https://github.com/fastgit-org/fastgit/pull/142#issuecomment-2463120577"
+          "web_url": "https://github.com/sternegit-org/sternegit/pull/142#issuecomment-2463120577"
         },
         {
           "id": "2463198834",
@@ -95,7 +95,7 @@
           "body": "It does: the head names the fork.",
           "created_at": "2026-11-03T19:20:47Z",
           "reply_to": null,
-          "web_url": "https://github.com/fastgit-org/fastgit/pull/142#issuecomment-2463198834"
+          "web_url": "https://github.com/sternegit-org/sternegit/pull/142#issuecomment-2463198834"
         }
       ],
       "next": null

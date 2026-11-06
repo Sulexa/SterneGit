@@ -38,7 +38,7 @@ impl fmt::Display for Refusal {
             Refusal::NoRemote => write!(f, "This repository has no remote yet."),
             Refusal::NoRemoteToPushTo { branch } => write!(
                 f,
-                "{branch} has no upstream branch, and with no origin among the remotes FastGit can't tell where to push it."
+                "{branch} has no upstream branch, and with no origin among the remotes SterneGit can't tell where to push it."
             ),
             Refusal::Diverged(Tracking { branch, upstream }) => write!(
                 f,
@@ -54,7 +54,7 @@ impl fmt::Display for Refusal {
             ),
             Refusal::UpstreamMoved(Tracking { upstream, .. }) => write!(
                 f,
-                "{upstream} moved again since FastGit fetched it, so nothing was overwritten. Push again to see what it has now."
+                "{upstream} moved again since SterneGit fetched it, so nothing was overwritten. Push again to see what it has now."
             ),
             Refusal::ChangesInTheWay => write!(
                 f,
@@ -70,7 +70,7 @@ impl fmt::Display for Refusal {
             ),
             Refusal::StashGone => write!(
                 f,
-                "That stash isn't there anymore: it was popped or deleted outside FastGit."
+                "That stash isn't there anymore: it was popped or deleted outside SterneGit."
             ),
         }
     }

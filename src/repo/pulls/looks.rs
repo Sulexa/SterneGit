@@ -1,4 +1,4 @@
-use fastgit_protocol::{
+use sternegit_protocol::{
     Check, CheckState, MergeMethod, Mergeability, PullDetails, PullState, PullSummary,
     ReviewStanding,
 };
@@ -201,7 +201,7 @@ pub(crate) fn merge_words(details: &PullDetails) -> MergeWords {
                 ..mark(IconName::Loader, Tint::Muted, "Checking")
             },
             "Checking whether it can merge…".to_owned(),
-            "The server is still working it out. FastGit asks again after the next fetch."
+            "The server is still working it out. SterneGit asks again after the next fetch."
                 .to_owned(),
             false,
         ),
@@ -231,27 +231,27 @@ pub(crate) fn merge_words(details: &PullDetails) -> MergeWords {
         ),
         (_, Mergeability::Unknown) => words(
             mark(IconName::CircleMinus, Tint::Muted, "Unknown"),
-            "FastGit can't tell whether it can merge".to_owned(),
+            "SterneGit can't tell whether it can merge".to_owned(),
             "The server didn't say. Try merging on the server.".to_owned(),
             false,
         ),
     }
 }
 
-pub(crate) fn readable_head(summary: &PullSummary, base: &fastgit_protocol::RepoRef) -> String {
+pub(crate) fn readable_head(summary: &PullSummary, base: &sternegit_protocol::RepoRef) -> String {
     match &summary.head.repo {
         Some(repo) if !same_repository(repo, base) => format!("{}:{}", repo.owner, summary.head.branch),
         _ => summary.head.branch.clone(),
     }
 }
 
-pub(crate) fn same_repository(one: &fastgit_protocol::RepoRef, other: &fastgit_protocol::RepoRef) -> bool {
+pub(crate) fn same_repository(one: &sternegit_protocol::RepoRef, other: &sternegit_protocol::RepoRef) -> bool {
     one.owner.eq_ignore_ascii_case(&other.owner) && one.name.eq_ignore_ascii_case(&other.name)
 }
 
 #[cfg(test)]
 mod tests {
-    use fastgit_protocol::{
+    use sternegit_protocol::{
         Check, CheckState, FetchSpec, MergeMethod, Mergeability, Person, PullDetails, PullState,
         PullSummary, RepoRef, Tip, Verdict,
     };
@@ -273,7 +273,7 @@ mod tests {
             sha: "8ff3473".into(),
             repo: Some(RepoRef {
                 owner: owner.into(),
-                name: "fastgit".into(),
+                name: "sternegit".into(),
             }),
         };
         PullSummary {
@@ -286,13 +286,13 @@ mod tests {
                 name: None,
                 avatar_url: None,
             },
-            base: tip("main", "fastgit-org"),
-            head: tip("feature/diff-view", "fastgit-org"),
+            base: tip("main", "sternegit-org"),
+            head: tip("feature/diff-view", "sternegit-org"),
             review: None,
             checks: None,
             created_at: "2026-11-03T18:50:00Z".into(),
             updated_at: "2026-11-04T08:15:00Z".into(),
-            web_url: "https://github.com/fastgit-org/fastgit/pull/12".into(),
+            web_url: "https://github.com/sternegit-org/sternegit/pull/12".into(),
         }
     }
 
@@ -348,14 +348,14 @@ mod tests {
     #[test]
     fn a_head_from_a_fork_is_named_with_its_owner() {
         let base = RepoRef {
-            owner: "fastgit-org".into(),
-            name: "fastgit".into(),
+            owner: "sternegit-org".into(),
+            name: "sternegit".into(),
         };
         let mut pull = summary(PullState::Open, false);
         assert_eq!(readable_head(&pull, &base), "feature/diff-view");
         pull.head.repo = Some(RepoRef {
             owner: "robin-chen".into(),
-            name: "fastgit".into(),
+            name: "sternegit".into(),
         });
         assert_eq!(readable_head(&pull, &base), "robin-chen:feature/diff-view");
     }

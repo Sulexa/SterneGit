@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use fastgit_protocol::{PullState, PullSummary, RepoRef};
+use sternegit_protocol::{PullState, PullSummary, RepoRef};
 
 use super::looks::same_repository;
 use crate::{
@@ -54,7 +54,7 @@ fn heads_of<'a>(pull: &PullSummary, refs: &'a [RefLabel], remote: &str, repo: &R
 
 #[cfg(test)]
 mod tests {
-    use fastgit_protocol::{PullState, PullSummary};
+    use sternegit_protocol::{PullState, PullSummary};
     use gix::ObjectId;
 
     use super::marks_for;
@@ -85,7 +85,7 @@ mod tests {
             label("diff-view", RefKind::LocalBranch, Some("origin/feature/diff-view")),
             label("origin/feature/diff-view", RefKind::RemoteBranch, None),
         ];
-        let marks = marks_for(&[pull(12, "feature/diff-view", "fastgit-org")], &refs, "origin", &repo("fastgit-org"));
+        let marks = marks_for(&[pull(12, "feature/diff-view", "sternegit-org")], &refs, "origin", &repo("sternegit-org"));
         assert_eq!(marks.get("refs/heads/diff-view"), Some(&PullMark { number: 12, draft: false }));
         assert_eq!(marks.len(), 1);
     }
@@ -93,17 +93,17 @@ mod tests {
     #[test]
     fn without_a_local_branch_the_remote_branch_carries_it() {
         let refs = [label("origin/feature/blame", RefKind::RemoteBranch, None)];
-        let marks = marks_for(&[draft(pull(11, "feature/blame", "fastgit-org"))], &refs, "origin", &repo("fastgit-org"));
+        let marks = marks_for(&[draft(pull(11, "feature/blame", "sternegit-org"))], &refs, "origin", &repo("sternegit-org"));
         assert_eq!(marks.get("refs/remotes/origin/feature/blame"), Some(&PullMark { number: 11, draft: true }));
     }
 
     #[test]
-    fn a_fork_pull_request_marks_only_the_branch_fastgit_made_for_it() {
+    fn a_fork_pull_request_marks_only_the_branch_sternegit_made_for_it() {
         let refs = [
             label("patch-1", RefKind::LocalBranch, None),
             label("pr/9-patch-1", RefKind::LocalBranch, None),
         ];
-        let marks = marks_for(&[pull(9, "patch-1", "robin-chen")], &refs, "origin", &repo("fastgit-org"));
+        let marks = marks_for(&[pull(9, "patch-1", "robin-chen")], &refs, "origin", &repo("sternegit-org"));
         assert_eq!(marks.keys().collect::<Vec<_>>(), ["refs/heads/pr/9-patch-1"]);
     }
 
@@ -112,8 +112,8 @@ mod tests {
         let refs = [label("topic/tabs", RefKind::LocalBranch, None)];
         let merged = PullSummary {
             state: PullState::Merged,
-            ..pull(13, "topic/tabs", "fastgit-org")
+            ..pull(13, "topic/tabs", "sternegit-org")
         };
-        assert!(marks_for(&[merged], &refs, "origin", &repo("fastgit-org")).is_empty());
+        assert!(marks_for(&[merged], &refs, "origin", &repo("sternegit-org")).is_empty());
     }
 }

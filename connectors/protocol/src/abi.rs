@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-pub const ABI: &str = "fastgit:1";
+pub const ABI: &str = "sternegit:1";
 
 const HEAD_LENGTH_BYTES: usize = 4;
 const ABSOLUTE_SCHEMES: [&str; 2] = ["https://", "http://"];

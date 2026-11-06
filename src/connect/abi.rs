@@ -1,6 +1,6 @@
 use std::{fmt, ops::Range};
 
-use fastgit_protocol::ABI;
+use sternegit_protocol::ABI;
 use wasmi::{Caller, Linker, Memory, errors::HostError};
 
 use super::{call::Call, sandbox::MEMORY_EXPORT};

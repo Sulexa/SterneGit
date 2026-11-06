@@ -8,7 +8,7 @@ mod guest {
     use crate::Level;
 
     mod imports {
-        #[link(wasm_import_module = "fastgit:1")]
+        #[link(wasm_import_module = "sternegit:1")]
         unsafe extern "C" {
             pub(super) fn take(into: *mut u8);
             pub(super) fn send(head: *const u8, head_len: usize, body: *const u8, body_len: usize) -> i32;
@@ -54,7 +54,7 @@ mod tape {
         time::{SystemTime, UNIX_EPOCH},
     };
 
-    use fastgit_protocol::{Reel, RequestHead, resolve};
+    use sternegit_protocol::{Reel, RequestHead, resolve};
 
     use crate::Level;
 
@@ -94,7 +94,7 @@ mod tape {
             let mut playing = playing.borrow_mut();
             let tape = playing
                 .as_mut()
-                .expect("requests reach a server only inside fastgit_sdk::replay or check");
+                .expect("requests reach a server only inside sternegit_sdk::replay or check");
             work(tape)
         })
     }
@@ -102,7 +102,7 @@ mod tape {
     pub(crate) fn send(head: &[u8], _body: &[u8]) -> i32 {
         with_tape(|tape| {
             let head: RequestHead =
-                serde_json::from_slice(head).expect("the SDK writes heads FastGit can read");
+                serde_json::from_slice(head).expect("the SDK writes heads SterneGit can read");
             let url = resolve(&tape.api, &head.url);
             let exchange = tape.reel.play(&head.method, &url).unwrap_or_else(|| {
                 panic!("The cassette holds no answer to {} {url}", head.method)

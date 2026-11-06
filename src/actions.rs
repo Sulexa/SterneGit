@@ -1,5 +1,5 @@
 gpui_kit::actions!(
-    fastgit,
+    sternegit,
     [
         OlderCommit,
         NewerCommit,
@@ -27,6 +27,6 @@ gpui_kit::actions!(
     ]
 );
 
-pub(crate) const WINDOW_CONTEXT: &str = "FastGit";
+pub(crate) const WINDOW_CONTEXT: &str = "SterneGit";
 pub(crate) const HISTORY_CONTEXT: &str = "History";
 pub(crate) const MEDIA_CONTEXT: &str = "Media";

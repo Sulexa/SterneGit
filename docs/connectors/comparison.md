@@ -20,10 +20,10 @@ Written 2026-11-05, after the grilling that settled the requirements. Four agent
 
 **Build connectors on wasmi, with the host services as proposed.**
 - **Size:** about 1.4 MB in all (3.7% of today's exe). That is the smallest of the options that let connector authors pick their language.
-- **Build:** pure Rust, so nothing new to install for anyone building FastGit.
+- **Build:** pure Rust, so nothing new to install for anyone building SterneGit.
 - **Isolation:** every call gets a fresh instance, so nothing a connector learns while working for one account survives into a call for another.
 - **Speed:** wasmi interprets connector code 15–20× slower than native, but that never shows. Reading 100 repositories costs about 15 ms of connector work, next to about 110 ms for each web request.
-- **Way out:** if speed or security ever demands a heavier engine, the same connector files run on Wasmtime, and only FastGit's side changes.
+- **Way out:** if speed or security ever demands a heavier engine, the same connector files run on Wasmtime, and only SterneGit's side changes.
 
 Two runners-up:
 - **Lua 5.4** is just as small and uses a seventh of wasmi's memory per connector, but its sandbox is weaker.
@@ -47,7 +47,7 @@ These parts of the design no longer depend on the engine:
   - It happens on a background task after the first frame, at 1–12 ms per connector.
   - A connector with no work to do runs no code, starts no thread and uses no CPU.
 - **Tokens never enter the sandbox.**
-  - FastGit attaches the token from a closed list of schemes:
+  - SterneGit attaches the token from a closed list of schemes:
     - `Authorization: Bearer`;
     - a named header, such as GitLab's `PRIVATE-TOKEN`;
     - Basic with an empty user, for Azure DevOps personal tokens.
@@ -62,12 +62,12 @@ These parts of the design no longer depend on the engine:
 - **Testing.**
   - A new `src/cli.rs` mode runs a connector against recorded responses without the window.
   - `cargo test` needs no network.
-  - Built connector files are committed, so FastGit's own `cargo build` needs no extra toolchain, and a test catches stale builds.
+  - Built connector files are committed, so SterneGit's own `cargo build` needs no extra toolchain, and a test catches stale builds.
 - **`ui/load.rs`** needs an async twin of `run_in_background`.
 
 ## 2. Measured numbers side by side
 
-All four agents measured probe programs, built outside FastGit with its release settings on this Windows machine.
+All four agents measured probe programs, built outside SterneGit with its release settings on this Windows machine.
 
 | | wasmi 2.0 | Wasmtime 50 | Luau | Lua 5.4 |
 | --- | --- | --- | --- | --- |
@@ -80,7 +80,7 @@ All four agents measured probe programs, built outside FastGit with its release 
 | Memory hog stopped at 64 MB after | 114 ms | about 6 ms | 112 ms | 478 ms |
 | Idle CPU / threads added | 0 / 0 | 0 / 0 | 0 / 1 | 0 / 1 |
 | GitHub connector file | 0.27 MB for 6 operations; 0.45–0.6 MB in full (estimate) | 0.35 MB in full (1,170 lines) | a 985-line script | the same script |
-| New native code in FastGit's cold build | Rust only | Rust only, but large | 75 s of C++ | 7 s of C |
+| New native code in SterneGit's cold build | Rust only | Rust only, but large | 75 s of C++ | 7 s of C |
 
 The host services cost the same whichever engine is chosen:
 
@@ -101,22 +101,22 @@ The serde code for the shared protocol types adds an estimated 0.1–0.2 MB for 
 | Wasmtime with its compiler | about 11.7 MB (31.5%) |
 
 How far to trust these numbers:
-- **Each agent used its own baseline**, from 273 KB to 936 KB, though every baseline links serde_json and anyhow like FastGit.
-- **The deltas are upper bounds,** since FastGit already links some of the same crates.
+- **Each agent used its own baseline**, from 273 KB to 936 KB, though every baseline links serde_json and anyhow like SterneGit.
+- **The deltas are upper bounds,** since SterneGit already links some of the same crates.
 - **Timings were taken on a busy machine.** Other builds kept it loaded.
 - **Only Windows was measured.**
 - **The new screens aren't counted.** Accounts, sign-in, clone, publish, SSH keys, approval, and pull requests with reviews in the diff come on top for every engine.
 
-Measure FastGit's real delta at the first milestone.
+Measure SterneGit's real delta at the first milestone.
 
 The host services' HTTPS choice:
 
-| Option | Exe | FastGit's memory | Warm request |
+| Option | Exe | SterneGit's memory | Warm request |
 | --- | --- | --- | --- |
 | System curl, request and token on stdin (recommended) | +34 KB | +0 MB | about 110 ms (first request 495 ms) |
 | Git's own libcurl, loaded at run time | +20 KB | +7.2 MB | 23 ms |
 | ureq with rustls | +2.1 MB | +4 to +7 MB | 22–27 ms |
-| ureq with native TLS | +0.68 MB | +5.3 MB | rejected: on Linux FastGit wouldn't start without libssl |
+| ureq with native TLS | +0.68 MB | +5.3 MB | rejected: on Linux SterneGit wouldn't start without libssl |
 
 ## 3. How they compare
 
@@ -150,11 +150,11 @@ Speed doesn't separate them in practice. A curl request takes about 110 ms; conn
   - A new major version ships every month.
 - **Luau:**
   - Roblox built it for hostile scripts and runs it at scale, but its VM is C++.
-  - mlua quietly gives every script a `require` that reads files, so FastGit must remove it.
+  - mlua quietly gives every script a `require` that reads files, so SterneGit must remove it.
   - Long built-in calls such as `string.rep` can't be interrupted, only stopped by the memory limit.
 - **Lua 5.4:** sandboxing is left to the program embedding it, and it has had memory-safety bugs reachable from scripts.
 
-**All four run inside FastGit's process,** which can read the credential store. Escaping the engine means escaping completely. None offers process isolation.
+**All four run inside SterneGit's process,** which can read the credential store. Escaping the engine means escaping completely. None offers process isolation.
 
 ### Who can write a connector
 
@@ -165,7 +165,7 @@ Speed doesn't separate them in practice. A curl request takes about 110 ms; conn
 - **Wasmtime:**
   - Rust works through wit-bindgen and the `wasm32-wasip2` target, with types on both sides.
   - Other languages make huge components: about 8 MB for JavaScript, tens of MB for Python.
-  - Every author must also avoid WASI, the WebAssembly system interface. FastGit's sandbox leaves it out, so a connector that touches it stops with an error.
+  - Every author must also avoid WASI, the WebAssembly system interface. SterneGit's sandbox leaves it out, so a connector that touches it stops with an error.
 - **Luau:**
   - One script file and no build step.
   - The editor checks types through luau-lsp, and errors carry line numbers.
@@ -177,7 +177,7 @@ Speed doesn't separate them in practice. A curl request takes about 110 ms; conn
 - **wasmi's JSON absorbs additions.** Unknown fields are ignored, and unknown enum values fall back to a catch-all. It's versioned by the name of the import module plus a protocol major.minor. Rust authors get types from the shared protocol crate; others work from documentation.
 - **Luau checks what comes back.** A bad value is reported with its path, such as `items[0].clone: missing field https`, the clearest error any design gives an author.
 
-### Effect on FastGit's build
+### Effect on SterneGit's build
 
 wasmi and Wasmtime are pure Rust, though Wasmtime takes long to compile. Luau adds 75 s of C++ to every cold build and needs a C++ compiler on Linux. Lua 5.4 adds 7 s of C.
 
@@ -194,7 +194,7 @@ wasmi and Wasmtime are pure Rust, though Wasmtime takes long to compile. Luau ad
 ## 4. Review findings to fix, whichever engine wins
 
 1. **One state shared across accounts in the Lua design** (section 3).
-2. **Line anchors.** wasmi's `Anchor { side, line }` holds one line number, but GitLab needs both the old and new numbers for comments on unchanged lines. Use the `{ old, new }` pair from the Lua and Wasmtime designs; FastGit knows both from its own diff.
+2. **Line anchors.** wasmi's `Anchor { side, line }` holds one line number, but GitLab needs both the old and new numbers for comments on unchanged lines. Use the `{ old, new }` pair from the Lua and Wasmtime designs; SterneGit knows both from its own diff.
 3. **One host API.** Each engine proposal invented its own call into the host. Adopt host-services.md's `HostServices::request(account, ApiRequest, Cancel)` and its `NetError`. wasmi's `send` and `wait` map onto it directly.
 4. **One domain model, taking the best of each:**
    - **From Lua:**
@@ -209,23 +209,23 @@ wasmi and Wasmtime are pure Rust, though Wasmtime takes long to compile. Luau ad
    - **From wasmi:** the fullest failure list (`Conflict`, `Unsupported`, `Protocol`, `Refused { status }`).
 5. **Sign-in details.**
    - **One scope list:** `repo read:org write:public_key workflow`. The Lua draft asked for the broader `admin:public_key`. The wasmi draft left out `workflow`, which HTTPS pushes that touch `.github/workflows` need.
-   - **The reused Credential Manager token** is copied into FastGit's own store and sent as Bearer, as host-services.md says. wasmi's draft sent Credential Manager's user and password pair instead.
+   - **The reused Credential Manager token** is copied into SterneGit's own store and sent as Bearer, as host-services.md says. wasmi's draft sent Credential Manager's user and password pair instead.
 6. **Silent updates.** An update that stays within its grant starts without asking, so the connector list should mark it "updated".
-7. **Cleaning up accounts.** A removed account leaves its per-repository SSH setting behind, so FastGit should list the repositories it changed and offer to undo them.
+7. **Cleaning up accounts.** A removed account leaves its per-repository SSH setting behind, so SterneGit should list the repositories it changed and offer to undo them.
 
 ## 5. Recommendation
 
 **wasmi, with the host services as proposed:**
 
 1. **Size.** The smallest exe of the options that let authors pick their language: about 1.4 MB in all.
-2. **Build.** Pure Rust: no C++ and nothing new to install for anyone building FastGit.
+2. **Build.** Pure Rust: no C++ and nothing new to install for anyone building SterneGit.
 3. **Isolation.** A fresh instance per call means:
    - nothing carries from one account to another;
    - nothing stays alive while idle;
    - calls can run in parallel without limit;
    - dropping a `Job` cancels its call.
 4. **Distribution.** One portable `.wasm` file per connector, a typed Rust SDK with native tests, and room for other languages.
-5. **A way out.** The same `.wasm` files and their six imports would run unchanged on Wasmtime; only FastGit's side would change.
+5. **A way out.** The same `.wasm` files and their six imports would run unchanged on Wasmtime; only SterneGit's side would change.
 6. **No visible slowness.** About 15 ms of connector work per 100 repositories, next to about 110 ms per request.
 
 To keep its risks small:
@@ -249,10 +249,10 @@ To keep its risks small:
 
 1. **Engine:** wasmi (recommended), Luau, Lua 5.4 or Wasmtime.
 2. **Bundled connectors:**
-   - **Embedded in the exe** with `include_bytes!` and run through the same sandbox. FastGit stays one file, with nothing beside it to tamper with.
-   - **Or a `connectors/` folder beside the exe,** checked against hashes the exe carries. This is what you chose earlier, and it makes FastGit a folder rather than one file.
+   - **Embedded in the exe** with `include_bytes!` and run through the same sandbox. SterneGit stays one file, with nothing beside it to tamper with.
+   - **Or a `connectors/` folder beside the exe,** checked against hashes the exe carries. This is what you chose earlier, and it makes SterneGit a folder rather than one file.
 3. **SDK documentation:** allow `///` comments in `connectors/sdk/` only, or keep the SDK comment-free and document it in `docs/connectors/authoring.md`. Either way, `tests/no_comments.rs` should cover `connectors/` too.
-4. **Your step, needed by milestone 4:** register a FastGit OAuth App on GitHub with "Enable Device Flow" ticked. Its public client ID goes in the GitHub connector's manifest.
+4. **Your step, needed by milestone 4:** register a SterneGit OAuth App on GitHub with "Enable Device Flow" ticked. Its public client ID goes in the GitHub connector's manifest.
 
 ## 7. Build plan
 
@@ -263,7 +263,7 @@ To keep its risks small:
    - the curl transport, with the allow-list and token schemes.
 
    Tested against local servers.
-2. **Engine:** the wasmi host, the six imports, the protocol crate, the SDK, misbehaving test connectors and `--connector-test`. Then measure FastGit's real exe delta.
+2. **Engine:** the wasmi host, the six imports, the protocol crate, the SDK, misbehaving test connectors and `--connector-test`. Then measure SterneGit's real exe delta.
 3. **Discovery and approval:** manifests, grants, hash pinning or embedding, starting at launch, and the build script.
 4. **Accounts and repositories,** mockup first:
    - accounts and device-flow sign-in;
@@ -277,8 +277,8 @@ To keep its risks small:
 6. **Reviews,** mockup first:
    - threads in the comparison view, which means changing the vendored diff component;
    - drafts, submit, reply, resolve.
-7. **Author kit and a second platform:** a template and an authoring guide, then a Gitea or GitLab connector that must not need any change to FastGit.
+7. **Author kit and a second platform:** a template and an authoring guide, then a Gitea or GitLab connector that must not need any change to SterneGit.
 
 ## Found along the way
 
-The host-services study noticed that FastGit's 5-minute background fetch doesn't set `GCM_INTERACTIVE=never`. Git Credential Manager may therefore open a sign-in window in the middle of an unattended fetch. This wasn't tested, because testing it would have touched Credential Manager. The fix belongs to today's fetch code, not to connectors.
+The host-services study noticed that SterneGit's 5-minute background fetch doesn't set `GCM_INTERACTIVE=never`. Git Credential Manager may therefore open a sign-in window in the middle of an unattended fetch. This wasn't tested, because testing it would have touched Credential Manager. The fix belongs to today's fetch code, not to connectors.

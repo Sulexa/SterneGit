@@ -1,4 +1,4 @@
-use fastgit_protocol::{
+use sternegit_protocol::{
     Answer, CheckState, Done, Failure, FieldError, Identity, Mergeability, ResponseHead,
     Visibility, major, ops, resolve, speaks_same_major,
 };

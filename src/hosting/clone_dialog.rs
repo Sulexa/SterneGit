@@ -4,7 +4,7 @@ use std::{
     time::Duration,
 };
 
-use fastgit_protocol::{Cursor, Owner, Repository, RepositoryQuery, Visibility};
+use sternegit_protocol::{Cursor, Owner, Repository, RepositoryQuery, Visibility};
 use gpui_kit::{
     AnyElement, App, AppContext as _, ClickEvent, Context, Entity, InteractiveElement as _,
     IntoElement, ParentElement as _, PathPromptOptions, Render, SharedString,
@@ -50,7 +50,7 @@ const ACCOUNTS: &str = "Accounts";
 const ADD_ACCOUNT: &str = "Add account…";
 const REPOSITORY_URL: &str = "Repository URL";
 const URL_HINT: &str = "Anything git clone accepts: https://, ssh:// or user@host:path. \
-     When an account fits the URL, FastGit lends Git its token.";
+     When an account fits the URL, SterneGit lends Git its token.";
 const CLONE_INTO: &str = "Clone into";
 const BROWSE: &str = "Browse…";
 const PROTOCOL: &str = "Protocol";
@@ -817,8 +817,8 @@ mod tests {
 
     #[test]
     fn the_folder_is_named_after_the_last_part_of_the_url() {
-        assert_eq!(name_in_url("https://github.com/fastgit-org/connectors.git"), "connectors");
-        assert_eq!(name_in_url("git@github.com:fastgit-org/fastgit.git"), "fastgit");
+        assert_eq!(name_in_url("https://github.com/sternegit-org/connectors.git"), "connectors");
+        assert_eq!(name_in_url("git@github.com:sternegit-org/sternegit.git"), "sternegit");
         assert_eq!(name_in_url("ssh://git@host:2222/team/app/"), "app");
         assert_eq!(name_in_url("git@host:app"), "app");
         assert_eq!(name_in_url(""), "");

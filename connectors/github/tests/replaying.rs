@@ -1,7 +1,7 @@
 use std::fs;
 
-use fastgit_github::GitHub;
-use fastgit_sdk::check;
+use sternegit_github::GitHub;
+use sternegit_sdk::check;
 use serde_json::{Value, json};
 
 const CASSETTES: &str = "tests/cassettes";
@@ -41,7 +41,7 @@ fn each_pull_request_carries_the_rollup_of_its_head_commits_checks() {
 
 #[test]
 fn a_pull_request_from_a_fork_names_the_fork_as_its_head_and_a_deleted_fork_as_none() {
-    let fork = json!({ "owner": "sam-lee", "name": "fastgit" });
+    let fork = json!({ "owner": "sam-lee", "name": "sternegit" });
     assert_eq!(answer("pulls_open")["ok"]["items"][1]["head"]["repo"], fork);
     assert_eq!(answer("pull_checking")["ok"]["summary"]["head"]["repo"], fork);
     assert_eq!(answer("create_pull_from_a_fork")["ok"]["head"]["repo"], fork);
@@ -98,7 +98,7 @@ fn a_check_run_without_a_title_says_how_long_it_ran() {
 fn github_refusals_keep_githubs_own_words() {
     assert_eq!(
         answer("create_pull_already_open")["err"]["message"],
-        "A pull request already exists for fastgit-org:topic/tabs."
+        "A pull request already exists for sternegit-org:topic/tabs."
     );
     assert_eq!(
         answer("merge_after_the_head_moved")["err"],

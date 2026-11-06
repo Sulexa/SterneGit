@@ -10,8 +10,8 @@
     }
   },
   "repo": {
-    "owner": "fastgit-org",
-    "name": "fastgit"
+    "owner": "sternegit-org",
+    "name": "sternegit"
   },
   "input": {
     "base": "main",
@@ -24,7 +24,7 @@
   "exchanges": [
     {
       "method": "POST",
-      "url": "https://api.github.com/repos/fastgit-org/fastgit/pulls",
+      "url": "https://api.github.com/repos/sternegit-org/sternegit/pulls",
       "status": 422,
       "headers": [
         [
@@ -38,7 +38,7 @@
           {
             "resource": "PullRequest",
             "code": "custom",
-            "message": "A pull request already exists for fastgit-org:topic/tabs."
+            "message": "A pull request already exists for sternegit-org:topic/tabs."
           }
         ],
         "documentation_url": "https://docs.github.com/rest/pulls/pulls#create-a-pull-request",
@@ -50,7 +50,7 @@
     "err": {
       "kind": "invalid",
       "fields": [],
-      "message": "A pull request already exists for fastgit-org:topic/tabs."
+      "message": "A pull request already exists for sternegit-org:topic/tabs."
     }
   }
 }

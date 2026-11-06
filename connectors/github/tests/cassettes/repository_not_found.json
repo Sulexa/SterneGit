@@ -10,13 +10,13 @@
     }
   },
   "repo": {
-    "owner": "fastgit-org",
+    "owner": "sternegit-org",
     "name": "gone"
   },
   "exchanges": [
     {
       "method": "GET",
-      "url": "https://api.github.com/repos/fastgit-org/gone",
+      "url": "https://api.github.com/repos/sternegit-org/gone",
       "status": 404,
       "headers": [
         [

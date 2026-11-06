@@ -3,31 +3,6 @@
 version = 4
 
 [[package]]
-name = "fastgit-github"
-version = "0.3.0"
-dependencies = [
- "fastgit-sdk",
- "serde_json",
-]
-
-[[package]]
-name = "fastgit-protocol"
-version = "1.0.0"
-dependencies = [
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "fastgit-sdk"
-version = "0.1.0"
-dependencies = [
- "fastgit-protocol",
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "itoa"
 version = "1.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -98,6 +73,31 @@ dependencies = [
  "serde",
  "serde_core",
  "zmij",
+]
+
+[[package]]
+name = "sternegit-github"
+version = "0.3.0"
+dependencies = [
+ "serde_json",
+ "sternegit-sdk",
+]
+
+[[package]]
+name = "sternegit-protocol"
+version = "1.0.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "sternegit-sdk"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "sternegit-protocol",
 ]
 
 [[package]]

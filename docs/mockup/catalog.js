@@ -20,18 +20,18 @@ const Catalog = (() => {
     {
       key: 'foundations',
       title: 'Foundations',
-      about: 'The Default Dark theme of gpui-kit, which FastGit switches to at start-up, and the sizes every row shares.',
+      about: 'The Default Dark theme of gpui-kit, which SterneGit switches to at start-up, and the sizes every row shares.',
       items: [
         { name: 'Colors', special: 'colors', source: 'src/ui/palette.rs', about: 'Theme tokens used by the panels. Values come from gpui-component\'s default-theme.json (Default Dark).' },
         { name: 'LaneColors', special: 'lanes', source: 'src/ui/palette.rs', about: 'Graph lanes cycle through six theme colors. A commit\'s ref badges take the color of its lane.' },
         { name: 'Typography', special: 'type', source: 'src/ui/look.rs', about: 'The text sizes of ui::Look. Each one sets a line height with the font size, because GPUI\'s own text_xs to text_lg leave it at 1.618 times the size. Plus the 28 px row height every list uses.' },
-        { name: 'Icons', special: 'icons', source: 'src/assets.rs', about: 'Lucide icons from gpui-kit, plus the ones FastGit adds in assets.rs.' },
+        { name: 'Icons', special: 'icons', source: 'src/assets.rs', about: 'Lucide icons from gpui-kit, plus the ones SterneGit adds in assets.rs.' },
       ],
     },
     {
       key: 'kit',
       title: 'Kit pieces',
-      about: 'gpui-kit components as FastGit configures them. FastGit does not own their look, only the options it passes.',
+      about: 'gpui-kit components as SterneGit configures them. SterneGit does not own their look, only the options it passes.',
       items: [
         {
           name: 'Button',
@@ -178,7 +178,7 @@ const Catalog = (() => {
             ['Upstream moved before a force push', () => C.Notification({ kind: 'error', title: 'Push failed', message: Texts.movedAgain('origin/main') })],
             ['Fast-forward refused on another branch', () => C.Notification({ kind: 'error', title: 'Pull failed', message: "feature/blame and origin/feature/blame have diverged, so feature/blame can't fast-forward. Check it out to merge or rebase." })],
             ['Signed in (planned)', () => C.Notification({ kind: 'success', message: 'Signed in to GitHub as alex-martin' })],
-            ['Signed in, token missing a scope (planned)', () => C.Notification({ kind: 'warning', title: 'Signed in to GitHub as alex-acme', message: "This token lacks write:public_key, so FastGit can't add SSH keys with it." })],
+            ['Signed in, token missing a scope (planned)', () => C.Notification({ kind: 'warning', title: 'Signed in to GitHub as alex-acme', message: "This token lacks write:public_key, so SterneGit can't add SSH keys with it." })],
             ['Connector waiting (planned)', () => C.Notification({ kind: 'info', title: HostTexts.waitingTitle('GitLab', '1.2.0'), message: HostTexts.waitingMessage, action: C.Button({ label: HostTexts.review, size: 'sm', variant: 'primary' }) })],
             ['Two connectors waiting (planned)', () => C.Notification({ kind: 'info', title: '2 connectors are waiting for your approval', message: 'GitLab 1.2.0 and Gitea 0.4.0. Nothing of them runs until you approve them.', action: C.Button({ label: HostTexts.review, size: 'sm', variant: 'primary' }) })],
           ],
@@ -187,9 +187,9 @@ const Catalog = (() => {
           name: 'AlertDialog',
           code: 'window.open_alert_dialog',
           source: 'src/app/window.rs',
-          about: 'About FastGit shows one with OK. Discarding a file asks with one that has Cancel and a danger button; Esc cancels.',
+          about: 'About SterneGit shows one with OK. Discarding a file asks with one that has Cancel and a danger button; Esc cancels.',
           variants: [
-            ['About', () => `<div style="position:relative;width:520px;height:260px" class="mk-dialog-frame">${C.AlertDialog({ title: 'FastGit 0.1.0', description: Texts.aboutDescription })}</div>`],
+            ['About', () => `<div style="position:relative;width:520px;height:260px" class="mk-dialog-frame">${C.AlertDialog({ title: 'SterneGit 0.1.0', description: Texts.aboutDescription })}</div>`],
             ['Confirm', () => `<div style="position:relative;width:520px;height:260px" class="mk-dialog-frame">${C.AlertDialog({ title: Texts.discardTitle('command.rs'), description: Texts.discardDescription('src/git/command.rs'), confirm: 'Discard' })}</div>`],
           ],
         },
@@ -250,7 +250,7 @@ const Catalog = (() => {
           name: 'FileViewToggle',
           code: 'ui::FileViewToggle',
           source: 'src/ui/file_view.rs',
-          about: 'Two ghost icon buttons that show files as a list or as a tree, the current one highlighted. There is one choice for the whole window, kept as a GPUI global: the commit files and both changes lists follow it, in every tab. FastGit keeps no settings file yet, so it opens as a list each time.',
+          about: 'Two ghost icon buttons that show files as a list or as a tree, the current one highlighted. There is one choice for the whole window, kept as a GPUI global: the commit files and both changes lists follow it, in every tab. SterneGit keeps no settings file yet, so it opens as a list each time.',
           variants: [
             ['List', () => C.FileViewToggle({ view: 'list' })],
             ['Tree', () => C.FileViewToggle({ view: 'tree' })],
@@ -307,13 +307,13 @@ const Catalog = (() => {
           source: 'src/ui/avatar.rs',
           about: 'A picture drawn from the author’s email, so one person gets the same picture in every repository and every run, with no network, no image file and no setting. The email, trimmed and lowercased, goes through 64-bit FNV-1a and a final mix; the hash modulo 360 picks the hue, and the 15 bits above the ninth fill the left three columns of a 5 × 5 grid, mirrored onto the right two. Light cells on a dark tint of the same hue, in a rounded square. Hovering it shows the name and the email. 16 px in a CommitRow, 20 px in the CommitPanel, 14 px in a FileHistoryRow.',
           variants: [
-            ['Alex Martin', () => C.AuthorAvatar({ name: 'Alex Martin', email: 'alex@fastgit.dev', size: 32 })],
-            ['Sam Lee', () => C.AuthorAvatar({ name: 'Sam Lee', email: 'sam@fastgit.dev', size: 32 })],
-            ['Robin Chen', () => C.AuthorAvatar({ name: 'Robin Chen', email: 'robin@fastgit.dev', size: 32 })],
-            ['Same email, other case', () => C.AuthorAvatar({ name: 'Robin Chen', email: ' Robin@FastGit.dev ', size: 32 })],
+            ['Alex Martin', () => C.AuthorAvatar({ name: 'Alex Martin', email: 'alex@sternegit.dev', size: 32 })],
+            ['Sam Lee', () => C.AuthorAvatar({ name: 'Sam Lee', email: 'sam@sternegit.dev', size: 32 })],
+            ['Robin Chen', () => C.AuthorAvatar({ name: 'Robin Chen', email: 'robin@sternegit.dev', size: 32 })],
+            ['Same email, other case', () => C.AuthorAvatar({ name: 'Robin Chen', email: ' Robin@SterneGit.dev ', size: 32 })],
             ['A bot', () => C.AuthorAvatar({ name: 'dependabot[bot]', email: '49699333+dependabot[bot]@users.noreply.github.com', size: 32 })],
-            ['Row sizes', () => `<div class="h" style="gap:12px">${[14, 16, 20].map((size) => C.AuthorAvatar({ name: 'Sam Lee', email: 'sam@fastgit.dev', size })).join('')}</div>`],
-            ['Initials instead', () => C.AuthorAvatar({ name: 'Sam Lee', email: 'sam@fastgit.dev', size: 32, look: 'initials' })],
+            ['Row sizes', () => `<div class="h" style="gap:12px">${[14, 16, 20].map((size) => C.AuthorAvatar({ name: 'Sam Lee', email: 'sam@sternegit.dev', size })).join('')}</div>`],
+            ['Initials instead', () => C.AuthorAvatar({ name: 'Sam Lee', email: 'sam@sternegit.dev', size: 32, look: 'initials' })],
           ],
         },
         {
@@ -392,8 +392,8 @@ const Catalog = (() => {
       about: 'The window around the repository tabs.',
       items: [
         {
-          name: 'FastGit',
-          code: 'app::window::FastGit',
+          name: 'SterneGit',
+          code: 'app::window::SterneGit',
           source: 'src/app/window.rs',
           about: 'The root view: top bar, tab strip when a tab is open, then the active tab or the welcome notice. 1440 × 900 by default, 960 × 600 at least.',
           variants: [['Layout', () => Screens.find((screen) => screen.id === 'history').render(), { scale: 0.5 }]],
@@ -404,10 +404,10 @@ const Catalog = (() => {
           source: 'src/app/top_bar.rs',
           about: '34 px. Logo, the menu bar where the platform has none, then the active repository and its checked-out branch on the right.',
           variants: [
-            ['Windows / Linux, repository open', () => C.TopBar({ repository: 'fastgit', head: 'main' }), { w: 1000 }],
+            ['Windows / Linux, repository open', () => C.TopBar({ repository: 'sternegit', head: 'main' }), { w: 1000 }],
             ['Windows / Linux, nothing open', () => C.TopBar(), { w: 1000 }],
-            ['Detached HEAD', () => C.TopBar({ repository: 'fastgit', head: '3f9c2e1' }), { w: 1000 }],
-            ['macOS', () => C.TopBar({ platform: 'mac', repository: 'fastgit', head: 'main' }), { w: 1000 }],
+            ['Detached HEAD', () => C.TopBar({ repository: 'sternegit', head: '3f9c2e1' }), { w: 1000 }],
+            ['macOS', () => C.TopBar({ platform: 'mac', repository: 'sternegit', head: 'main' }), { w: 1000 }],
           ],
         },
         {
@@ -426,7 +426,7 @@ const Catalog = (() => {
           source: 'src/app/tab_strip.rs',
           about: '120–240 px wide. A spinner while history is read, a red warning when opening failed.',
           variants: [
-            ['Active', () => `<div class="tab-strip">${C.Tab({ name: 'fastgit', active: true })}</div>`],
+            ['Active', () => `<div class="tab-strip">${C.Tab({ name: 'sternegit', active: true })}</div>`],
             ['Inactive', () => `<div class="tab-strip">${C.Tab({ name: 'website' })}</div>`],
             ['Reading', () => `<div class="tab-strip">${C.Tab({ name: 'linux', state: 'reading' })}</div>`],
             ['Failed', () => `<div class="tab-strip">${C.Tab({ name: 'old-site', state: 'failed' })}</div>`],
@@ -464,7 +464,7 @@ const Catalog = (() => {
           name: 'OperationBar',
           code: 'repo::operation_bar::OperationBar',
           source: 'src/repo/operation_bar.rs',
-          about: 'A 40 px bar under the RepoToolbar, only while a rebase or a merge waits, whether FastGit or a terminal started it. It names the branches and, for a rebase, which commit of how many stopped. While files conflict it is tinted yellow and counts them in magenta, and Continue or Commit merge stays disabled; once none are left it turns green. Abort puts the branch back where it was and brings back the changes stashed out of the way. While one of the two runs it spins and the other waits.',
+          about: 'A 40 px bar under the RepoToolbar, only while a rebase or a merge waits, whether SterneGit or a terminal started it. It names the branches and, for a rebase, which commit of how many stopped. While files conflict it is tinted yellow and counts them in magenta, and Continue or Commit merge stays disabled; once none are left it turns green. Abort puts the branch back where it was and brings back the changes stashed out of the way. While one of the two runs it spins and the other waits.',
           variants: [
             ['Rebase stopped', () => C.OperationBar({ operation: rebase, conflicts: 2 }), { w: 940 }],
             ['Rebase ready to continue', () => C.OperationBar({ operation: rebase }), { w: 940 }],
@@ -613,7 +613,7 @@ const Catalog = (() => {
           name: 'DeleteBranchDialog',
           code: 'repo::branch_menu::confirm_delete',
           source: 'src/repo/branch_menu.rs',
-          about: 'An AlertDialog opened by Delete…. For a local branch it counts the commits no other branch or tag holds, among the history FastGit has read, and says they are lost, or that nothing is lost; when the branch is older than the history read, it says it can\'t tell. Delete then runs git branch -D. For a remote branch it says the branch goes for everyone, and Delete runs git push --delete. Cancel or Esc does nothing.',
+          about: 'An AlertDialog opened by Delete…. For a local branch it counts the commits no other branch or tag holds, among the history SterneGit has read, and says they are lost, or that nothing is lost; when the branch is older than the history read, it says it can\'t tell. Delete then runs git branch -D. For a remote branch it says the branch goes for everyone, and Delete runs git push --delete. Cancel or Esc does nothing.',
           variants: [
             ['Commits only it holds', () => dialogFrame(C.DeleteBranchDialog({ label: ref('feature/blame'), only: 1 }))],
             ['Merged', () => dialogFrame(C.DeleteBranchDialog({ label: ref('feature/stash') }))],
@@ -869,7 +869,7 @@ const Catalog = (() => {
             ['Reading', () => C.RepoStatusBar({ summary: Texts.readingHistory }), { w: 1000 }],
             ['Truncated history', () => C.RepoStatusBar({ summary: historySummary({ ...history, total: 10000, truncated: true }), position: 'Commit 1 of 10,000' }), { w: 1000 }],
             ['Fetching', () => C.RepoStatusBar({ summary: historySummary(history), position: 'Commit 3 of 1,284', fetching: true }), { w: 1000 }],
-            ['Fetch failed', () => C.RepoStatusBar({ summary: historySummary(history), failure: 'fatal: Authentication failed for \'https://github.com/example/fastgit.git/\'' }), { w: 1000 }],
+            ['Fetch failed', () => C.RepoStatusBar({ summary: historySummary(history), failure: 'fatal: Authentication failed for \'https://github.com/example/sternegit.git/\'' }), { w: 1000 }],
           ],
         },
       ],
@@ -1026,7 +1026,7 @@ const Catalog = (() => {
           name: 'BinaryFacts',
           code: 'repo::file_diff_panel::BinaryFacts',
           source: 'src/repo/file_diff_panel.rs',
-          about: 'For a file FastGit can’t draw: what it is, buttons that open each version with its default app or both with git difftool, and the MediaDetails.',
+          about: 'For a file SterneGit can’t draw: what it is, buttons that open each version with its default app or both with git difftool, and the MediaDetails.',
           variants: [['3D model', () => C.BinaryFacts({ diff: modelDiff }), { w: 736, h: 420 }]],
         },
       ],
@@ -1077,7 +1077,7 @@ const Catalog = (() => {
           name: 'AccountRow',
           code: 'accounts::page::AccountRow',
           source: 'src/accounts/account.rs',
-          about: 'Avatar (an identicon until avatars are fetched), name and login; service, server and sign-in method; SSH when FastGit made a key for it. A refused token turns the second line red and offers Sign in again.',
+          about: 'Avatar (an identicon until avatars are fetched), name and login; service, server and sign-in method; SSH when SterneGit made a key for it. A refused token turns the second line red and offers Sign in again.',
           variants: Sample.hosting.accounts.map((account) => [account.signedOut ? 'Signed out' : account.service, () => C.GroupBox({ rows: [C.AccountRow({ account })] }), { w: 816 }]),
         },
         {
@@ -1086,7 +1086,7 @@ const Catalog = (() => {
           source: 'src/accounts/account.rs',
           about: 'One account: sign-in, SSH keys (ssh_keys.list, read when the page opens) and remembered remote owners.',
           variants: [
-            ['With a FastGit key', () => C.AccountPage({ account: Sample.hosting.accounts[0], keys: Sample.hosting.serverKeys }), { w: 816 }],
+            ['With a SterneGit key', () => C.AccountPage({ account: Sample.hosting.accounts[0], keys: Sample.hosting.serverKeys }), { w: 816 }],
             ['No key yet', () => C.AccountPage({ account: Sample.hosting.accounts[2], keys: [] }), { w: 816 }],
           ],
         },
@@ -1094,9 +1094,9 @@ const Catalog = (() => {
           name: 'SshKeyRow',
           code: 'accounts::page::SshKeyRow',
           source: 'src/accounts/account.rs',
-          about: 'A key: its title, its SHA-256 fingerprint and when it was added. The key FastGit made comes first, with how many repositories use it and Copy public key.',
+          about: 'A key: its title, its SHA-256 fingerprint and when it was added. The key SterneGit made comes first, with how many repositories use it and Copy public key.',
           variants: [
-            ["FastGit's key", () => C.GroupBox({ rows: [C.SshKeyRow({ key: { ...Sample.hosting.accounts[0].key, fastgit: true, using: 2 }, local: true })] }), { w: 816 }],
+            ["SterneGit's key", () => C.GroupBox({ rows: [C.SshKeyRow({ key: { ...Sample.hosting.accounts[0].key, sternegit: true, using: 2 }, local: true })] }), { w: 816 }],
             ['Listed by the server', () => C.GroupBox({ rows: [C.SshKeyRow({ key: Sample.hosting.serverKeys[1] })] }), { w: 816 }],
             ['Read-only', () => C.GroupBox({ rows: [C.SshKeyRow({ key: Sample.hosting.serverKeys[2] })] }), { w: 816 }],
           ],
@@ -1115,7 +1115,7 @@ const Catalog = (() => {
           about: 'Name, version, where it came from and its Standing; then the hosts it reaches and how many accounts use it, or why it does not run.',
           variants: [
             ...Sample.hosting.connectors.map((connector) => [StandingLooks[connector.standing].label(connector), () => C.GroupBox({ rows: [C.ConnectorRow({ connector })] }), { w: 816 }]),
-            ['Files changed', () => C.GroupBox({ rows: [C.ConnectorRow({ connector: { ...Sample.hosting.connectors[0], origin: 'installed', standing: 'modified', problem: "Its files don't match the ones this FastGit ships, so it waits like an installed connector." } })] }), { w: 816 }],
+            ['Files changed', () => C.GroupBox({ rows: [C.ConnectorRow({ connector: { ...Sample.hosting.connectors[0], origin: 'installed', standing: 'modified', problem: "Its files don't match the ones this SterneGit ships, so it waits like an installed connector." } })] }), { w: 816 }],
           ],
         },
         {
@@ -1177,7 +1177,7 @@ const Catalog = (() => {
           code: 'repo::account_bar::AccountChoiceBar',
           source: 'src/accounts/access.rs',
           about: 'A bar under the toolbar when a remote fits several accounts and its owner has no remembered choice.',
-          variants: [['Two accounts', () => C.AccountChoiceBar({ host: 'github.com', owner: 'fastgit-org', accounts: Sample.hosting.accounts.slice(0, 2), chosen: 'alex-martin' }), { w: 1200 }]],
+          variants: [['Two accounts', () => C.AccountChoiceBar({ host: 'github.com', owner: 'sternegit-org', accounts: Sample.hosting.accounts.slice(0, 2), chosen: 'alex-martin' }), { w: 1200 }]],
         },
         {
           name: 'AccountMenu',
@@ -1192,7 +1192,7 @@ const Catalog = (() => {
           source: 'src/app/window.rs',
           about: 'URL, then one source per account. An account lists its repositories through repositories.list.',
           variants: [
-            ['URL', () => bigDialog(C.CloneDialog({ from: 'url', accounts: Sample.hosting.accounts, url: 'https://github.com/fastgit-org/connectors.git' }), 720, 920), { scale: 0.75 }],
+            ['URL', () => bigDialog(C.CloneDialog({ from: 'url', accounts: Sample.hosting.accounts, url: 'https://github.com/sternegit-org/connectors.git' }), 720, 920), { scale: 0.75 }],
             ['Account', () => bigDialog(C.CloneDialog({ from: 'alex-martin', accounts: Sample.hosting.accounts, repositories: Sample.hosting.repositories, selected: 1 }), 720, 920), { scale: 0.75 }],
             ['Account without a key', () => bigDialog(C.CloneDialog({ from: 'amartin', accounts: Sample.hosting.accounts, repositories: Sample.hosting.repositories.slice(0, 4), selected: 0 }), 720, 920), { scale: 0.75 }],
           ],
@@ -1227,9 +1227,9 @@ const Catalog = (() => {
           source: 'src/repo/toolbar.rs',
           about: 'Push in a repository with no remote: create it on an account, add origin, push.',
           variants: [
-            ['Ready', () => bigDialog(C.PublishDialog({ repository: 'fastgit', account: Sample.hosting.accounts[0], owner: Sample.hosting.owners[0] }), 480)],
-            ['Name taken', () => bigDialog(C.PublishDialog({ repository: 'fastgit', account: Sample.hosting.accounts[0], owner: Sample.hosting.owners[1], problem: HostTexts.nameTaken('fastgit-org', 'fastgit') }), 500)],
-            ['No account yet', () => bigDialog(C.PublishDialog({ repository: 'fastgit', noAccount: true }), 220)],
+            ['Ready', () => bigDialog(C.PublishDialog({ repository: 'sternegit', account: Sample.hosting.accounts[0], owner: Sample.hosting.owners[0] }), 480)],
+            ['Name taken', () => bigDialog(C.PublishDialog({ repository: 'sternegit', account: Sample.hosting.accounts[0], owner: Sample.hosting.owners[1], problem: HostTexts.nameTaken('sternegit-org', 'sternegit') }), 500)],
+            ['No account yet', () => bigDialog(C.PublishDialog({ repository: 'sternegit', noAccount: true }), 220)],
           ],
         },
       ],
@@ -1244,7 +1244,7 @@ const Catalog = (() => {
     return {
       key: 'pulls',
       title: 'Pull requests',
-      about: 'Milestone 5 of docs/connectors/design.md: the Pull requests section of the left pane, branch badges, the overview in the middle pane and the files in the right one, creating and merging. Every piece is drawn by FastGit from what the connector answers.',
+      about: 'Milestone 5 of docs/connectors/design.md: the Pull requests section of the left pane, branch badges, the overview in the middle pane and the files in the right one, creating and merging. Every piece is drawn by SterneGit from what the connector answers.',
       items: [
         {
           name: 'PullsSection',
@@ -1362,7 +1362,7 @@ const Catalog = (() => {
           name: 'MergePullDialog',
           code: 'repo::pulls::merge::MergeForm',
           source: 'src/repo/pulls/merge.rs',
-          about: 'Merge… in the MergeBox: the methods the repository allows, then the commit title and message where the method makes a commit. pulls.merge carries the head FastGit showed.',
+          about: 'Merge… in the MergeBox: the methods the repository allows, then the commit title and message where the method makes a commit. pulls.merge carries the head SterneGit showed.',
           variants: [
             ['Squash and merge', () => bigDialog(C.MergePullDialog({ pull: shown, details }), 560, 640)],
             ['Create a merge commit', () => bigDialog(C.MergePullDialog({ pull: shown, details, method: 'merge' }), 560, 640)],

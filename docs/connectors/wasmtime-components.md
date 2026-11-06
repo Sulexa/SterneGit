@@ -1,8 +1,8 @@
 # Connectors as Wasmtime components
 
 A connector is a folder with `manifest.json` and a WebAssembly component built against a typed WIT
-world, `fastgit:connector@1.0.0`, run by Wasmtime 50 as Zed runs extensions, minus WASI and tokio.
-- **Network:** only through a `session` resource lent for one call. FastGit attaches the token,
+world, `sternegit:connector@1.0.0`, run by Wasmtime 50 as Zed runs extensions, minus WASI and tokio.
+- **Network:** only through a `session` resource lent for one call. SterneGit attaches the token,
   which never enters the sandbox.
 - **Idle cost:** each call gets a fresh instance, so a started connector is ~0.2 MB of compiled
   code, with no threads and no CPU.
@@ -14,8 +14,8 @@ world, `fastgit:connector@1.0.0`, run by Wasmtime 50 as Zed runs extensions, min
 
 ## Measured numbers
 
-These come from probes, not FastGit: a baseline exe (serde_json, anyhow, futures, windows-sys),
-and engine exes that call a real connector through every export. All were built with FastGit's
+These come from probes, not SterneGit: a baseline exe (serde_json, anyhow, futures, windows-sys),
+and engine exes that call a real connector through every export. All were built with SterneGit's
 release profile and rustc 1.99.1 on Windows 11 x86-64. Timings are ranges, because other builds
 ran alongside.
 
@@ -53,7 +53,7 @@ Also measured on Cranelift:
   drops without blocking.
 - **Dependencies:** no tokio, hyper, rustls or mio.
 
-Not measured: FastGit's own delta (it already links object, gimli and hashbrown), macOS, Linux.
+Not measured: SterneGit's own delta (it already links object, gimli and hashbrown), macOS, Linux.
 
 ## 1. What to copy from Zed, and what to drop
 
@@ -86,7 +86,7 @@ The connector folder is `<id>/manifest.json` plus `<id>/connector.wasm`:
       "device_code_url": "https://github.com/login/device/code", "token_url": "https://github.com/login/oauth/access_token",
       "scopes": ["repo", "read:org", "write:public_key", "workflow"] },
     { "method": "pasted_token", "token": { "kind": "bearer" },
-      "create_url": "{web}/settings/tokens/new?scopes=repo,read:org,write:public_key,workflow&description=FastGit" },
+      "create_url": "{web}/settings/tokens/new?scopes=repo,read:org,write:public_key,workflow&description=SterneGit" },
     { "method": "git_credential", "token": { "kind": "bearer" } }
   ],
   "features": ["repositories", "create-repository", "ssh-keys", "pull-requests", "reviews", "merge"]
@@ -107,8 +107,8 @@ The interface version is read from the component's import names (`…/http@1.0.0
 **Folders.**
 - **Bundled:** `connectors/` beside the exe (`Contents/Resources/` on macOS), or
   `CARGO_MANIFEST_DIR/connectors` in debug builds.
-- **Installed:** `%APPDATA%\FastGit\connectors\`, `~/Library/Application Support/FastGit/connectors/`
-  or `$XDG_DATA_HOME/fastgit/connectors/`.
+- **Installed:** `%APPDATA%\SterneGit\connectors\`, `~/Library/Application Support/SterneGit/connectors/`
+  or `$XDG_DATA_HOME/sternegit/connectors/`.
 
 **Approvals.** A grant (endpoints, self-hosted or not, sign-in URLs, features) lives in host
 services' `connectors.json`.
@@ -118,15 +118,15 @@ services' `connectors.json`.
   since portable installs leave the folder writable.
 
 **Clashes.** An installed connector reusing a bundled id needs its own approval. Two connectors on
-one server are fine; FastGit asks only when a remote matches accounts in both, and remembers per
+one server are fine; SterneGit asks only when a remote matches accounts in both, and remembers per
 remote owner.
 
-**In this repository,** each crate has its own `[workspace]`, so FastGit's `cargo build` needs no
+**In this repository,** each crate has its own `[workspace]`, so SterneGit's `cargo build` needs no
 wasm target:
 
 ```text
-connectors/wit/connector.wit   read by FastGit's bindgen! and the SDK
-connectors/sdk/                fastgit-connector: generate!, request helpers, Link parsing, panic hook
+connectors/wit/connector.wit   read by SterneGit's bindgen! and the SDK
+connectors/sdk/                sternegit-connector: generate!, request helpers, Link parsing, panic hook
 connectors/github/             cdylib, manifest.json, tests/fixtures/, committed connector.wasm + .sha256
 connectors/fake/               misbehaving test connector (committed .wasm)
 connectors/template/           the copy-me start
@@ -144,7 +144,7 @@ scripts/build-connectors.ps1   cargo build --release --target wasm32-wasip2, cop
 - **Winch** compiles 4× faster, runs 2.4× slower, and isn't smaller.
 - **Recommended:** Cranelift with its crates at `opt-level = "s"` (+11.6 MB), costing 0.65 s of
   compiling per new connector.
-- **Alternative:** a runtime-only FastGit (+2.0 MB) plus a `fastgit-compile` helper exe. The
+- **Alternative:** a runtime-only SterneGit (+2.0 MB) plus a `sternegit-compile` helper exe. The
   probe ran helper-built code at full speed (1.7 ms), with an unchanged start-up working set
   (4.76 vs 4.78 MB). The helper must be a non-default workspace member, or feature unification
   pulls Cranelift back in.
@@ -169,24 +169,24 @@ pub(crate) fn engine() -> wasmtime::Result<Engine> {
 ```
 
 **Cache.**
-- **Where:** `%LOCALAPPDATA%\FastGit\cache\connectors\` (or the OS cache folder).
+- **Where:** `%LOCALAPPDATA%\SterneGit\cache\connectors\` (or the OS cache folder).
 - **Name:** `<id>-<sha256(component)[..16]>-<hash of Engine::precompile_compatibility_hash()>.cwasm`,
   written to `.unfinished`, then renamed.
 - **Invalidation:** an upgraded Wasmtime changes the name; a file `deserialize_file` rejects is
   rebuilt; unused files are swept.
-- **Safety:** deserializing loads native code. Only FastGit writes there.
+- **Safety:** deserializing loads native code. Only SterneGit writes there.
 
 **No WASI.** Rust std on `wasm32-wasip2` imports 14 WASI interfaces the probe never used: `io/*`,
 `clocks/monotonic-clock`, `cli/{stdin,stdout,stderr,environment,exit}` and `cli/terminal-*`. Only
 panics and out-of-memory reach them.
-- **Stubs:** FastGit links each `wasi:*` import as a trap and refuses any import outside
-  `fastgit:connector/`. A panic trapped in 66 µs.
+- **Stubs:** SterneGit links each `wasi:*` import as a trap and refuses any import outside
+  `sternegit:connector/`. A panic trapped in 66 µs.
 - **Pitfall (measured):** `Linker::define_unknown_imports_as_traps` defines the exact
-  `fastgit:connector/http@1.0.0` and so shadows the semver match to `@1.1.0`. Old connectors then
+  `sternegit:connector/http@1.0.0` and so shadows the semver match to `@1.1.0`. Old connectors then
   fail with "resource type mismatch". Stub `wasi:*` by name instead (~40 lines).
 - **Rejected:** `wasmtime-wasi` brings tokio, files and sockets to deny. `wasi:http` exposes raw
   headers, streams and pollables, and needs hyper, tokio and rustls.
-- **`session.send`** takes whole requests. FastGit adds the token after the guest has let go; the
+- **`session.send`** takes whole requests. SterneGit adds the token after the guest has let go; the
   probe's transport asserted the added header on every request.
 
 **Limits.**
@@ -202,7 +202,7 @@ accounts. "Started" means an `InstancePre` with resolved exports.
 ## 4. The interface
 
 ```wit
-package fastgit:connector@1.0.0;
+package sternegit:connector@1.0.0;
 
 interface types {
   type cursor = string;
@@ -328,7 +328,7 @@ This file compiles with wit-bindgen 0.63. Four choices in it matter:
   one or reach another account.
 - **Diff lines** carry both numbers, enough for GitHub's sides, GitLab's `old_line`/`new_line` and
   Azure's left and right positions.
-- **Publishing** is `create-repository` with `initialize: false`; FastGit then adds the remote and
+- **Publishing** is `create-repository` with `initialize: false`; SterneGit then adds the remote and
   pushes.
 - **Sign-in** stays in the host, which checks each token with `whoami`.
 
@@ -445,7 +445,7 @@ mod bindings {
         world: "connector",
         imports: { default: async | trappable },
         exports: { default: async },
-        with: { "fastgit:connector/http.session": super::Session },
+        with: { "sternegit:connector/http.session": super::Session },
     });
 }
 
@@ -524,17 +524,17 @@ transport standing in for `HostServices`.
   only by minor for 0.x (`wasmtime-environ/src/component/names.rs`).
 - **Freeze what's released.** Minor versions add interfaces, or functions in host interfaces. A
   changed record means a new interface.
-- **One bindgen.** FastGit binds the newest 1.x and resolves each export with
+- **One bindgen.** SterneGit binds the newest 1.x and resolves each export with
   `GuestIndices::new`; an absent export means unsupported.
 
 Measured with a 1.1.0 WIT that adds an import, `clock.monotonic-millis`, and an export,
 `thread-resolution`:
 
-| Connector on FastGit | Result |
+| Connector on SterneGit | Result |
 |---|---|
 | 1.0 on 1.1 | `ConnectorPre::new` refuses; per interface, `repositories` is found and `thread-resolution` absent; listing works |
 | 1.1 without the new import, on 1.0 | works; the extra export is ignored |
-| 1.1 using `monotonic-millis`, on 1.0 | refused at link ("function implementation is missing"), shown as "needs a newer FastGit" |
+| 1.1 using `monotonic-millis`, on 1.0 | refused at link ("function implementation is missing"), shown as "needs a newer SterneGit" |
 
 A feature is offered when the manifest declares it and its export exists. `unsupported` covers
 servers that lack an operation. A 2.0 would keep a `since_v1` module for a while, at up to
@@ -543,20 +543,20 @@ servers that lack an operation. A 2.0 would keep a `since_v1` module for a while
 ## 7. Async and lifecycle
 
 - **No tokio.** `send` is an `async fn`. Wasmtime suspends the guest's fiber, and the outer future
-  returns `Pending`; the probe used only `futures::executor::block_on`. FastGit gives the future to
+  returns `Pending`; the probe used only `futures::executor::block_on`. SterneGit gives the future to
   `cx.background_spawn`, so wasm runs inside `poll` on a background thread, bounded by fuel.
 - **Concurrency.** A store per call means any number of calls at once. Within a call, `send-all`
   fans out. `component-model-async` would cost +1.19 MB and isn't needed.
 - **Cancellation.** Dropping a `Job` drops the future. Wasmtime resumes the fiber with "future
   dropped" (`runtime/fiber.rs`), the guest unwinds as a trap, and the `Store`, the request and its
   `CancelOnDrop` are dropped too.
-- **Start-up.** `FastGit::new` sets a `Connectors` global to `Starting`, and one background task
+- **Start-up.** `SterneGit::new` sets a `Connectors` global to `Starting`, and one background task
   loads, links and resolves each approved connector, then sets `Ready`.
   - **Speed:** ten cached connectors take ~0.1 s, beside the history read.
   - **Early calls** await a shared future.
   - **Compiles** after an install or upgrade run one at a time.
 
-## 8. FastGit side
+## 8. SterneGit side
 
 ```text
 src/connect/  mod.rs Connectors (Global), Connector, ConnectorError    manifest.rs   found.rs discover()
@@ -594,7 +594,7 @@ Calls ride only existing triggers:
   Server).
 - **Pagination.** The `Link` `rel="next"` URL is the cursor, checked to stay on the API endpoint.
 - **Pull request heads.** `refs/pull/N/head` sits in the base repository even for forks, so
-  `url: none` means "the matched remote". FastGit fetches it, checks the SHA and diffs locally.
+  `url: none` means "the matched remote". SterneGit fetches it, checks the SHA and diffs locally.
 - **Mergeability.** `mergeable: null` reads as `checking`, re-read on the next fetch.
 - **Merging.** The methods come from `allow_*`, and the `sha` guard turns a moved head into
   `refused`.
@@ -633,9 +633,9 @@ new folder only.
 - **Template:** `opt-level = "s"`, `lto`, `panic = "abort"`, `-C link-arg=-zstack-size=131072`.
 - **Unit tests** run natively, because wit-bindgen's imports compile to stubs (verified).
 - **No GUI needed:**
-  - `fastgit --connector-check <folder>` validates, compiles and prints imports, exports and
+  - `sternegit --connector-check <folder>` validates, compiles and prints imports, exports and
     version.
-  - `fastgit --connector-replay <folder> <fixtures.json> <operation> <args.json>` runs one
+  - `sternegit --connector-replay <folder> <fixtures.json> <operation> <args.json>` runs one
     operation in the real sandbox against recorded responses.
 - **Logs** go to the host's 200-line ring, and to stderr in CLI modes. The SDK's panic hook logs
   the message before trapping.
@@ -647,7 +647,7 @@ new folder only.
 
   All three must be built without WASI, or they trap on the stubs.
 
-## 12. Testing in FastGit
+## 12. Testing in SterneGit
 
 `cargo test` stays offline, with a fixture transport behind `HostServices`.
 - **Units:** manifests, grants, cache keys, import refusal, remote candidates.
@@ -670,22 +670,22 @@ new folder only.
   reporters is untested; `signals_based_traps(false)` is the fallback.
 - **Churn:** a Wasmtime major release ships monthly (50 dropped `async_support`), and each
   upgrade recompiles every connector once.
-- **Std:** if it ever touches WASI at start-up, every connector traps, until FastGit adds a few
+- **Std:** if it ever touches WASI at start-up, every connector traps, until SterneGit adds a few
   null functions.
 
 Decisions worth a second look:
-- **"Anyone may write one"** (1) is what forces a compiler into FastGit, because portable code
+- **"Anyone may write one"** (1) is what forces a compiler into SterneGit, because portable code
   must be compiled locally. With only bundled connectors, the runtime alone (+2.0 MB) would do.
-- **"Starts when FastGit starts"** (3) should mean compiled and linked, not a live instance. A
+- **"Starts when SterneGit starts"** (3) should mean compiled and linked, not a live instance. A
   live instance per connector costs 0.8–1.7 MB and buys nothing.
 - **"Bundled are pre-approved"** should go by hash, not by folder.
 
 ## 14. Build plan
 
 1. WIT, `src/connect`, and GitHub `whoami` and `list-repositories` with fixtures. Then measure
-   FastGit's real delta and choose in-exe Cranelift or the helper.
+   SterneGit's real delta and choose in-exe Cranelift or the helper.
 2. Manifest, discovery, grants, start-up, CLI modes, SDK and template.
 3. With host services: sign-in, accounts, remote → account, repositories, publishing, SSH keys.
 4. Pull requests: list, details, checks, head fetch, create, merge.
 5. Reviews: threads, conversation, submit, reply.
-6. A GitLab spike against the frozen WIT, with no FastGit change allowed, before declaring 1.0.
+6. A GitLab spike against the frozen WIT, with no SterneGit change allowed, before declaring 1.0.

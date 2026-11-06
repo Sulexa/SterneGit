@@ -14,7 +14,7 @@ use windows::{
 use super::{Secrets, Token};
 use crate::accounts::AccountId;
 
-const TARGET_PREFIX: &str = "FastGit/";
+const TARGET_PREFIX: &str = "SterneGit/";
 
 pub(crate) struct CredentialManager;
 
@@ -92,11 +92,11 @@ mod tests {
     use crate::accounts::{AccountId, Secrets as _, Token};
 
     #[test]
-    #[ignore = "writes a FastGit test entry to this machine's Windows Credential Manager"]
+    #[ignore = "writes a SterneGit test entry to this machine's Windows Credential Manager"]
     fn a_token_stored_in_credential_manager_reads_back_until_erased() {
-        let account = AccountId::new("fastgit-test", "localhost", "1").unwrap();
-        let token = Token::new("fastgit-test-token").unwrap();
-        CredentialManager.write(&account, "fastgit-test", &token).unwrap();
+        let account = AccountId::new("sternegit-test", "localhost", "1").unwrap();
+        let token = Token::new("sternegit-test-token").unwrap();
+        CredentialManager.write(&account, "sternegit-test", &token).unwrap();
         let read = CredentialManager.read(&account).unwrap();
         CredentialManager.erase(&account).unwrap();
         assert_eq!(read, Some(token));

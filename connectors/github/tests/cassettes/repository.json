@@ -10,13 +10,13 @@
     }
   },
   "repo": {
-    "owner": "fastgit-org",
-    "name": "fastgit"
+    "owner": "sternegit-org",
+    "name": "sternegit"
   },
   "exchanges": [
     {
       "method": "GET",
-      "url": "https://api.github.com/repos/fastgit-org/fastgit",
+      "url": "https://api.github.com/repos/sternegit-org/sternegit",
       "status": 200,
       "headers": [
         [
@@ -26,10 +26,10 @@
       ],
       "body": {
         "id": 1928,
-        "name": "fastgit",
-        "full_name": "fastgit-org/fastgit",
+        "name": "sternegit",
+        "full_name": "sternegit-org/sternegit",
         "owner": {
-          "login": "fastgit-org",
+          "login": "sternegit-org",
           "id": 1,
           "type": "User"
         },
@@ -39,9 +39,9 @@
         "fork": false,
         "archived": false,
         "default_branch": "main",
-        "html_url": "https://github.com/fastgit-org/fastgit",
-        "clone_url": "https://github.com/fastgit-org/fastgit.git",
-        "ssh_url": "git@github.com:fastgit-org/fastgit.git",
+        "html_url": "https://github.com/sternegit-org/sternegit",
+        "clone_url": "https://github.com/sternegit-org/sternegit.git",
+        "ssh_url": "git@github.com:sternegit-org/sternegit.git",
         "pushed_at": "2026-11-05T10:00:00Z",
         "updated_at": "2026-11-01T08:00:00Z"
       }
@@ -50,17 +50,17 @@
   "output": {
     "ok": {
       "repo": {
-        "owner": "fastgit-org",
-        "name": "fastgit"
+        "owner": "sternegit-org",
+        "name": "sternegit"
       },
       "description": "A lightweight Git client for Linux, macOS and Windows",
       "visibility": "public",
       "default_branch": "main",
       "clone": {
-        "https": "https://github.com/fastgit-org/fastgit.git",
-        "ssh": "git@github.com:fastgit-org/fastgit.git"
+        "https": "https://github.com/sternegit-org/sternegit.git",
+        "ssh": "git@github.com:sternegit-org/sternegit.git"
       },
-      "web_url": "https://github.com/fastgit-org/fastgit",
+      "web_url": "https://github.com/sternegit-org/sternegit",
       "updated_at": "2026-11-05T10:00:00Z",
       "fork": false,
       "archived": false

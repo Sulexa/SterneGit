@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use fastgit_protocol::{Failure, NewSshKey};
+use sternegit_protocol::{Failure, NewSshKey};
 use gpui_kit::{
     App, AppContext as _, Context, Entity, IntoElement, ParentElement as _, Render, SharedString,
     Styled as _, Task, Window,
@@ -55,7 +55,7 @@ impl SshKeyForm {
         let (Some(forge), Some(folder), Some(known_hosts)) =
             (connectors.forge(&self.account.id, None), keys_folder(), known_hosts_file())
         else {
-            self.problem = Some("FastGit can't reach this account's connector right now.".into());
+            self.problem = Some("SterneGit can't reach this account's connector right now.".into());
             cx.notify();
             return;
         };
@@ -66,7 +66,7 @@ impl SshKeyForm {
             return;
         }
         let private = folder.join(key_file_name(self.account.id.as_str(), &self.key_type));
-        let comment = format!("FastGit {}@{}", self.account.login, self.account.server.host_str().unwrap_or_default());
+        let comment = format!("SterneGit {}@{}", self.account.login, self.account.server.host_str().unwrap_or_default());
         let hosts = host_names(&self.account, cx);
         let key_type = self.key_type.clone();
         let work = create_and_add(forge, private, key_type, comment, title, hosts, known_hosts);
@@ -199,7 +199,7 @@ impl Render for SshKeyForm {
         v_flex()
             .gap_3()
             .child(div().sm_text().text_color(muted).child(format!(
-                "FastGit makes an {} key without a passphrase in {folder}, adds its public half to {}, \
+                "SterneGit makes an {} key without a passphrase in {folder}, adds its public half to {}, \
                  and uses it only in the repositories you clone or publish with this account.",
                 self.key_type, self.service
             )))
@@ -240,7 +240,7 @@ pub(crate) fn open_ssh_key_dialog(
         .unwrap_or_else(|_| "this computer".to_owned());
     let login = account.login.clone();
     let form = cx.new(|cx| SshKeyForm {
-        title: cx.new(|cx| InputState::new(window, cx).default_value(format!("FastGit on {computer}"))),
+        title: cx.new(|cx| InputState::new(window, cx).default_value(format!("SterneGit on {computer}"))),
         account,
         service,
         key_type,

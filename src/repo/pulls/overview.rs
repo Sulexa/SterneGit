@@ -1,6 +1,6 @@
 use std::{path::Path, sync::Arc};
 
-use fastgit_protocol::{Check, Comment, PullDetails, PullState, PullSummary};
+use sternegit_protocol::{Check, Comment, PullDetails, PullState, PullSummary};
 use gix::ObjectId;
 use gpui_kit::{
     AnyElement, App, AppContext as _, Context, Entity, EventEmitter, Hsla, InteractiveElement as _,
@@ -57,7 +57,7 @@ const NO_FILES: &str = "This pull request doesn't change any files.";
 const NO_DESCRIPTION: &str = "No description.";
 const NO_CHECKS: &str = "No checks ran on this commit.";
 const NO_COMMENTS: &str = "No comments yet.";
-const PLAIN_TEXT: &str = "Sent as you type it. FastGit shows comments as plain text.";
+const PLAIN_TEXT: &str = "Sent as you type it. SterneGit shows comments as plain text.";
 const COMMENT: &str = "Comment";
 const COMMENT_PLACEHOLDER: &str = "Write a comment";
 const CHECK_OUT: &str = "Check out";

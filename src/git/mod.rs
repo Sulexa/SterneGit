@@ -187,7 +187,7 @@ pub(crate) mod scratch {
 
     impl ScratchRepo {
         pub(crate) fn new(label: &str) -> Result<Self> {
-            let dir = std::env::temp_dir().join(format!("fastgit-{label}-{}", std::process::id()));
+            let dir = std::env::temp_dir().join(format!("sternegit-{label}-{}", std::process::id()));
             let _ = std::fs::remove_dir_all(&dir);
             std::fs::create_dir_all(&dir)?;
             let scratch = Self { dir };
@@ -202,7 +202,7 @@ pub(crate) mod scratch {
         }
 
         pub(crate) fn bare(label: &str) -> Result<Self> {
-            let dir = std::env::temp_dir().join(format!("fastgit-{label}-{}", std::process::id()));
+            let dir = std::env::temp_dir().join(format!("sternegit-{label}-{}", std::process::id()));
             let _ = std::fs::remove_dir_all(&dir);
             std::fs::create_dir_all(&dir)?;
             let scratch = Self { dir };

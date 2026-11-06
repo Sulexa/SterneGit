@@ -3,7 +3,7 @@ use std::{
     time::{Duration, Instant, UNIX_EPOCH},
 };
 
-use fastgit_protocol::{RequestHead, ResponseHead, resolve};
+use sternegit_protocol::{RequestHead, ResponseHead, resolve};
 use futures::FutureExt as _;
 use wasmi::{
     Memory, Store, StoreLimits, TrapCode, TypedResumableCall, Val,
@@ -81,7 +81,7 @@ impl Call {
         let head: RequestHead = serde_json::from_slice(head)
             .map_err(|error| format!("the request head isn't valid: {error}"))?;
         let method = Method::named(&head.method)
-            .ok_or_else(|| format!("FastGit doesn't send {} requests", head.method))?;
+            .ok_or_else(|| format!("SterneGit doesn't send {} requests", head.method))?;
         self.requests.make_room(body.len())?;
         let journey = match &self.account {
             Some(account) => {
@@ -334,7 +334,7 @@ fn ran_out_of_memory(error: &wasmi::Error) -> bool {
 mod tests {
     use std::{sync::Arc, time::Duration};
 
-    use fastgit_protocol::ops::{Op as _, WhoAmI};
+    use sternegit_protocol::ops::{Op as _, WhoAmI};
     use serde_json::{Value, json};
 
     use super::{Budget, Outcome, run};
@@ -517,11 +517,11 @@ mod tests {
     fn a_call_must_end_with_status_zero_and_exactly_one_answer() {
         assert_eq!(
             trap_message(&connector(&entry("(i32.const 0)"))),
-            "fastgit_call ended without calling finish"
+            "sternegit_call ended without calling finish"
         );
         assert_eq!(
             trap_message(&connector(&entry("(call $finish (i32.const 0) (i32.const 2)) (i32.const 7)"))),
-            "fastgit_call ended with status 7"
+            "sternegit_call ended with status 7"
         );
         assert_eq!(
             trap_message(&connector(&entry(
@@ -544,7 +544,7 @@ mod tests {
         let broken = fetching(&[("{\"url\":", "")]);
         assert!(trap_message(&broken).starts_with("send: the request head isn't valid"));
         let brew = fetching(&[(r#"{"method":"BREW","url":"pot"}"#, "")]);
-        assert_eq!(trap_message(&brew), "send: FastGit doesn't send BREW requests");
+        assert_eq!(trap_message(&brew), "send: SterneGit doesn't send BREW requests");
     }
 
     #[test]

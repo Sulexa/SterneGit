@@ -1,6 +1,6 @@
 use std::{fmt, sync::Arc, time::Duration};
 
-use fastgit_protocol::{
+use sternegit_protocol::{
     AccountContext, Answer, BranchQuery, Call, Check, Comment, CommitQuery, ConversationQuery,
     Cursor, Failure, Identity, Merge, Merged, NewComment, NewPull, NewReply, NewRepository,
     NewSshKey, Owner, Page, PullDetails, PullNumber, PullSummary, PullsQuery, RepoRef, Repository,
@@ -342,7 +342,7 @@ mod tests {
         time::{Duration, UNIX_EPOCH},
     };
 
-    use fastgit_protocol::{
+    use sternegit_protocol::{
         Done, Failure, Identity, Merge, MergeMethod, NewPull, NewRepository, NewSshKey, RepoRef,
         RepositoryQuery, Review, StateFilter, Verdict, Visibility,
     };
@@ -415,7 +415,7 @@ mod tests {
                 forge.repository().await.map(drop),
                 forge.create_repository(new_repository).await.map(drop),
                 forge.ssh_keys().await.map(drop),
-                forge.add_ssh_key(NewSshKey { title: "FastGit".into(), key: "ssh-ed25519 AAAA".into() }).await.map(drop),
+                forge.add_ssh_key(NewSshKey { title: "SterneGit".into(), key: "ssh-ed25519 AAAA".into() }).await.map(drop),
                 forge.host_keys().await.map(drop),
                 forge.pulls(StateFilter::Open, Some("c2".into())).await.map(drop),
                 forge.pulls_for_branch("topic".into()).await.map(drop),
@@ -451,7 +451,7 @@ mod tests {
                 json!(["repositories.get", repo, null]),
                 json!(["repositories.create", null, { "owner": "octo", "name": "new", "description": null, "visibility": "private", "initialize": false }]),
                 json!(["ssh_keys.list", null, null]),
-                json!(["ssh_keys.add", null, { "title": "FastGit", "key": "ssh-ed25519 AAAA" }]),
+                json!(["ssh_keys.add", null, { "title": "SterneGit", "key": "ssh-ed25519 AAAA" }]),
                 json!(["ssh_keys.host_keys", null, null]),
                 json!(["pulls.list", repo, { "state": "open", "cursor": "c2" }]),
                 json!(["pulls.for_branch", repo, { "branch": "topic" }]),

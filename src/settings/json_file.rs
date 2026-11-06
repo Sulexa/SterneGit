@@ -70,7 +70,7 @@ mod tests {
     use super::{Fields, JsonFile};
 
     fn scratch(name: &str) -> PathBuf {
-        let folder = std::env::temp_dir().join(format!("fastgit-json-{name}-{}", std::process::id()));
+        let folder = std::env::temp_dir().join(format!("sternegit-json-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&folder);
         folder
     }
@@ -127,7 +127,7 @@ mod tests {
     fn an_update_keeps_the_fields_it_does_not_touch() {
         let folder = scratch("update");
         let file = JsonFile::at(folder.join("accounts.json"));
-        file.write(&fields(json!({ "from_a_newer_fastgit": [1, 2], "version": 1 })))
+        file.write(&fields(json!({ "from_a_newer_sternegit": [1, 2], "version": 1 })))
             .unwrap();
         file.update(|fields| {
             fields.insert("version".into(), json!(2));
@@ -135,6 +135,6 @@ mod tests {
         .unwrap();
         let read = file.read();
         let _ = std::fs::remove_dir_all(&folder);
-        assert_eq!(read, fields(json!({ "from_a_newer_fastgit": [1, 2], "version": 2 })));
+        assert_eq!(read, fields(json!({ "from_a_newer_sternegit": [1, 2], "version": 2 })));
     }
 }

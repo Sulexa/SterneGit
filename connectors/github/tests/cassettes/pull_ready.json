@@ -10,8 +10,8 @@
     }
   },
   "repo": {
-    "owner": "fastgit-org",
-    "name": "fastgit"
+    "owner": "sternegit-org",
+    "name": "sternegit"
   },
   "input": {
     "number": 142
@@ -42,7 +42,7 @@
               "title": "Show pull requests in the left pane",
               "state": "OPEN",
               "isDraft": false,
-              "url": "https://github.com/fastgit-org/fastgit/pull/142",
+              "url": "https://github.com/sternegit-org/sternegit/pull/142",
               "createdAt": "2026-11-01T09:14:05Z",
               "updatedAt": "2026-11-04T09:15:02Z",
               "reviewDecision": "APPROVED",
@@ -56,9 +56,9 @@
               "headRefName": "topic/pull-list",
               "headRefOid": "4f1d2c9e8b7a6f5e4d3c2b1a0f9e8d7c6b5a4f3e",
               "headRepository": {
-                "name": "fastgit",
+                "name": "sternegit",
                 "owner": {
-                  "login": "fastgit-org"
+                  "login": "sternegit-org"
                 }
               },
               "commits": {
@@ -98,23 +98,23 @@
           "branch": "main",
           "sha": "1a7e3c95d2b84f60a9c1e7d3b5f2a8c4e6d0b9f1",
           "repo": {
-            "owner": "fastgit-org",
-            "name": "fastgit"
+            "owner": "sternegit-org",
+            "name": "sternegit"
           }
         },
         "head": {
           "branch": "topic/pull-list",
           "sha": "4f1d2c9e8b7a6f5e4d3c2b1a0f9e8d7c6b5a4f3e",
           "repo": {
-            "owner": "fastgit-org",
-            "name": "fastgit"
+            "owner": "sternegit-org",
+            "name": "sternegit"
           }
         },
         "review": "approved",
         "checks": "success",
         "created_at": "2026-11-01T09:14:05Z",
         "updated_at": "2026-11-04T09:15:02Z",
-        "web_url": "https://github.com/fastgit-org/fastgit/pull/142"
+        "web_url": "https://github.com/sternegit-org/sternegit/pull/142"
       },
       "body": "Lists the repository's pull requests in the left pane, newest activity first.\r\n\r\n- state filter: open, closed, all\r\n- badges on branches with an open pull request",
       "base_sha": "1a7e3c95d2b84f60a9c1e7d3b5f2a8c4e6d0b9f1",

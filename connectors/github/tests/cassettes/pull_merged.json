@@ -10,8 +10,8 @@
     }
   },
   "repo": {
-    "owner": "fastgit-org",
-    "name": "fastgit"
+    "owner": "sternegit-org",
+    "name": "sternegit"
   },
   "input": {
     "number": 136
@@ -42,7 +42,7 @@
               "title": "Keep background fetches silent",
               "state": "MERGED",
               "isDraft": false,
-              "url": "https://github.com/fastgit-org/fastgit/pull/136",
+              "url": "https://github.com/sternegit-org/sternegit/pull/136",
               "createdAt": "2026-10-20T10:44:12Z",
               "updatedAt": "2026-10-24T17:03:39Z",
               "reviewDecision": "APPROVED",
@@ -56,9 +56,9 @@
               "headRefName": "quiet-fetch",
               "headRefOid": "e5a9c3f7b1d4e8a2c6f0b3d7e1a5c9f2b6d0e4a8",
               "headRepository": {
-                "name": "fastgit",
+                "name": "sternegit",
                 "owner": {
-                  "login": "fastgit-org"
+                  "login": "sternegit-org"
                 }
               },
               "commits": {
@@ -98,23 +98,23 @@
           "branch": "main",
           "sha": "7d3f9b1e5a2c8d4f0b6e3a9c1d7f5b2e8a4c0d6f",
           "repo": {
-            "owner": "fastgit-org",
-            "name": "fastgit"
+            "owner": "sternegit-org",
+            "name": "sternegit"
           }
         },
         "head": {
           "branch": "quiet-fetch",
           "sha": "e5a9c3f7b1d4e8a2c6f0b3d7e1a5c9f2b6d0e4a8",
           "repo": {
-            "owner": "fastgit-org",
-            "name": "fastgit"
+            "owner": "sternegit-org",
+            "name": "sternegit"
           }
         },
         "review": "approved",
         "checks": "success",
         "created_at": "2026-10-20T10:44:12Z",
         "updated_at": "2026-10-24T17:03:39Z",
-        "web_url": "https://github.com/fastgit-org/fastgit/pull/136"
+        "web_url": "https://github.com/sternegit-org/sternegit/pull/136"
       },
       "body": "Background fetches no longer pop up a progress bar.",
       "base_sha": "7d3f9b1e5a2c8d4f0b6e3a9c1d7f5b2e8a4c0d6f",

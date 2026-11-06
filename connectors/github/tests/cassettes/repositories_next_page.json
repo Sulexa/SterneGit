@@ -50,9 +50,9 @@
         {
           "id": 1808,
           "name": "design",
-          "full_name": "fastgit-org/design",
+          "full_name": "sternegit-org/design",
           "owner": {
-            "login": "fastgit-org",
+            "login": "sternegit-org",
             "id": 1,
             "type": "User"
           },
@@ -62,9 +62,9 @@
           "fork": false,
           "archived": false,
           "default_branch": "main",
-          "html_url": "https://github.com/fastgit-org/design",
-          "clone_url": "https://github.com/fastgit-org/design.git",
-          "ssh_url": "git@github.com:fastgit-org/design.git",
+          "html_url": "https://github.com/sternegit-org/design",
+          "clone_url": "https://github.com/sternegit-org/design.git",
+          "ssh_url": "git@github.com:sternegit-org/design.git",
           "pushed_at": null,
           "updated_at": "2026-11-01T08:00:00Z"
         }
@@ -93,17 +93,17 @@
         },
         {
           "repo": {
-            "owner": "fastgit-org",
+            "owner": "sternegit-org",
             "name": "design"
           },
           "description": null,
           "visibility": "internal",
           "default_branch": "main",
           "clone": {
-            "https": "https://github.com/fastgit-org/design.git",
-            "ssh": "git@github.com:fastgit-org/design.git"
+            "https": "https://github.com/sternegit-org/design.git",
+            "ssh": "git@github.com:sternegit-org/design.git"
           },
-          "web_url": "https://github.com/fastgit-org/design",
+          "web_url": "https://github.com/sternegit-org/design",
           "updated_at": "2026-11-01T08:00:00Z",
           "fork": false,
           "archived": false

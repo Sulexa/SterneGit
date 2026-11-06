@@ -1,6 +1,6 @@
-# FastGit mockup
+# SterneGit mockup
 
-A reference for what every FastGit screen looks like, built from the same reusable
+A reference for what every SterneGit screen looks like, built from the same reusable
 pieces as the Rust code. Open `index.html` in a browser: there is no build step and
 nothing to install.
 

@@ -1,4 +1,4 @@
-use fastgit_protocol::RepoRef;
+use sternegit_protocol::RepoRef;
 use url::Url;
 
 const NAME: &str = "name";
@@ -71,7 +71,7 @@ impl PathPattern {
 }
 
 fn piece(pattern: &str, segment: &str) -> Result<Piece, String> {
-    let refused = || format!("The remote path {pattern} has a part FastGit can't read: {segment:?}");
+    let refused = || format!("The remote path {pattern} has a part SterneGit can't read: {segment:?}");
     match segment.strip_prefix('{').and_then(|inner| inner.strip_suffix('}')) {
         Some(NAME) => Ok(Piece::Name),
         Some(capture) => match capture.strip_suffix(SEVERAL_SEGMENTS) {
@@ -129,7 +129,7 @@ impl Remote {
 
 #[cfg(test)]
 mod tests {
-    use fastgit_protocol::RepoRef;
+    use sternegit_protocol::RepoRef;
 
     use super::{PathPattern, Remote};
 

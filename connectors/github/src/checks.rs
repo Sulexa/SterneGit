@@ -1,4 +1,4 @@
-use fastgit_sdk::{Check, CheckState, CommitQuery, Failure, RepoRef, Request};
+use sternegit_sdk::{Check, CheckState, CommitQuery, Failure, RepoRef, Request};
 use serde_json::Value;
 
 use crate::{

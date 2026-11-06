@@ -71,7 +71,7 @@ const Screens = (() => {
   const busyDuringOperation = ['pull', 'push', 'stash', 'pop'];
 
   const rebaseView = ({ middle, changes, open, conflicts, expanded = false }) =>
-    C.FastGit({
+    C.SterneGit({
       topBar: C.TopBar({ repository: rebasing.name, head: rebasing.head }),
       tabStrip: tabStrip(),
       body: C.RepoView({
@@ -87,7 +87,7 @@ const Screens = (() => {
   const changedFiles = [...assets.staged, ...assets.unstaged];
 
   const assetComparison = (diff, { mode = 'split', expanded = false, view } = {}) =>
-    C.FastGit({
+    C.SterneGit({
       topBar: C.TopBar({ repository: starfall.name, head: starfall.head }),
       tabStrip: C.TabStrip({ tabs: gameTabs, active: gameTabs.length - 1 }),
       body: C.RepoView({
@@ -103,10 +103,10 @@ const Screens = (() => {
     {
       id: 'welcome',
       title: 'Welcome',
-      about: 'No repository is open: FastGit started outside a repository, or the last tab was closed. The tab strip and the status bar are hidden. Clone repository… opens the clone dialog, as File → Clone Repository… does.',
+      about: 'No repository is open: SterneGit started outside a repository, or the last tab was closed. The tab strip and the status bar are hidden. Clone repository… opens the clone dialog, as File → Clone Repository… does.',
       source: 'src/app/window.rs',
       render: () =>
-        C.FastGit({
+        C.SterneGit({
           topBar: C.TopBar(),
           body: C.Notice({
             title: Texts.welcomeTitle,
@@ -121,7 +121,7 @@ const Screens = (() => {
       about: 'A repository was just opened. Its tab shows a spinner and the whole body waits for the first read of refs and history.',
       source: 'src/repo/mod.rs',
       render: () =>
-        C.FastGit({
+        C.SterneGit({
           topBar: C.TopBar({ repository: 'linux' }),
           tabStrip: C.TabStrip({ tabs, active: 2 }),
           body: C.RepoView({
@@ -137,7 +137,7 @@ const Screens = (() => {
       about: 'Reading the repository failed. The tab shows a warning and the body explains why, with a Retry button.',
       source: 'src/repo/mod.rs',
       render: () =>
-        C.FastGit({
+        C.SterneGit({
           topBar: C.TopBar({ repository: 'old-site' }),
           tabStrip: C.TabStrip({ tabs: [...tabs.slice(0, 2), { name: 'old-site', state: 'failed' }], active: 2 }),
           body: C.RepoView({
@@ -156,7 +156,7 @@ const Screens = (() => {
       title: 'History — commit selected',
       about: 'The main screen. Under the tabs, the header holds Pull, Push, Branch, Stash and Pop. Then refs on the left, split into folders at each slash, the commit graph in the middle, the selected commit and the files it changes on the right. The refs pointing at the selected commit are highlighted too. Click a section or a folder to fold it.',
       source: 'src/repo/mod.rs',
-      render: () => C.FastGit({ topBar: topBar(), tabStrip: tabStrip(), body: commitSelected() }),
+      render: () => C.SterneGit({ topBar: topBar(), tabStrip: tabStrip(), body: commitSelected() }),
     },
     {
       id: 'ahead-behind',
@@ -164,7 +164,7 @@ const Screens = (() => {
       about: 'A local branch whose upstream is on another commit says how far apart they are, at the right of its row in the left pane: ↓ and the number of upstream commits the branch lacks, which Pull brings in, then ↑ and the number of its own commits the upstream lacks, which Push sends. A side with nothing to count is left out. A branch level with its upstream, without one, or whose upstream is gone shows nothing, and neither do remote branches and tags. Hovering the numbers says it in words, naming the upstream. The upstream is counted as the last fetch left it, so the numbers move with each fetch, pull, push and commit. Here main has two commits that origin/main lacks, and a fetch brought origin/feature/diff-view a commit that feature/diff-view lacks.',
       source: 'src/repo/refs_list.rs',
       render: () =>
-        C.FastGit({
+        C.SterneGit({
           topBar: topBar(),
           tabStrip: tabStrip(),
           body: repo({
@@ -179,7 +179,7 @@ const Screens = (() => {
       title: 'Stashes',
       about: 'Stashes get a section of their own in the left pane, between Remotes and Tags, newest first, each with its message as Git wrote it; it folds like the others and is left out when there is no stash. In the graph each stash is a row at the time it was made: a hollow square in the lane of the commit it was made on, joined to that commit, with a stash@{n} badge. Git also keeps a commit for the staged part of a stash and one for its untracked files; the graph leaves those out. Clicking a stash in the left pane or in the graph selects it, and the right pane shows what it changes in tracked files against the commit it was made on, as for any commit. The status bar counts the stashes, and says which one is selected; commit positions skip the stash rows.',
       source: 'src/repo/refs_list.rs',
-      render: () => C.FastGit({ topBar: topBar(), tabStrip: tabStrip(), body: stashSelected() }),
+      render: () => C.SterneGit({ topBar: topBar(), tabStrip: tabStrip(), body: stashSelected() }),
     },
     {
       id: 'stash-menu',
@@ -187,7 +187,7 @@ const Screens = (() => {
       about: "A right-click on a stash, in the left pane or on its row in the graph, opens its menu where the pointer is, without selecting it. Apply brings its changes back into the work tree and keeps the stash; Pop brings them back and deletes the stash; both keep what was staged staged. When the changes conflict with the files, the conflicted files are left to resolve and the stash is kept; when they don't apply at all, nothing changes and the stash is kept; an error notification says which. Delete… asks first. Each item runs like the header's Pop: one Git write at a time, disabled while one runs, then a notification such as Popped stash@{1}. The header's Pop still pops the newest stash.",
       source: 'src/repo/stash_menu.rs',
       render: () =>
-        C.FastGit({
+        C.SterneGit({
           topBar: topBar(),
           tabStrip: tabStrip(),
           body: stashSelected(),
@@ -200,7 +200,7 @@ const Screens = (() => {
       about: 'Delete… always asks first, because Git keeps no other copy of a stash. Delete then runs git stash drop on that stash, and the stashes after it move up by one; Cancel or Esc keeps it.',
       source: 'src/repo/stash_menu.rs',
       render: () =>
-        C.FastGit({
+        C.SterneGit({
           topBar: topBar(),
           tabStrip: tabStrip(),
           body: stashSelected(),
@@ -212,14 +212,14 @@ const Screens = (() => {
       title: 'Commit file comparison',
       about: "A file was clicked in the selected commit's file list. The middle pane swaps the graph for a comparison of that file with the commit's first parent; the file stays highlighted on the right, another click opens another file, and Esc or × goes back to the graph.",
       source: 'src/repo/file_diff_panel.rs',
-      render: () => C.FastGit({ topBar: topBar(), tabStrip: tabStrip(), body: commitFileComparison() }),
+      render: () => C.SterneGit({ topBar: topBar(), tabStrip: tabStrip(), body: commitFileComparison() }),
     },
     {
       id: 'history-tree',
       title: 'Commit files as a tree',
       about: "The two buttons at the right end of the file counts show the files as a list or as a tree. The tree splits each path at its slashes: folders first, then files, both by name, and a folder whose only child is a folder shares its row with it, as in src/repo. Each file row keeps its status letter and line counts. Click a folder to fold it. The choice applies to every file list in every tab, the changes list included.",
       source: 'src/repo/commit_files.rs',
-      render: () => C.FastGit({ topBar: topBar(), tabStrip: tabStrip(), body: commitSelected(undefined, { view: 'tree' }) }),
+      render: () => C.SterneGit({ topBar: topBar(), tabStrip: tabStrip(), body: commitSelected(undefined, { view: 'tree' }) }),
     },
     {
       id: 'commit-file-menu',
@@ -227,7 +227,7 @@ const Screens = (() => {
       about: "A right-click on a file in the selected commit's list opens its menu where the pointer is, without opening the file: File history, then Open file, Show in folder and Copy path, as for a changed file. A file the commit deletes has nothing to open or show, but still has a history. The same menu opens on the files of a commit in a file's history.",
       source: 'src/repo/commit_files.rs',
       render: () =>
-        C.FastGit({
+        C.SterneGit({
           topBar: topBar(),
           tabStrip: tabStrip(),
           body: commitSelected(undefined, { pointed: { path: fileHistory.path, left: 150, top: 16, hot: Texts.fileHistory } }),
@@ -238,7 +238,7 @@ const Screens = (() => {
       title: 'File history',
       about: "File history puts every commit that changed the file in the left pane, in place of the refs, newest first, and follows the file through renames as git log --follow does. Each row says what the commit did to the file (added, modified, renamed, deleted) and its subject, then its author and day, or the old path for a rename, and the lines it added and removed in that file. The middle pane compares the file as the selected commit changed it with its first parent, as for any file of a commit. Opened from a commit, that commit is selected; opened from the changes list, the newest one. The right pane shows the selected commit with the file highlighted; a click on another of its files compares that file and leaves the history. Up and Down move through the file's commits; Esc or × in the file bar brings back the refs and the graph, with the same commit selected. While Git reads, the header spins and the list waits; opened from a commit, that commit is compared at once. A file no commit changed says so, and the history is read again when the branches move.",
       source: 'src/repo/file_history.rs',
-      render: () => C.FastGit({ topBar: topBar(), tabStrip: tabStrip(), body: fileHistoryView() }),
+      render: () => C.SterneGit({ topBar: topBar(), tabStrip: tabStrip(), body: fileHistoryView() }),
     },
     {
       id: 'nothing-selected',
@@ -246,7 +246,7 @@ const Screens = (() => {
       about: 'History is read but nothing is selected yet, so the right pane asks for a selection.',
       source: 'src/repo/mod.rs',
       render: () =>
-        C.FastGit({
+        C.SterneGit({
           topBar: topBar(),
           tabStrip: tabStrip(),
           body: repo({ right: C.Hint({ message: Texts.selectCommit }) }),
@@ -258,7 +258,7 @@ const Screens = (() => {
       about: 'The Uncommitted changes row is selected. The right pane starts with the commit message, its description and the Commit button, then the number of changed files with the list and tree buttons, then the staged files, then the unstaged files at the bottom. Each file has a button that moves it to the other list. Commit stays disabled until there is a message and at least one staged file.',
       source: 'src/repo/changes_list.rs',
       render: () =>
-        C.FastGit({
+        C.SterneGit({
           topBar: topBar(),
           tabStrip: tabStrip(),
           body: repo({ wipSelected: true, right: C.ChangesList({ changes }) }),
@@ -270,7 +270,7 @@ const Screens = (() => {
       about: 'A message and a description are typed and two files are staged, so Commit is enabled and names how many files it commits. Ctrl+Enter commits from either field.',
       source: 'src/repo/changes_list.rs',
       render: () =>
-        C.FastGit({
+        C.SterneGit({
           topBar: topBar(),
           tabStrip: tabStrip(),
           body: repo({ wipSelected: true, right: C.ChangesList({ changes, draft: { ...draft, focus: 'description' } }) }),
@@ -281,7 +281,7 @@ const Screens = (() => {
       title: 'Uncommitted changes as a tree',
       about: 'The same switch sits between the commit form and the file lists, beside the number of changed files. In a tree, the staged and the unstaged files each get their own folders, and a folder row ends with a + or − that moves every file under it to the other list. Here patch.rs is open in the middle pane and highlighted in its folder.',
       source: 'src/repo/changes_list.rs',
-      render: () => C.FastGit({ topBar: topBar(), tabStrip: tabStrip(), body: fileComparison('split', { view: 'tree' }) }),
+      render: () => C.SterneGit({ topBar: topBar(), tabStrip: tabStrip(), body: fileComparison('split', { view: 'tree' }) }),
     },
     {
       id: 'file-menu',
@@ -289,7 +289,7 @@ const Screens = (() => {
       about: 'A right-click on a file in the changes list opens its menu where the pointer is: move it to the other list, discard its unstaged changes (Delete file… when Git does not track it), see its history, open it with its default app, show it in the file manager or copy its full path. A staged or conflicted file has no Discard; a file that is new or untracked has no history yet; a deleted one has nothing to open or show.',
       source: 'src/repo/changes_list.rs',
       render: () =>
-        C.FastGit({
+        C.SterneGit({
           topBar: topBar(),
           tabStrip: tabStrip(),
           body: repo({
@@ -304,7 +304,7 @@ const Screens = (() => {
       about: 'Discard changes… asks first, because Git keeps no copy of unstaged changes. Discard puts the file back as it is staged, or as it was committed when nothing of it is staged; Cancel or Esc keeps it.',
       source: 'src/repo/changes_list.rs',
       render: () =>
-        C.FastGit({
+        C.SterneGit({
           topBar: topBar(),
           tabStrip: tabStrip(),
           body: repo({ wipSelected: true, right: C.ChangesList({ changes }) }),
@@ -314,23 +314,23 @@ const Screens = (() => {
     {
       id: 'file-split',
       title: 'File comparison — Split',
-      about: 'A file was clicked in the changes list. The middle pane swaps the graph for a side-by-side comparison; Esc or × goes back to the graph. The file bar names the file and holds what acts on all of it: Stage, the button that gives the comparison the whole window, and ×. The view bar under it picks Split or Unified, counts the changes and steps through them with ↑ and ↓ (Alt+Up, Alt+Down), and opens the view options. Changed words are highlighted inside changed lines. FastGit reads the whole file, so each hunk header is followed by the unchanged lines above it, folded: a click shows them all, or 20 at a time when there are more. The strip at the right edge marks where the changes sit and what part of the comparison is in view; a click on a mark goes there. Each hunk header ends with Discard hunk and Stage hunk, so one part of the file can be staged or thrown away without the rest.',
+      about: 'A file was clicked in the changes list. The middle pane swaps the graph for a side-by-side comparison; Esc or × goes back to the graph. The file bar names the file and holds what acts on all of it: Stage, the button that gives the comparison the whole window, and ×. The view bar under it picks Split or Unified, counts the changes and steps through them with ↑ and ↓ (Alt+Up, Alt+Down), and opens the view options. Changed words are highlighted inside changed lines. SterneGit reads the whole file, so each hunk header is followed by the unchanged lines above it, folded: a click shows them all, or 20 at a time when there are more. The strip at the right edge marks where the changes sit and what part of the comparison is in view; a click on a mark goes there. Each hunk header ends with Discard hunk and Stage hunk, so one part of the file can be staged or thrown away without the rest.',
       source: 'src/repo/file_diff_panel.rs',
-      render: () => C.FastGit({ topBar: topBar(), tabStrip: tabStrip(), body: fileComparison('split') }),
+      render: () => C.SterneGit({ topBar: topBar(), tabStrip: tabStrip(), body: fileComparison('split') }),
     },
     {
       id: 'file-unified',
       title: 'File comparison — Unified',
       about: 'The same comparison in one column, after clicking Unified. The hunk buttons are the same.',
       source: 'src/repo/file_diff_panel.rs',
-      render: () => C.FastGit({ topBar: topBar(), tabStrip: tabStrip(), body: fileComparison('unified') }),
+      render: () => C.SterneGit({ topBar: topBar(), tabStrip: tabStrip(), body: fileComparison('unified') }),
     },
     {
       id: 'file-lines',
       title: 'File comparison — lines selected',
       about: 'Clicking a line number selects that line; dragging over line numbers, or Shift-clicking a second one, selects more. The header of the hunk that holds them then reads Discard 3 lines and Stage 3 lines, which act on the selected changed lines only; the other hunks keep their hunk buttons.',
       source: 'src/repo/file_diff_panel.rs',
-      render: () => C.FastGit({ topBar: topBar(), tabStrip: tabStrip(), body: fileComparison('split', { selection: selectedLines }) }),
+      render: () => C.SterneGit({ topBar: topBar(), tabStrip: tabStrip(), body: fileComparison('split', { selection: selectedLines }) }),
     },
     {
       id: 'line-menu',
@@ -338,7 +338,7 @@ const Screens = (() => {
       about: 'The line under the pointer is highlighted, and a right-click on it opens a menu where the pointer is. On a changed line it offers its hunk, then the line alone; on an unchanged line or a hunk header only the hunk; inside a selection, the selected lines first. Discarding a hunk or lines happens at once, like staging them, without asking.',
       source: 'src/repo/file_diff_panel.rs',
       render: () =>
-        C.FastGit({
+        C.SterneGit({
           topBar: topBar(),
           tabStrip: tabStrip(),
           body: fileComparison('split', { pointed: { hunk: 1, line: 2, left: 132, top: 12, hot: 'Stage hunk' } }),
@@ -350,7 +350,7 @@ const Screens = (() => {
       about: 'After Stage hunk on the first hunk, patch.rs is in both lists: the staged copy holds that hunk, the open unstaged comparison holds the two hunks left. Unstage hunk on the staged side brings it back.',
       source: 'src/repo/changes_list.rs',
       render: () =>
-        C.FastGit({
+        C.SterneGit({
           topBar: topBar(),
           tabStrip: tabStrip(),
           body: fileComparison('split', { diff: partlyStagedDiff, changes: partlyStaged }),
@@ -361,7 +361,7 @@ const Screens = (() => {
       title: 'File comparison — view options',
       about: 'The ⋯ at the right end of the view bar opens the options of every text comparison, in every tab: changed words highlighted, long lines wrapped, the whole file shown instead of the changed parts, whitespace changes hidden. While whitespace is hidden the hunk buttons and the line menu go away, because Git could not apply those parts to the file.',
       source: 'src/repo/file_diff_panel.rs',
-      render: () => C.FastGit({ topBar: topBar(), tabStrip: tabStrip(), body: fileComparison('split', { menuOpen: true, hot: 'whitespace' }) }),
+      render: () => C.SterneGit({ topBar: topBar(), tabStrip: tabStrip(), body: fileComparison('split', { menuOpen: true, hot: 'whitespace' }) }),
     },
     {
       id: 'picture-split',
@@ -394,38 +394,38 @@ const Screens = (() => {
     {
       id: 'video-whole-window',
       title: 'Compare videos — whole window',
-      about: 'A video compares frame by frame. Here the comparison has the whole window: the button left of × in the file bar hides the refs and the file list until it is clicked again, and the file bar gains ‹ and › to move through the changed files (Alt+Left, Alt+Right). Both versions play in step from the same time, and the frame buttons step one frame. The timeline draws how long each version is and where their frames differ, numbered like the changes in the view bar. FastGit uses the ffmpeg and ffprobe found on PATH; without them a video shows its details and the Open buttons, with a note that says so. Hear picks whose sound plays. Split, Swipe, Onion skin and Difference work as for pictures. LFS says Git LFS stores the file: FastGit compares the videos, not the pointers.',
+      about: 'A video compares frame by frame. Here the comparison has the whole window: the button left of × in the file bar hides the refs and the file list until it is clicked again, and the file bar gains ‹ and › to move through the changed files (Alt+Left, Alt+Right). Both versions play in step from the same time, and the frame buttons step one frame. The timeline draws how long each version is and where their frames differ, numbered like the changes in the view bar. SterneGit uses the ffmpeg and ffprobe found on PATH; without them a video shows its details and the Open buttons, with a note that says so. Hear picks whose sound plays. Split, Swipe, Onion skin and Difference work as for pictures. LFS says Git LFS stores the file: SterneGit compares the videos, not the pointers.',
       source: 'src/repo/file_diff_panel.rs',
       render: () => assetComparison(introDiff, { expanded: true }),
     },
     {
       id: 'music',
       title: 'Compare music and sounds',
-      about: 'A sound shows both waveforms on one time scale, the version before the change on top. Yellow bands mark where they sound different, numbered like the changes in the view bar; the hatching is where the old version has already ended. One playhead drives both: Hear switches which version plays at once, without stopping, so the same bar can be heard one way and then the other (Tab switches too). Loop change repeats the current band. Difference shows only what changed. The details add loudness (EBU R128) and peak. FastGit reads WAV, AIFF, FLAC, Ogg Vorbis, MP3 and M4A (AAC).',
+      about: 'A sound shows both waveforms on one time scale, the version before the change on top. Yellow bands mark where they sound different, numbered like the changes in the view bar; the hatching is where the old version has already ended. One playhead drives both: Hear switches which version plays at once, without stopping, so the same bar can be heard one way and then the other (Tab switches too). Loop change repeats the current band. Difference shows only what changed. The details add loudness (EBU R128) and peak. SterneGit reads WAV, AIFF, FLAC, Ogg Vorbis, MP3 and M4A (AAC).',
       source: 'src/repo/file_diff_panel.rs',
       render: () => assetComparison(themeDiff),
     },
     {
       id: 'other-file',
-      title: 'Compare a file FastGit can’t draw',
-      about: 'A file FastGit can’t draw, such as a 3D model, still says what changed: its type, its size and when it last changed. Open Before gives a copy of the old version to its default app, Open After the file on disk, and Compare in difftool hands both to the tool set in Git’s diff.tool; it only shows when one is set.',
+      title: 'Compare a file SterneGit can’t draw',
+      about: 'A file SterneGit can’t draw, such as a 3D model, still says what changed: its type, its size and when it last changed. Open Before gives a copy of the old version to its default app, Open After the file on disk, and Compare in difftool hands both to the tool set in Git’s diff.tool; it only shows when one is set.',
       source: 'src/repo/file_diff_panel.rs',
       render: () => assetComparison(modelDiff),
     },
     {
       id: 'pulling',
       title: 'Header — pulling',
-      about: 'Pull was clicked. Its icon turns into a spinner and the other header buttons wait, like the stage and commit buttons, because FastGit runs one Git write at a time. Pull and Push need a checked-out branch, except that Pull in Fetch only mode works anywhere; Stash needs uncommitted changes; Pop needs a stash.',
+      about: 'Pull was clicked. Its icon turns into a spinner and the other header buttons wait, like the stage and commit buttons, because SterneGit runs one Git write at a time. Pull and Push need a checked-out branch, except that Pull in Fetch only mode works anywhere; Stash needs uncommitted changes; Pop needs a stash.',
       source: 'src/repo/toolbar.rs',
-      render: () => C.FastGit({ topBar: topBar(), tabStrip: tabStrip(), body: commitSelected(undefined, {}, C.RepoToolbar({ running: 'pull' })) }),
+      render: () => C.SterneGit({ topBar: topBar(), tabStrip: tabStrip(), body: commitSelected(undefined, {}, C.RepoToolbar({ running: 'pull' })) }),
     },
     {
       id: 'pull-modes',
       title: 'Header — pull mode',
-      about: "The caret beside Pull opens its modes. The checked one is what a click on Pull does; picking another makes it Pull's default for this repository, without pulling. FastGit saves it in the repository's Git config as fastgit.pullMode, which Git itself ignores. Until a mode is picked, Pull follows Git's own settings: Rebase when pull.rebase is true, Fast-forward only when pull.ff is only, Fast-forward if possible otherwise.",
+      about: "The caret beside Pull opens its modes. The checked one is what a click on Pull does; picking another makes it Pull's default for this repository, without pulling. SterneGit saves it in the repository's Git config as sternegit.pullMode, which Git itself ignores. Until a mode is picked, Pull follows Git's own settings: Rebase when pull.rebase is true, Fast-forward only when pull.ff is only, Fast-forward if possible otherwise.",
       source: 'src/repo/toolbar.rs',
       render: () =>
-        C.FastGit({
+        C.SterneGit({
           topBar: topBar(),
           tabStrip: tabStrip(),
           body: commitSelected(undefined, {}, C.RepoToolbar({ menuOpen: true })),
@@ -438,7 +438,7 @@ const Screens = (() => {
       about: 'A pull, a push, a stash or a pop that worked says so in a notification. The first push of a branch that has no upstream sends it to origin, or to the only remote, and makes that copy its upstream.',
       source: 'src/repo/toolbar.rs',
       render: () =>
-        C.FastGit({
+        C.SterneGit({
           topBar: topBar(),
           tabStrip: tabStrip(),
           body: commitSelected(),
@@ -448,10 +448,10 @@ const Screens = (() => {
     {
       id: 'push-behind',
       title: 'Header — push behind its upstream',
-      about: "When the remote refuses a push because origin/main has commits main doesn't have, FastGit fetches that remote, counts the commits on each side and asks what to do; the graph behind the dialog already shows the fetched commits. Pull and push pulls in Fast-forward if possible mode, whatever the header's mode is, then pushes; a pull that stops on a conflict shows the OperationBar and pushes nothing, so Push is clicked again once the merge is committed. Force push overwrites origin/main with main, but only if origin/main is still where the dialog counted from: if someone pushed again in between, nothing is overwritten and a notification says so. Cancel or Esc pushes nothing. When main has nothing of its own to push, the primary button is just Pull. Push in a branch's menu asks the same way; for a branch that isn't checked out, Pull is only offered when it can fast-forward.",
+      about: "When the remote refuses a push because origin/main has commits main doesn't have, SterneGit fetches that remote, counts the commits on each side and asks what to do; the graph behind the dialog already shows the fetched commits. Pull and push pulls in Fast-forward if possible mode, whatever the header's mode is, then pushes; a pull that stops on a conflict shows the OperationBar and pushes nothing, so Push is clicked again once the merge is committed. Force push overwrites origin/main with main, but only if origin/main is still where the dialog counted from: if someone pushed again in between, nothing is overwritten and a notification says so. Cancel or Esc pushes nothing. When main has nothing of its own to push, the primary button is just Pull. Push in a branch's menu asks the same way; for a branch that isn't checked out, Pull is only offered when it can fast-forward.",
       source: 'src/repo/behind_dialog.rs',
       render: () =>
-        C.FastGit({
+        C.SterneGit({
           topBar: topBar(),
           tabStrip: tabStrip(),
           body: commitSelected(),
@@ -464,7 +464,7 @@ const Screens = (() => {
       about: 'Pull and push says both steps in one notification. Force push says Force pushed main to origin/main. When the upstream moved again before Force push ran, the push fails and the notification stays until it is closed; pushing again asks with fresh counts.',
       source: 'src/repo/toolbar.rs',
       render: () =>
-        C.FastGit({
+        C.SterneGit({
           topBar: topBar(),
           tabStrip: tabStrip(),
           body: commitSelected(),
@@ -477,7 +477,7 @@ const Screens = (() => {
       about: 'Branch asks for a name, then creates the branch where HEAD is and checks it out. Create branch stays disabled while the name is empty, taken or refused by Git; Enter creates, Esc cancels.',
       source: 'src/repo/branch_dialog.rs',
       render: () =>
-        C.FastGit({
+        C.SterneGit({
           topBar: topBar(),
           tabStrip: tabStrip(),
           body: commitSelected(),
@@ -490,7 +490,7 @@ const Screens = (() => {
       about: "A right-click on a branch, in the left list or on its badge in the graph, opens its menu where the pointer is, without selecting its commit. Here feature/blame is not checked out, so it offers Check out, Pull, Push, Merge it into main or Rebase main onto it, Create branch here… and Delete…. Pull is fast-forward only, because Git can't merge into or rebase a branch that isn't checked out. The checked-out branch offers Pull with the header's pull mode, Push and Create branch here…. A remote branch offers Check out, Merge, Rebase, Create branch here… and Delete from its remote. With a detached HEAD there is no Merge or Rebase. Tags and folders have no menu; a badge that holds a branch and its upstream opens the menu of the local branch. Each action runs like the header buttons: one Git write at a time, then a notification; Pull and Push spin the header's button while they run. A double-click on a branch, in the left list or on its badge in the graph, checks it out straight away; it does nothing on the checked-out branch, on a tag, or while Git writes.",
       source: 'src/repo/branch_menu.rs',
       render: () =>
-        C.FastGit({
+        C.SterneGit({
           topBar: topBar(),
           tabStrip: tabStrip(),
           body: commitSelected(),
@@ -503,7 +503,7 @@ const Screens = (() => {
       about: 'Create branch here… opens the same dialog as the header’s Branch, but the new branch starts at the ref that was right-clicked. It is checked out right away; uncommitted changes come along unless they clash with it, and then Git refuses and says why.',
       source: 'src/repo/branch_dialog.rs',
       render: () =>
-        C.FastGit({
+        C.SterneGit({
           topBar: topBar(),
           tabStrip: tabStrip(),
           body: commitSelected(),
@@ -516,7 +516,7 @@ const Screens = (() => {
       about: 'Delete… always asks first. The question counts the commits that no other branch or tag holds and says they are lost; when there are none it says nothing is lost. Delete then removes the branch, merged or not. A remote branch is deleted on its remote, after a question that says everyone who uses it loses it.',
       source: 'src/repo/branch_menu.rs',
       render: () =>
-        C.FastGit({
+        C.SterneGit({
           topBar: topBar(),
           tabStrip: tabStrip(),
           body: commitSelected(),
@@ -529,7 +529,7 @@ const Screens = (() => {
       about: 'Check out, Merge, Rebase and Delete say what they did in a notification. A merge or a rebase that stops on a conflict shows the OperationBar instead, until it is finished or aborted.',
       source: 'src/repo/operation.rs',
       render: () =>
-        C.FastGit({
+        C.SterneGit({
           topBar: topBar(),
           tabStrip: tabStrip(),
           body: commitSelected(),
@@ -539,10 +539,10 @@ const Screens = (() => {
     {
       id: 'checked-out-stash-kept',
       title: 'Checked out, changes left in the stash',
-      about: "When uncommitted changes are in the way of a check-out, FastGit stashes them, switches and pops the stash, so what was staged stays staged. When they conflict with the branch or don't apply on it, the check-out still happens, the stash keeps them and a warning says so until it is closed.",
+      about: "When uncommitted changes are in the way of a check-out, SterneGit stashes them, switches and pops the stash, so what was staged stays staged. When they conflict with the branch or don't apply on it, the check-out still happens, the stash keeps them and a warning says so until it is closed.",
       source: 'src/git/branch.rs',
       render: () =>
-        C.FastGit({
+        C.SterneGit({
           topBar: topBar(),
           tabStrip: tabStrip(),
           body: commitSelected(),
@@ -552,7 +552,7 @@ const Screens = (() => {
     {
       id: 'rebase-stopped',
       title: 'Rebase stopped on a conflict',
-      about: "Rebase in a branch's menu and Pull in Rebase mode go through on their own: uncommitted changes in the way are stashed first and brought back at the end, and a commit whose changes are already upstream is left out. FastGit stops only when a commit conflicts. The OperationBar under the header then says what is being rebased, which commit stopped and how many files conflict. The uncommitted changes get selected, the conflicted files get their own section at the top of the list, and the first one opens with the whole window, because three views of the code need the width; ⤡ shows the panes again and ‹ › step through the conflicted files. The head pill reads rebasing main while Git replays the commits on a detached HEAD. Pull, Push, Stash and Pop wait, and the commit form is hidden, because Continue commits each step with its own message. A conflicted text file opens in the MergeEditor: the current version (what the branch already has: during a rebase, origin/main and the commits replayed so far) and the incoming version (the commit being replayed) side by side on top, each conflict under a row with its two Accept checkboxes, and below them the result, the file as it will be saved, still holding the conflict markers. ↑ and ↓ step through the conflicts and scroll the three together.",
+      about: "Rebase in a branch's menu and Pull in Rebase mode go through on their own: uncommitted changes in the way are stashed first and brought back at the end, and a commit whose changes are already upstream is left out. SterneGit stops only when a commit conflicts. The OperationBar under the header then says what is being rebased, which commit stopped and how many files conflict. The uncommitted changes get selected, the conflicted files get their own section at the top of the list, and the first one opens with the whole window, because three views of the code need the width; ⤡ shows the panes again and ‹ › step through the conflicted files. The head pill reads rebasing main while Git replays the commits on a detached HEAD. Pull, Push, Stash and Pop wait, and the commit form is hidden, because Continue commits each step with its own message. A conflicted text file opens in the MergeEditor: the current version (what the branch already has: during a rebase, origin/main and the commits replayed so far) and the incoming version (the commit being replayed) side by side on top, each conflict under a row with its two Accept checkboxes, and below them the result, the file as it will be saved, still holding the conflict markers. ↑ and ↓ step through the conflicts and scroll the three together.",
       source: 'src/repo/operation_bar.rs',
       render: () =>
         rebaseView({
@@ -595,7 +595,7 @@ const Screens = (() => {
       about: "The same bar serves a merge that stops, from a branch's menu or from Pull in Fast-forward if possible mode: Abort merge, and Commit merge, which commits with Git's usual message. A conflicted file that isn't text has no markers to choose between, so its comparison shows the current version as Before and the incoming one as After, side by side, with the comparison modes of its kind. Keep current or Keep incoming stages that version as it is.",
       source: 'src/repo/file_diff_panel.rs',
       render: () =>
-        C.FastGit({
+        C.SterneGit({
           topBar: C.TopBar({ repository: starfall.name, head: starfall.head }),
           tabStrip: C.TabStrip({ tabs: gameTabs, active: gameTabs.length - 1 }),
           body: C.RepoView({
@@ -611,10 +611,10 @@ const Screens = (() => {
     {
       id: 'menu',
       title: 'View menu open',
-      about: 'On Windows and Linux FastGit draws its own menu bar in the top bar; on macOS the same menus go to the system menu bar.',
+      about: 'On Windows and Linux SterneGit draws its own menu bar in the top bar; on macOS the same menus go to the system menu bar.',
       source: 'src/app/mod.rs',
       render: () =>
-        C.FastGit({
+        C.SterneGit({
           topBar: topBar({ openMenu: 'View' }),
           tabStrip: tabStrip(),
           body: commitSelected(),
@@ -627,7 +627,7 @@ const Screens = (() => {
       about: 'Copy hash shows a notification. A fetch runs in the background every five minutes and when the window comes back; the status bar shows it.',
       source: 'src/repo/status_bar.rs',
       render: () =>
-        C.FastGit({
+        C.SterneGit({
           topBar: topBar(),
           tabStrip: tabStrip(),
           body: commitSelected({ fetching: true }),
@@ -637,14 +637,14 @@ const Screens = (() => {
     {
       id: 'about',
       title: 'About dialog',
-      about: 'About → About FastGit opens an alert dialog with the version.',
+      about: 'About → About SterneGit opens an alert dialog with the version.',
       source: 'src/app/window.rs',
       render: () =>
-        C.FastGit({
+        C.SterneGit({
           topBar: topBar(),
           tabStrip: tabStrip(),
           body: commitSelected(),
-          overlays: C.AlertDialog({ title: 'FastGit 0.1.0', description: Texts.aboutDescription }),
+          overlays: C.AlertDialog({ title: 'SterneGit 0.1.0', description: Texts.aboutDescription }),
         }),
     },
     ...(() => {
@@ -652,22 +652,22 @@ const Screens = (() => {
       const [personal, work, enterprise] = accounts;
       const settingsTabs = [...tabs, { name: HostTexts.settings, icon: 'settings' }];
       const settings = (page, content, overlays = '') =>
-        C.FastGit({
+        C.SterneGit({
           topBar: C.TopBar(),
           tabStrip: C.TabStrip({ tabs: settingsTabs, active: settingsTabs.length - 1 }),
           body: C.SettingsTab({ page, content, nav: { accounts: accounts.length, waiting: 1 } }),
           overlays,
         });
       const accountsPage = () => C.AccountsPage({ accounts });
-      const personalPage = (account = personal) => C.AccountPage({ account, keys: serverKeys.filter((key) => account.key || !key.fastgit) });
-      const overHistory = (overlays) => C.FastGit({ topBar: topBar(), tabStrip: tabStrip(), body: commitSelected(), overlays });
+      const personalPage = (account = personal) => C.AccountPage({ account, keys: serverKeys.filter((key) => account.key || !key.sternegit) });
+      const overHistory = (overlays) => C.SterneGit({ topBar: topBar(), tabStrip: tabStrip(), body: commitSelected(), overlays });
       const withoutRemotes = {
         ...history,
         refs: history.refs.filter((label) => label.kind !== 'remote'),
         commits: history.commits.map((commit) => (commit.refs ? { ...commit, refs: commit.refs.filter(([, kind]) => kind !== 'remote') } : commit)),
       };
       const pair = [personal, work];
-      const choiceBar = (open) => C.AccountChoiceBar({ host: 'github.com', owner: 'fastgit-org', accounts: pair, chosen: 'alex-martin', open });
+      const choiceBar = (open) => C.AccountChoiceBar({ host: 'github.com', owner: 'sternegit-org', accounts: pair, chosen: 'alex-martin', open });
       return [
         {
           id: 'app-file-menu',
@@ -675,7 +675,7 @@ const Screens = (() => {
           about: 'File gains Clone Repository… (Ctrl+Shift+O), New Repository… (Ctrl+N) and Settings… (Ctrl+,). Settings… opens the Settings tab, or switches to it when it is already open.',
           source: 'src/app/mod.rs',
           render: () =>
-            C.FastGit({
+            C.SterneGit({
               topBar: topBar({ openMenu: 'File' }),
               tabStrip: tabStrip(),
               body: commitSelected(),
@@ -685,14 +685,14 @@ const Screens = (() => {
         {
           id: 'settings-accounts',
           title: 'Settings — accounts',
-          about: "Settings is a tab after the repository tabs, with a gear; it isn't saved with the open tabs, and Ctrl+W closes it like any tab. Its left column picks a page. Accounts lists every account FastGit knows, with its service, its server and how it signed in. An account whose token the server refused says so in red and offers Sign in again; nothing is asked until then, so a refused token never interrupts a fetch. Click an account to open its page. The yellow badge on Connectors counts connectors waiting for approval.",
+          about: "Settings is a tab after the repository tabs, with a gear; it isn't saved with the open tabs, and Ctrl+W closes it like any tab. Its left column picks a page. Accounts lists every account SterneGit knows, with its service, its server and how it signed in. An account whose token the server refused says so in red and offers Sign in again; nothing is asked until then, so a refused token never interrupts a fetch. Click an account to open its page. The yellow badge on Connectors counts connectors waiting for approval.",
           source: 'src/accounts/book.rs',
           render: () => settings('accounts', accountsPage()),
         },
         {
           id: 'settings-account',
           title: "Settings — an account's page",
-          about: "How the account signed in, its scopes and where its token is kept; its SSH key and every key the server lists for it, read when the page opens; and the remote owners FastGit remembers for it. Sign in again replaces the token after checking who it belongs to: a token of another user is refused. Forget drops a remembered owner, so FastGit asks again the next time two accounts fit.",
+          about: "How the account signed in, its scopes and where its token is kept; its SSH key and every key the server lists for it, read when the page opens; and the remote owners SterneGit remembers for it. Sign in again replaces the token after checking who it belongs to: a token of another user is refused. Forget drops a remembered owner, so SterneGit asks again the next time two accounts fit.",
           source: 'src/accounts/account.rs',
           render: () => settings('accounts', personalPage()),
         },
@@ -706,7 +706,7 @@ const Screens = (() => {
         {
           id: 'sign-in-browser',
           title: 'Sign in with the browser',
-          about: "GitHub's device flow: FastGit asks GitHub for a code, opens github.com/login/device in the browser and asks again every few seconds inside the dialog, slower when GitHub says so, until the user approves. The token is checked with account.who_am_i and stored only then; the dialog closes and a notification says Signed in to GitHub as alex-martin. Cancel or Esc stops asking. It needs the client ID of FastGit's OAuth App in GitHub's manifest.",
+          about: "GitHub's device flow: SterneGit asks GitHub for a code, opens github.com/login/device in the browser and asks again every few seconds inside the dialog, slower when GitHub says so, until the user approves. The token is checked with account.who_am_i and stored only then; the dialog closes and a notification says Signed in to GitHub as alex-martin. Cancel or Esc stops asking. It needs the client ID of SterneGit's OAuth App in GitHub's manifest.",
           source: 'src/accounts/account.rs',
           render: () => settings('accounts', accountsPage(), C.SignInDialog({ step: 'device' })),
         },
@@ -720,21 +720,21 @@ const Screens = (() => {
         {
           id: 'sign-in-token',
           title: 'Sign in with a pasted token',
-          about: "Create a token on GitHub opens the manifest's create_url, with the scopes FastGit needs already ticked. Sign in checks the token with account.who_am_i before saving it; a refused token says so under the field, and Sign in waits for the field to change. A token missing write:public_key signs in, and the Signed in notification adds that SSH keys won't work with it. The field never shows the token once pasted.",
+          about: "Create a token on GitHub opens the manifest's create_url, with the scopes SterneGit needs already ticked. Sign in checks the token with account.who_am_i before saving it; a refused token says so under the field, and Sign in waits for the field to change. A token missing write:public_key signs in, and the Signed in notification adds that SSH keys won't work with it. The field never shows the token once pasted.",
           source: 'src/accounts/account.rs',
           render: () => settings('accounts', accountsPage(), C.SignInDialog({ step: 'token', problem: HostTexts.tokenRefused('GitHub') })),
         },
         {
           id: 'sign-in-credential-manager',
           title: "Use Git Credential Manager's token",
-          about: "FastGit reads Git Credential Manager's token only after this question, with git credential fill and no prompt. When it has none, the dialog says so and Use this token stays off.",
+          about: "SterneGit reads Git Credential Manager's token only after this question, with git credential fill and no prompt. When it has none, the dialog says so and Use this token stays off.",
           source: 'src/accounts/account.rs',
           render: () => settings('accounts', accountsPage(), C.SignInDialog({ step: 'credential' })),
         },
         {
           id: 'ssh-key',
           title: 'Create an SSH key',
-          about: "Create SSH key… on an account's page. FastGit runs ssh-keygen beside git's ssh, adds the public key with ssh_keys.add and fills its own known_hosts from ssh_keys.host_keys, so the first SSH clone checks GitHub's host key. When the token lacks write:public_key, the dialog says so and offers Sign in with the browser instead of Create and add.",
+          about: "Create SSH key… on an account's page. SterneGit runs ssh-keygen beside git's ssh, adds the public key with ssh_keys.add and fills its own known_hosts from ssh_keys.host_keys, so the first SSH clone checks GitHub's host key. When the token lacks write:public_key, the dialog says so and offers Sign in with the browser instead of Create and add.",
           source: 'src/accounts/account.rs',
           render: () => settings('accounts', personalPage({ ...personal, key: null }), C.SshKeyDialog({ account: personal })),
         },
@@ -748,7 +748,7 @@ const Screens = (() => {
         {
           id: 'settings-connectors',
           title: 'Settings — connectors',
-          about: "Every connector FastGit found beside its exe (Bundled) or in the user's connectors folder (Installed), with what it reaches and its standing. Ready runs. Updated is a new version within what was approved, until its row is opened. Waiting for approval and Files changed (a bundled connector whose files don't match what this FastGit ships) wait for Review…. Can't run needs a newer FastGit or has a broken manifest. Stopped trapped, ran out of time or memory while starting; Show log shows its last log lines.",
+          about: "Every connector SterneGit found beside its exe (Bundled) or in the user's connectors folder (Installed), with what it reaches and its standing. Ready runs. Updated is a new version within what was approved, until its row is opened. Waiting for approval and Files changed (a bundled connector whose files don't match what this SterneGit ships) wait for Review…. Can't run needs a newer SterneGit or has a broken manifest. Stopped trapped, ran out of time or memory while starting; Show log shows its last log lines.",
           source: 'src/connect/catalog.rs',
           render: () => settings('connectors', C.ConnectorsPage({ connectors })),
         },
@@ -779,10 +779,10 @@ const Screens = (() => {
         {
           id: 'account-choice',
           title: 'Which account?',
-          about: "When a remote fits several accounts and FastGit hasn't been told which one its owner uses, a bar under the toolbar asks. Use remembers the choice for every repository of that owner and closes the bar. Until then Git uses the user's own credentials, so fetches and pushes work as before; × hides the bar until the next launch.",
+          about: "When a remote fits several accounts and SterneGit hasn't been told which one its owner uses, a bar under the toolbar asks. Use remembers the choice for every repository of that owner and closes the bar. Until then Git uses the user's own credentials, so fetches and pushes work as before; × hides the bar until the next launch.",
           source: 'src/accounts/access.rs',
           render: () =>
-            C.FastGit({
+            C.SterneGit({
               topBar: topBar(),
               tabStrip: tabStrip(),
               body: C.RepoView({
@@ -798,14 +798,14 @@ const Screens = (() => {
         {
           id: 'clone-url',
           title: 'Clone — from a URL',
-          about: 'File → Clone Repository…, or Clone repository… on the welcome screen. URL clones anything git clone accepts, with no account; Clone into fills in the folder name from the URL and Browse… picks the parent folder. When an account fits the URL, FastGit lends Git its token.',
+          about: 'File → Clone Repository…, or Clone repository… on the welcome screen. URL clones anything git clone accepts, with no account; Clone into fills in the folder name from the URL and Browse… picks the parent folder. When an account fits the URL, SterneGit lends Git its token.',
           source: 'src/app/window.rs',
-          render: () => overHistory(C.CloneDialog({ from: 'url', accounts, url: 'https://github.com/fastgit-org/connectors.git' })),
+          render: () => overHistory(C.CloneDialog({ from: 'url', accounts, url: 'https://github.com/sternegit-org/connectors.git' })),
         },
         {
           id: 'clone-account',
           title: 'Clone — from an account',
-          about: "Each account lists the repositories it can reach, newest first, a hundred at a time; Load more reads the next page. The owner filter lists the account's user and organizations, and search asks the server. Clone into ends with the selected repository's name. HTTPS is the default; SSH is offered once the account has a FastGit key, and the choice is remembered per account.",
+          about: "Each account lists the repositories it can reach, newest first, a hundred at a time; Load more reads the next page. The owner filter lists the account's user and organizations, and search asks the server. Clone into ends with the selected repository's name. HTTPS is the default; SSH is offered once the account has a SterneGit key, and the choice is remembered per account.",
           source: 'src/connect/forge.rs',
           render: () => overHistory(C.CloneDialog({ from: 'alex-martin', accounts, repositories, selected: 1 })),
         },
@@ -819,14 +819,14 @@ const Screens = (() => {
         {
           id: 'cloning',
           title: 'Cloning',
-          about: "Clone opens a tab for the new repository at once and runs git clone in it, showing git's progress; the tab reads history as soon as the clone ends. Cancel stops git and deletes the half-made folder. A failed clone keeps the tab with git's message and Retry. A clone over SSH gets core.sshCommand with the account's key; over HTTPS, FastGit is Git's credential helper for that remote.",
+          about: "Clone opens a tab for the new repository at once and runs git clone in it, showing git's progress; the tab reads history as soon as the clone ends. Cancel stops git and deletes the half-made folder. A failed clone keeps the tab with git's message and Retry. A clone over SSH gets core.sshCommand with the account's key; over HTTPS, SterneGit is Git's credential helper for that remote.",
           source: 'src/app/window.rs',
           render: () =>
-            C.FastGit({
+            C.SterneGit({
               topBar: C.TopBar({ repository: 'connectors' }),
               tabStrip: C.TabStrip({ tabs: [...tabs, { name: 'connectors', state: 'reading' }], active: tabs.length }),
               body: C.Loading({
-                message: HostTexts.cloning('fastgit-org/connectors', 'E:\\Projects\\connectors'),
+                message: HostTexts.cloning('sternegit-org/connectors', 'E:\\Projects\\connectors'),
                 detail: HostTexts.receiving(45, 1234, 2741),
                 action: C.Button({ label: HostTexts.cancel, size: 'md' }),
               }),
@@ -845,7 +845,7 @@ const Screens = (() => {
           about: "Push in a repository with no remote opens Publish instead of failing. Publish creates the repository on the account, empty, adds it as origin, pushes the checked-out branch and makes origin's copy its upstream. A name the server refuses is shown under the field. With no account yet, the dialog offers Add account…, which opens Settings.",
           source: 'src/repo/toolbar.rs',
           render: () =>
-            C.FastGit({
+            C.SterneGit({
               topBar: topBar(),
               tabStrip: tabStrip(),
               body: C.RepoView({
@@ -854,7 +854,7 @@ const Screens = (() => {
                 right: C.Hint({ message: Texts.selectCommit }),
                 status: C.RepoStatusBar({ summary: historySummary(withoutRemotes) }),
               }),
-              overlays: C.PublishDialog({ repository: 'fastgit', account: personal, owner: owners[0] }),
+              overlays: C.PublishDialog({ repository: 'sternegit', account: personal, owner: owners[0] }),
             }),
         },
       ];
@@ -864,7 +864,7 @@ const Screens = (() => {
       const refsWithPulls = (pulls, refs = pulled.refs, selectedRow = null) => C.RefsList({ refs, selectedRow, collapsed, pulls: { pulls: list.open, ...pulls } });
       const graph = (selectedRow = selected) => C.HistoryList({ history: pulled, selectedRow, changes });
       const pullView = ({ pull = shown, info = details, middle, right, pulls = {}, refs, overlays = '', position, head = history.head }) =>
-        C.FastGit({
+        C.SterneGit({
           topBar: topBar({ head }),
           tabStrip: tabStrip(),
           body: C.RepoView({
@@ -883,10 +883,10 @@ const Screens = (() => {
         {
           id: 'pulls',
           title: 'Pull requests in the left pane',
-          about: "When a started connector claims the repository's remote and an account fits it, the left pane starts with Pull requests, above Branches. FastGit reads them with pulls.list when the tab opens and after each fetch finishes, never on a timer of its own. Each row has its state's icon (open in green, a draft in grey), the title, the overall state of its checks and its number; hovering it names the author and the branches. A local branch that is the head of an open pull request carries its number, in the left pane and on its badge in the graph: here feature/diff-view (#12), feature/stash (#14) and the draft feature/blame (#11). A pull request from a fork has no branch here, so it is only in the list. The section folds like the others and is left out when no connector claims the remote.",
+          about: "When a started connector claims the repository's remote and an account fits it, the left pane starts with Pull requests, above Branches. SterneGit reads them with pulls.list when the tab opens and after each fetch finishes, never on a timer of its own. Each row has its state's icon (open in green, a draft in grey), the title, the overall state of its checks and its number; hovering it names the author and the branches. A local branch that is the head of an open pull request carries its number, in the left pane and on its badge in the graph: here feature/diff-view (#12), feature/stash (#14) and the draft feature/blame (#11). A pull request from a fork has no branch here, so it is only in the list. The section folds like the others and is left out when no connector claims the remote.",
           source: 'src/repo/pulls/section.rs',
           render: () =>
-            C.FastGit({
+            C.SterneGit({
               topBar: topBar(),
               tabStrip: tabStrip(),
               body: C.RepoView({
@@ -903,7 +903,7 @@ const Screens = (() => {
           about: 'The button at the right of the section header picks which pull requests to list: Open, Closed (merged or closed, newest first) or All. Away from Open, the button says which. A hundred are read at a time; Load more, the last row, reads the next hundred. The choice belongs to the tab and isn\'t saved. Branch badges keep showing the open pull requests read last.',
           source: 'src/repo/pulls/section.rs',
           render: () =>
-            C.FastGit({
+            C.SterneGit({
               topBar: topBar(),
               tabStrip: tabStrip(),
               body: C.RepoView({
@@ -918,7 +918,7 @@ const Screens = (() => {
         {
           id: 'pull-overview',
           title: 'Pull request selected',
-          about: "Clicking a pull request selects it. The middle pane swaps the graph for its overview: title and number; its state, review, author and branches; Check out and Open on GitHub. Then its description as plain text, its checks (pulls.checks on the head commit), whether it can merge with Merge…, and the conversation with a box to comment. The right pane fetches the head into refs/fastgit/pull/12 and lists the files it changes since the commit where it branched off, as git diff main...head would; the list or tree choice is the one every file list shares. The overview is read again after each fetch. Esc, or a click on a branch, a tag or a stash, brings the graph back.",
+          about: "Clicking a pull request selects it. The middle pane swaps the graph for its overview: title and number; its state, review, author and branches; Check out and Open on GitHub. Then its description as plain text, its checks (pulls.checks on the head commit), whether it can merge with Merge…, and the conversation with a box to comment. The right pane fetches the head into refs/sternegit/pull/12 and lists the files it changes since the commit where it branched off, as git diff main...head would; the list or tree choice is the one every file list shares. The overview is read again after each fetch. Esc, or a click on a branch, a tag or a stash, brings the graph back.",
           source: 'src/repo/pulls/overview.rs',
           render: () => pullView({}),
         },
@@ -950,14 +950,14 @@ const Screens = (() => {
         {
           id: 'pull-merge',
           title: 'Merge a pull request',
-          about: "Merge… asks how, offering only the methods the repository allows, with the first one picked. Squash and merge and Create a merge commit take a commit title and message, filled in as GitHub would; Rebase and merge takes none. FastGit sends the head it showed with pulls.merge: if someone pushed since, GitHub refuses, nothing is merged, and the dialog says so. Enter merges, Esc cancels.",
+          about: "Merge… asks how, offering only the methods the repository allows, with the first one picked. Squash and merge and Create a merge commit take a commit title and message, filled in as GitHub would; Rebase and merge takes none. SterneGit sends the head it showed with pulls.merge: if someone pushed since, GitHub refuses, nothing is merged, and the dialog says so. Enter merges, Esc cancels.",
           source: 'src/repo/pulls/merge.rs',
           render: () => pullView({ overlays: C.MergePullDialog({ pull: shown, details }) }),
         },
         {
           id: 'pull-merged',
           title: 'Pull request merged',
-          about: 'Once the server merges it, FastGit fetches; the overview shows Merged and the pull request leaves the Open list, but stays selected. A notification offers Delete branch for a few seconds, and the merge box keeps offering it while origin still has the branch: git push --delete removes feature/diff-view from origin, then the local branch goes too unless it is checked out or points somewhere else than the merged head.',
+          about: 'Once the server merges it, SterneGit fetches; the overview shows Merged and the pull request leaves the Open list, but stays selected. A notification offers Delete branch for a few seconds, and the merge box keeps offering it while origin still has the branch: git push --delete removes feature/diff-view from origin, then the local branch goes too unless it is checked out or points somewhere else than the merged head.',
           source: 'src/repo/pulls/overview.rs',
           render: () =>
             pullView({
@@ -972,7 +972,7 @@ const Screens = (() => {
         {
           id: 'pull-checked-out-fork',
           title: 'Check out a pull request from a fork',
-          about: 'Check out on a pull request from this repository checks out its branch tracking origin\'s copy, as Check out on a remote branch does. One from a fork has no branch on origin: FastGit fetches refs/pull/9/head and makes a local pr/9-patch-1 from it, without an upstream; the branch carries the pull request\'s number. Uncommitted changes come along unless they clash, as for any check out. Here the merge is blocked until someone with write access approves.',
+          about: 'Check out on a pull request from this repository checks out its branch tracking origin\'s copy, as Check out on a remote branch does. One from a fork has no branch on origin: SterneGit fetches refs/pull/9/head and makes a local pr/9-patch-1 from it, without an upstream; the branch carries the pull request\'s number. Uncommitted changes come along unless they clash, as for any check out. Here the merge is blocked until someone with write access approves.',
           source: 'src/repo/pulls/overview.rs',
           render: () =>
             pullView({
@@ -990,7 +990,7 @@ const Screens = (() => {
           about: "When the remote has a connector and an account, the branch menu gains Create pull request…, or Show pull request #12 for a branch that already has an open one, which selects it. It is offered on local and remote branches, in the left pane and on badges in the graph, but not on the default branch.",
           source: 'src/repo/branch_menu.rs',
           render: () =>
-            C.FastGit({
+            C.SterneGit({
               topBar: topBar(),
               tabStrip: tabStrip(),
               body: C.RepoView({
@@ -1008,7 +1008,7 @@ const Screens = (() => {
           about: "From is the branch that was right-clicked, Into lists origin's branches with the default one picked. The title is the newest commit's subject, and the description lists the subjects when there are several. A branch that isn't on origin yet, or has commits origin lacks, is pushed first, and the dialog says so. Create sends pulls.create, selects the new pull request and says Created pull request #15; a refusal, such as one already open for the branch, shows under the title. Ctrl+Enter creates, Esc cancels.",
           source: 'src/repo/pulls/create.rs',
           render: () =>
-            C.FastGit({
+            C.SterneGit({
               topBar: topBar(),
               tabStrip: tabStrip(),
               body: C.RepoView({
@@ -1030,10 +1030,10 @@ const Screens = (() => {
         {
           id: 'pulls-no-account',
           title: 'Pull requests without an account',
-          about: 'A connector claims the remote but no account fits it: the section\'s one row says so, and Add account… opens the Add an account dialog. A refused token says the account is signed out, with Sign in again; nothing is asked before, and fetches keep using Git\'s own credentials. The first read shows a spinner; another failure shows its reason with Retry. When two accounts fit and FastGit asks which one, the row says to pick one above. Hovering a row shows its whole text.',
+          about: 'A connector claims the remote but no account fits it: the section\'s one row says so, and Add account… opens the Add an account dialog. A refused token says the account is signed out, with Sign in again; nothing is asked before, and fetches keep using Git\'s own credentials. The first read shows a spinner; another failure shows its reason with Retry. When two accounts fit and SterneGit asks which one, the row says to pick one above. Hovering a row shows its whole text.',
           source: 'src/repo/pulls/section.rs',
           render: () =>
-            C.FastGit({
+            C.SterneGit({
               topBar: topBar(),
               tabStrip: tabStrip(),
               body: C.RepoView({

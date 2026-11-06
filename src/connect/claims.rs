@@ -1,4 +1,4 @@
-use fastgit_protocol::RepoRef;
+use sternegit_protocol::RepoRef;
 
 use super::{
     catalog::{Catalog, Connector},
@@ -103,7 +103,7 @@ fn is_under(owner: &str, chosen: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use fastgit_protocol::RepoRef;
+    use sternegit_protocol::RepoRef;
 
     use super::Claim;
     use crate::{

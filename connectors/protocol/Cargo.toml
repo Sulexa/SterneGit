@@ -1,5 +1,5 @@
 [package]
-name = "fastgit-protocol"
+name = "sternegit-protocol"
 version = "1.0.0"
 edition = "2024"
 publish = false

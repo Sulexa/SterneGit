@@ -199,7 +199,7 @@ mod tests {
     fn flow(server: &TestServer) -> DeviceFlow {
         DeviceFlow::new(
             Arc::new(Curl::ignoring_git_config()),
-            "Iv1.fastgit".into(),
+            "Iv1.sternegit".into(),
             vec!["repo".into(), "read:org".into()],
             Url::parse(&server.url("/login/device/code")).unwrap(),
             Url::parse(&server.url("/login/oauth/access_token")).unwrap(),
@@ -239,7 +239,7 @@ mod tests {
         assert_eq!(seen.header("accept"), Some("application/json"));
         assert_eq!(
             form_of(seen),
-            [("client_id".into(), "Iv1.fastgit".into()), ("scope".into(), "repo read:org".into())]
+            [("client_id".into(), "Iv1.sternegit".into()), ("scope".into(), "repo read:org".into())]
         );
     }
 

@@ -28,7 +28,7 @@ mod toolbar;
 
 use std::{ffi::OsString, path::PathBuf, sync::Arc};
 
-use fastgit_protocol::{PullSummary, StateFilter};
+use sternegit_protocol::{PullSummary, StateFilter};
 use gix::ObjectId;
 use gpui_kit::{
     AnyElement, AppContext as _, Context, Entity, FocusHandle, InteractiveElement as _,
@@ -1157,7 +1157,7 @@ impl RepoView {
                 .into_any_element();
         }
         let rem = window.rem_size();
-        h_resizable("fastgit-panes")
+        h_resizable("sternegit-panes")
             .child(
                 resizable_panel()
                     .size(rem * 14.)

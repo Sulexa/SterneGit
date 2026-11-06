@@ -20,12 +20,12 @@ pub(super) const NOW_MILLIS: u64 = 1_762_300_800_000;
 pub(super) const GREETING: &str = r#"{"ok":{"protocol":"1.0","sdk":null}}"#;
 
 const IMPORTS: &str = r#"
-    (import "fastgit:1" "take" (func $take (param i32)))
-    (import "fastgit:1" "send" (func $send (param i32 i32 i32 i32) (result i32)))
-    (import "fastgit:1" "wait" (func $wait (param i32) (result i32)))
-    (import "fastgit:1" "finish" (func $finish (param i32 i32)))
-    (import "fastgit:1" "log" (func $log (param i32 i32 i32)))
-    (import "fastgit:1" "now" (func $now (result i64)))
+    (import "sternegit:1" "take" (func $take (param i32)))
+    (import "sternegit:1" "send" (func $send (param i32 i32 i32 i32) (result i32)))
+    (import "sternegit:1" "wait" (func $wait (param i32) (result i32)))
+    (import "sternegit:1" "finish" (func $finish (param i32 i32)))
+    (import "sternegit:1" "log" (func $log (param i32 i32 i32)))
+    (import "sternegit:1" "now" (func $now (result i64)))
 "#;
 
 const RESPONSES_AT: usize = 32_768;
@@ -54,7 +54,7 @@ pub(super) fn escaped(text: &str) -> String {
 }
 
 pub(super) fn entry(instructions: &str) -> String {
-    format!(r#"(func (export "fastgit_call") (param $length i32) (result i32) {instructions})"#)
+    format!(r#"(func (export "sternegit_call") (param $length i32) (result i32) {instructions})"#)
 }
 
 pub(super) fn answering(output: &str) -> Vec<u8> {
@@ -173,7 +173,7 @@ pub(super) fn fetching(requests: &[(&str, &str)]) -> Vec<u8> {
             (call $append
                 (i32.add (i32.const {head_at}) (local.get $head))
                 (i32.sub (i32.sub (local.get $length) (i32.const 4)) (local.get $head))))
-        (func (export "fastgit_call") (param $length i32) (result i32) {locals}
+        (func (export "sternegit_call") (param $length i32) (result i32) {locals}
             {sends}
             (call $append (i32.const 0) (i32.const 7))
             {waits}

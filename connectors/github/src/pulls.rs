@@ -1,4 +1,4 @@
-use fastgit_sdk::{
+use sternegit_sdk::{
     AccountContext, BranchQuery, CheckState, Failure, FetchSpec, Merge, MergeMethod, Mergeability,
     Merged, NewPull, Page, Person, PullDetails, PullNumber, PullState, PullSummary, PullsQuery,
     RepoRef, Request, ReviewStanding, StateFilter, Tip, Verdict,
@@ -301,7 +301,7 @@ fn undescribed() -> Failure {
 
 #[cfg(test)]
 mod tests {
-    use fastgit_sdk::{Failure, Merge, MergeMethod, Mergeability, NewPull, PullState};
+    use sternegit_sdk::{Failure, Merge, MergeMethod, Mergeability, NewPull, PullState};
     use serde_json::{Value, json};
 
     use super::{listed_summary, merging, mergeability, opening};
@@ -366,11 +366,11 @@ mod tests {
         let state = |state: &str, merged_at: Value| {
             let pull = json!({
                 "number": 136,
-                "html_url": "https://github.com/fastgit-org/fastgit/pull/136",
+                "html_url": "https://github.com/sternegit-org/sternegit/pull/136",
                 "state": state,
                 "merged_at": merged_at,
                 "user": null,
-                "base": { "ref": "main", "sha": "7d3f9b1e", "repo": { "name": "fastgit", "owner": { "login": "fastgit-org" } } },
+                "base": { "ref": "main", "sha": "7d3f9b1e", "repo": { "name": "sternegit", "owner": { "login": "sternegit-org" } } },
                 "head": { "ref": "quiet-fetch", "sha": "e5a9c3f7", "repo": null }
             });
             listed_summary(&pull).unwrap().state

@@ -41,7 +41,7 @@
           "state": "active",
           "role": "admin",
           "organization": {
-            "login": "fastgit-org",
+            "login": "sternegit-org",
             "id": 7,
             "avatar_url": "https://avatars.githubusercontent.com/u/7?v=4"
           }
@@ -88,7 +88,7 @@
         "can_initialize": true
       },
       {
-        "login": "fastgit-org",
+        "login": "sternegit-org",
         "kind": "organization",
         "avatar_url": "https://avatars.githubusercontent.com/u/7?v=4",
         "can_create": true,

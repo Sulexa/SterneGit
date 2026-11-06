@@ -169,7 +169,7 @@ fn open_stream(deck: Arc<Mutex<Deck>>) -> Result<Stream> {
         SampleFormat::I16 => build::<i16>(&device, config, deck),
         SampleFormat::I32 => build::<i32>(&device, config, deck),
         SampleFormat::U16 => build::<u16>(&device, config, deck),
-        other => Err(anyhow!("FastGit can't play to a {other} sound output")),
+        other => Err(anyhow!("SterneGit can't play to a {other} sound output")),
     }
 }
 

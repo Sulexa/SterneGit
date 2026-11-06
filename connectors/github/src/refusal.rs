@@ -1,4 +1,4 @@
-use fastgit_sdk::{Failure, FieldError, Response, now};
+use sternegit_sdk::{Failure, FieldError, Response, now};
 use serde_json::Value;
 
 const RETRY_AFTER: &str = "retry-after";
@@ -139,7 +139,7 @@ fn fields(response: &Response) -> Vec<FieldError> {
 
 #[cfg(test)]
 mod tests {
-    use fastgit_sdk::{Failure, FieldError, Response, now};
+    use sternegit_sdk::{Failure, FieldError, Response, now};
     use serde_json::json;
 
     use super::failure;
@@ -254,7 +254,7 @@ mod tests {
             json!({
                 "message": "Validation Failed",
                 "errors": [
-                    { "resource": "PullRequest", "code": "custom", "message": "A pull request already exists for fastgit-org:topic/tabs." }
+                    { "resource": "PullRequest", "code": "custom", "message": "A pull request already exists for sternegit-org:topic/tabs." }
                 ]
             }),
         );
@@ -262,7 +262,7 @@ mod tests {
             failure(&duplicate),
             Failure::Invalid {
                 fields: Vec::new(),
-                message: "A pull request already exists for fastgit-org:topic/tabs.".into(),
+                message: "A pull request already exists for sternegit-org:topic/tabs.".into(),
             }
         );
     }

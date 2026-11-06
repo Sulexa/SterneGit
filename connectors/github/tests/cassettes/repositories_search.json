@@ -27,14 +27,14 @@
       ],
       "body": [
         {
-          "login": "fastgit-org",
+          "login": "sternegit-org",
           "id": 7
         }
       ]
     },
     {
       "method": "GET",
-      "url": "https://api.github.com/search/repositories?q=star%20in%3Aname%20fork%3Atrue%20user%3Aoctocat%20user%3Afastgit-org&sort=updated&per_page=100",
+      "url": "https://api.github.com/search/repositories?q=star%20in%3Aname%20fork%3Atrue%20user%3Aoctocat%20user%3Asternegit-org&sort=updated&per_page=100",
       "status": 200,
       "headers": [
         [

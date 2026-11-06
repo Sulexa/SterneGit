@@ -116,7 +116,7 @@ mod tests {
 
     #[test]
     fn saved_tabs_survive_a_trip_through_the_file() {
-        let file = folder(&format!("fastgit-saved-tabs-{}", std::process::id())).join("tabs");
+        let file = folder(&format!("sternegit-saved-tabs-{}", std::process::id())).join("tabs");
         let tabs = saved(&["a", "b"], 1);
         tabs.write_to(&file).unwrap();
         let read = SavedTabs::read_from(&file);
@@ -126,7 +126,7 @@ mod tests {
 
     #[test]
     fn no_file_means_no_tabs() {
-        let missing = folder("fastgit-no-such-folder").join("tabs");
+        let missing = folder("sternegit-no-such-folder").join("tabs");
         assert_eq!(SavedTabs::read_from(&missing), SavedTabs::default());
     }
 

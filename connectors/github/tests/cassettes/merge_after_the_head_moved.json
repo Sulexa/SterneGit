@@ -10,8 +10,8 @@
     }
   },
   "repo": {
-    "owner": "fastgit-org",
-    "name": "fastgit"
+    "owner": "sternegit-org",
+    "name": "sternegit"
   },
   "input": {
     "number": 142,
@@ -23,7 +23,7 @@
   "exchanges": [
     {
       "method": "PUT",
-      "url": "https://api.github.com/repos/fastgit-org/fastgit/pulls/142/merge",
+      "url": "https://api.github.com/repos/sternegit-org/sternegit/pulls/142/merge",
       "status": 409,
       "headers": [
         [

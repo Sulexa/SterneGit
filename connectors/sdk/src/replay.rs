@@ -1,6 +1,6 @@
 use std::{fs, path::Path};
 
-use fastgit_protocol::{Call, Cassette, Exchange};
+use sternegit_protocol::{Call, Cassette, Exchange};
 use serde_json::Value;
 
 use crate::{

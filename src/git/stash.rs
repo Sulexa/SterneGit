@@ -350,7 +350,7 @@ mod tests {
         scratch.git(&["stash", "drop", "--quiet", "stash@{1}"])?;
         let error = repo
             .drop_stash(history.stashes[1].id)
-            .expect_err("the stash was dropped behind FastGit's back");
+            .expect_err("the stash was dropped behind SterneGit's back");
         assert_eq!(error.downcast_ref::<Refusal>(), Some(&Refusal::StashGone));
         assert_eq!(stash_messages(&scratch)?, "On main: newer\n");
         Ok(())

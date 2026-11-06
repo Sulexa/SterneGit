@@ -10,8 +10,8 @@
     }
   },
   "input": {
-    "owner": "fastgit-org",
-    "name": "fastgit",
+    "owner": "sternegit-org",
+    "name": "sternegit",
     "description": null,
     "visibility": "public",
     "initialize": false
@@ -19,7 +19,7 @@
   "exchanges": [
     {
       "method": "POST",
-      "url": "https://api.github.com/orgs/fastgit-org/repos",
+      "url": "https://api.github.com/orgs/sternegit-org/repos",
       "status": 422,
       "headers": [
         [

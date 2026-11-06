@@ -103,7 +103,7 @@ pub(crate) fn account_bar(
         .border_color(border)
         .child(Icon::new(IconName::User).small().text_color(blue))
         .child(div().flex_1().min_w_0().sm_text().ellipsis().child(format!(
-            "{count} accounts fit {}/{}. Which one should FastGit use for {}'s repositories?",
+            "{count} accounts fit {}/{}. Which one should SterneGit use for {}'s repositories?",
             question.host, question.owner, question.owner
         )))
         .child(div().flex_none().w(px(PICKER_WIDTH)).child(picker))

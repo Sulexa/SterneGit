@@ -1,5 +1,5 @@
 [package]
-name = "fastgit"
+name = "sternegit"
 version = "0.1.0"
 edition = "2024"
 
@@ -18,7 +18,7 @@ serde_path_to_error = "0.1.20"
 sha2 = "0.11.1"
 smol = "2.0.2"
 url = "2.5.8"
-fastgit-protocol = { path = "connectors/protocol" }
+sternegit-protocol = { path = "connectors/protocol" }
 wasmi = { version = "~2.0.0", default-features = false, features = ["std", "validate", "auto-dispatch"] }
 
 [target.'cfg(windows)'.dependencies]

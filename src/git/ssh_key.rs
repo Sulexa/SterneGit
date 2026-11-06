@@ -233,7 +233,7 @@ mod tests {
         "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl";
 
     fn scratch(name: &str) -> PathBuf {
-        let folder = std::env::temp_dir().join(format!("fastgit-ssh-{name}-{}", std::process::id()));
+        let folder = std::env::temp_dir().join(format!("sternegit-ssh-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&folder);
         std::fs::create_dir_all(&folder).unwrap();
         folder
@@ -254,7 +254,7 @@ mod tests {
             Some("SHA256:+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU")
         );
         assert_eq!(fingerprint("ssh-ed25519 not-base64!"), None);
-        assert!(same_key(&format!("{GITHUB_ED25519} FastGit octocat@github.com"), GITHUB_ED25519));
+        assert!(same_key(&format!("{GITHUB_ED25519} SterneGit octocat@github.com"), GITHUB_ED25519));
         assert!(!same_key("ssh-ed25519", "ssh-ed25519"));
     }
 
@@ -276,12 +276,12 @@ mod tests {
 
     #[test]
     fn the_ssh_command_quotes_paths_for_sh_and_checks_host_keys() {
-        let key = Path::new(r"C:\Users\O'Neil\AppData\Local\FastGit\ssh\github-github.com-1_ed25519");
-        let known = Path::new(r"C:\Users\O'Neil\AppData\Local\FastGit\ssh\known_hosts");
+        let key = Path::new(r"C:\Users\O'Neil\AppData\Local\SterneGit\ssh\github-github.com-1_ed25519");
+        let known = Path::new(r"C:\Users\O'Neil\AppData\Local\SterneGit\ssh\known_hosts");
         let command = ssh_command(key, known, true);
         assert_eq!(
             command,
-            r#"ssh -i 'C:/Users/O'\''Neil/AppData/Local/FastGit/ssh/github-github.com-1_ed25519' -o IdentitiesOnly=yes -o 'UserKnownHostsFile="C:/Users/O'\''Neil/AppData/Local/FastGit/ssh/known_hosts" ~/.ssh/known_hosts' -o StrictHostKeyChecking=yes"#
+            r#"ssh -i 'C:/Users/O'\''Neil/AppData/Local/SterneGit/ssh/github-github.com-1_ed25519' -o IdentitiesOnly=yes -o 'UserKnownHostsFile="C:/Users/O'\''Neil/AppData/Local/SterneGit/ssh/known_hosts" ~/.ssh/known_hosts' -o StrictHostKeyChecking=yes"#
         );
         assert!(names_key(&command, key));
         assert!(!names_key(&command, Path::new(r"C:\other_ed25519")));
@@ -292,12 +292,12 @@ mod tests {
     fn ssh_keygen_makes_a_key_pair_that_reads_back_and_is_deleted_whole() {
         let folder = scratch("keygen");
         let private = folder.join("ssh").join(key_file_name("github:github.com:1", "ed25519"));
-        let made = generate(&private, "ed25519", "FastGit octocat@github.com").unwrap();
+        let made = generate(&private, "ed25519", "SterneGit octocat@github.com").unwrap();
         assert_eq!(made.kind(), "ssh-ed25519");
-        assert!(made.public.ends_with("FastGit octocat@github.com"));
+        assert!(made.public.ends_with("SterneGit octocat@github.com"));
         assert!(made.fingerprint().unwrap().starts_with("SHA256:"));
         assert_eq!(KeyPair::read(&private), Some(made.clone()));
-        let again = generate(&private, "ed25519", "FastGit octocat@github.com").unwrap();
+        let again = generate(&private, "ed25519", "SterneGit octocat@github.com").unwrap();
         assert_ne!(again.public, made.public);
         again.delete().unwrap();
         assert_eq!(KeyPair::read(&private), None);

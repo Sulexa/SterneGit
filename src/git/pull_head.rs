@@ -6,7 +6,7 @@ use super::{
     command::{Exit, READ_ONLY, run_text},
 };
 
-pub(super) const PULL_REFS: &str = "refs/fastgit/pull/";
+pub(super) const PULL_REFS: &str = "refs/sternegit/pull/";
 const REMOTE_URL_KEYS: &str = r"^remote\..*\.url$";
 const REMOTE_KEY_PREFIX: &str = "remote.";
 const REMOTE_KEY_SUFFIX: &str = ".url";
@@ -89,7 +89,7 @@ impl PullSource {
             bail!("The pull request's base branch has a name Git refuses: {}", self.base_branch);
         }
         if self.url.as_deref().is_some_and(|url| !url.starts_with(SECURE_SCHEME)) {
-            bail!("FastGit fetches pull requests only over https");
+            bail!("SterneGit fetches pull requests only over https");
         }
         Ok(())
     }
@@ -261,12 +261,12 @@ mod tests {
 
     #[test]
     fn remotes_are_read_with_their_names_and_push_urls_are_left_out() {
-        let listed = "remote.origin.url https://github.com/fastgit-org/fastgit.git\nremote.origin.pushurl git@github.com:me/fastgit.git\nremote.my.fork.url https://github.com/me/fastgit\n";
+        let listed = "remote.origin.url https://github.com/sternegit-org/sternegit.git\nremote.origin.pushurl git@github.com:me/sternegit.git\nremote.my.fork.url https://github.com/me/sternegit\n";
         assert_eq!(
             named_remotes_in(listed),
             [
-                NamedRemote { name: "origin".into(), url: "https://github.com/fastgit-org/fastgit.git".into() },
-                NamedRemote { name: "my.fork".into(), url: "https://github.com/me/fastgit".into() },
+                NamedRemote { name: "origin".into(), url: "https://github.com/sternegit-org/sternegit.git".into() },
+                NamedRemote { name: "my.fork".into(), url: "https://github.com/me/sternegit".into() },
             ]
         );
     }
@@ -313,7 +313,7 @@ mod tests {
         assert!(fetched.patch.contains("+two"));
         assert!(fetched.patch.contains("b/added.txt"));
         assert!(!fetched.patch.contains("main moves on"));
-        assert_eq!(reviewer.git(&["rev-parse", "refs/fastgit/pull/7"])?.trim(), head);
+        assert_eq!(reviewer.git(&["rev-parse", "refs/sternegit/pull/7"])?.trim(), head);
         Ok(())
     }
 
@@ -333,7 +333,7 @@ mod tests {
         let (_origin, reviewer, _) = with_a_pull_request("branch-span")?;
         let (repo, _) = reviewer.open()?;
         repo.fetch_pull_head(&source("origin", 7))?;
-        let span = repo.branch_span("origin/main", "refs/fastgit/pull/7")?;
+        let span = repo.branch_span("origin/main", "refs/sternegit/pull/7")?;
         assert_eq!(span.subjects, ["Add a file", "Add two"]);
         assert_eq!(span.files, 2);
         Ok(())

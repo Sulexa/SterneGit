@@ -59,7 +59,7 @@ mod tests {
     use crate::accounts::Token;
 
     fn scratch(name: &str) -> PathBuf {
-        let folder = std::env::temp_dir().join(format!("fastgit-git-token-{name}-{}", std::process::id()));
+        let folder = std::env::temp_dir().join(format!("sternegit-git-token-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&folder);
         std::fs::create_dir_all(&folder).unwrap();
         folder

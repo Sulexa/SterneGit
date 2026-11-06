@@ -352,7 +352,7 @@ mod tests {
     }
 
     #[test]
-    fn fastgit_runs_the_curl_that_comes_with_the_system() {
+    fn sternegit_runs_the_curl_that_comes_with_the_system() {
         let program = Curl::system().program;
         let name = program.file_name().unwrap().to_string_lossy().into_owned();
         assert_eq!(name, if cfg!(windows) { "curl.exe" } else { "curl" });

@@ -357,9 +357,9 @@ mod tests {
     fn an_account_reads_back_what_it_wrote_including_fields_it_does_not_know() {
         let mut account = fixtures::github("583231");
         account.name = Some("Octo Cat".into());
-        account.others.insert("from_a_newer_fastgit".into(), json!({ "a": 1 }));
+        account.others.insert("from_a_newer_sternegit".into(), json!({ "a": 1 }));
         account.ssh_key = Some("C:/keys/github-github.com-583231_ed25519".into());
-        account.ssh_repositories = vec!["E:/Projects/fastgit".into()];
+        account.ssh_repositories = vec!["E:/Projects/sternegit".into()];
         account.clone_over_ssh = true;
         assert_eq!(Account::from_json(&account.to_json()), Some(account));
     }

@@ -24,8 +24,8 @@ use crate::{
 };
 
 const CONNECTORS: &str = "Connectors";
-const CONNECTORS_ABOUT: &str = "Connectors let FastGit talk to hosting services. Each one runs in a sandbox: \
-     it reaches only the servers listed for it, and FastGit adds the token to its requests, so it never sees one.";
+const CONNECTORS_ABOUT: &str = "Connectors let SterneGit talk to hosting services. Each one runs in a sandbox: \
+     it reaches only the servers listed for it, and SterneGit adds the token to its requests, so it never sees one.";
 const OPEN_FOLDER: &str = "Open folder";
 const BUNDLED: &str = "Bundled";
 const INSTALLED: &str = "Installed";
@@ -35,7 +35,7 @@ const APPROVE: &str = "Approve";
 const NOT_NOW: &str = "Not now";
 const COPY_LOG: &str = "Copy log";
 const REACH: &str = "Servers it can reach";
-const REACH_ABOUT: &str = "Requests anywhere else fail before they leave FastGit.";
+const REACH_ABOUT: &str = "Requests anywhere else fail before they leave SterneGit.";
 const WITH_TOKEN: &str = "With your token";
 const WITHOUT_TOKEN: &str = "Without a token";
 const IMAGES: &str = "Pictures from";
@@ -225,7 +225,7 @@ impl SettingsTab {
                         .xs_text()
                         .text_color(muted)
                         .child(Icon::new(IconName::Info).xsmall())
-                        .child(format!("To install a connector, copy its folder into {folder} and restart FastGit.")),
+                        .child(format!("To install a connector, copy its folder into {folder} and restart SterneGit.")),
                 ),
         )
         .into_any_element()
@@ -330,7 +330,7 @@ impl SettingsTab {
                 IconName::ShieldCheck,
                 format!(
                     "Approve only a connector you trust. Once approved, it acts on your {name} accounts as far as their tokens allow, \
-                     through FastGit. It can't read your files, your SSH keys or your other accounts."
+                     through SterneGit. It can't read your files, your SSH keys or your other accounts."
                 ),
                 yellow,
             ));

@@ -22,7 +22,7 @@ use crate::{
     },
     assets::Assets,
 };
-use window::FastGit;
+use window::SterneGit;
 
 const WINDOW_WIDTH: f32 = 1440.;
 const WINDOW_HEIGHT: f32 = 900.;
@@ -40,14 +40,14 @@ pub(crate) fn run(path: Option<PathBuf>) {
                 cx,
             )),
             window_min_size: Some(size(px(MIN_WINDOW_WIDTH), px(MIN_WINDOW_HEIGHT))),
-            app_id: Some("fastgit".into()),
+            app_id: Some("sternegit".into()),
             ..TitleBar::window_options()
         };
         connectors::install_connectors(cx);
         gpui_kit::open_window(options, cx, |window, cx| {
-            cx.new(|cx| FastGit::new(path, window, cx))
+            cx.new(|cx| SterneGit::new(path, window, cx))
         })
-        .expect("failed to open the FastGit window");
+        .expect("failed to open the SterneGit window");
         cx.activate(true);
         connectors::start_connectors(cx);
     });
@@ -156,6 +156,6 @@ fn menus() -> Vec<Menu> {
             MenuItem::action("Next Tab", NextTab),
             MenuItem::action("Previous Tab", PreviousTab),
         ]),
-        Menu::new("About").items([MenuItem::action("About FastGit", About)]),
+        Menu::new("About").items([MenuItem::action("About SterneGit", About)]),
     ]
 }

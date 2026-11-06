@@ -8,7 +8,7 @@ mod pulls;
 mod refusal;
 mod repositories;
 
-use fastgit_sdk::{
+use sternegit_sdk::{
     AccountContext, BranchQuery, Check, Comment, CommitQuery, Connector, ConversationQuery, Failure,
     Identity, Merge, Merged, NewComment, NewPull, NewRepository, NewSshKey, Owner, Page, PullDetails,
     PullNumber, PullSummary, PullsQuery, RepoRef, Repository, RepositoryQuery, Request, Response,

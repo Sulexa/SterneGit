@@ -188,7 +188,7 @@ fn what_deleting_loses(branch: &str, commits_only_on_it: Option<usize>) -> Strin
         ),
         None => format!(
             "{branch} points to a commit older than the newest {} shown, \
-             so FastGit can't tell whether deleting it loses any commits.",
+             so SterneGit can't tell whether deleting it loses any commits.",
             thousands(HISTORY_LIMIT)
         ),
     }

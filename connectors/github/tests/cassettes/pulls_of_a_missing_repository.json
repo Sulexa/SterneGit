@@ -10,7 +10,7 @@
     }
   },
   "repo": {
-    "owner": "fastgit-org",
+    "owner": "sternegit-org",
     "name": "gone"
   },
   "input": {
@@ -48,7 +48,7 @@
                 "column": 108
               }
             ],
-            "message": "Could not resolve to a Repository with the name 'fastgit-org/gone'."
+            "message": "Could not resolve to a Repository with the name 'sternegit-org/gone'."
           }
         ]
       }

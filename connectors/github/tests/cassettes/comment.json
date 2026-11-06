@@ -10,8 +10,8 @@
     }
   },
   "repo": {
-    "owner": "fastgit-org",
-    "name": "fastgit"
+    "owner": "sternegit-org",
+    "name": "sternegit"
   },
   "input": {
     "number": 142,
@@ -20,7 +20,7 @@
   "exchanges": [
     {
       "method": "POST",
-      "url": "https://api.github.com/repos/fastgit-org/fastgit/issues/142/comments",
+      "url": "https://api.github.com/repos/sternegit-org/sternegit/issues/142/comments",
       "status": 201,
       "headers": [
         [
@@ -35,8 +35,8 @@
       "body": {
         "id": 2464500129,
         "node_id": "IC_kwDOM1a2b86SvX0129",
-        "html_url": "https://github.com/fastgit-org/fastgit/pull/142#issuecomment-2464500129",
-        "issue_url": "https://api.github.com/repos/fastgit-org/fastgit/issues/142",
+        "html_url": "https://github.com/sternegit-org/sternegit/pull/142#issuecomment-2464500129",
+        "issue_url": "https://api.github.com/repos/sternegit-org/sternegit/issues/142",
         "user": {
           "login": "alex-martin",
           "id": 4120511,
@@ -64,7 +64,7 @@
       "body": "Rebased on main; the checks are green again.",
       "created_at": "2026-11-04T08:55:16Z",
       "reply_to": null,
-      "web_url": "https://github.com/fastgit-org/fastgit/pull/142#issuecomment-2464500129"
+      "web_url": "https://github.com/sternegit-org/sternegit/pull/142#issuecomment-2464500129"
     }
   }
 }

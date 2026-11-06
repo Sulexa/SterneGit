@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use fastgit_protocol::speaks_same_major;
+use sternegit_protocol::speaks_same_major;
 use serde_json::Value;
 use url::Url;
 
@@ -78,13 +78,13 @@ impl Manifest {
         let interface = manifest.object("interface")?;
         if interface.value.get("abi").and_then(Value::as_u64) != Some(ABI_VERSION) {
             return Err(format!(
-                "The connector doesn't ask for ABI {ABI_VERSION}, the only one this FastGit offers"
+                "The connector doesn't ask for ABI {ABI_VERSION}, the only one this SterneGit offers"
             ));
         }
         let protocol = interface.text("protocol")?;
         if !speaks_same_major(&protocol) {
             return Err(format!(
-                "The connector speaks protocol {protocol}, which this FastGit doesn't speak"
+                "The connector speaks protocol {protocol}, which this SterneGit doesn't speak"
             ));
         }
         let id = manifest.text("id")?;
@@ -191,7 +191,7 @@ impl Field {
         let kind = match place.text("kind")?.as_str() {
             "url" => FieldKind::Url,
             "text" => FieldKind::Text,
-            other => return Err(format!("{}: FastGit asks for url or text fields, not {other}", place.path)),
+            other => return Err(format!("{}: SterneGit asks for url or text fields, not {other}", place.path)),
         };
         Ok(Self {
             id,
@@ -228,7 +228,7 @@ impl SignIn {
     fn read(place: &Place, fields: &[Field], endpoints: &[(String, String)]) -> Result<Self, String> {
         let method = place.text("method")?;
         let method = SignInMethod::named(&method)
-            .ok_or_else(|| format!("{}: FastGit doesn't know the sign-in method {method}", place.path))?;
+            .ok_or_else(|| format!("{}: SterneGit doesn't know the sign-in method {method}", place.path))?;
         let scheme = TokenScheme::from_json(place.object("token")?.value)
             .ok_or_else(|| format!("{}.token: the token scheme can't be read", place.path))?;
         let url_names: &[&str] = match method {

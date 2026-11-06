@@ -127,7 +127,7 @@ impl RenderOnce for OtherFileView {
                 .tooltip("git difftool, with the tool set in diff.tool")
                 .on_click(move |_, window, cx| on_difftool(&(), window, cx))
         });
-        let title = format!("FastGit can't draw {} files", self.file.type_name);
+        let title = format!("SterneGit can't draw {} files", self.file.type_name);
         v_flex()
             .size_full()
             .child(

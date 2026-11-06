@@ -2,9 +2,9 @@ $ErrorActionPreference = 'Stop'
 try { [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false) } catch {}
 
 $root = Split-Path -Parent $PSScriptRoot
-$fresh = Join-Path $root 'target\release\fastgit.exe'
+$fresh = Join-Path $root 'target\release\sternegit.exe'
 $buildDir = Join-Path $root 'build'
-$installed = Join-Path $buildDir 'fastgit.exe'
+$installed = Join-Path $buildDir 'sternegit.exe'
 
 $hook = $null
 if ([Console]::IsInputRedirected) {
@@ -55,7 +55,7 @@ try {
 finally { Pop-Location }
 
 if ($exitCode -ne 0) {
-    $summary = 'FastGit failed to build, so build\fastgit.exe was left as it was.'
+    $summary = 'SterneGit failed to build, so build\sternegit.exe was left as it was.'
     $errors = Get-CompilerErrors $log
     if ($hook -and -not $hook.stop_hook_active) {
         [Console]::Error.WriteLine("$summary Fix these errors:`n$errors")
@@ -68,11 +68,11 @@ if ($exitCode -ne 0) {
 Sync-BundledConnectors
 
 if ((Test-Path $installed) -and ((Get-FileHash $fresh).Hash -eq (Get-FileHash $installed).Hash)) {
-    if (-not $hook) { Write-Report 'build\fastgit.exe is already the latest build.' }
+    if (-not $hook) { Write-Report 'build\sternegit.exe is already the latest build.' }
     exit 0
 }
 
-$running = @(Get-Process -Name fastgit -ErrorAction SilentlyContinue |
+$running = @(Get-Process -Name sternegit -ErrorAction SilentlyContinue |
     Where-Object { $_.Path -and ($_.Path -eq $installed) })
 $running | Stop-Process -Force
 $running | ForEach-Object { $_.WaitForExit(10000) | Out-Null }
@@ -88,9 +88,9 @@ for ($attempt = 1; ; $attempt++) {
 
 if ($running.Count -gt 0) {
     Start-Process -FilePath $installed -WorkingDirectory $root
-    Write-Report 'FastGit rebuilt and relaunched from build\fastgit.exe.'
+    Write-Report 'SterneGit rebuilt and relaunched from build\sternegit.exe.'
 }
 else {
-    Write-Report 'FastGit rebuilt into build\fastgit.exe. It was not running, so it was not started.'
+    Write-Report 'SterneGit rebuilt into build\sternegit.exe. It was not running, so it was not started.'
 }
 exit 0

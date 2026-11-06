@@ -1418,7 +1418,7 @@ fn copy_version(repo: &Repo, source: &VersionSource, version: Version) -> anyhow
         .file_name()
         .map_or_else(|| OsString::from("file"), ToOwned::to_owned);
     let folder = std::env::temp_dir()
-        .join("fastgit")
+        .join("sternegit")
         .join(format!("{}-{}", version.label().to_lowercase(), std::process::id()));
     std::fs::create_dir_all(&folder)?;
     let copy = folder.join(name);
@@ -1456,7 +1456,7 @@ fn video_on_disk(
     let bytes = repo.resolve_lfs(bytes)?.bytes;
     static COPIES: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
     let number = COPIES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    let folder = std::env::temp_dir().join("fastgit");
+    let folder = std::env::temp_dir().join("sternegit");
     std::fs::create_dir_all(&folder)?;
     let copy = folder.join(format!(
         "video-{}-{number}.{}",

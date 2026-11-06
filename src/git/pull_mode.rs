@@ -5,7 +5,7 @@ use super::{
     command::{Exit, run},
 };
 
-const SAVED_UNDER: &str = "fastgit.pullMode";
+const SAVED_UNDER: &str = "sternegit.pullMode";
 const GIT_REBASES_ON_PULL: &str = "pull.rebase";
 const GIT_FAST_FORWARDS_ON_PULL: &str = "pull.ff";
 const GIT_FALSE: [&str; 5] = ["false", "no", "off", "0", ""];

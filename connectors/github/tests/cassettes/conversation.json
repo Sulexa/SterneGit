@@ -10,8 +10,8 @@
     }
   },
   "repo": {
-    "owner": "fastgit-org",
-    "name": "fastgit"
+    "owner": "sternegit-org",
+    "name": "sternegit"
   },
   "input": {
     "number": 142,
@@ -20,7 +20,7 @@
   "exchanges": [
     {
       "method": "GET",
-      "url": "https://api.github.com/repos/fastgit-org/fastgit/issues/142/comments?per_page=100",
+      "url": "https://api.github.com/repos/sternegit-org/sternegit/issues/142/comments?per_page=100",
       "status": 200,
       "headers": [
         [
@@ -40,8 +40,8 @@
         {
           "id": 2461803912,
           "node_id": "IC_kwDOM1a2b86SvX3912",
-          "html_url": "https://github.com/fastgit-org/fastgit/pull/142#issuecomment-2461803912",
-          "issue_url": "https://api.github.com/repos/fastgit-org/fastgit/issues/142",
+          "html_url": "https://github.com/sternegit-org/sternegit/pull/142#issuecomment-2461803912",
+          "issue_url": "https://api.github.com/repos/sternegit-org/sternegit/issues/142",
           "user": {
             "login": "sam-lee",
             "id": 5523874,
@@ -59,8 +59,8 @@
         {
           "id": 2461877405,
           "node_id": "IC_kwDOM1a2b86SvX7405",
-          "html_url": "https://github.com/fastgit-org/fastgit/pull/142#issuecomment-2461877405",
-          "issue_url": "https://api.github.com/repos/fastgit-org/fastgit/issues/142",
+          "html_url": "https://github.com/sternegit-org/sternegit/pull/142#issuecomment-2461877405",
+          "issue_url": "https://api.github.com/repos/sternegit-org/sternegit/issues/142",
           "user": {
             "login": "alex-martin",
             "id": 4120511,
@@ -91,7 +91,7 @@
           "body": "Tried it on a repository with 400 open pull requests; the list pages smoothly.",
           "created_at": "2026-11-03T10:12:40Z",
           "reply_to": null,
-          "web_url": "https://github.com/fastgit-org/fastgit/pull/142#issuecomment-2461803912"
+          "web_url": "https://github.com/sternegit-org/sternegit/pull/142#issuecomment-2461803912"
         },
         {
           "id": "2461877405",
@@ -103,7 +103,7 @@
           "body": "Thanks! The state filter comes next.",
           "created_at": "2026-11-03T10:31:02Z",
           "reply_to": null,
-          "web_url": "https://github.com/fastgit-org/fastgit/pull/142#issuecomment-2461877405"
+          "web_url": "https://github.com/sternegit-org/sternegit/pull/142#issuecomment-2461877405"
         }
       ],
       "next": "https://api.github.com/repositories/861200417/issues/142/comments?per_page=100&page=2"

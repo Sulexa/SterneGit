@@ -1,4 +1,4 @@
-use fastgit_sdk::{AccountContext, Comment, ConversationQuery, Failure, NewComment, Page, RepoRef, Request};
+use sternegit_sdk::{AccountContext, Comment, ConversationQuery, Failure, NewComment, Page, RepoRef, Request};
 use serde_json::{Value, json};
 
 use crate::{

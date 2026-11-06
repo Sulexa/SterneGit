@@ -3,7 +3,7 @@ use url::Url;
 use super::request::{ApiResponse, Method, NetError};
 use crate::accounts::{Account, TokenScheme, is_header_name};
 
-const HEADERS_ONLY_FASTGIT_SETS: [&str; 10] = [
+const HEADERS_ONLY_STERNEGIT_SETS: [&str; 10] = [
     "authorization",
     "proxy-authorization",
     "cookie",
@@ -96,7 +96,7 @@ pub(crate) fn check_headers(
         let lower = name.to_ascii_lowercase();
         !is_header_name(name)
             || !value.bytes().all(|byte| byte == b'\t' || (b' '..=b'~').contains(&byte))
-            || HEADERS_ONLY_FASTGIT_SETS.contains(&lower.as_str())
+            || HEADERS_ONLY_STERNEGIT_SETS.contains(&lower.as_str())
             || name.eq_ignore_ascii_case(token_header)
     });
     match refused {

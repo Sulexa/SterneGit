@@ -2,7 +2,7 @@
 
 A connector is a folder holding `connector.json` and a WebAssembly core module built for
 `wasm32-unknown-unknown`, run by the wasmi 2.0 interpreter. The module imports six functions from
-FastGit and exports one entry point, and every message is JSON. An HTTP request suspends the
+SterneGit and exports one entry point, and every message is JSON. An HTTP request suspends the
 connector with a wasmi resumable call, so no thread blocks while it waits. Each operation gets a
 fresh instance, dropped when it ends, so an idle connector holds none. Fuel slices and a memory
 limit stop runaway connectors, and dropping a `Job` cancels the call and its requests. The cost
@@ -12,7 +12,7 @@ no idle CPU. The component model on wasmi was measured too, and isn't worth it.
 
 ## Measured numbers
 
-Probe crates built with FastGit's release profile and rustc 1.99.1. The baseline links
+Probe crates built with SterneGit's release profile and rustc 1.99.1. The baseline links
 serde_json and anyhow and does the engine probe's JSON work. Other builds were running, so
 timings are ranges.
 
@@ -36,17 +36,17 @@ timings are ranges.
 | Misbehaving connectors | endless loop stopped by fuel in 0.3–0.8 s; memory hog stopped at 64 MB in 114 ms; panic trapped and logged in 1.6 ms; wild pointer refused in 6.7 ms |
 
 *Estimates:* the full GitHub connector (about 17 operations) at 0.45–0.6 MB of `.wasm` and
-0.8–1.1 MB while started; FastGit's serde code for the protocol types at 100–200 KB, which every
+0.8–1.1 MB while started; SterneGit's serde code for the protocol types at 100–200 KB, which every
 JSON design pays.
 
 ## 1. Package, manifest and discovery
 
 A connector is a folder named after its id: `github/connector.json` and `github/github.wasm`.
-FastGit reads the manifests in two places:
+SterneGit reads the manifests in two places:
 
 - **bundled:** `connectors/` next to the exe, or `Contents/Resources/connectors` on macOS;
-- **installed:** `%APPDATA%\FastGit\connectors`, `~/Library/Application Support/FastGit/connectors`
-  or `$XDG_DATA_HOME/fastgit/connectors`.
+- **installed:** `%APPDATA%\SterneGit\connectors`, `~/Library/Application Support/SterneGit/connectors`
+  or `$XDG_DATA_HOME/sternegit/connectors`.
 
 The manifest is JSON, because serde_json is linked and toml isn't:
 
@@ -76,7 +76,7 @@ The manifest is JSON, because serde_json is linked and toml isn't:
 ```
 
 **Permissions**, shown at approval, are the endpoint and image origins, the claimed remote hosts,
-the features and the sign-in URLs. FastGit stores approved permissions per connector id. A new
+the features and the sign-in URLs. SterneGit stores approved permissions per connector id. A new
 connector waits for approval. An update within the approved permissions starts without asking,
 even with a new module; one that adds anything waits, showing what it adds. Bundled connectors
 never wait.
@@ -85,14 +85,14 @@ never wait.
 that says so, which is how an author tests a new GitHub connector. Accounts are keyed by
 connector id and keep working.
 
-**Two connectors claiming one server** is fine, because claims belong to accounts: FastGit asks
+**Two connectors claiming one server** is fine, because claims belong to accounts: SterneGit asks
 once per remote owner (decision 8), and the approval warns that github.com is also claimed.
 
 **Source and shipping.**
 
 - `connectors/github/` is the connector crate, with its own `[workspace]`,
   `rust-toolchain.toml`, cassettes and manifest. `connectors/sdk/` is the author SDK.
-  `connectors/protocol/` holds the serde types the SDK and FastGit share, and is FastGit's only
+  `connectors/protocol/` holds the serde types the SDK and SterneGit share, and is SterneGit's only
   new path dependency.
 - The module is committed as `connectors/github/dist/github.wasm`, so a plain `cargo build` needs
   no wasm target. CI rebuilds it and fails on any difference.
@@ -105,7 +105,7 @@ once per remote owner (decision 8), and the approval warns that github.com is al
 
 **wasmi 2.0.0** (1 September 2026), with `default-features = false, features = ["std",
 "validate"]`: no `wat`, `memory64` or `simd`, and validation kept for untrusted modules.
-FastGit's `Cargo.toml` sets `opt-level = "s"` for the wasmi crates and `wasmparser`, saving
+SterneGit's `Cargo.toml` sets `opt-level = "s"` for the wasmi crates and `wasmparser`, saving
 450 KB for 15–30% slower interpretation.
 
 ```rust
@@ -135,7 +135,7 @@ config
   them run in parallel, and leaves nothing idle.
 - **One `Engine` per connector**, because wasmi frees compiled code only with its engine. A
   connector without accounts drops its engine after the handshake and reloads it on sign-in.
-- **Target:** `wasm32-unknown-unknown`. FastGit refuses, by name, any other import, such as the
+- **Target:** `wasm32-unknown-unknown`. SterneGit refuses, by name, any other import, such as the
   WASI of a `wasip1` build.
 - **Component model on wasmi: no.** `wasm_component_layer` was last released in August 2024 and
   doesn't compile against wasmi 2.0's `wasm_runtime_layer` 0.7. Pinned to wasmi 0.40 it added
@@ -145,7 +145,7 @@ config
 
 ### ABI 1
 
-| Import from `fastgit:1` | Meaning |
+| Import from `sternegit:1` | Meaning |
 | --- | --- |
 | `take(into: i32)` | Copy the waiting message, the call input or the last response, into guest memory |
 | `send(head, head_len, body, body_len: i32) -> i32` | Start a request; returns its id at once |
@@ -154,7 +154,7 @@ config
 | `log(level, text, len: i32)` | One log line, 64 KB per call at most |
 | `now() -> i64` | Unix time in ms |
 
-The module exports `memory` and `fastgit_call(input_len: i32) -> i32`. A request head is
+The module exports `memory` and `sternegit_call(input_len: i32) -> i32`. A request head is
 `{"method","url","headers"}`, with a relative `url` resolved against the account's `api`. A
 response is a `u32` head length, the head `{"status","headers","error"}`, then the raw body. The
 guest does all the allocating, so the host never calls into it, as in Typst's plugin protocol.
@@ -182,8 +182,8 @@ A call's input is `{"op", "account": {"api","graphql","web","login"}, "repo": <l
 | `pulls.reply` / `.resolve` | `{number, thread, body}` / `{number, thread, resolved}` | `Comment` / `Thread` |
 | `pulls.merge` | `{number, method, title, message, expected_head}` | `Merged {sha}` |
 
-Publishing is `repositories.create`, after which FastGit adds the remote and pushes. A review
-draft stays in FastGit until one `pulls.review` submits it. The main types:
+Publishing is `repositories.create`, after which SterneGit adds the remote and pushes. A review
+draft stays in SterneGit until one `pulls.review` submits it. The main types:
 
 ```rust
 pub struct PullDetails { pub summary: PullSummary, pub body: String, pub base: Tip, pub head: Tip,
@@ -198,7 +198,7 @@ pub enum Failure { SignedOut, Forbidden { needs: Option<String>, message: String
     Unsupported, Protocol { message: String } }
 ```
 
-The host adds `Stopped { reason }` for traps and budgets. FastGit's screens need only these
+The host adds `Stopped { reason }` for traps and budgets. SterneGit's screens need only these
 values, the catalog's `Standing`, and each service's `fields` and `sign_in`.
 
 ### Sign-in and the token
@@ -317,8 +317,8 @@ export!(GitHub);
 
 ## 4. Versioning
 
-- **The ABI version** is the import module name. A breaking change would be `fastgit:2`, linked
-  alongside `fastgit:1` for a while. A module importing a version FastGit lacks is refused before
+- **The ABI version** is the import module name. A breaking change would be `sternegit:2`, linked
+  alongside `sternegit:1` for a while. A module importing a version SterneGit lacks is refused before
   it is instantiated.
 - **The protocol** is `major.minor`, declared in the manifest and confirmed by `hello`, which
   catches a manifest that disagrees with its module. Minor versions only add operations, optional
@@ -326,8 +326,8 @@ export!(GitHub);
   unknown fields.
 - **Features** gate the UI. A stray `Unsupported` reads as "not available".
 - **An older connector** runs, with what it lacks hidden. **A newer one** with the same major
-  runs too; FastGit ignores what it doesn't know. One needing a newer major or ABI shows "needs a
-  newer FastGit" and doesn't start.
+  runs too; SterneGit ignores what it doesn't know. One needing a newer major or ABI shows "needs a
+  newer SterneGit" and doesn't start.
 
 ## 5. Async, concurrency, cancellation, start-up
 
@@ -368,7 +368,7 @@ step = match step {
   history reads. One connector takes 2–4 ms and ten take 19–36 ms, by compilation mode. No timers
   are added.
 
-## 6. FastGit side
+## 6. SterneGit side
 
 `src/connect/` is UI-free. `Found` pairs a manifest with its folder, origin and `Standing`
 (`Ready`, `Waiting(Permissions)` or `Unusable(String)`).
@@ -425,16 +425,16 @@ tab opens and when a fetch finishes, so they need no timer of their own.
   `/user/keys`, creating pull requests, the review (one `POST …/reviews` with `event` and line
   comments) and the merge (`PUT …/merge` with `sha`; 405 means not mergeable, 409 that the head
   moved).
-- **Search** uses `/search/repositories` with `user:`/`org:` (30 requests a minute), so FastGit
+- **Search** uses `/search/repositories` with `user:`/`org:` (30 requests a minute), so SterneGit
   also filters loaded pages as the user types.
 - **GraphQL** is required for review threads: REST has no thread ids or resolved state, and
   `resolveReviewThread` and `addPullRequestReviewThreadReply` are GraphQL only. `pulls.get` is one
   query: `mergeable`, `mergeStateStatus`, ref oids, `*Allowed` merge settings, `statusCheckRollup`.
-- **The head** is `refs/pull/N/head` on the base repository, which works for forks too. FastGit
-  fetches it into `refs/fastgit/pull/N` and diffs locally.
+- **The head** is `refs/pull/N/head` on the base repository, which works for forks too. SterneGit
+  fetches it into `refs/sternegit/pull/N` and diffs locally.
 - **Missing scopes** come back as a 403, or sometimes a 404, with `X-Accepted-OAuth-Scopes`, which
   becomes `Forbidden { needs }`. A token reused from Git Credential Manager usually lacks
-  `write:public_key`, so FastGit offers the device flow.
+  `write:public_key`, so SterneGit offers the device flow.
 
 ## 8. Platform check
 
@@ -464,7 +464,7 @@ verdicts), opaque cursors (continuation tokens) and locator captures (deep paths
 
 **Gitea** is GitHub-shaped REST (`/api/v1`, `Link` paging, `refs/pull/N/head`, `POST …/merge`
 with `Do`) without GraphQL. *Estimate:* 700–900 lines against about 1,300 for GitHub, a
-350–450 KB module, and no change in FastGit.
+350–450 KB module, and no change in SterneGit.
 
 ## 9. Author experience
 
@@ -472,17 +472,17 @@ with `Do`) without GraphQL. *Estimate:* 700–900 lines against about 1,300 for 
   `panic = "abort"`), the 128 KiB stack in `.cargo/config.toml`, a manifest and a cassette.
 - **Test natively.** On native targets the SDK swaps its imports for a replay backend, so
   `cargo test` runs the connector against cassettes with a debugger and backtraces.
-- **Test the real module** with `fastgit --connector-test <folder> [cassette]`, a new
+- **Test the real module** with `sternegit --connector-test <folder> [cassette]`, a new
   `src/cli.rs` mode that prints outputs, logs, fuel and memory without a window.
 - **Cassettes** are lists of `{method, url, status, headers, body}`. A connector never sees a
   token, so a cassette can't hold one.
-- **Logs** go to FastGit's log under `connector:<id>`.
+- **Logs** go to SterneGit's log under `connector:<id>`.
 - **Other languages** need only i32 imports and an exported memory. *Estimates, no compilers
   installed:* TinyGo (`wasm-unknown`) 100–250 KB with a JSON library, AssemblyScript 20–60 KB,
   C with cJSON 15–40 KB, Zig with `std.json` 30–80 KB.
 - **miniserde** measured 29% smaller than serde_json on the list-only connector.
 
-## 10. Testing in FastGit
+## 10. Testing in SterneGit
 
 - Unit tests cover manifests, permission diffs, remote matching and cursors.
 - Engine tests use fake connectors in WAT (the `wat` crate as a dev-dependency) and a fake `Host`.
@@ -517,7 +517,7 @@ write JavaScript, or if typed WIT bindings outweigh size.
 
 ## 13. Build plan
 
-1. Engine, ABI, SDK, protocol crate, fake-connector tests, `--connector-test`; measure FastGit's
+1. Engine, ABI, SDK, protocol crate, fake-connector tests, `--connector-test`; measure SterneGit's
    real size delta.
 2. Manifests, discovery, approvals, accounts, remote matching, the remembered account choice.
 3. GitHub: who am I, repositories (list, search, create, publish), SSH keys.

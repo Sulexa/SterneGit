@@ -1,4 +1,4 @@
-# FastGit
+# SterneGit
 
 A lightweight Git client for Linux, macOS and Windows, written in
 Rust with [GPUI](https://www.gpui.rs/) (through [gpui-kit](https://github.com/longbridge/gpui-kit))
@@ -13,11 +13,11 @@ doesn't commit or push yet.
 cargo run --release -- path/to/repository
 ```
 
-FastGit brings back the tabs that were open last time, and a path given on the
+SterneGit brings back the tabs that were open last time, and a path given on the
 command line opens in one more tab. With no tabs to bring back it offers **Open
 repository…**. The open tabs are saved after every change, in
-`%APPDATA%\FastGit\tabs` on Windows, `~/Library/Application Support/FastGit/tabs`
-on macOS and `$XDG_STATE_HOME/fastgit/tabs` (or `~/.local/state/fastgit/tabs`) on
+`%APPDATA%\SterneGit\tabs` on Windows, `~/Library/Application Support/SterneGit/tabs`
+on macOS and `$XDG_STATE_HOME/sternegit/tabs` (or `~/.local/state/sternegit/tabs`) on
 Linux. Git 2.26 or newer must be on `PATH` for diffs and staging.
 
 To time how long reading a repository takes, without opening a window:
@@ -27,7 +27,7 @@ cargo run -- --check path/to/repository
 ```
 
 On Windows, `scripts/build-and-relaunch.ps1` builds a release and copies it to
-`build/fastgit.exe`, which Git ignores, replacing the previous copy. If that copy
+`build/sternegit.exe`, which Git ignores, replacing the previous copy. If that copy
 is running, it's closed and started again on the new build. Nothing happens when
 the build hasn't changed.
 
@@ -61,7 +61,7 @@ graph. Select it (or press ↑ from the newest commit) to list the unstaged and
 staged files. Click a file to compare it with its previous version in the middle
 pane, side by side (**Split**) or in one column (**Unified**). The **+** / **−**
 next to each file, **Stage all** / **Unstage all**, and the button above the
-comparison move files between the two lists. Edits made outside FastGit show up
+comparison move files between the two lists. Edits made outside SterneGit show up
 within a few seconds.
 
 Right-click a file in a commit, or a changed file, and choose **File history** to

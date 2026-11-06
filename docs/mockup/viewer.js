@@ -58,7 +58,7 @@ const Viewer = (() => {
         .join('');
       return `<a class="${route.startsWith(`components/${group.key}`) ? 'active' : ''}" href="#/components/${group.key}">${group.title}</a>${items}`;
     }).join('');
-    return `<a class="mk-brand" href="#/">FastGit mockup</a><a class="${route === '' ? 'active' : ''}" href="#/">Overview</a><h2>Screens</h2>${screens}<h2>Components</h2>${groups}`;
+    return `<a class="mk-brand" href="#/">SterneGit mockup</a><a class="${route === '' ? 'active' : ''}" href="#/">Overview</a><h2>Screens</h2>${screens}<h2>Components</h2>${groups}`;
   };
 
   const scaled = (html, scale, w = WINDOW.w, h = WINDOW.h) =>
@@ -71,7 +71,7 @@ const Viewer = (() => {
     const groups = Catalog.map(
       (group) => `<a class="mk-group-card" href="#/components/${group.key}"><div class="mk-card-title">${group.title}</div><p>${group.about}</p><div class="mk-count">${group.items.length} entries</div></a>`,
     ).join('');
-    return `<header class="mk-head"><h1>FastGit mockup</h1><p>Every screen of the app, built from the same reusable components as the Rust code. Change a component in <code>components.js</code> and every screen that uses it follows.</p></header><h2 class="mk-section">Screens</h2><div class="mk-cards">${cards}</div><h2 class="mk-section">Components</h2><div class="mk-groups">${groups}</div>`;
+    return `<header class="mk-head"><h1>SterneGit mockup</h1><p>Every screen of the app, built from the same reusable components as the Rust code. Change a component in <code>components.js</code> and every screen that uses it follows.</p></header><h2 class="mk-section">Screens</h2><div class="mk-cards">${cards}</div><h2 class="mk-section">Components</h2><div class="mk-groups">${groups}</div>`;
   };
 
   const screenPage = (id) => {

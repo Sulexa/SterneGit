@@ -1,4 +1,4 @@
-use fastgit_sdk::{AccountContext, Failure, RepoRef, Request};
+use sternegit_sdk::{AccountContext, Failure, RepoRef, Request};
 use serde_json::Value;
 
 use crate::{api, refusal::succeeded};
@@ -70,14 +70,14 @@ pub(crate) fn encoded(text: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use fastgit_sdk::AccountContext;
+    use sternegit_sdk::AccountContext;
     use serde_json::json;
 
     use super::{encoded, id_of, on_api};
 
     #[test]
     fn query_text_is_percent_encoded_except_unreserved_bytes() {
-        assert_eq!(encoded("fast git"), "fast%20git");
+        assert_eq!(encoded("sterne git"), "sterne%20git");
         assert_eq!(encoded("a+b/c:d"), "a%2Bb%2Fc%3Ad");
         assert_eq!(encoded("été"), "%C3%A9t%C3%A9");
         assert_eq!(encoded("x-y_z.w~"), "x-y_z.w~");
