@@ -10,6 +10,7 @@ pub(crate) enum Folder {
     Config,
     State,
     Data,
+    Local,
     #[cfg(not(windows))]
     Session,
 }
@@ -25,6 +26,7 @@ impl Folder {
             Folder::Config | Folder::State | Folder::Data => {
                 Some(absolute(var("APPDATA"))?.join(PRODUCT))
             }
+            Folder::Local => Some(absolute(var("LOCALAPPDATA"))?.join(PRODUCT)),
         }
     }
 
@@ -32,7 +34,7 @@ impl Folder {
     fn path_from(self, var: &dyn Fn(&str) -> Option<OsString>) -> Option<PathBuf> {
         let base = match self {
             Folder::Session => absolute(var("TMPDIR"))?,
-            Folder::Config | Folder::State | Folder::Data => {
+            Folder::Config | Folder::State | Folder::Data | Folder::Local => {
                 absolute(var("HOME"))?.join("Library/Application Support")
             }
         };
@@ -45,7 +47,9 @@ impl Folder {
         let base = match self {
             Folder::Config => absolute(var("XDG_CONFIG_HOME")).or_else(|| in_home(".config"))?,
             Folder::State => absolute(var("XDG_STATE_HOME")).or_else(|| in_home(".local/state"))?,
-            Folder::Data => absolute(var("XDG_DATA_HOME")).or_else(|| in_home(".local/share"))?,
+            Folder::Data | Folder::Local => {
+                absolute(var("XDG_DATA_HOME")).or_else(|| in_home(".local/share"))?
+            }
             Folder::Session => absolute(var("XDG_RUNTIME_DIR"))?,
         };
         Some(base.join(PRODUCT))
@@ -78,6 +82,16 @@ mod tests {
         assert_eq!(Folder::Config.path_from(&vars), Some(roaming.clone()));
         assert_eq!(Folder::State.path_from(&vars), Some(roaming.clone()));
         assert_eq!(Folder::Data.path_from(&vars), Some(roaming));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn ssh_keys_stay_on_this_machine_in_local_app_data() {
+        let vars = with(&[("LOCALAPPDATA", r"C:\Users\me\AppData\Local")]);
+        assert_eq!(
+            Folder::Local.path_from(&vars),
+            Some(PathBuf::from(r"C:\Users\me\AppData\Local\FastGit"))
+        );
     }
 
     #[cfg(windows)]

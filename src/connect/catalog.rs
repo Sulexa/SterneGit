@@ -39,22 +39,19 @@ impl Standing {
         matches!(self, Standing::Ready | Standing::Updated)
     }
 
-    #[cfg_attr(not(test), expect(dead_code))]
-    fn awaits_approval(&self) -> bool {
+    pub(crate) fn awaits_approval(&self) -> bool {
         matches!(self, Standing::Waiting(_) | Standing::Modified(_))
     }
 }
 
 pub(crate) struct Connector {
     pub(crate) id: ConnectorId,
-    #[cfg_attr(not(test), expect(dead_code))]
     pub(crate) folder: PathBuf,
     pub(crate) origin: Origin,
     pub(crate) manifest: Option<Arc<Manifest>>,
     pub(crate) standing: Standing,
     pub(crate) replaces_bundled: bool,
     pub(crate) started: Option<Arc<Started>>,
-    #[cfg_attr(not(test), expect(dead_code))]
     files: Hashes,
     module: Option<Vec<u8>>,
 }
@@ -133,9 +130,12 @@ impl Catalog {
         catalog
     }
 
-    #[cfg_attr(not(test), expect(dead_code))]
     pub(crate) fn connectors(&self) -> &[Connector] {
         &self.connectors
+    }
+
+    pub(crate) fn approved_version(&self, id: &ConnectorId) -> Option<String> {
+        self.approvals.get(id).map(|approval| approval.version.clone())
     }
 
     pub(crate) fn start(&mut self, host: &Arc<dyn HostServices>) {
@@ -153,7 +153,6 @@ impl Catalog {
         }
     }
 
-    #[cfg_attr(not(test), expect(dead_code))]
     pub(crate) fn approve(&mut self, id: &ConnectorId) -> io::Result<Option<Grant>> {
         let Some(connector) = self
             .connectors
@@ -183,7 +182,6 @@ impl Catalog {
         Ok(Some(grant))
     }
 
-    #[cfg_attr(not(test), expect(dead_code))]
     pub(crate) fn seen(&mut self, id: &ConnectorId) -> io::Result<()> {
         let Some(connector) = self
             .connectors

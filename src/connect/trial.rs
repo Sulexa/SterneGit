@@ -159,7 +159,7 @@ mod tests {
     use super::try_connector;
     use crate::connect::{CallError, Stop, fakes::two_faced, manifest::samples};
 
-    const IDENTITY: &str = r#"{"ok":{"login":"octo","name":null,"avatar_url":null,"scopes":[]}}"#;
+    const IDENTITY: &str = r#"{"ok":{"id":"1","login":"octo","name":null,"avatar_url":null,"scopes":[]}}"#;
 
     fn folder(name: &str, manifest: Value, wasm: &[u8]) -> PathBuf {
         let folder = std::env::temp_dir().join(format!("fastgit-trial-{name}-{}", std::process::id()));
@@ -209,7 +209,7 @@ mod tests {
     #[test]
     fn an_answer_that_differs_from_the_cassette_fails_the_trial() {
         let folder = folder("differs", manifest(), &two_faced(IDENTITY));
-        let someone_else = json!({ "ok": { "login": "someone", "name": null, "avatar_url": null, "scopes": [] } });
+        let someone_else = json!({ "ok": { "id": "2", "login": "someone", "name": null, "avatar_url": null, "scopes": [] } });
         let cassette = cassette(&folder, someone_else);
         let trial = try_connector(&folder, Some(&cassette)).unwrap();
         assert_eq!(trial.played.as_ref().unwrap().matches_expected(), Some(false));
@@ -278,5 +278,18 @@ mod tests {
             Some("FastGit never calls teleport".to_owned())
         );
         fs::remove_dir_all(folder).unwrap();
+    }
+
+    #[test]
+    fn the_committed_github_module_answers_every_cassette_inside_the_sandbox() {
+        let github = Path::new(env!("CARGO_MANIFEST_DIR")).join("connectors").join("github");
+        let mut played = 0;
+        for entry in fs::read_dir(github.join("tests").join("cassettes")).unwrap() {
+            let cassette = entry.unwrap().path();
+            let trial = try_connector(&github.join("dist"), Some(&cassette)).unwrap();
+            assert!(trial.passed(), "{}", cassette.display());
+            played += 1;
+        }
+        assert!(played >= 19, "only {played} cassettes");
     }
 }

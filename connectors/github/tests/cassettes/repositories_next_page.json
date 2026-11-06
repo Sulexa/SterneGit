@@ -1,0 +1,115 @@
+{
+  "op": "repositories.list",
+  "account": {
+    "id": "github:github.com:583231",
+    "login": "octocat",
+    "endpoints": {
+      "api": "https://api.github.com/",
+      "graphql": "https://api.github.com/graphql",
+      "web": "https://github.com/"
+    }
+  },
+  "input": {
+    "search": null,
+    "owner": null,
+    "cursor": "https://api.github.com/user/repositories?affiliation=owner,collaborator,organization_member&sort=updated&per_page=100&page=2"
+  },
+  "exchanges": [
+    {
+      "method": "GET",
+      "url": "https://api.github.com/user/repositories?affiliation=owner,collaborator,organization_member&sort=updated&per_page=100&page=2",
+      "status": 200,
+      "headers": [
+        [
+          "content-type",
+          "application/json; charset=utf-8"
+        ]
+      ],
+      "body": [
+        {
+          "id": 1684,
+          "name": "advent-2025",
+          "full_name": "octocat/advent-2025",
+          "owner": {
+            "login": "octocat",
+            "id": 1,
+            "type": "User"
+          },
+          "private": false,
+          "visibility": "public",
+          "description": "Advent of Code 2025 in Rust",
+          "fork": false,
+          "archived": true,
+          "default_branch": "main",
+          "html_url": "https://github.com/octocat/advent-2025",
+          "clone_url": "https://github.com/octocat/advent-2025.git",
+          "ssh_url": "git@github.com:octocat/advent-2025.git",
+          "pushed_at": "2025-12-25T09:00:00Z",
+          "updated_at": "2026-11-01T08:00:00Z"
+        },
+        {
+          "id": 1808,
+          "name": "design",
+          "full_name": "fastgit-org/design",
+          "owner": {
+            "login": "fastgit-org",
+            "id": 1,
+            "type": "User"
+          },
+          "private": true,
+          "visibility": "internal",
+          "description": null,
+          "fork": false,
+          "archived": false,
+          "default_branch": "main",
+          "html_url": "https://github.com/fastgit-org/design",
+          "clone_url": "https://github.com/fastgit-org/design.git",
+          "ssh_url": "git@github.com:fastgit-org/design.git",
+          "pushed_at": null,
+          "updated_at": "2026-11-01T08:00:00Z"
+        }
+      ]
+    }
+  ],
+  "output": {
+    "ok": {
+      "items": [
+        {
+          "repo": {
+            "owner": "octocat",
+            "name": "advent-2025"
+          },
+          "description": "Advent of Code 2025 in Rust",
+          "visibility": "public",
+          "default_branch": "main",
+          "clone": {
+            "https": "https://github.com/octocat/advent-2025.git",
+            "ssh": "git@github.com:octocat/advent-2025.git"
+          },
+          "web_url": "https://github.com/octocat/advent-2025",
+          "updated_at": "2025-12-25T09:00:00Z",
+          "fork": false,
+          "archived": true
+        },
+        {
+          "repo": {
+            "owner": "fastgit-org",
+            "name": "design"
+          },
+          "description": null,
+          "visibility": "internal",
+          "default_branch": "main",
+          "clone": {
+            "https": "https://github.com/fastgit-org/design.git",
+            "ssh": "git@github.com:fastgit-org/design.git"
+          },
+          "web_url": "https://github.com/fastgit-org/design",
+          "updated_at": "2026-11-01T08:00:00Z",
+          "fork": false,
+          "archived": false
+        }
+      ],
+      "next": null
+    }
+  }
+}

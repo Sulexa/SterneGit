@@ -54,6 +54,7 @@ pub(crate) struct ApiRequest {
     pub(crate) timeout: Option<Duration>,
 }
 
+#[cfg_attr(not(test), expect(dead_code))]
 impl ApiRequest {
     pub(crate) fn new(method: Method, url: impl Into<String>) -> Self {
         Self {

@@ -1,0 +1,24 @@
+{
+  "op": "repositories.list",
+  "account": {
+    "id": "github:github.com:583231",
+    "login": "octocat",
+    "endpoints": {
+      "api": "https://api.github.com/",
+      "graphql": "https://api.github.com/graphql",
+      "web": "https://github.com/"
+    }
+  },
+  "input": {
+    "search": null,
+    "owner": null,
+    "cursor": "https://evil.example/user/repos?page=2"
+  },
+  "exchanges": [],
+  "output": {
+    "err": {
+      "kind": "protocol",
+      "message": "The page asked for isn't on GitHub's API"
+    }
+  }
+}

@@ -103,7 +103,7 @@ const Screens = (() => {
     {
       id: 'welcome',
       title: 'Welcome',
-      about: 'No repository is open: FastGit started outside a repository, or the last tab was closed. The tab strip and the status bar are hidden.',
+      about: 'No repository is open: FastGit started outside a repository, or the last tab was closed. The tab strip and the status bar are hidden. Clone repository… opens the clone dialog, as File → Clone Repository… does.',
       source: 'src/app/window.rs',
       render: () =>
         C.FastGit({
@@ -111,7 +111,7 @@ const Screens = (() => {
           body: C.Notice({
             title: Texts.welcomeTitle,
             description: Texts.welcomeDescription,
-            action: C.Button({ label: 'Open repository…', variant: 'primary', size: 'md' }),
+            action: `<div class="h actions">${C.Button({ label: 'Open repository…', variant: 'primary', size: 'md' })}${C.Button({ label: Texts.cloneRepository, icon: 'download', size: 'md' })}</div>`,
           }),
         }),
     },
@@ -647,5 +647,217 @@ const Screens = (() => {
           overlays: C.AlertDialog({ title: 'FastGit 0.1.0', description: Texts.aboutDescription }),
         }),
     },
+    ...(() => {
+      const { accounts, serverKeys, connectors, gitlabUpdate, owners, repositories } = Sample.hosting;
+      const [personal, work, enterprise] = accounts;
+      const settingsTabs = [...tabs, { name: HostTexts.settings, icon: 'settings' }];
+      const settings = (page, content, overlays = '') =>
+        C.FastGit({
+          topBar: C.TopBar(),
+          tabStrip: C.TabStrip({ tabs: settingsTabs, active: settingsTabs.length - 1 }),
+          body: C.SettingsTab({ page, content, nav: { accounts: accounts.length, waiting: 1 } }),
+          overlays,
+        });
+      const accountsPage = () => C.AccountsPage({ accounts });
+      const personalPage = (account = personal) => C.AccountPage({ account, keys: serverKeys.filter((key) => account.key || !key.fastgit) });
+      const overHistory = (overlays) => C.FastGit({ topBar: topBar(), tabStrip: tabStrip(), body: commitSelected(), overlays });
+      const withoutRemotes = {
+        ...history,
+        refs: history.refs.filter((label) => label.kind !== 'remote'),
+        commits: history.commits.map((commit) => (commit.refs ? { ...commit, refs: commit.refs.filter(([, kind]) => kind !== 'remote') } : commit)),
+      };
+      const pair = [personal, work];
+      const choiceBar = (open) => C.AccountChoiceBar({ host: 'github.com', owner: 'fastgit-org', accounts: pair, chosen: 'alex-martin', open });
+      return [
+        {
+          id: 'app-file-menu',
+          title: 'File menu open',
+          about: 'File gains Clone Repository… (Ctrl+Shift+O), New Repository… (Ctrl+N) and Settings… (Ctrl+,). Settings… opens the Settings tab, or switches to it when it is already open.',
+          source: 'src/app/mod.rs',
+          render: () =>
+            C.FastGit({
+              topBar: topBar({ openMenu: 'File' }),
+              tabStrip: tabStrip(),
+              body: commitSelected(),
+              overlays: C.Menu({ items: Menus.File, left: 26, top: 32, hot: 'Clone Repository…' }),
+            }),
+        },
+        {
+          id: 'settings-accounts',
+          title: 'Settings — accounts',
+          about: "Settings is a tab after the repository tabs, with a gear; it isn't saved with the open tabs, and Ctrl+W closes it like any tab. Its left column picks a page. Accounts lists every account FastGit knows, with its service, its server and how it signed in. An account whose token the server refused says so in red and offers Sign in again; nothing is asked until then, so a refused token never interrupts a fetch. Click an account to open its page. The yellow badge on Connectors counts connectors waiting for approval.",
+          source: 'src/accounts/book.rs',
+          render: () => settings('accounts', accountsPage()),
+        },
+        {
+          id: 'settings-account',
+          title: "Settings — an account's page",
+          about: "How the account signed in, its scopes and where its token is kept; its SSH key and every key the server lists for it, read when the page opens; and the remote owners FastGit remembers for it. Sign in again replaces the token after checking who it belongs to: a token of another user is refused. Forget drops a remembered owner, so FastGit asks again the next time two accounts fit.",
+          source: 'src/accounts/account.rs',
+          render: () => settings('accounts', personalPage()),
+        },
+        {
+          id: 'add-account',
+          title: 'Add an account',
+          about: "Add account… asks which service, among every started connector's services, then how to sign in. The connector's manifest lists the methods each service offers: GitHub Enterprise Server asks for its address first and has no browser sign-in. Choosing a method moves to its step in the same dialog; Esc or Cancel closes it.",
+          source: 'src/accounts/account.rs',
+          render: () => settings('accounts', accountsPage(), C.SignInDialog({ step: 'choose', hot: 'device' })),
+        },
+        {
+          id: 'sign-in-browser',
+          title: 'Sign in with the browser',
+          about: "GitHub's device flow: FastGit asks GitHub for a code, opens github.com/login/device in the browser and asks again every few seconds inside the dialog, slower when GitHub says so, until the user approves. The token is checked with account.who_am_i and stored only then; the dialog closes and a notification says Signed in to GitHub as alex-martin. Cancel or Esc stops asking. It needs the client ID of FastGit's OAuth App in GitHub's manifest.",
+          source: 'src/accounts/account.rs',
+          render: () => settings('accounts', accountsPage(), C.SignInDialog({ step: 'device' })),
+        },
+        {
+          id: 'sign-in-expired',
+          title: 'Sign in with the browser — code expired',
+          about: "A code lasts 15 minutes. Get a new code starts over. When the user declines on GitHub, the dialog says GitHub says you declined, with Try again.",
+          source: 'src/accounts/account.rs',
+          render: () => settings('accounts', accountsPage(), C.SignInDialog({ step: 'expired' })),
+        },
+        {
+          id: 'sign-in-token',
+          title: 'Sign in with a pasted token',
+          about: "Create a token on GitHub opens the manifest's create_url, with the scopes FastGit needs already ticked. Sign in checks the token with account.who_am_i before saving it; a refused token says so under the field, and Sign in waits for the field to change. A token missing write:public_key signs in, and the Signed in notification adds that SSH keys won't work with it. The field never shows the token once pasted.",
+          source: 'src/accounts/account.rs',
+          render: () => settings('accounts', accountsPage(), C.SignInDialog({ step: 'token', problem: HostTexts.tokenRefused('GitHub') })),
+        },
+        {
+          id: 'sign-in-credential-manager',
+          title: "Use Git Credential Manager's token",
+          about: "FastGit reads Git Credential Manager's token only after this question, with git credential fill and no prompt. When it has none, the dialog says so and Use this token stays off.",
+          source: 'src/accounts/account.rs',
+          render: () => settings('accounts', accountsPage(), C.SignInDialog({ step: 'credential' })),
+        },
+        {
+          id: 'ssh-key',
+          title: 'Create an SSH key',
+          about: "Create SSH key… on an account's page. FastGit runs ssh-keygen beside git's ssh, adds the public key with ssh_keys.add and fills its own known_hosts from ssh_keys.host_keys, so the first SSH clone checks GitHub's host key. When the token lacks write:public_key, the dialog says so and offers Sign in with the browser instead of Create and add.",
+          source: 'src/accounts/account.rs',
+          render: () => settings('accounts', personalPage({ ...personal, key: null }), C.SshKeyDialog({ account: personal })),
+        },
+        {
+          id: 'remove-account',
+          title: 'Remove an account',
+          about: "Remove… on an account's page. The repositories whose core.sshCommand names the account's key are listed, and ticked to have it removed. Remove forgets the account, its token, its key file and its remembered owners.",
+          source: 'src/accounts/book.rs',
+          render: () => settings('accounts', personalPage(), C.RemoveAccountDialog({ account: personal })),
+        },
+        {
+          id: 'settings-connectors',
+          title: 'Settings — connectors',
+          about: "Every connector FastGit found beside its exe (Bundled) or in the user's connectors folder (Installed), with what it reaches and its standing. Ready runs. Updated is a new version within what was approved, until its row is opened. Waiting for approval and Files changed (a bundled connector whose files don't match what this FastGit ships) wait for Review…. Can't run needs a newer FastGit or has a broken manifest. Stopped trapped, ran out of time or memory while starting; Show log shows its last log lines.",
+          source: 'src/connect/catalog.rs',
+          render: () => settings('connectors', C.ConnectorsPage({ connectors })),
+        },
+        {
+          id: 'connector-approval',
+          title: 'Approve a connector',
+          about: "Exactly what the connector asks for, from its manifest: the servers it can reach and whether they get the token, picture servers, the remotes it recognizes (and any other connector that already does), sign-in pages and features. Approve records the grant and the files' SHA-256 in connectors.json and starts it at once. Not now leaves it waiting, and the next launch asks again. An installed connector with the id of a bundled one says it replaces it; once approved, the bundled one stops being listed.",
+          source: 'src/connect/grant.rs',
+          render: () => settings('connectors', C.ApprovalPage({ connector: connectors[1] })),
+        },
+        {
+          id: 'connector-update',
+          title: 'Approve an update that asks for more',
+          about: 'A new version that asks for nothing new starts on its own and shows Updated. One that asks for more waits, and its page lists only the additions; the old version keeps running meanwhile.',
+          source: 'src/connect/grant.rs',
+          render: () => settings('connectors', C.ApprovalPage({ connector: gitlabUpdate, update: true })),
+        },
+        {
+          id: 'connector-waiting',
+          title: 'A connector waits for approval',
+          about: 'At launch, once connectors are found, a notification names each connector waiting for approval (or says how many). Review opens the Settings tab on its approval page. It shows again at every launch until the connector is approved.',
+          source: 'src/app/connectors.rs',
+          render: () =>
+            overHistory(
+              `<div class="toasts">${C.Notification({ kind: 'info', title: HostTexts.waitingTitle('GitLab', '1.2.0'), message: HostTexts.waitingMessage, action: C.Button({ label: HostTexts.review, size: 'sm', variant: 'primary' }) })}</div>`,
+            ),
+        },
+        {
+          id: 'account-choice',
+          title: 'Which account?',
+          about: "When a remote fits several accounts and FastGit hasn't been told which one its owner uses, a bar under the toolbar asks. Use remembers the choice for every repository of that owner and closes the bar. Until then Git uses the user's own credentials, so fetches and pushes work as before; × hides the bar until the next launch.",
+          source: 'src/accounts/access.rs',
+          render: () =>
+            C.FastGit({
+              topBar: topBar(),
+              tabStrip: tabStrip(),
+              body: C.RepoView({
+                operation: choiceBar(true),
+                left: C.RefsList({ refs: history.refs, selectedRow: selected, collapsed }),
+                middle: C.HistoryList({ history, selectedRow: selected, changes }),
+                right: C.CommitPanel({ commit: history.commits[selected], details: commitDetails }),
+                status: C.RepoStatusBar({ summary: historySummary(history), position: position(selected) }),
+              }),
+              overlays: C.AccountMenu({ accounts: pair, chosen: 'alex-martin', hot: 'alex-acme', left: 1137, top: 155 }),
+            }),
+        },
+        {
+          id: 'clone-url',
+          title: 'Clone — from a URL',
+          about: 'File → Clone Repository…, or Clone repository… on the welcome screen. URL clones anything git clone accepts, with no account; Clone into fills in the folder name from the URL and Browse… picks the parent folder. When an account fits the URL, FastGit lends Git its token.',
+          source: 'src/app/window.rs',
+          render: () => overHistory(C.CloneDialog({ from: 'url', accounts, url: 'https://github.com/fastgit-org/connectors.git' })),
+        },
+        {
+          id: 'clone-account',
+          title: 'Clone — from an account',
+          about: "Each account lists the repositories it can reach, newest first, a hundred at a time; Load more reads the next page. The owner filter lists the account's user and organizations, and search asks the server. Clone into ends with the selected repository's name. HTTPS is the default; SSH is offered once the account has a FastGit key, and the choice is remembered per account.",
+          source: 'src/connect/forge.rs',
+          render: () => overHistory(C.CloneDialog({ from: 'alex-martin', accounts, repositories, selected: 1 })),
+        },
+        {
+          id: 'clone-signed-out',
+          title: 'Clone — account signed out',
+          about: "When a connector call fails, the place that asked shows why, with the way out: signed out → Sign in again; a missing scope → Sign in with the browser; rate limited → when it resets; unreachable server → Retry; a stopped connector → its last log lines.",
+          source: 'src/connect/stop.rs',
+          render: () => overHistory(C.CloneDialog({ from: 'alex-acme', accounts, failure: Failures.signedOut })),
+        },
+        {
+          id: 'cloning',
+          title: 'Cloning',
+          about: "Clone opens a tab for the new repository at once and runs git clone in it, showing git's progress; the tab reads history as soon as the clone ends. Cancel stops git and deletes the half-made folder. A failed clone keeps the tab with git's message and Retry. A clone over SSH gets core.sshCommand with the account's key; over HTTPS, FastGit is Git's credential helper for that remote.",
+          source: 'src/app/window.rs',
+          render: () =>
+            C.FastGit({
+              topBar: C.TopBar({ repository: 'connectors' }),
+              tabStrip: C.TabStrip({ tabs: [...tabs, { name: 'connectors', state: 'reading' }], active: tabs.length }),
+              body: C.Loading({
+                message: HostTexts.cloning('fastgit-org/connectors', 'E:\\Projects\\connectors'),
+                detail: HostTexts.receiving(45, 1234, 2741),
+                action: C.Button({ label: HostTexts.cancel, size: 'md' }),
+              }),
+            }),
+        },
+        {
+          id: 'new-repository',
+          title: 'New repository',
+          about: 'File → New Repository…. Name and folder make a local repository with git init, opened in a new tab. Also create it on, off by default, creates it empty on the chosen account and adds it as origin, so the first push sends main there. Owners that can\'t create repositories are listed but greyed out, and Visibility offers only what the owner allows.',
+          source: 'src/app/window.rs',
+          render: () => overHistory(C.NewRepositoryDialog({ hosted: true, account: personal, owners })),
+        },
+        {
+          id: 'publish',
+          title: 'Publish a repository',
+          about: "Push in a repository with no remote opens Publish instead of failing. Publish creates the repository on the account, empty, adds it as origin, pushes the checked-out branch and makes origin's copy its upstream. A name the server refuses is shown under the field. With no account yet, the dialog offers Add account…, which opens Settings.",
+          source: 'src/repo/toolbar.rs',
+          render: () =>
+            C.FastGit({
+              topBar: topBar(),
+              tabStrip: tabStrip(),
+              body: C.RepoView({
+                left: C.RefsList({ refs: withoutRemotes.refs, selectedRow: null, collapsed }),
+                middle: C.HistoryList({ history: withoutRemotes, selectedRow: null, changes }),
+                right: C.Hint({ message: Texts.selectCommit }),
+                status: C.RepoStatusBar({ summary: historySummary(withoutRemotes) }),
+              }),
+              overlays: C.PublishDialog({ repository: 'fastgit', account: personal, owner: owners[0] }),
+            }),
+        },
+      ];
+    })(),
   ];
 })();

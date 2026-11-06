@@ -1,0 +1,77 @@
+{
+  "op": "repositories.list",
+  "account": {
+    "id": "github:github.com:583231",
+    "login": "octocat",
+    "endpoints": {
+      "api": "https://api.github.com/",
+      "graphql": "https://api.github.com/graphql",
+      "web": "https://github.com/"
+    }
+  },
+  "input": {
+    "search": null,
+    "owner": "octocat",
+    "cursor": null
+  },
+  "exchanges": [
+    {
+      "method": "GET",
+      "url": "https://api.github.com/user/repos?affiliation=owner&sort=updated&per_page=100",
+      "status": 200,
+      "headers": [
+        [
+          "content-type",
+          "application/json; charset=utf-8"
+        ]
+      ],
+      "body": [
+        {
+          "id": 1653,
+          "name": "starfall",
+          "full_name": "octocat/starfall",
+          "owner": {
+            "login": "octocat",
+            "id": 1,
+            "type": "User"
+          },
+          "private": true,
+          "visibility": "private",
+          "description": "A tiny space shooter",
+          "fork": false,
+          "archived": false,
+          "default_branch": "main",
+          "html_url": "https://github.com/octocat/starfall",
+          "clone_url": "https://github.com/octocat/starfall.git",
+          "ssh_url": "git@github.com:octocat/starfall.git",
+          "pushed_at": "2026-11-04T09:00:00Z",
+          "updated_at": "2026-11-01T08:00:00Z"
+        }
+      ]
+    }
+  ],
+  "output": {
+    "ok": {
+      "items": [
+        {
+          "repo": {
+            "owner": "octocat",
+            "name": "starfall"
+          },
+          "description": "A tiny space shooter",
+          "visibility": "private",
+          "default_branch": "main",
+          "clone": {
+            "https": "https://github.com/octocat/starfall.git",
+            "ssh": "git@github.com:octocat/starfall.git"
+          },
+          "web_url": "https://github.com/octocat/starfall",
+          "updated_at": "2026-11-04T09:00:00Z",
+          "fork": false,
+          "archived": false
+        }
+      ],
+      "next": null
+    }
+  }
+}

@@ -52,6 +52,8 @@ use crate::{
         ChangeKind, Commit, FileChange, FileCommit, HISTORY_LIMIT, History, PullMode, RefLabel,
         Scope, Side, Stash, WorkingChanges, short_id,
     },
+    app::connectors::Connectors,
+    hosting::{AccountQuestion, account_bar, account_question, open_publish},
     ui::{self, Failure, FileView, Folded, Look as _, Notice, run_in_background, thousands},
 };
 use behind_dialog::open_behind_dialog;
@@ -98,7 +100,11 @@ pub(crate) struct RepoView {
     history_scroll: UniformListScrollHandle,
     refs_scroll: UniformListScrollHandle,
     changes_scrolls: SideScrolls,
-    _subscriptions: [Subscription; 5],
+    remote_urls: Vec<String>,
+    account_question: Option<AccountQuestion>,
+    question_dismissed: bool,
+    reading_remotes: Option<Task<()>>,
+    _subscriptions: [Subscription; 6],
 }
 
 impl RepoView {
@@ -112,6 +118,7 @@ impl RepoView {
                 RepositoryEvent::HistoryRead => this.on_history_read(cx),
                 RepositoryEvent::ChangesRead => this.on_changes_read(cx),
                 RepositoryEvent::Committed => {}
+                RepositoryEvent::Unpublished => open_publish(this.repository.clone(), window, cx),
                 RepositoryEvent::Operated(operated) => {
                     match &operated.outcome {
                         Ok(Outcome::Stopped) => this.follow_conflicts = true,
@@ -156,6 +163,7 @@ impl RepoView {
                 this.open_history_file(cx);
                 this.place_file(cx)
             }),
+            cx.observe_global::<Connectors>(|this, cx| this.ask_which_account(cx)),
         ];
         Self {
             repository,
@@ -174,8 +182,57 @@ impl RepoView {
             history_scroll: UniformListScrollHandle::new(),
             refs_scroll: UniformListScrollHandle::new(),
             changes_scrolls: SideScrolls::default(),
+            remote_urls: Vec::new(),
+            account_question: None,
+            question_dismissed: false,
+            reading_remotes: None,
             _subscriptions: subscriptions,
         }
+    }
+
+    fn read_remotes(&mut self, cx: &mut Context<Self>) {
+        let Some(repo) = self.repository.read(cx).repo().cloned() else {
+            return;
+        };
+        self.reading_remotes = Some(run_in_background(cx, move || repo.remote_urls(), |this, urls, cx| {
+            this.reading_remotes = None;
+            if this.remote_urls != urls {
+                this.remote_urls = urls;
+                this.ask_which_account(cx);
+            }
+        }));
+    }
+
+    fn ask_which_account(&mut self, cx: &mut Context<Self>) {
+        let asked = account_question(&self.remote_urls, cx);
+        let same_question = |known: &AccountQuestion| {
+            asked
+                .as_ref()
+                .is_some_and(|asked| asked.host == known.host && asked.owner == known.owner && asked.accounts == known.accounts)
+        };
+        if self.account_question.as_ref().is_some_and(same_question) {
+            return;
+        }
+        self.account_question = asked;
+        cx.notify();
+    }
+
+    fn account_choice(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let question = self.account_question.as_ref().filter(|_| !self.question_dismissed)?;
+        Some(account_bar(
+            question,
+            ui::handler(cx.listener(|this, ix: &usize, _, cx| {
+                if let Some(question) = &mut this.account_question {
+                    question.chosen = *ix;
+                    cx.notify();
+                }
+            })),
+            ui::handler(cx.listener(|this, _: &(), _, cx| {
+                this.question_dismissed = true;
+                cx.notify();
+            })),
+            cx,
+        ))
     }
 
     pub(crate) fn repository(&self) -> &Entity<Repository> {
@@ -193,6 +250,7 @@ impl RepoView {
     }
 
     fn on_history_read(&mut self, cx: &mut Context<Self>) {
+        self.read_remotes(cx);
         if self.file_history.is_some() {
             self.reread_file_history(cx);
             return;
@@ -1030,6 +1088,7 @@ impl Render for RepoView {
                 this.toggle_whole_window(cx)
             }))
             .child(self.toolbar(cx))
+            .children(self.account_choice(cx))
             .children(self.operation_bar(cx))
             .child(div().fill_height().child(self.render_body(window, cx)))
             .child(status_bar)

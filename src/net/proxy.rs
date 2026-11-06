@@ -27,6 +27,7 @@ impl Proxies {
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn none() -> Self {
         Self {
             reads_git_config: false,

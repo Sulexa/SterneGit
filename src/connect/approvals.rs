@@ -27,7 +27,6 @@ pub(crate) struct Approval {
 }
 
 impl Approval {
-    #[cfg_attr(not(test), expect(dead_code))]
     pub(crate) fn new(id: ConnectorId, version: String, files: Hashes, grant: Grant) -> Self {
         Self {
             id,

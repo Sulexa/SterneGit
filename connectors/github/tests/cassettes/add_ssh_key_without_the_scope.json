@@ -1,0 +1,48 @@
+{
+  "op": "ssh_keys.add",
+  "account": {
+    "id": "github:github.com:583231",
+    "login": "octocat",
+    "endpoints": {
+      "api": "https://api.github.com/",
+      "graphql": "https://api.github.com/graphql",
+      "web": "https://github.com/"
+    }
+  },
+  "input": {
+    "title": "FastGit on DESKTOP-7Q2K",
+    "key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl"
+  },
+  "exchanges": [
+    {
+      "method": "POST",
+      "url": "https://api.github.com/user/keys",
+      "status": 404,
+      "headers": [
+        [
+          "content-type",
+          "application/json; charset=utf-8"
+        ],
+        [
+          "x-oauth-scopes",
+          "repo, workflow"
+        ],
+        [
+          "x-accepted-oauth-scopes",
+          "admin:public_key, write:public_key"
+        ]
+      ],
+      "body": {
+        "message": "Not Found",
+        "status": "404"
+      }
+    }
+  ],
+  "output": {
+    "err": {
+      "kind": "forbidden",
+      "needs": "admin:public_key or write:public_key",
+      "message": "Not Found"
+    }
+  }
+}

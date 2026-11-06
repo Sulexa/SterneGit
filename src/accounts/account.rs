@@ -1,10 +1,12 @@
+use std::path::PathBuf;
+
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use serde_json::{Map, Value, json};
 use url::Url;
 
 const AUTHORIZATION: &str = "Authorization";
 const HEADER_NAME_SYMBOLS: &[u8] = b"!#$%&'*+-.^_`|~";
-const KNOWN_FIELDS: [&str; 12] = [
+const KNOWN_FIELDS: [&str; 14] = [
     "id",
     "connector",
     "service",
@@ -17,6 +19,8 @@ const KNOWN_FIELDS: [&str; 12] = [
     "scheme",
     "scopes",
     "ssh_key",
+    "ssh_repositories",
+    "clone_over_ssh",
 ];
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -167,6 +171,8 @@ pub(crate) struct Account {
     pub(crate) scheme: TokenScheme,
     pub(crate) scopes: Vec<String>,
     pub(crate) ssh_key: Option<String>,
+    pub(crate) ssh_repositories: Vec<PathBuf>,
+    pub(crate) clone_over_ssh: bool,
     pub(crate) others: Map<String, Value>,
 }
 
@@ -197,6 +203,12 @@ impl Account {
                 .map(|scopes| scopes.iter().filter_map(Value::as_str).map(str::to_owned).collect())
                 .unwrap_or_default(),
             ssh_key: owned("ssh_key"),
+            ssh_repositories: fields
+                .get("ssh_repositories")
+                .and_then(Value::as_array)
+                .map(|paths| paths.iter().filter_map(Value::as_str).map(PathBuf::from).collect())
+                .unwrap_or_default(),
+            clone_over_ssh: fields.get("clone_over_ssh").and_then(Value::as_bool).unwrap_or(false),
             others: fields
                 .iter()
                 .filter(|(key, _)| !KNOWN_FIELDS.contains(&key.as_str()))
@@ -225,6 +237,13 @@ impl Account {
         fields.insert("scopes".into(), self.scopes.clone().into());
         if let Some(ssh_key) = &self.ssh_key {
             fields.insert("ssh_key".into(), ssh_key.as_str().into());
+        }
+        if !self.ssh_repositories.is_empty() {
+            let paths = self.ssh_repositories.iter().map(|path| path.to_string_lossy().into_owned());
+            fields.insert("ssh_repositories".into(), paths.collect());
+        }
+        if self.clone_over_ssh {
+            fields.insert("clone_over_ssh".into(), true.into());
         }
         fields.extend(self.others.clone());
         Value::Object(fields)
@@ -269,6 +288,8 @@ pub(crate) mod fixtures {
             scheme: TokenScheme::Bearer,
             scopes: vec!["repo".into()],
             ssh_key: None,
+            ssh_repositories: Vec::new(),
+            clone_over_ssh: false,
             others: Map::new(),
         }
     }
@@ -337,6 +358,9 @@ mod tests {
         let mut account = fixtures::github("583231");
         account.name = Some("Octo Cat".into());
         account.others.insert("from_a_newer_fastgit".into(), json!({ "a": 1 }));
+        account.ssh_key = Some("C:/keys/github-github.com-583231_ed25519".into());
+        account.ssh_repositories = vec!["E:/Projects/fastgit".into()];
+        account.clone_over_ssh = true;
         assert_eq!(Account::from_json(&account.to_json()), Some(account));
     }
 

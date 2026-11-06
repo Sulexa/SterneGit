@@ -1,5 +1,6 @@
 #[cfg(windows)]
 mod credential_manager;
+#[cfg_attr(all(windows, not(test)), expect(dead_code))]
 mod session_files;
 
 use std::{fmt, io, sync::Arc};

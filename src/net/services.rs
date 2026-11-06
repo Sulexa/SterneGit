@@ -6,7 +6,7 @@ use url::Url;
 use super::request::{ApiRequest, ApiResponse, NetError};
 use crate::accounts::AccountId;
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub(crate) struct ConnectorId(pub(crate) String);
 
 #[derive(Clone, Debug, PartialEq, Eq)]

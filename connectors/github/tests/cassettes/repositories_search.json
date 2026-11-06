@@ -1,0 +1,98 @@
+{
+  "op": "repositories.list",
+  "account": {
+    "id": "github:github.com:583231",
+    "login": "octocat",
+    "endpoints": {
+      "api": "https://api.github.com/",
+      "graphql": "https://api.github.com/graphql",
+      "web": "https://github.com/"
+    }
+  },
+  "input": {
+    "search": " star ",
+    "owner": null,
+    "cursor": null
+  },
+  "exchanges": [
+    {
+      "method": "GET",
+      "url": "https://api.github.com/user/orgs?per_page=100",
+      "status": 200,
+      "headers": [
+        [
+          "content-type",
+          "application/json; charset=utf-8"
+        ]
+      ],
+      "body": [
+        {
+          "login": "fastgit-org",
+          "id": 7
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "url": "https://api.github.com/search/repositories?q=star%20in%3Aname%20fork%3Atrue%20user%3Aoctocat%20user%3Afastgit-org&sort=updated&per_page=100",
+      "status": 200,
+      "headers": [
+        [
+          "content-type",
+          "application/json; charset=utf-8"
+        ]
+      ],
+      "body": {
+        "total_count": 1,
+        "incomplete_results": false,
+        "items": [
+          {
+            "id": 1653,
+            "name": "starfall",
+            "full_name": "octocat/starfall",
+            "owner": {
+              "login": "octocat",
+              "id": 1,
+              "type": "User"
+            },
+            "private": true,
+            "visibility": "private",
+            "description": "A tiny space shooter",
+            "fork": false,
+            "archived": false,
+            "default_branch": "main",
+            "html_url": "https://github.com/octocat/starfall",
+            "clone_url": "https://github.com/octocat/starfall.git",
+            "ssh_url": "git@github.com:octocat/starfall.git",
+            "pushed_at": "2026-11-04T09:00:00Z",
+            "updated_at": "2026-11-01T08:00:00Z"
+          }
+        ]
+      }
+    }
+  ],
+  "output": {
+    "ok": {
+      "items": [
+        {
+          "repo": {
+            "owner": "octocat",
+            "name": "starfall"
+          },
+          "description": "A tiny space shooter",
+          "visibility": "private",
+          "default_branch": "main",
+          "clone": {
+            "https": "https://github.com/octocat/starfall.git",
+            "ssh": "git@github.com:octocat/starfall.git"
+          },
+          "web_url": "https://github.com/octocat/starfall",
+          "updated_at": "2026-11-04T09:00:00Z",
+          "fork": false,
+          "archived": false
+        }
+      ],
+      "next": null
+    }
+  }
+}

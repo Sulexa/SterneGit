@@ -1,0 +1,46 @@
+{
+  "op": "repositories.get",
+  "account": {
+    "id": "github:github.com:583231",
+    "login": "octocat",
+    "endpoints": {
+      "api": "https://api.github.com/",
+      "graphql": "https://api.github.com/graphql",
+      "web": "https://github.com/"
+    }
+  },
+  "repo": {
+    "owner": "fastgit-org",
+    "name": "gone"
+  },
+  "exchanges": [
+    {
+      "method": "GET",
+      "url": "https://api.github.com/repos/fastgit-org/gone",
+      "status": 404,
+      "headers": [
+        [
+          "content-type",
+          "application/json; charset=utf-8"
+        ],
+        [
+          "x-oauth-scopes",
+          "repo"
+        ],
+        [
+          "x-accepted-oauth-scopes",
+          "repo"
+        ]
+      ],
+      "body": {
+        "message": "Not Found",
+        "status": "404"
+      }
+    }
+  ],
+  "output": {
+    "err": {
+      "kind": "not_found"
+    }
+  }
+}

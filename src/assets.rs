@@ -30,7 +30,21 @@ gpui_kit::assets::icon_assets!(
         StepBack,
         StepForward,
         Repeat,
-        FileQuestionMark
+        FileQuestionMark,
+        Plug,
+        KeyRound,
+        Link,
+        Lock,
+        LogIn,
+        Download,
+        Upload,
+        ShieldCheck,
+        Clock,
+        Trash,
+        Server,
+        Image,
+        GitFork,
+        FolderPlus
     ]
 );
 

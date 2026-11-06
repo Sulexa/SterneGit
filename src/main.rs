@@ -1,6 +1,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-#[cfg_attr(not(test), expect(dead_code))]
 mod accounts;
 mod actions;
 mod app;
@@ -8,6 +7,7 @@ mod assets;
 mod cli;
 mod connect;
 mod git;
+mod hosting;
 mod media;
 mod net;
 mod repo;

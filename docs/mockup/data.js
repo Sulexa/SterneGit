@@ -660,9 +660,114 @@ const Sample = (() => {
     unstaged: [],
   };
 
+  const githubScopes = ['repo', 'read:org', 'write:public_key', 'workflow'];
+
+  const accounts = [
+    {
+      id: 'github:github.com:583231',
+      login: 'alex-martin',
+      name: 'Alex Martin',
+      email: 'alex@fastgit.dev',
+      service: 'GitHub',
+      server: 'github.com',
+      method: 'device',
+      scopes: githubScopes,
+      key: { title: 'FastGit on DESKTOP-7Q2K', type: 'ed25519', fingerprint: 'SHA256:q3V2pXbN0c8m1Lr7tWkY4fJ9sHdE6aUoZiG5yCvBn2Q', file: 'github-github.com-583231_ed25519' },
+      owners: ['starfall-games'],
+      using: ['E:\\Projects\\fastgit', 'E:\\Projects\\website'],
+    },
+    {
+      id: 'github:github.com:9120447',
+      login: 'alex-acme',
+      name: 'Alex Martin',
+      email: 'alex@acme.dev',
+      service: 'GitHub',
+      server: 'github.com',
+      method: 'token',
+      scopes: ['repo', 'read:org'],
+      signedOut: true,
+      owners: ['acme-web'],
+      using: [],
+    },
+    {
+      id: 'github:github.acme.dev:1042',
+      login: 'amartin',
+      name: 'Alex Martin',
+      email: 'amartin@acme.dev',
+      service: 'GitHub Enterprise Server',
+      server: 'github.acme.dev',
+      method: 'credential',
+      scopes: ['repo', 'read:org'],
+      owners: [],
+      using: [],
+    },
+  ];
+
+  const serverKeys = [
+    { title: 'FastGit on DESKTOP-7Q2K', fingerprint: 'SHA256:q3V2pXbN0c8m1Lr7tWkY4fJ9sHdE6aUoZiG5yCvBn2Q', added: '2026-11-06', fastgit: true },
+    { title: 'Laptop', fingerprint: 'SHA256:Hk81bR0vXyQe3sTnPwU5mZ7cLd2fGa9jK4oIi6NtVrE', added: '2025-03-14' },
+    { title: 'Deploy key for the website', fingerprint: 'SHA256:W2nJx5eYp8RtQ0vLsK3dM7cBu1hZa6gFo9iT4wPyNqE', added: '2024-09-02', readOnly: true },
+  ];
+
+  const githubGrant = {
+    reach: [
+      { origin: 'https://api.github.com/', token: true },
+      { origin: 'https://github.com/', token: false },
+      { origin: '{server}/api/v3/', token: true, typed: true },
+      { origin: '{server}/', token: false, typed: true },
+    ],
+    images: ['https://avatars.githubusercontent.com/'],
+    remotes: ['github.com', 'ssh.github.com', '{server.host}'],
+    signIn: [],
+    features: ['Browse and clone repositories', 'Create and publish repositories', 'Add SSH keys'],
+  };
+
+  const gitlabGrant = {
+    reach: [
+      { origin: 'https://gitlab.com/api/v4/', token: true },
+      { origin: 'https://gitlab.com/', token: false },
+      { origin: '{server}/api/v4/', token: true, typed: true },
+    ],
+    images: ['https://secure.gravatar.com/avatar/'],
+    remotes: ['gitlab.com', 'altssh.gitlab.com', '{server.host}'],
+    signIn: ['https://gitlab.com/oauth/authorize_device', 'https://gitlab.com/oauth/token'],
+    features: ['Browse and clone repositories', 'Create and publish repositories', 'Add SSH keys', 'Merge requests: list, review, merge'],
+  };
+
+  const connectors = [
+    { id: 'github', name: 'GitHub', version: '0.1.0', origin: 'bundled', standing: 'ready', grant: githubGrant, accounts: 3 },
+    { id: 'gitlab', name: 'GitLab', version: '1.2.0', origin: 'installed', standing: 'waiting', grant: gitlabGrant, accounts: 0 },
+    { id: 'gitea', name: 'Gitea', version: '0.3.1', was: '0.3.0', origin: 'installed', standing: 'updated', grant: { reach: [{ origin: '{server}/api/v1/', token: true, typed: true }], images: [], remotes: ['{server.host}'], signIn: [], features: ['Browse and clone repositories'] }, accounts: 1 },
+    { id: 'azure-devops', name: 'Azure DevOps', version: '0.9.0', origin: 'installed', standing: 'unusable', problem: 'Needs a newer FastGit: it speaks protocol 2.0, and this FastGit speaks 1.0.' },
+    { id: 'bitbucket', name: 'Bitbucket', version: '0.2.0', origin: 'installed', standing: 'failed', problem: 'Stopped while starting: it ran out of time.', log: ['info  hello from bitbucket 0.2.0', 'debug building the route table', 'debug building the route table'] },
+  ];
+
+  const gitlabUpdate = { ...connectors[1], version: '1.3.0', was: '1.2.0', added: { reach: [{ origin: 'https://gitlab.com/api/graphql', token: true }], images: [], remotes: [], signIn: [], features: ['Merge requests: resolve threads'] } };
+
+  const owners = [
+    { login: 'alex-martin', kind: 'user', visibilities: ['public', 'private'], canInitialize: true },
+    { login: 'fastgit-org', kind: 'organization', visibilities: ['public', 'private', 'internal'], canInitialize: true },
+    { login: 'starfall-games', kind: 'organization', visibilities: ['public'], canInitialize: true, cannotCreate: true },
+  ];
+
+  const repositories = [
+    { owner: 'fastgit-org', name: 'fastgit', description: 'A lightweight Git client for Linux, macOS and Windows', visibility: 'public', updated: '2026-11-06' },
+    { owner: 'fastgit-org', name: 'connectors', description: 'Community connectors for FastGit', visibility: 'public', updated: '2026-11-05' },
+    { owner: 'alex-martin', name: 'starfall', description: 'A tiny space shooter made in Unity', visibility: 'private', updated: '2026-11-04' },
+    { owner: 'fastgit-org', name: 'website', description: 'fastgit.dev', visibility: 'public', updated: '2026-11-02' },
+    { owner: 'alex-martin', name: 'gpui-kit', description: 'UI components for GPUI', visibility: 'public', updated: '2026-10-28', fork: true },
+    { owner: 'alex-martin', name: 'dotfiles', description: '', visibility: 'private', updated: '2026-10-19' },
+    { owner: 'fastgit-org', name: 'design', description: 'Logos, icons and screenshots', visibility: 'internal', updated: '2026-09-30' },
+    { owner: 'alex-martin', name: 'advent-2025', description: 'Advent of Code 2025 in Rust', visibility: 'public', updated: '2025-12-25', archived: true },
+    { owner: 'alex-martin', name: 'notes', description: '', visibility: 'private', updated: '2025-11-12' },
+  ];
+
+  const hosting = { accounts, serverKeys, connectors, gitlabUpdate, owners, repositories, deviceCode: '8F2C-K7QD' };
+
   return {
     history, tracked, stashed, collapsed, changes, partlyStaged, draft, commitDetails, commitFileDiff, fileHistory, fileDiff, stagedHunkDiff, partlyStagedDiff, selectedLines, tabs,
     starfall, assets, slimeDiff, crownIcon, introDiff, themeDiff, modelDiff,
     rebasing, rebase, merge, starfallMerge, rebaseChanges, rebaseOneLeft, rebaseResolved, statusConflicts, statusMerged, slimeConflict, starfallConflicts,
+    hosting,
   };
 })();

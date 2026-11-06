@@ -14,7 +14,7 @@ use super::{
     request::{ApiRequest, ApiResponse, Method, NetError},
     services::{AccountView, Cancel, ConnectorId, HostServices, Level},
 };
-use crate::accounts::{Account, AccountBook, AccountId, Secrets};
+use crate::accounts::{Account, AccountBook, AccountId, Secrets, Token};
 
 const USER_AGENT: (&str, &str) = ("User-Agent", concat!("FastGit/", env!("CARGO_PKG_VERSION")));
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(30);
@@ -37,6 +37,18 @@ struct State {
     gates: HashMap<AccountId, Arc<Semaphore>>,
     logs: HashMap<ConnectorId, VecDeque<String>>,
     hidden: Vec<String>,
+    lent: HashMap<AccountId, (Account, Token)>,
+}
+
+pub(crate) struct Lent {
+    gateway: Arc<Gateway>,
+    account: AccountId,
+}
+
+impl Drop for Lent {
+    fn drop(&mut self) {
+        self.gateway.state().lent.remove(&self.account);
+    }
 }
 
 struct Trip {
@@ -71,25 +83,41 @@ impl Gateway {
             .unwrap_or_default()
     }
 
+    pub(crate) fn lend(self: &Arc<Self>, account: Account, token: Token) -> Lent {
+        let id = account.id.clone();
+        self.state().lent.insert(id.clone(), (account, token));
+        Lent {
+            gateway: Arc::clone(self),
+            account: id,
+        }
+    }
+
+    fn found(&self, account: &AccountId) -> Option<(Account, Option<Token>)> {
+        if let Some((lent, token)) = self.state().lent.get(account) {
+            return Some((lent.clone(), Some(token.clone())));
+        }
+        let book = self.book.read().unwrap_or_else(PoisonError::into_inner);
+        book.account(account).map(|found| (found.clone(), None))
+    }
+
     fn state(&self) -> MutexGuard<'_, State> {
         self.state.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
     fn prepare(&self, account: &AccountId, request: ApiRequest) -> Result<Trip, NetError> {
-        let book = self.book.read().unwrap_or_else(PoisonError::into_inner);
-        let found = book.account(account).ok_or(NetError::NotSignedIn)?;
+        let (found, lent_token) = self.found(account).ok_or(NetError::NotSignedIn)?;
         if let Some(until) = self.paused_until(account) {
             return Err(NetError::RateLimitedUntil(until));
         }
         let url = Url::parse(&request.url)
             .map_err(|_| NetError::ServerNotAllowed(request.url.clone()))?;
-        let allowed = AllowList::of(found);
+        let allowed = AllowList::of(&found);
         let admission = allowed
             .admit(&url)
             .ok_or_else(|| NetError::ServerNotAllowed(url.to_string()))?;
         check_headers(&request.headers, &found.scheme)?;
         let token_header = match admission {
-            Admission::WithToken => Some(self.token_header(found)?),
+            Admission::WithToken => Some(self.token_header(&found, lent_token)?),
             Admission::WithoutToken => None,
         };
         Ok(Trip {
@@ -103,12 +131,9 @@ impl Gateway {
         })
     }
 
-    fn token_header(&self, account: &Account) -> Result<(String, String), NetError> {
-        let token = self
-            .secrets
-            .read(&account.id)
-            .ok()
-            .flatten()
+    fn token_header(&self, account: &Account, lent: Option<Token>) -> Result<(String, String), NetError> {
+        let token = lent
+            .or_else(|| self.secrets.read(&account.id).ok().flatten())
             .ok_or(NetError::NotSignedIn)?;
         let header = account.scheme.header(token.reveal());
         let mut state = self.state();
@@ -187,8 +212,7 @@ fn hidden(message: &str, secrets: &[String]) -> String {
 
 impl HostServices for Gateway {
     fn account(&self, account: &AccountId) -> Option<AccountView> {
-        let book = self.book.read().unwrap_or_else(PoisonError::into_inner);
-        book.account(account).map(|found| AccountView {
+        self.found(account).map(|(found, _)| AccountView {
             id: found.id.clone(),
             server: found.server.clone(),
             endpoints: found
@@ -243,7 +267,7 @@ mod tests {
 
     use super::Gateway;
     use crate::{
-        accounts::{AccountBook, MemorySecrets, Secrets, fixtures},
+        accounts::{AccountBook, MemorySecrets, Secrets, Token, fixtures},
         net::{
             curl::{Curl, Outgoing, Transport},
             request::{ApiRequest, ApiResponse, Method, NetError},
@@ -421,6 +445,29 @@ mod tests {
         assert_eq!(lines.len(), 200);
         assert_eq!(lines[198], "Debug line 249");
         assert_eq!(lines[199], "Error echoed ••• back");
+    }
+
+    #[test]
+    fn an_account_being_signed_in_is_lent_with_its_token_until_given_back() {
+        let recorder = Recorder::answering(Vec::new());
+        let gateway = Arc::new(Gateway::new(
+            Arc::new(RwLock::new(AccountBook::default())),
+            Arc::new(MemorySecrets::default()),
+            recorder.clone(),
+        ));
+        let mut draft = fixtures::github("signing-in");
+        draft.login = String::new();
+        let lent = gateway.lend(draft.clone(), Token::new("gho_new").unwrap());
+        let (_keep, cancel) = cancel_pair();
+        let asked = gateway.request(&draft.id, ApiRequest::new(Method::Get, "https://api.github.com/user"), cancel);
+        smol::block_on(asked).unwrap();
+        assert_eq!(header(&recorder.sent()[0], "authorization"), Some("Bearer gho_new"));
+        assert!(gateway.account(&draft.id).is_some());
+        drop(lent);
+        assert_eq!(gateway.account(&draft.id), None);
+        let (_keep, cancel) = cancel_pair();
+        let after = gateway.request(&draft.id, ApiRequest::new(Method::Get, "https://api.github.com/user"), cancel);
+        assert_eq!(smol::block_on(after), Err(NetError::NotSignedIn));
     }
 
     #[test]

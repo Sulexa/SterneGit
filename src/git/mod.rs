@@ -1,5 +1,6 @@
 mod access;
 mod branch;
+mod clone;
 mod command;
 mod commit;
 mod context;
@@ -19,12 +20,12 @@ mod reach;
 mod refs;
 mod refusal;
 mod remote;
+pub(crate) mod ssh_key;
 mod stash;
 mod status;
 mod text;
 mod time;
 mod underway;
-#[cfg_attr(not(test), expect(dead_code))]
 pub(crate) mod url_settings;
 mod version;
 
@@ -39,6 +40,7 @@ use gpui_kit::SharedString;
 
 pub(crate) use access::{Access, Attendance, CredentialScope, GIT_CREDENTIAL_FLAG};
 pub(crate) use branch::{CheckedOut, NameProblem, new_branch_name};
+pub(crate) use clone::{CloneRequest, Progress, Stop, add_remote, clone, init, is_empty_or_missing};
 pub(crate) use command::without_console_window;
 pub(crate) use commit::commit_message;
 pub(crate) use credential::{CredentialAnswer, CredentialRequest};

@@ -13,6 +13,7 @@ const Catalog = (() => {
   const menuFrame = (menu, width = 240) => `<div style="position:relative;width:${width}px;height:${(menu.match(/class="item/g).length + 1) * 28 + 8}px">${menu}</div>`;
   const dialogFrame = (dialog) => `<div style="position:relative;width:520px;height:260px" class="mk-dialog-frame">${dialog}</div>`;
   const tallDialogFrame = (dialog) => `<div style="position:relative;width:520px;height:300px" class="mk-dialog-frame">${dialog}</div>`;
+  const bigDialog = (dialog, height, width = 560) => `<div style="position:relative;width:${width}px;height:${height}px" class="mk-dialog-frame">${dialog}</div>`;
   const hunkFrame = (actions) => `<div class="diff" style="width:560px;flex:none"><div class="diff-line hunk"><span class="text">${esc(fileDiff.hunks[0].header)}</span>${actions}</div></div>`;
 
   return [
@@ -48,6 +49,48 @@ const Catalog = (() => {
             ['Ghost, icon only', () => C.Button({ icon: 'close', variant: 'ghost' })],
             ['Disabled', () => C.Button({ label: 'Stage all', icon: 'plus', variant: 'ghost', disabled: true })],
           ],
+        },
+        {
+          name: 'Chip',
+          code: 'gpui_kit::tag::Tag',
+          source: 'src/app/connectors.rs',
+          about: 'Planned for milestone 4. A small outlined label for facts about a row: Bundled, Private, Fork, a scope. Tinted with a theme color for a standing: green Ready, yellow Waiting, blue Updated, red Stopped.',
+          variants: [
+            ['Plain', () => C.Chip({ label: 'Bundled' })],
+            ['Ready', () => C.Chip({ label: 'Ready', color: 'var(--green)' })],
+            ['Waiting', () => C.Chip({ label: 'Waiting for approval', color: 'var(--yellow)' })],
+            ['Updated', () => C.Chip({ label: 'Updated from 0.3.0', color: 'var(--blue)' })],
+            ['Stopped', () => C.Chip({ label: 'Stopped', color: 'var(--red)' })],
+          ],
+        },
+        {
+          name: 'Select',
+          code: 'gpui_kit::select::Select',
+          source: 'src/app/connectors.rs',
+          about: 'Planned for milestone 4. The kit dropdown at medium size, as tall as an Input. It may lead with an icon or an avatar.',
+          variants: [
+            ['Plain', () => C.Select({ value: 'All owners' }), { w: 220 }],
+            ['With an avatar', () => C.Select({ value: 'alex-martin · GitHub', lead: `<span class="prefix">${accountAvatar(Sample.hosting.accounts[0], 18)}</span>` }), { w: 300 }],
+            ['Open', () => C.Select({ value: 'alex-martin', open: true }), { w: 220 }],
+            ['Disabled', () => C.Select({ value: 'alex-martin · GitHub', disabled: true }), { w: 300 }],
+          ],
+        },
+        {
+          name: 'Radio',
+          code: 'gpui_kit::radio::Radio',
+          source: 'src/app/connectors.rs',
+          about: 'Planned for milestone 4. One choice among a few shown at once, such as the visibility of a repository.',
+          variants: [
+            ['Two', () => visibilityChoice(['public', 'private'], 'private')],
+            ['Three', () => visibilityChoice(['public', 'private', 'internal'], 'public')],
+          ],
+        },
+        {
+          name: 'GroupBox',
+          code: 'gpui_kit::group_box::GroupBox',
+          source: 'src/app/connectors.rs',
+          about: 'Planned for milestone 4. A titled, outlined box of rows separated by lines, the building block of the Settings pages.',
+          variants: [['Rows', () => C.GroupBox({ title: 'Sign-in', about: 'How this account signed in', rows: ['<div class="row def"><span class="term">Method</span><span class="sm">Signed in with the browser</span></div>', '<div class="row def"><span class="term">Token</span><span class="sm muted">In Windows Credential Manager</span></div>'] }), { w: 600 }]],
         },
         {
           name: 'Checkbox',
@@ -134,6 +177,10 @@ const Catalog = (() => {
             ['Force pushed', () => C.Notification({ kind: 'success', message: Texts.forcePushed('main', 'origin/main') })],
             ['Upstream moved before a force push', () => C.Notification({ kind: 'error', title: 'Push failed', message: Texts.movedAgain('origin/main') })],
             ['Fast-forward refused on another branch', () => C.Notification({ kind: 'error', title: 'Pull failed', message: "feature/blame and origin/feature/blame have diverged, so feature/blame can't fast-forward. Check it out to merge or rebase." })],
+            ['Signed in (planned)', () => C.Notification({ kind: 'success', message: 'Signed in to GitHub as alex-martin' })],
+            ['Signed in, token missing a scope (planned)', () => C.Notification({ kind: 'warning', title: 'Signed in to GitHub as alex-acme', message: "This token lacks write:public_key, so FastGit can't add SSH keys with it." })],
+            ['Connector waiting (planned)', () => C.Notification({ kind: 'info', title: HostTexts.waitingTitle('GitLab', '1.2.0'), message: HostTexts.waitingMessage, action: C.Button({ label: HostTexts.review, size: 'sm', variant: 'primary' }) })],
+            ['Two connectors waiting (planned)', () => C.Notification({ kind: 'info', title: '2 connectors are waiting for your approval', message: 'GitLab 1.2.0 and Gitea 0.4.0. Nothing of them runs until you approve them.', action: C.Button({ label: HostTexts.review, size: 'sm', variant: 'primary' }) })],
           ],
         },
         {
@@ -975,6 +1022,209 @@ const Catalog = (() => {
           source: 'src/repo/file_diff_panel.rs',
           about: 'For a file FastGit can’t draw: what it is, buttons that open each version with its default app or both with git difftool, and the MediaDetails.',
           variants: [['3D model', () => C.BinaryFacts({ diff: modelDiff }), { w: 736, h: 420 }]],
+        },
+      ],
+    },
+    {
+      key: 'hosting',
+      title: 'Accounts and connectors (planned)',
+      about: 'Milestone 4 of docs/connectors/design.md, drawn for approval before any Rust: the Settings tab with its Accounts and Connectors pages, signing in, SSH keys, approving connectors, picking an account for a remote, cloning, creating and publishing. Each entry points at the module it will build on.',
+      items: [
+        {
+          name: 'SettingsTab',
+          code: 'app::settings_tab::SettingsTab',
+          source: 'src/app/connectors.rs',
+          about: 'A tab after the repository tabs, opened by File → Settings… (Ctrl+,), with a gear in its label. A 224 px column of pages on the left, the page on the right, at most 880 px wide. Not saved with the open tabs.',
+          variants: [['Accounts page', () => Screens.find((screen) => screen.id === 'settings-accounts').render(), { scale: 0.5 }]],
+        },
+        {
+          name: 'SettingsNav',
+          code: 'app::settings_tab::SettingsNav',
+          source: 'src/app/connectors.rs',
+          about: 'The Settings pages: Accounts with how many there are, Connectors with a yellow badge counting the ones waiting for approval.',
+          variants: [
+            ['A connector waiting', () => C.SettingsNav({ page: 'accounts', accounts: 3, waiting: 1 }), { w: 224 }],
+            ['Nothing waiting', () => C.SettingsNav({ page: 'connectors', accounts: 3 }), { w: 224 }],
+          ],
+        },
+        {
+          name: 'PageHeader',
+          code: 'app::settings_tab::PageHeader',
+          source: 'src/app/connectors.rs',
+          about: 'The title of a page, what it is for and its actions; below a top page, the way back.',
+          variants: [
+            ['Top page', () => C.PageHeader({ title: HostTexts.accounts, about: HostTexts.accountsAbout, actions: C.Button({ label: HostTexts.addAccount, icon: 'plus', size: 'md', variant: 'primary' }) }), { w: 816 }],
+            ['Inner page', () => C.PageHeader({ title: 'Alex Martin', crumb: HostTexts.accounts, subtitle: '<div class="sm muted">alex-martin · GitHub · github.com</div>', media: accountAvatar(Sample.hosting.accounts[0], 48) }), { w: 816 }],
+          ],
+        },
+        {
+          name: 'AccountsPage',
+          code: 'accounts::page::AccountsPage',
+          source: 'src/accounts/book.rs',
+          about: 'Every account in accounts.json. Nothing is read from the servers to draw it.',
+          variants: [
+            ['Three accounts', () => C.AccountsPage({ accounts: Sample.hosting.accounts }), { w: 816 }],
+            ['None yet', () => C.AccountsPage({ accounts: [] }), { w: 816 }],
+          ],
+        },
+        {
+          name: 'AccountRow',
+          code: 'accounts::page::AccountRow',
+          source: 'src/accounts/account.rs',
+          about: 'Avatar (an identicon until avatars are fetched), name and login; service, server and sign-in method; SSH when FastGit made a key for it. A refused token turns the second line red and offers Sign in again.',
+          variants: Sample.hosting.accounts.map((account) => [account.signedOut ? 'Signed out' : account.service, () => C.GroupBox({ rows: [C.AccountRow({ account })] }), { w: 816 }]),
+        },
+        {
+          name: 'AccountPage',
+          code: 'accounts::page::AccountPage',
+          source: 'src/accounts/account.rs',
+          about: 'One account: sign-in, SSH keys (ssh_keys.list, read when the page opens) and remembered remote owners.',
+          variants: [
+            ['With a FastGit key', () => C.AccountPage({ account: Sample.hosting.accounts[0], keys: Sample.hosting.serverKeys }), { w: 816 }],
+            ['No key yet', () => C.AccountPage({ account: Sample.hosting.accounts[2], keys: [] }), { w: 816 }],
+          ],
+        },
+        {
+          name: 'SshKeyRow',
+          code: 'accounts::page::SshKeyRow',
+          source: 'src/accounts/account.rs',
+          about: 'A key: its title, its SHA-256 fingerprint and when it was added. The key FastGit made comes first, with how many repositories use it and Copy public key.',
+          variants: [
+            ["FastGit's key", () => C.GroupBox({ rows: [C.SshKeyRow({ key: { ...Sample.hosting.accounts[0].key, fastgit: true, using: 2 }, local: true })] }), { w: 816 }],
+            ['Listed by the server', () => C.GroupBox({ rows: [C.SshKeyRow({ key: Sample.hosting.serverKeys[1] })] }), { w: 816 }],
+            ['Read-only', () => C.GroupBox({ rows: [C.SshKeyRow({ key: Sample.hosting.serverKeys[2] })] }), { w: 816 }],
+          ],
+        },
+        {
+          name: 'ConnectorsPage',
+          code: 'connect::page::ConnectorsPage',
+          source: 'src/connect/catalog.rs',
+          about: 'Every connector the Catalog found, bundled or installed, in the order it found them.',
+          variants: [['Five connectors', () => C.ConnectorsPage({ connectors: Sample.hosting.connectors }), { w: 816 }]],
+        },
+        {
+          name: 'ConnectorRow',
+          code: 'connect::page::ConnectorRow',
+          source: 'src/connect/catalog.rs',
+          about: 'Name, version, where it came from and its Standing; then the hosts it reaches and how many accounts use it, or why it does not run.',
+          variants: [
+            ...Sample.hosting.connectors.map((connector) => [StandingLooks[connector.standing].label(connector), () => C.GroupBox({ rows: [C.ConnectorRow({ connector })] }), { w: 816 }]),
+            ['Files changed', () => C.GroupBox({ rows: [C.ConnectorRow({ connector: { ...Sample.hosting.connectors[0], origin: 'installed', standing: 'modified', problem: "Its files don't match the ones this FastGit ships, so it waits like an installed connector." } })] }), { w: 816 }],
+          ],
+        },
+        {
+          name: 'ApprovalPage',
+          code: 'connect::page::ApprovalPage',
+          source: 'src/connect/grant.rs',
+          about: 'What a connector asks for, read from its manifest, with Approve and Not now. For an update, only what it adds.',
+          variants: [
+            ['New connector', () => C.ApprovalPage({ connector: Sample.hosting.connectors[1] }), { w: 816 }],
+            ['Update asking for more', () => C.ApprovalPage({ connector: Sample.hosting.gitlabUpdate, update: true }), { w: 816 }],
+          ],
+        },
+        {
+          name: 'GrantList',
+          code: 'connect::page::GrantList',
+          source: 'src/connect/grant.rs',
+          about: 'A Grant as groups of rows: servers and whether they get the token, picture servers, remotes, sign-in pages and features. A server or host the user types appears as a slot in italics.',
+          variants: [['GitHub', () => C.GrantList({ grant: Sample.hosting.connectors[0].grant }), { w: 816 }]],
+        },
+        {
+          name: 'SignInDialog',
+          code: 'accounts::sign_in::SignInDialog',
+          source: 'src/accounts/account.rs',
+          about: 'Add account… and Sign in again: one dialog whose body follows the steps of the chosen method.',
+          variants: [
+            ['Choose', () => bigDialog(C.SignInDialog({ step: 'choose' }), 440)],
+            ['Choose, Enterprise Server', () => bigDialog(C.SignInDialog({ step: 'choose', enterprise: true }), 480)],
+            ['Browser: code', () => bigDialog(C.SignInDialog({ step: 'device' }), 320)],
+            ['Browser: expired', () => bigDialog(C.SignInDialog({ step: 'expired' }), 320)],
+            ['Browser: declined', () => bigDialog(C.SignInDialog({ step: 'denied' }), 320)],
+            ['Token', () => bigDialog(C.SignInDialog({ step: 'token' }), 300)],
+            ['Token refused', () => bigDialog(C.SignInDialog({ step: 'token', problem: HostTexts.tokenRefused('GitHub') }), 300)],
+            ["Credential Manager's token", () => bigDialog(C.SignInDialog({ step: 'credential' }), 300)],
+            ['Credential Manager has none', () => bigDialog(C.SignInDialog({ step: 'credential', problem: 'Git Credential Manager has no token for github.com.' }), 340)],
+          ],
+        },
+        {
+          name: 'SshKeyDialog',
+          code: 'accounts::ssh_key::SshKeyDialog',
+          source: 'src/accounts/account.rs',
+          about: 'Create SSH key… on an account page: a title for the key on the server, then Create and add.',
+          variants: [
+            ['Ready', () => bigDialog(C.SshKeyDialog({ account: Sample.hosting.accounts[0] }), 300)],
+            ['Token lacks the scope', () => bigDialog(C.SshKeyDialog({ account: Sample.hosting.accounts[2], forbidden: true }), 320)],
+          ],
+        },
+        {
+          name: 'RemoveAccountDialog',
+          code: 'accounts::page::RemoveAccountDialog',
+          source: 'src/accounts/book.rs',
+          about: 'Remove… on an account page, listing the repositories that use its SSH key.',
+          variants: [
+            ['Key in use', () => bigDialog(C.RemoveAccountDialog({ account: Sample.hosting.accounts[0] }), 360)],
+            ['No key', () => bigDialog(C.RemoveAccountDialog({ account: Sample.hosting.accounts[2] }), 240)],
+          ],
+        },
+        {
+          name: 'AccountChoiceBar',
+          code: 'repo::account_bar::AccountChoiceBar',
+          source: 'src/accounts/access.rs',
+          about: 'A bar under the toolbar when a remote fits several accounts and its owner has no remembered choice.',
+          variants: [['Two accounts', () => C.AccountChoiceBar({ host: 'github.com', owner: 'fastgit-org', accounts: Sample.hosting.accounts.slice(0, 2), chosen: 'alex-martin' }), { w: 1200 }]],
+        },
+        {
+          name: 'AccountMenu',
+          code: 'accounts::page::AccountMenu',
+          source: 'src/accounts/book.rs',
+          about: 'The accounts a Select offers, each with its service and server.',
+          variants: [['Two accounts', () => `<div style="position:relative;width:300px;height:110px">${C.AccountMenu({ accounts: Sample.hosting.accounts.slice(0, 2), chosen: 'alex-martin', hot: 'alex-acme' })}</div>`]],
+        },
+        {
+          name: 'CloneDialog',
+          code: 'app::clone_dialog::CloneDialog',
+          source: 'src/app/window.rs',
+          about: 'URL, then one source per account. An account lists its repositories through repositories.list.',
+          variants: [
+            ['URL', () => bigDialog(C.CloneDialog({ from: 'url', accounts: Sample.hosting.accounts, url: 'https://github.com/fastgit-org/connectors.git' }), 720, 920), { scale: 0.75 }],
+            ['Account', () => bigDialog(C.CloneDialog({ from: 'alex-martin', accounts: Sample.hosting.accounts, repositories: Sample.hosting.repositories, selected: 1 }), 720, 920), { scale: 0.75 }],
+            ['Account without a key', () => bigDialog(C.CloneDialog({ from: 'amartin', accounts: Sample.hosting.accounts, repositories: Sample.hosting.repositories.slice(0, 4), selected: 0 }), 720, 920), { scale: 0.75 }],
+          ],
+        },
+        {
+          name: 'RepositoryRow',
+          code: 'app::clone_dialog::RepositoryRow',
+          source: 'src/connect/forge.rs',
+          about: 'owner/name, its description and when it last changed; chips for private, internal, fork and archived.',
+          variants: [0, 2, 4, 6, 7].map((at, ix) => [Sample.hosting.repositories[at].name, () => `<div class="repo-list">${C.RepositoryRow({ repository: Sample.hosting.repositories[at], selected: ix === 0 })}</div>`, { w: 620 }]),
+        },
+        {
+          name: 'ConnectorFailure',
+          code: 'connect::failure::ConnectorFailure',
+          source: 'src/connect/stop.rs',
+          about: 'Why a connector call failed and the way out, wherever the call was made. Each CallError has its own words.',
+          variants: Object.entries(Failures).map(([kind, failure]) => [kind, () => C.ConnectorFailure(failure), { w: 620 }]),
+        },
+        {
+          name: 'NewRepositoryDialog',
+          code: 'app::new_repository::NewRepositoryDialog',
+          source: 'src/app/window.rs',
+          about: 'File → New Repository…: a local repository, and optionally an empty one on an account as its origin.',
+          variants: [
+            ['Local only', () => bigDialog(C.NewRepositoryDialog({ account: Sample.hosting.accounts[0], owners: Sample.hosting.owners }), 420)],
+            ['Also on GitHub', () => bigDialog(C.NewRepositoryDialog({ hosted: true, account: Sample.hosting.accounts[0], owners: Sample.hosting.owners }), 640)],
+          ],
+        },
+        {
+          name: 'PublishDialog',
+          code: 'repo::publish_dialog::PublishDialog',
+          source: 'src/repo/toolbar.rs',
+          about: 'Push in a repository with no remote: create it on an account, add origin, push.',
+          variants: [
+            ['Ready', () => bigDialog(C.PublishDialog({ repository: 'fastgit', account: Sample.hosting.accounts[0], owner: Sample.hosting.owners[0] }), 480)],
+            ['Name taken', () => bigDialog(C.PublishDialog({ repository: 'fastgit', account: Sample.hosting.accounts[0], owner: Sample.hosting.owners[1], problem: HostTexts.nameTaken('fastgit-org', 'fastgit') }), 500)],
+            ['No account yet', () => bigDialog(C.PublishDialog({ repository: 'fastgit', noAccount: true }), 220)],
+          ],
         },
       ],
     },

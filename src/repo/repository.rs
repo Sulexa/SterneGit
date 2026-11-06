@@ -23,6 +23,7 @@ pub(crate) enum RepositoryEvent {
     HistoryRead,
     ChangesRead,
     Committed,
+    Unpublished,
     Operated(Operated),
     PullModeNotSaved(Failure),
 }
@@ -74,6 +75,7 @@ pub(crate) struct Repository {
     write_failure: Option<Failure>,
     chosen_pull_mode: Option<PullMode>,
     pull_mode_save: Job,
+    push_once_read: bool,
 }
 
 impl EventEmitter<RepositoryEvent> for Repository {}
@@ -96,6 +98,7 @@ impl Repository {
             write_failure: None,
             chosen_pull_mode: None,
             pull_mode_save: Job::default(),
+            push_once_read: false,
         }
     }
 
@@ -210,6 +213,9 @@ impl Repository {
                 this.opened.finish(result);
                 if this.opened.value().is_some() {
                     this.read_status(StatusCheck::Forced, cx);
+                    if std::mem::take(&mut this.push_once_read) {
+                        this.push(cx);
+                    }
                 } else {
                     this.status_read.cancel();
                     this.changes = None;
@@ -381,7 +387,16 @@ impl Repository {
         );
     }
 
+    pub(crate) fn push_once_reread(&mut self, cx: &mut Context<Self>) {
+        self.push_once_read = true;
+        self.refresh(cx);
+    }
+
     pub(crate) fn push(&mut self, cx: &mut Context<Self>) {
+        if self.repo().is_some_and(|repo| !repo.has_remotes()) {
+            cx.emit(RepositoryEvent::Unpublished);
+            return;
+        }
         self.operate(
             Operation::Push,
             |repo| repo.push().map(operation::pushed),

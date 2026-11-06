@@ -17,6 +17,7 @@ impl AccountContext {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Identity {
+    pub id: String,
     pub login: String,
     pub name: Option<String>,
     pub avatar_url: Option<String>,

@@ -28,6 +28,7 @@ impl Connector for Toy {
         }
         let user: Value = response.json()?;
         Ok(Identity {
+            id: user["id"].to_string(),
             login: user["login"].as_str().unwrap_or(&account.login).to_owned(),
             name: user["name"].as_str().map(str::to_owned),
             avatar_url: None,

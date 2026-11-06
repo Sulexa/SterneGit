@@ -313,6 +313,10 @@ impl Repo {
         Ok(Pushed::Sent(tracking))
     }
 
+    pub(crate) fn has_remotes(&self) -> bool {
+        !self.local().remote_names().is_empty()
+    }
+
     pub(crate) fn remote_urls(&self) -> Vec<String> {
         run_text(
             &self.location,

@@ -31,6 +31,7 @@ pub(crate) enum TabState {
 pub(crate) struct TabLabel {
     pub(crate) name: SharedString,
     pub(crate) state: TabState,
+    pub(crate) icon: Option<IconName>,
 }
 
 #[derive(IntoElement)]
@@ -81,6 +82,7 @@ impl TabStrip {
 impl RenderOnce for TabStrip {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let failed_color = cx.theme().red;
+        let muted = cx.theme().muted_foreground;
         let on_close = self.on_close;
         let tabs = self.labels.into_iter().enumerate().map(|(ix, label)| {
             let on_close = on_close.clone();
@@ -96,7 +98,12 @@ impl RenderOnce for TabStrip {
                                 .text_color(failed_color),
                         ),
                     ),
-                    TabState::Ready => tab,
+                    TabState::Ready => match label.icon {
+                        Some(icon) => tab.prefix(
+                            div().pl_3().child(Icon::new(icon).xsmall().text_color(muted)),
+                        ),
+                        None => tab,
+                    },
                 })
                 .child(div().flex_1().ellipsis().child(label.name))
                 .suffix(

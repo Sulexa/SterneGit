@@ -71,6 +71,17 @@ fn murmur_finish(mut hash: u64) -> u64 {
     hash ^ (hash >> 33)
 }
 
+pub(crate) fn identicon(seed: &str, size: Pixels) -> impl IntoElement {
+    let identicon = Identicon::of(seed);
+    div().flex_none().size(size).child(
+        canvas(
+            |_, _, _| {},
+            move |bounds, (), window, _| paint(identicon, bounds, window),
+        )
+        .size_full(),
+    )
+}
+
 pub(crate) fn author_avatar(
     name: &SharedString,
     email: &SharedString,

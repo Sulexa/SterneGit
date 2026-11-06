@@ -64,6 +64,11 @@ impl AccountBook {
         }
     }
 
+    pub(crate) fn save(&self) -> io::Result<()> {
+        let file = file().ok_or_else(|| io::Error::other("There is no folder for FastGit's settings"))?;
+        self.write_to(&file)
+    }
+
     pub(crate) fn write_to(&self, file: &JsonFile) -> io::Result<()> {
         let accounts = self.accounts.iter().map(Account::to_json);
         let owners = self.owners.iter().map(OwnerChoice::to_json);
@@ -104,6 +109,18 @@ impl AccountBook {
             Some(known) => *known = account,
             None => self.accounts.push(account),
         }
+    }
+
+    pub(crate) fn sign_in(&mut self, mut account: Account) {
+        if let Some(known) = self.account(&account.id) {
+            account.ssh_key = known.ssh_key.clone();
+            account.ssh_repositories = known.ssh_repositories.clone();
+            account.clone_over_ssh = known.clone_over_ssh;
+            let mut others = known.others.clone();
+            others.extend(account.others);
+            account.others = others;
+        }
+        self.put(account);
     }
 
     pub(crate) fn remove(&mut self, id: &AccountId) {
@@ -185,6 +202,24 @@ mod tests {
         renamed.login = "new-login".into();
         book.put(renamed.clone());
         assert_eq!(book.accounts, [renamed]);
+    }
+
+    #[test]
+    fn signing_in_again_keeps_what_fastgit_set_up_for_the_account() {
+        let mut book = AccountBook::default();
+        let mut known = fixtures::github("1");
+        known.ssh_key = Some("C:/keys/github-github.com-1_ed25519".into());
+        known.ssh_repositories = vec!["E:/Projects/fastgit".into()];
+        known.clone_over_ssh = true;
+        book.put(known.clone());
+        let mut again = fixtures::github("1");
+        again.scopes = vec!["repo".into(), "write:public_key".into()];
+        book.sign_in(again);
+        let kept = book.account(&known.id).unwrap();
+        assert_eq!(kept.ssh_key, known.ssh_key);
+        assert_eq!(kept.ssh_repositories, known.ssh_repositories);
+        assert!(kept.clone_over_ssh);
+        assert_eq!(kept.scopes, ["repo", "write:public_key"]);
     }
 
     #[test]

@@ -1,0 +1,61 @@
+{
+  "op": "ssh_keys.list",
+  "account": {
+    "id": "github:github.com:583231",
+    "login": "octocat",
+    "endpoints": {
+      "api": "https://api.github.com/",
+      "graphql": "https://api.github.com/graphql",
+      "web": "https://github.com/"
+    }
+  },
+  "exchanges": [
+    {
+      "method": "GET",
+      "url": "https://api.github.com/user/keys?per_page=100",
+      "status": 200,
+      "headers": [
+        [
+          "content-type",
+          "application/json; charset=utf-8"
+        ]
+      ],
+      "body": [
+        {
+          "id": 2,
+          "key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl",
+          "title": "FastGit on DESKTOP-7Q2K",
+          "created_at": "2026-11-06T10:00:00Z",
+          "verified": true,
+          "read_only": false
+        },
+        {
+          "id": 3,
+          "key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJ5D3Jg0vdYbW5S1Vg0aQ8w3r6h7J8Y2l3cXlTnRmM4p",
+          "title": "Laptop",
+          "created_at": "2025-03-14T10:00:00Z",
+          "verified": true,
+          "read_only": false
+        }
+      ]
+    }
+  ],
+  "output": {
+    "ok": [
+      {
+        "id": "2",
+        "title": "FastGit on DESKTOP-7Q2K",
+        "key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl",
+        "created_at": "2026-11-06T10:00:00Z",
+        "read_only": false
+      },
+      {
+        "id": "3",
+        "title": "Laptop",
+        "key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJ5D3Jg0vdYbW5S1Vg0aQ8w3r6h7J8Y2l3cXlTnRmM4p",
+        "created_at": "2025-03-14T10:00:00Z",
+        "read_only": false
+      }
+    ]
+  }
+}

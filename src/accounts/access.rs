@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use url::Url;
 
-use super::{AccountBook, account::authority};
+use super::{Account, AccountBook, account::authority};
 use crate::git::{Access, Attendance, CredentialScope, Repo};
 
 pub(crate) fn access_for_repo(repo: &Repo, attendance: Attendance) -> Access {
@@ -16,6 +16,23 @@ pub(crate) fn access_for_repo(repo: &Repo, attendance: Attendance) -> Access {
         std::env::current_exe().ok(),
         attendance,
     )
+}
+
+pub(crate) fn access_for_url(url: &str) -> Access {
+    let book = AccountBook::load();
+    access_for(&book, &[url.to_owned()], std::env::current_exe().ok(), Attendance::Attended)
+}
+
+pub(crate) fn access_as(account: &Account, owner: &str) -> Access {
+    let server = account.server.as_str().trim_end_matches('/');
+    Access {
+        helper: std::env::current_exe().ok(),
+        scopes: vec![CredentialScope {
+            prefix: format!("{server}/{}", owner.trim_matches('/')),
+            account: account.id.as_str().to_owned(),
+        }],
+        attendance: Attendance::Attended,
+    }
 }
 
 fn access_for(

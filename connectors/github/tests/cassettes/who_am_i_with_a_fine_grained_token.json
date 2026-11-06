@@ -15,6 +15,6 @@
     }
   ],
   "output": {
-    "ok": { "login": "octocat", "name": null, "avatar_url": null, "scopes": [] }
+    "ok": { "id": "583231", "login": "octocat", "name": null, "avatar_url": null, "scopes": [] }
   }
 }

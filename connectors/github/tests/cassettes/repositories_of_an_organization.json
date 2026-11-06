@@ -1,0 +1,115 @@
+{
+  "op": "repositories.list",
+  "account": {
+    "id": "github:github.com:583231",
+    "login": "octocat",
+    "endpoints": {
+      "api": "https://api.github.com/",
+      "graphql": "https://api.github.com/graphql",
+      "web": "https://github.com/"
+    }
+  },
+  "input": {
+    "search": null,
+    "owner": "fastgit-org",
+    "cursor": null
+  },
+  "exchanges": [
+    {
+      "method": "GET",
+      "url": "https://api.github.com/orgs/fastgit-org/repos?sort=updated&per_page=100",
+      "status": 200,
+      "headers": [
+        [
+          "content-type",
+          "application/json; charset=utf-8"
+        ]
+      ],
+      "body": [
+        {
+          "id": 1928,
+          "name": "fastgit",
+          "full_name": "fastgit-org/fastgit",
+          "owner": {
+            "login": "fastgit-org",
+            "id": 1,
+            "type": "User"
+          },
+          "private": false,
+          "visibility": "public",
+          "description": "A lightweight Git client for Linux, macOS and Windows",
+          "fork": false,
+          "archived": false,
+          "default_branch": "main",
+          "html_url": "https://github.com/fastgit-org/fastgit",
+          "clone_url": "https://github.com/fastgit-org/fastgit.git",
+          "ssh_url": "git@github.com:fastgit-org/fastgit.git",
+          "pushed_at": "2026-11-05T10:00:00Z",
+          "updated_at": "2026-11-01T08:00:00Z"
+        },
+        {
+          "id": 1808,
+          "name": "design",
+          "full_name": "fastgit-org/design",
+          "owner": {
+            "login": "fastgit-org",
+            "id": 1,
+            "type": "User"
+          },
+          "private": true,
+          "visibility": "internal",
+          "description": null,
+          "fork": false,
+          "archived": false,
+          "default_branch": "main",
+          "html_url": "https://github.com/fastgit-org/design",
+          "clone_url": "https://github.com/fastgit-org/design.git",
+          "ssh_url": "git@github.com:fastgit-org/design.git",
+          "pushed_at": null,
+          "updated_at": "2026-11-01T08:00:00Z"
+        }
+      ]
+    }
+  ],
+  "output": {
+    "ok": {
+      "items": [
+        {
+          "repo": {
+            "owner": "fastgit-org",
+            "name": "fastgit"
+          },
+          "description": "A lightweight Git client for Linux, macOS and Windows",
+          "visibility": "public",
+          "default_branch": "main",
+          "clone": {
+            "https": "https://github.com/fastgit-org/fastgit.git",
+            "ssh": "git@github.com:fastgit-org/fastgit.git"
+          },
+          "web_url": "https://github.com/fastgit-org/fastgit",
+          "updated_at": "2026-11-05T10:00:00Z",
+          "fork": false,
+          "archived": false
+        },
+        {
+          "repo": {
+            "owner": "fastgit-org",
+            "name": "design"
+          },
+          "description": null,
+          "visibility": "internal",
+          "default_branch": "main",
+          "clone": {
+            "https": "https://github.com/fastgit-org/design.git",
+            "ssh": "git@github.com:fastgit-org/design.git"
+          },
+          "web_url": "https://github.com/fastgit-org/design",
+          "updated_at": "2026-11-01T08:00:00Z",
+          "fork": false,
+          "archived": false
+        }
+      ],
+      "next": null
+    }
+  }
+}

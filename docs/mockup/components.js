@@ -48,6 +48,31 @@ const IconPaths = {
   'file-question': '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z"/><path d="M9.1 9a3 3 0 0 1 5.82 1c0 2-3 3-3 3"/><path d="M12 17h.01"/>',
   'external-link': '<path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
   'move-horizontal': '<path d="m18 8 4 4-4 4"/><path d="M2 12h20"/><path d="m6 8-4 4 4 4"/>',
+  settings: '<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>',
+  user: '<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
+  plug: '<path d="M12 22v-5"/><path d="M9 8V2"/><path d="M15 8V2"/><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"/>',
+  'key-round': '<path d="M2.586 17.414A2 2 0 0 0 2 18.828V21a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h1a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h.172a2 2 0 0 0 1.414-.586l.814-.814a6.5 6.5 0 1 0-4-4z"/><circle cx="16.5" cy="7.5" r=".5" fill="currentColor"/>',
+  link: '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
+  lock: '<rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
+  globe: '<circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/>',
+  building: '<rect width="16" height="20" x="4" y="2" rx="2" ry="2"/><path d="M9 22v-4h6v4"/><path d="M8 6h.01"/><path d="M16 6h.01"/><path d="M12 6h.01"/><path d="M12 10h.01"/><path d="M12 14h.01"/><path d="M16 10h.01"/><path d="M16 14h.01"/><path d="M8 10h.01"/><path d="M8 14h.01"/>',
+  search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+  copy: '<rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>',
+  'git-fork': '<circle cx="12" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><circle cx="18" cy="6" r="3"/><path d="M18 9v2c0 .6-.4 1-1 1H7c-.6 0-1-.4-1-1V9"/><path d="M12 12v3"/>',
+  'folder-open': '<path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"/>',
+  'shield-check': '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/>',
+  clock: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
+  'log-in': '<path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="m10 17 5-5-5-5"/><path d="M15 12H3"/>',
+  'refresh-cw': '<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>',
+  download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/>',
+  upload: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m17 8-5-5-5 5"/><path d="M12 3v12"/>',
+  'circle-alert': '<circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><path d="M12 16h.01"/>',
+  info: '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>',
+  server: '<rect width="20" height="8" x="2" y="2" rx="2" ry="2"/><rect width="20" height="8" x="2" y="14" rx="2" ry="2"/><path d="M6 6h.01"/><path d="M6 18h.01"/>',
+  image: '<rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>',
+  book: '<path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/>',
+  'trash-2': '<path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><path d="M10 11v6"/><path d="M14 11v6"/>',
+  'folder-plus': '<path d="M12 10v6"/><path d="M9 13h6"/><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>',
 };
 
 const IconSizes = { xs: 12, sm: 14, md: 16, lg: 24 };
@@ -156,7 +181,17 @@ const PartLabels = {
 };
 
 const Menus = {
-  File: [['Open Repository…', 'Ctrl+O'], ['Close Tab', 'Ctrl+W'], '-', ['Quit', 'Ctrl+Q']],
+  File: [
+    ['Open Repository…', 'Ctrl+O'],
+    ['Clone Repository…', 'Ctrl+Shift+O'],
+    ['New Repository…', 'Ctrl+N'],
+    '-',
+    ['Settings…', 'Ctrl+,'],
+    '-',
+    ['Close Tab', 'Ctrl+W'],
+    '-',
+    ['Quit', 'Ctrl+Q'],
+  ],
   Edit: [['Copy Commit Hash', 'Ctrl+Shift+C']],
   View: [
     ['Refresh', 'Ctrl+R'],
@@ -326,6 +361,175 @@ const Texts = {
   historyPosition: (at, n, name) => `Commit ${thousands(at)} of ${thousands(n)} changing ${name}`,
   renamedFrom: (path) => `Renamed from ${path}`,
   hear: (side) => `Hear ${side === 'before' ? 'the version before the change' : 'the changed version'}  Tab switches`,
+  cloneRepository: 'Clone repository…',
+};
+
+const MethodLabels = {
+  device: 'Signed in with the browser',
+  token: 'Signed in with a pasted token',
+  credential: 'Token from Git Credential Manager',
+};
+
+const StandingLooks = {
+  ready: { label: () => 'Ready', color: 'var(--green)' },
+  updated: { label: (connector) => `Updated from ${connector.was}`, color: 'var(--blue)' },
+  waiting: { label: () => 'Waiting for approval', color: 'var(--yellow)' },
+  modified: { label: () => 'Files changed', color: 'var(--yellow)' },
+  unusable: { label: () => "Can't run", color: 'var(--red)' },
+  failed: { label: () => 'Stopped', color: 'var(--red)' },
+};
+
+const Visibilities = {
+  public: { label: 'Public', icon: 'globe', about: 'Anyone can see it' },
+  private: { label: 'Private', icon: 'lock', about: 'Only you and the people you invite' },
+  internal: { label: 'Internal', icon: 'building', about: 'Everyone in the organization' },
+};
+
+const HostTexts = {
+  settings: 'Settings',
+  accounts: 'Accounts',
+  connectors: 'Connectors',
+  accountsAbout: "FastGit signs in to hosting services to clone, create and publish repositories. It keeps their tokens in Windows Credential Manager under its own names, apart from the credentials Git uses in a terminal.",
+  addAccount: 'Add account…',
+  noAccounts: 'No accounts yet',
+  noAccountsAbout: 'Add one to clone your repositories, publish new ones and add SSH keys. Git keeps using your own credentials meanwhile.',
+  signedOut: (service) => `Signed out: ${service} refused the token`,
+  signInAgain: 'Sign in again',
+  removeAccount: 'Remove…',
+  signIn: 'Sign-in',
+  method: 'Method',
+  scopes: 'Scopes',
+  tokenKept: 'Token',
+  tokenWhere: (id) => `In Windows Credential Manager as FastGit/${id}`,
+  sshKey: 'SSH key',
+  sshKeyAbout: (service) => `The key FastGit made for this account, then the other keys ${service} lists for it.`,
+  fastgitKey: "FastGit's key",
+  readOnly: 'Read-only',
+  noKey: (service) => `No SSH key yet. FastGit can make one and add it to ${service}, so this account's clones can use SSH.`,
+  createKey: 'Create SSH key…',
+  copyPublicKey: 'Copy public key',
+  added: (date) => `Added ${date}`,
+  usedBy: (n) => (n ? `Used by ${counted(n, 'repository', 'repositories')}` : 'Not used by any repository yet'),
+  remoteOwners: 'Remote owners',
+  remoteOwnersAbout: "When another account also fits a remote, FastGit uses this one for these owners' repositories.",
+  noOwners: 'None yet: FastGit asks when two accounts fit a remote.',
+  forget: 'Forget',
+  connectorsAbout: 'Connectors let FastGit talk to hosting services. Each one runs in a sandbox: it reaches only the servers listed for it, and FastGit adds the token to its requests, so it never sees one.',
+  connectorsFolder: 'To install a connector, copy its folder into %APPDATA%\\FastGit\\connectors and restart FastGit.',
+  openFolder: 'Open folder',
+  bundled: 'Bundled',
+  installed: 'Installed',
+  review: 'Review…',
+  showLog: 'Show log',
+  reaches: (hosts, typed) => `Reaches ${[hosts.join(', '), typed && (hosts.length ? 'servers you add' : 'the servers you add')].filter(Boolean).join(' and ')}`,
+  approveTitle: (name, version) => `Approve ${name} ${version}?`,
+  moreTitle: (name, version, was) => `${name} ${version} asks for more than ${was} did`,
+  installedIn: (id) => `Installed in %APPDATA%\\FastGit\\connectors\\${id}`,
+  approvalWarning: (name) => `Approve only a connector you trust. Once approved, it acts on your ${name} accounts as far as their tokens allow, through FastGit. It can't read your files, your SSH keys or your other accounts.`,
+  sameAsBefore: (was) => `Everything else stays as you approved it for ${was}.`,
+  reach: 'Servers it can reach',
+  reachAbout: 'Requests anywhere else fail before they leave FastGit.',
+  withToken: 'With your token',
+  withoutToken: 'Without a token',
+  serverSlot: 'server you add',
+  images: 'Pictures from',
+  remotes: 'Remotes it recognizes',
+  remotesAbout: 'Repositories with these remotes use its accounts.',
+  hostSlot: 'the server of each account you add',
+  signInPages: 'Sign-in pages',
+  features: 'What it offers',
+  approve: 'Approve',
+  notNow: 'Not now',
+  newGrant: 'New',
+  waitingTitle: (name, version) => `${name} ${version} is waiting for your approval`,
+  waitingMessage: "It was copied into FastGit's connectors folder. Nothing of it runs until you approve it.",
+  addAccountTitle: 'Add an account',
+  service: 'Service',
+  serverAddress: 'Server address',
+  methodDevice: 'Sign in with the browser',
+  methodDeviceAbout: 'GitHub shows a short code to confirm. Recommended.',
+  methodToken: 'Paste a token',
+  methodTokenAbout: 'Make a token on GitHub with the scopes FastGit needs.',
+  methodCredential: "Use Git Credential Manager's token",
+  methodCredentialAbout: (host) => `Reuse the token Git already has for ${host}.`,
+  signInTo: (service) => `Sign in to ${service}`,
+  deviceOpened: (page) => `FastGit opened ${page} in your browser. Enter this code there:`,
+  copy: 'Copy',
+  waitingForYou: (service) => `Waiting for you to approve FastGit on ${service}…`,
+  openAgain: 'Open the page again',
+  expired: 'The code expired after 15 minutes. Nothing was saved.',
+  newCode: 'Get a new code',
+  denied: (service) => `${service} says you declined. Nothing was saved.`,
+  tryAgain: 'Try again',
+  tokenTitle: (service) => `Sign in to ${service} with a token`,
+  tokenAbout: (scopes) => `Create a classic token with the scopes ${scopes}, then paste it here. FastGit checks it before saving it.`,
+  createToken: 'Create a token on GitHub',
+  tokenLabel: 'Token',
+  tokenRefused: (service) => `${service} refused this token: it may have expired or been revoked.`,
+  tokenLacks: (scope) => `This token lacks ${scope}, so FastGit can't add SSH keys with it. Signing in works anyway.`,
+  signInButton: 'Sign in',
+  checking: 'Checking…',
+  credentialTitle: "Use Git Credential Manager's token?",
+  credentialAbout: (host) => `Git Credential Manager has a token for ${host}. FastGit copies it into its own entry in Windows Credential Manager and signs in with it; Git Credential Manager keeps its copy. These tokens usually can't add SSH keys: sign in with the browser for that.`,
+  useToken: 'Use this token',
+  keyTitle: (login) => `Create an SSH key for ${login}`,
+  keyAbout: (type, service) => `FastGit makes an ${type} key without a passphrase in %LOCALAPPDATA%\\FastGit\\ssh, adds its public half to ${service}, and uses it only in the repositories you clone or publish with this account.`,
+  keyLabel: (service) => `Title on ${service}`,
+  keyForbidden: (service, scope) => `${service} refused: this account's token lacks the ${scope} scope.`,
+  createAndAdd: 'Create and add',
+  removeTitle: (login) => `Remove ${login}?`,
+  removeAbout: (service) => `FastGit forgets the account and deletes its token from Windows Credential Manager. It deletes its copy of the SSH key too; ${service} keeps the public half until you delete it there.`,
+  removeUsing: (n) => `${counted(n, 'repository uses', 'repositories use')} this account's SSH key:`,
+  undoSshCommand: 'Remove core.sshCommand from them, so they use your own SSH setup again',
+  remove: 'Remove',
+  choiceText: (host, owner, n) => `${n === 2 ? 'Two' : thousands(n)} accounts fit ${host}/${owner}. Which one should FastGit use for ${owner}'s repositories?`,
+  use: 'Use',
+  choiceLater: "Not now: Git keeps using your own credentials",
+  cloneTitle: 'Clone a repository',
+  url: 'URL',
+  addAccountShort: 'Add account…',
+  repositoryUrl: 'Repository URL',
+  urlHint: 'Anything git clone accepts: https://, ssh:// or user@host:path. When an account fits the URL, FastGit lends Git its token.',
+  allOwners: 'All owners',
+  searchIn: (login) => `Search ${login}'s repositories`,
+  loadMore: 'Load more',
+  cloneInto: 'Clone into',
+  browse: 'Browse…',
+  protocol: 'Protocol',
+  sshNeedsKey: 'Create an SSH key for this account first, in Settings → Accounts',
+  clone: 'Clone',
+  cloning: (repo, folder) => `Cloning ${repo} into ${folder}…`,
+  receiving: (percent, done, total) => `Receiving objects: ${percent}% (${thousands(done)} of ${thousands(total)})`,
+  cancel: 'Cancel',
+  newTitle: 'New repository',
+  newAbout: 'FastGit makes the folder, runs git init in it and opens it in a new tab.',
+  name: 'Name',
+  folder: 'Folder',
+  creates: (path) => `Creates ${path}`,
+  alsoOn: 'Also create it on',
+  owner: 'Owner',
+  visibility: 'Visibility',
+  description: 'Description',
+  optional: 'Optional',
+  hostedHint: (service) => `FastGit creates it empty on ${service} and adds it as origin. Your first push sends your branch there.`,
+  create: 'Create',
+  publishTitle: (name) => `Publish ${name}`,
+  publishAbout: (name, branch) => `${name} has no remote yet. FastGit creates it on your account, adds it as origin and pushes ${branch} to it.`,
+  publishNoAccount: (name) => `${name} has no remote yet. Add an account to create it there; FastGit then adds it as origin and pushes.`,
+  account: 'Account',
+  nameTaken: (owner, name) => `${owner} already has a repository named ${name}.`,
+  publish: 'Publish',
+  cannotCreate: (owner) => `You can't create repositories in ${owner}`,
+};
+
+const Failures = {
+  signedOut: { title: 'GitHub refused the token of alex-acme', message: 'It expired or was revoked. Sign in again to keep using this account.', action: 'Sign in again' },
+  forbidden: { title: "alex-martin's token can't do this", message: 'It lacks the write:public_key scope. Sign in with the browser to get a token that has it.', action: 'Sign in with the browser', tone: 'warning' },
+  rateLimited: { title: "GitHub's rate limit for alex-martin is used up", message: 'FastGit asks again after 14:32, when GitHub resets it.', tone: 'wait' },
+  notFound: { title: 'Not found on GitHub', message: 'The repository was deleted or renamed, or this account can’t see it.' },
+  net: { title: "Couldn't reach api.github.com", message: 'curl: (6) Could not resolve host: api.github.com', action: 'Retry' },
+  stopped: { title: 'The GitHub connector stopped', message: 'It ran out of time. Its last log lines:', log: ['debug GET /user/repos?per_page=100&affiliation=owner,collaborator,organization_member', 'debug 100 repositories, next page', 'warn  sorting 2,400 repositories'], action: 'Copy log' },
+  unavailable: { title: 'Not available', message: "This connector doesn't offer it.", tone: 'wait' },
 };
 
 const esc = (text) =>
@@ -784,6 +988,55 @@ function stashMenuItems({ stash }) {
   return [item(Texts.applyStash(stash.name)), item(Texts.popStash(stash.name)), '-', item(Texts.deleteStash(stash.name))];
 }
 
+const typedOrigin = (origin) => origin.startsWith('{');
+
+const originHost = (origin) => (typedOrigin(origin) ? null : new URL(origin).host);
+
+function grantSummary(grant) {
+  const hosts = [...new Set(grant.reach.map((entry) => originHost(entry.origin)).filter(Boolean))];
+  return HostTexts.reaches(hosts, grant.reach.some((entry) => entry.typed));
+}
+
+function slotted(text, slot, label) {
+  return esc(text).replace(esc(slot), `<span class="slot">${esc(label)}</span>`);
+}
+
+function accountAvatar(account, size) {
+  return C.AuthorAvatar({ name: account.name || account.login, email: account.email, size });
+}
+
+function formField({ label, control, hint, problem, warning, extra = '' }) {
+  const note = problem
+    ? `<div class="problem">${esc(problem)}</div>`
+    : warning
+      ? `<div class="warn">${esc(warning)}</div>`
+      : hint
+        ? `<div class="note">${esc(hint)}</div>`
+        : '';
+  const head = label ? `<div class="h label"><span class="fill sm medium">${esc(label)}</span>${extra}</div>` : '';
+  return `<div class="v form-field">${head}${control}${note}</div>`;
+}
+
+function withButton(control, button) {
+  return `<div class="h" style="gap:8px"><div class="fill v">${control}</div>${button}</div>`;
+}
+
+function dialogShell({ name, title, description, body = '', buttons, size = 'wide', stretch = false }) {
+  const close = `<span class="close">${icon('close', 'sm')}</span>`;
+  const text = description ? `<div class="sm muted">${esc(description)}</div>` : '';
+  return `<div class="overlay"><div data-c="${name}" data-base="Dialog" class="dialog ${size}">${close}<div class="base semibold">${esc(title)}</div>${text}${body}<div class="footer${stretch ? ' stretch' : ''}">${buttons}</div></div></div>`;
+}
+
+function protocolToggle(hasKey) {
+  const ssh = C.Button({ label: 'SSH', variant: 'ghost', size: 'sm', selected: false, disabled: !hasKey, tooltip: hasKey ? 'Clone over SSH with the account\'s FastGit key' : HostTexts.sshNeedsKey });
+  return `<div class="h toggle-group">${C.Button({ label: 'HTTPS', variant: 'ghost', size: 'sm', selected: true })}${ssh}</div>`;
+}
+
+function visibilityChoice(visibilities, chosen) {
+  const radios = visibilities.map((key) => C.Radio({ label: Visibilities[key].label, about: Visibilities[key].about, checked: key === chosen }));
+  return `<div class="h radios">${radios.join('')}</div>`;
+}
+
 const C = {
   Button({ label, icon: iconName, variant = 'default', size = 'xs', selected = false, disabled = false, loading = false, tooltip, dot }) {
     const classes = ['btn', variant, size, selected && 'selected', disabled && 'disabled', !label && 'icon-only']
@@ -805,15 +1058,16 @@ const C = {
     return `<span data-c="Checkbox" class="checkbox${checked ? ' checked' : ''}${disabled ? ' disabled' : ''}"${title}><span class="box">${checked ? icon('check', 'xs') : ''}</span><span>${esc(label)}</span></span>`;
   },
 
-  Input({ value = '', placeholder = '', lines = 1, focused = false, disabled = false }) {
+  Input({ value = '', placeholder = '', lines = 1, focused = false, disabled = false, prefix, mono = false }) {
     const multiLine = lines > 1;
-    const classes = ['input', multiLine && 'multi-line', focused && 'focused', disabled && 'disabled'].filter(Boolean).join(' ');
+    const classes = ['input', multiLine && 'multi-line', focused && 'focused', disabled && 'disabled', prefix && 'with-prefix'].filter(Boolean).join(' ');
     const height = multiLine ? ` style="height:${lines * 20 + 17}px"` : '';
     const caret = focused ? '<span class="caret"></span>' : '';
     const text = value
-      ? `<span class="${multiLine ? 'fill' : 'ellipsis'}">${esc(value)}${caret}</span>`
+      ? `<span class="${multiLine ? 'fill' : 'ellipsis'}${mono ? ' mono' : ''}">${esc(value)}${caret}</span>`
       : `${caret}<span class="placeholder">${esc(placeholder)}</span>`;
-    return `<div data-c="Input" class="${classes}"${height}>${text}</div>`;
+    const lead = prefix ? `<span class="prefix">${icon(prefix, 'sm')}</span>` : '';
+    return `<div data-c="Input" class="${classes}"${height}>${lead}${text}</div>`;
   },
 
   Spinner({ size = 'md' } = {}) {
@@ -843,13 +1097,15 @@ const C = {
     return `<div data-c="TopBar" data-base="TitleBar" class="top-bar${mac ? ' mac' : ''}">${lights}<div class="content">${icon('git-merge', 'sm', 'var(--primary)')}${mac ? '' : C.AppMenuBar({ open: openMenu })}<div class="fill"></div>${repo}</div>${mac ? '' : C.WindowControls()}</div>`;
   },
 
-  Tab({ name, state = 'ready', active = false }) {
+  Tab({ name, state = 'ready', active = false, icon: glyph }) {
     const prefix =
       state === 'reading'
         ? `<span class="prefix">${C.Spinner({ size: 'xs' })}</span>`
         : state === 'failed'
           ? `<span class="prefix">${icon('triangle-alert', 'xs', 'var(--red)')}</span>`
-          : '';
+          : glyph
+            ? `<span class="prefix">${icon(glyph, 'xs', 'var(--muted)')}</span>`
+            : '';
     const close = C.Button({ icon: 'close', variant: 'ghost', tooltip: 'Close tab  Ctrl+W' });
     return `<div data-c="Tab" class="tab${active ? ' active' : ''}">${prefix}<span class="label ellipsis">${esc(name)}</span>${close}</div>`;
   },
@@ -936,8 +1192,9 @@ const C = {
     return `<span data-c="UncommittedCell" class="graph-cell none" style="width:${w}px"><svg width="${w}" height="28" viewBox="0 0 ${w} 28"><circle cx="${laneX(0)}" cy="14" r="4.5" fill="none" style="stroke:var(--muted)" stroke-width="1.5"/></svg></span>`;
   },
 
-  Loading({ message }) {
-    return `<div data-c="Loading" class="loading">${C.Spinner()}<div class="sm">${esc(message)}</div></div>`;
+  Loading({ message, detail, action = '' }) {
+    const more = detail ? `<div class="xs muted mono">${esc(detail)}</div>` : '';
+    return `<div data-c="Loading" class="loading">${C.Spinner()}<div class="sm">${esc(message)}</div>${more}${action}</div>`;
   },
 
   Hint({ message }) {
@@ -1818,15 +2075,17 @@ const C = {
     return `<div data-c="${name}" data-base="PopupMenu" class="menu sm" style="left:${length(left)};top:${length(top)}">${rows}</div>`;
   },
 
-  Notification({ message, title, kind }) {
+  Notification({ message, title, kind, action = '' }) {
     const glyphs = {
       success: icon('circle-check', 'md', 'var(--green)'),
       warning: icon('triangle-alert', 'md', 'var(--yellow)'),
       error: icon('circle-x', 'md', 'var(--red)'),
+      info: icon('info', 'md', 'var(--blue)'),
     };
     const glyph = glyphs[kind] ? `<span class="kind">${glyphs[kind]}</span>` : '';
     const heading = title ? `<div class="semibold">${esc(title)}</div>` : '';
-    return `<div data-c="Notification" class="toast sm">${glyph}<div class="message">${heading}${esc(message)}</div>${C.Button({ icon: 'close', variant: 'ghost' })}</div>`;
+    const actions = action ? `<div class="h actions">${action}</div>` : '';
+    return `<div data-c="Notification" class="toast sm">${glyph}<div class="message">${heading}${esc(message)}${actions}</div>${C.Button({ icon: 'close', variant: 'ghost' })}</div>`;
   },
 
   AlertDialog({ title, description, confirm, name = 'AlertDialog' }) {
@@ -1845,6 +2104,300 @@ const C = {
       description: untracked ? Texts.deleteDescription(change.path) : Texts.discardDescription(change.path),
       confirm: untracked ? 'Delete' : 'Discard',
     });
+  },
+
+  Chip({ label, color, icon: glyph }) {
+    const tint = color ? ` tinted" style="--c:${color}` : '';
+    return `<span data-c="Chip" data-base="Tag" class="chip${tint}">${glyph ? icon(glyph, 'xs') : ''}${esc(label)}</span>`;
+  },
+
+  Select({ value, placeholder = '', lead = '', open = false, disabled = false }) {
+    const shown = value ? `<span class="fill ellipsis">${esc(value)}</span>` : `<span class="fill placeholder">${esc(placeholder)}</span>`;
+    const classes = ['input', 'select', open && 'focused', disabled && 'disabled'].filter(Boolean).join(' ');
+    return `<div data-c="Select" class="${classes}">${lead}${shown}${icon('chevron-down', 'sm', 'var(--muted)')}</div>`;
+  },
+
+  Radio({ label, checked = false, about }) {
+    const title = about ? ` title="${esc(about)}"` : '';
+    return `<span data-c="Radio" class="radio${checked ? ' checked' : ''}"${title}><span class="dot"></span><span>${esc(label)}</span></span>`;
+  },
+
+  GroupBox({ title, about, rows, action = '' }) {
+    const head = title
+      ? `<div class="h group-head"><div class="v fill"><div class="sm semibold">${esc(title)}</div>${about ? `<div class="xs muted">${esc(about)}</div>` : ''}</div>${action}</div>`
+      : '';
+    return `<div data-c="GroupBox" class="v group">${head}<div class="group-box">${rows.join('')}</div></div>`;
+  },
+
+  PageHeader({ title, about, subtitle = '', actions = '', crumb, here = title, media = '' }) {
+    const crumbs = crumb ? `<div class="h crumbs xs"><span class="link">${esc(crumb)}</span>${icon('chevron-right', 'xs')}<span>${esc(here)}</span></div>` : '';
+    const text = about ? `<div class="sm muted about">${esc(about)}</div>` : '';
+    return `<div data-c="PageHeader" class="page-head">${crumbs}<div class="h top">${media}<div class="v fill" style="gap:2px"><div class="lg semibold">${esc(title)}</div>${subtitle}${text}</div>${actions ? `<div class="h actions">${actions}</div>` : ''}</div></div>`;
+  },
+
+  SettingsNav({ page = 'accounts', accounts = 0, waiting = 0 }) {
+    const row = (key, label, glyph, extra) =>
+      C.ListRow({ content: `<div class="h fill" style="gap:8px">${icon(glyph, 'sm', 'var(--muted)')}<span class="fill sm">${esc(label)}</span>${extra}</div>`, selected: key === page });
+    const count = accounts ? `<span class="xs muted">${thousands(accounts)}</span>` : '';
+    const badge = waiting ? `<span class="count-badge" title="${esc(counted(waiting, 'connector waits', 'connectors wait'))} for your approval">${thousands(waiting)}</span>` : '';
+    return `<div data-c="SettingsNav" class="settings-nav">${C.SectionHeader({ title: HostTexts.settings })}${row('accounts', HostTexts.accounts, 'user', count)}${row('connectors', HostTexts.connectors, 'plug', badge)}</div>`;
+  },
+
+  SettingsTab({ page, content, nav = {} }) {
+    return `<div data-c="SettingsTab" class="settings">${C.SettingsNav({ page, ...nav })}<div class="settings-page"><div class="page-body">${content}</div></div></div>`;
+  },
+
+  AccountRow({ account, hot = false }) {
+    const details = account.signedOut
+      ? `<span class="h problem-text">${icon('triangle-alert', 'xs')}${esc(HostTexts.signedOut(account.service))}</span>`
+      : `<span class="ellipsis">${esc([account.service, account.server, MethodLabels[account.method]].join(' · '))}</span>`;
+    const key = account.key ? `<span class="h xs muted none" style="gap:4px" title="${esc(account.key.title)}">${icon('key-round', 'xs')}SSH</span>` : '';
+    const end = account.signedOut ? C.Button({ label: HostTexts.signInAgain, icon: 'log-in', size: 'sm' }) : icon('chevron-right', 'sm', 'var(--muted)');
+    const name = account.name ? `<span class="sm medium">${esc(account.name)}</span><span class="sm muted">${esc(account.login)}</span>` : `<span class="sm medium">${esc(account.login)}</span>`;
+    return `<div data-c="AccountRow" class="row${hot ? ' hot' : ''}">${accountAvatar(account, 32)}<div class="v fill"><div class="h" style="gap:6px">${name}</div><div class="h xs muted">${details}</div></div>${key}${end}</div>`;
+  },
+
+  AccountsPage({ accounts }) {
+    const add = C.Button({ label: HostTexts.addAccount, icon: 'plus', size: 'md', variant: 'primary' });
+    const list = accounts.length
+      ? C.GroupBox({ rows: accounts.map((account, ix) => C.AccountRow({ account, hot: ix === 0 })) })
+      : `<div class="v empty-page">${icon('user', 'lg', 'var(--muted)')}<div class="medium">${esc(HostTexts.noAccounts)}</div><div class="sm muted">${esc(HostTexts.noAccountsAbout)}</div></div>`;
+    return `<div data-c="AccountsPage" class="v page">${C.PageHeader({ title: HostTexts.accounts, about: HostTexts.accountsAbout, actions: add })}${list}</div>`;
+  },
+
+  SshKeyRow({ key, local = false }) {
+    const chips = [key.fastgit && C.Chip({ label: HostTexts.fastgitKey, color: 'var(--blue)' }), key.readOnly && C.Chip({ label: HostTexts.readOnly })].filter(Boolean).join('');
+    const side = local ? C.Button({ label: HostTexts.copyPublicKey, icon: 'copy', size: 'sm', variant: 'ghost' }) : `<span class="xs muted none">${esc(HostTexts.added(key.added))}</span>`;
+    const second = local ? `${esc(key.type)} · ${esc(key.fingerprint)} · <span class="text">${esc(HostTexts.usedBy(key.using))}</span>` : esc(key.fingerprint);
+    return `<div data-c="SshKeyRow" class="row">${icon('key-round', 'md', 'var(--muted)')}<div class="v fill"><div class="h" style="gap:6px"><span class="sm medium ellipsis">${esc(key.title)}</span>${chips}</div><div class="xs muted mono ellipsis">${second}</div></div>${side}</div>`;
+  },
+
+  AccountPage({ account, keys = [] }) {
+    const subtitle = `<div class="sm muted">${esc([account.login, account.service, account.server].join(' · '))}</div>`;
+    const actions = C.Button({ label: HostTexts.signInAgain, icon: 'log-in', size: 'md' }) + C.Button({ label: HostTexts.removeAccount, icon: 'trash-2', size: 'md', variant: 'danger' });
+    const header = C.PageHeader({ title: account.name || account.login, crumb: HostTexts.accounts, subtitle, actions, media: accountAvatar(account, 48) });
+    const def = (term, value) => `<div class="row def"><span class="term">${esc(term)}</span><div class="h fill" style="gap:6px;flex-wrap:wrap">${value}</div></div>`;
+    const signIn = C.GroupBox({
+      title: HostTexts.signIn,
+      rows: [
+        def(HostTexts.method, `<span class="sm">${esc(MethodLabels[account.method])}</span>`),
+        def(HostTexts.scopes, account.scopes.map((scope) => C.Chip({ label: scope })).join('')),
+        def(HostTexts.tokenKept, `<span class="sm muted">${esc(HostTexts.tokenWhere(account.id))}</span>`),
+      ],
+    });
+    const local = account.key
+      ? C.SshKeyRow({ key: { ...account.key, fastgit: true, using: account.using.length }, local: true })
+      : `<div class="row">${icon('key-round', 'md', 'var(--muted)')}<span class="sm muted fill">${esc(HostTexts.noKey(account.service))}</span>${C.Button({ label: HostTexts.createKey, size: 'sm' })}</div>`;
+    const others = keys.filter((key) => !key.fastgit).map((key) => C.SshKeyRow({ key }));
+    const ssh = C.GroupBox({ title: HostTexts.sshKey, about: HostTexts.sshKeyAbout(account.service), rows: [local, ...others] });
+    const owners = account.owners.length
+      ? account.owners.map((owner) => `<div class="row">${icon('building', 'md', 'var(--muted)')}<span class="sm fill">${esc(`${account.server}/${owner}`)}</span>${C.Button({ label: HostTexts.forget, size: 'sm', variant: 'ghost' })}</div>`)
+      : [`<div class="row"><span class="sm muted">${esc(HostTexts.noOwners)}</span></div>`];
+    const remembered = C.GroupBox({ title: HostTexts.remoteOwners, about: HostTexts.remoteOwnersAbout, rows: owners });
+    return `<div data-c="AccountPage" class="v page">${header}${signIn}${ssh}${remembered}</div>`;
+  },
+
+  ConnectorRow({ connector, hot = false }) {
+    const look = StandingLooks[connector.standing];
+    const chips = C.Chip({ label: connector.origin === 'bundled' ? HostTexts.bundled : HostTexts.installed }) + C.Chip({ label: look.label(connector), color: look.color });
+    const facts = connector.problem || [grantSummary(connector.grant), connector.accounts && counted(connector.accounts, 'account', 'accounts')].filter(Boolean).join(' · ');
+    const end =
+      connector.standing === 'waiting' || connector.standing === 'modified'
+        ? C.Button({ label: HostTexts.review, variant: 'primary', size: 'sm' })
+        : connector.standing === 'failed'
+          ? C.Button({ label: HostTexts.showLog, size: 'sm' })
+          : icon('chevron-right', 'sm', 'var(--muted)');
+    const problem = connector.problem ? ' problem-text' : '';
+    return `<div data-c="ConnectorRow" class="row${hot ? ' hot' : ''}"><span class="mark">${icon('plug', 'md')}</span><div class="v fill"><div class="h" style="gap:6px"><span class="sm medium">${esc(connector.name)}</span><span class="sm muted">${esc(connector.version)}</span>${chips}</div><div class="xs muted ellipsis${problem}">${esc(facts)}</div></div>${end}</div>`;
+  },
+
+  ConnectorsPage({ connectors }) {
+    const open = C.Button({ label: HostTexts.openFolder, icon: 'folder-open', size: 'md' });
+    const header = C.PageHeader({ title: HostTexts.connectors, about: HostTexts.connectorsAbout, actions: open });
+    const note = `<div class="h xs muted" style="gap:6px">${icon('info', 'xs')}${esc(HostTexts.connectorsFolder)}</div>`;
+    const rows = connectors.map((connector) => C.ConnectorRow({ connector, hot: connector.standing === 'waiting' }));
+    return `<div data-c="ConnectorsPage" class="v page">${header}${C.GroupBox({ rows })}${note}</div>`;
+  },
+
+  GrantList({ grant, fresh = false }) {
+    const isNew = fresh ? C.Chip({ label: HostTexts.newGrant, color: 'var(--yellow)' }) : '';
+    const row = (glyph, html, side = '') => `<div class="row slim">${icon(glyph, 'sm', 'var(--muted)')}<span class="fill sm">${html}</span>${isNew}${side}</div>`;
+    const groups = [
+      grant.reach.length &&
+        C.GroupBox({
+          title: HostTexts.reach,
+          about: HostTexts.reachAbout,
+          rows: grant.reach.map((entry) => row('globe', `<span class="mono">${slotted(entry.origin, '{server}', HostTexts.serverSlot)}</span>`, `<span class="xs muted none">${esc(entry.token ? HostTexts.withToken : HostTexts.withoutToken)}</span>`)),
+        }),
+      grant.images.length && C.GroupBox({ title: HostTexts.images, rows: grant.images.map((origin) => row('image', `<span class="mono">${esc(origin)}</span>`, `<span class="xs muted none">${esc(HostTexts.withoutToken)}</span>`)) }),
+      grant.remotes.length && C.GroupBox({ title: HostTexts.remotes, about: HostTexts.remotesAbout, rows: grant.remotes.map((host) => row('server', host === '{server.host}' ? `<span class="slot">${esc(HostTexts.hostSlot)}</span>` : `<span class="mono">${esc(host)}</span>`)) }),
+      grant.signIn.length && C.GroupBox({ title: HostTexts.signInPages, rows: grant.signIn.map((url) => row('log-in', `<span class="mono">${esc(url)}</span>`)) }),
+      grant.features.length && C.GroupBox({ title: HostTexts.features, rows: grant.features.map((feature) => row('check', esc(feature))) }),
+    ];
+    return `<div data-c="GrantList" class="v grant">${groups.filter(Boolean).join('')}</div>`;
+  },
+
+  ApprovalPage({ connector, update = false }) {
+    const look = StandingLooks[connector.standing];
+    const title = update ? HostTexts.moreTitle(connector.name, connector.version, connector.was) : HostTexts.approveTitle(connector.name, connector.version);
+    const chips = `<div class="h" style="gap:6px;margin-top:4px">${C.Chip({ label: HostTexts.installed })}${C.Chip({ label: look.label(connector), color: look.color })}<span class="xs muted">${esc(HostTexts.installedIn(connector.id))}</span></div>`;
+    const header = C.PageHeader({ title, crumb: HostTexts.connectors, here: connector.name, subtitle: chips, media: `<span class="mark large">${icon('plug', 'lg')}</span>` });
+    const warning = `<div class="callout">${icon('shield-check', 'md', 'var(--yellow)')}<div class="sm">${esc(HostTexts.approvalWarning(connector.name))}</div></div>`;
+    const grant = C.GrantList({ grant: update ? connector.added : connector.grant, fresh: update });
+    const rest = update ? `<div class="sm muted">${esc(HostTexts.sameAsBefore(connector.was))}</div>` : '';
+    const actions = `<div class="h page-actions">${C.Button({ label: HostTexts.notNow, size: 'md' })}${C.Button({ label: HostTexts.approve, icon: 'shield-check', variant: 'primary', size: 'md' })}</div>`;
+    return `<div data-c="ApprovalPage" class="v page">${header}${warning}${grant}${rest}${actions}</div>`;
+  },
+
+  SignInDialog({ step = 'choose', service = 'GitHub', host = 'github.com', enterprise = false, problem, warning, hot }) {
+    const name = 'SignInDialog';
+    const cancel = C.Button({ label: HostTexts.cancel, size: 'md' });
+    if (step === 'choose') {
+      const option = (key, glyph, label, about) =>
+        `<div class="method-option${key === hot ? ' hot' : ''}">${icon(glyph, 'md', 'var(--muted)')}<div class="v fill"><span class="sm medium">${esc(label)}</span><span class="xs muted">${esc(about)}</span></div>${icon('chevron-right', 'sm', 'var(--muted)')}</div>`;
+      const services = formField({ label: HostTexts.service, control: C.Select({ value: enterprise ? 'GitHub Enterprise Server' : 'GitHub — github.com', lead: `<span class="prefix">${icon('plug', 'sm')}</span>` }) });
+      const server = enterprise ? formField({ label: HostTexts.serverAddress, control: C.Input({ value: 'https://github.acme.dev', focused: true }), hint: 'The address you open in the browser' }) : '';
+      const methods = [
+        !enterprise && option('device', 'log-in', HostTexts.methodDevice, HostTexts.methodDeviceAbout),
+        option('token', 'key-round', HostTexts.methodToken, HostTexts.methodTokenAbout),
+        option('credential', 'shield-check', HostTexts.methodCredential, HostTexts.methodCredentialAbout(enterprise ? 'github.acme.dev' : host)),
+      ].filter(Boolean);
+      return dialogShell({ name, title: HostTexts.addAccountTitle, body: `<div class="form">${services}${server}<div class="v" style="gap:8px">${methods.join('')}</div></div>`, buttons: cancel });
+    }
+    if (step === 'device' || step === 'expired' || step === 'denied') {
+      const stale = step !== 'device';
+      const code = `<div class="device-code${stale ? ' stale' : ''}"><span class="code">${esc(Sample.hosting.deviceCode)}</span>${stale ? '' : C.Button({ label: HostTexts.copy, icon: 'copy', size: 'sm' })}</div>`;
+      const status =
+        step === 'device'
+          ? `<div class="dialog-status">${C.Spinner({ size: 'sm' })}<span class="muted">${esc(HostTexts.waitingForYou(service))}</span></div>`
+          : step === 'expired'
+            ? `<div class="dialog-status">${icon('clock', 'md', 'var(--yellow)')}<span>${esc(HostTexts.expired)}</span></div>`
+            : `<div class="dialog-status">${icon('circle-x', 'md', 'var(--red)')}<span>${esc(HostTexts.denied(service))}</span></div>`;
+      const buttons =
+        step === 'device'
+          ? C.Button({ label: HostTexts.openAgain, icon: 'external-link', size: 'md', variant: 'ghost' }) + cancel
+          : cancel + C.Button({ label: step === 'expired' ? HostTexts.newCode : HostTexts.tryAgain, variant: 'primary', size: 'md' });
+      return dialogShell({ name, title: HostTexts.signInTo(service), description: HostTexts.deviceOpened(`${host}/login/device`), body: code + status, buttons });
+    }
+    if (step === 'token') {
+      const create = C.Button({ label: HostTexts.createToken, icon: 'external-link', size: 'sm', variant: 'ghost' });
+      const field = formField({ label: HostTexts.tokenLabel, control: C.Input({ value: 'ghp_••••••••••••••••••••••••••••••••••••', focused: true, mono: true }), problem, warning, extra: create });
+      const buttons = cancel + C.Button({ label: HostTexts.signInButton, variant: 'primary', size: 'md', disabled: Boolean(problem) });
+      return dialogShell({ name, title: HostTexts.tokenTitle(service), description: HostTexts.tokenAbout('repo, read:org, write:public_key and workflow'), body: `<div class="form">${field}</div>`, buttons });
+    }
+    const failure = problem ? `<div class="dialog-status">${icon('circle-x', 'md', 'var(--red)')}<span>${esc(problem)}</span></div>` : '';
+    const buttons = cancel + C.Button({ label: HostTexts.useToken, variant: 'primary', size: 'md', disabled: Boolean(problem) });
+    return dialogShell({ name, title: HostTexts.credentialTitle, description: HostTexts.credentialAbout(host), body: failure, buttons });
+  },
+
+  SshKeyDialog({ account, forbidden = false }) {
+    const field = formField({ label: HostTexts.keyLabel(account.service), control: C.Input({ value: 'FastGit on DESKTOP-7Q2K', focused: true }), problem: forbidden ? HostTexts.keyForbidden(account.service, 'write:public_key') : null });
+    const buttons = forbidden
+      ? C.Button({ label: HostTexts.cancel, size: 'md' }) + C.Button({ label: HostTexts.methodDevice, icon: 'log-in', variant: 'primary', size: 'md' })
+      : C.Button({ label: HostTexts.cancel, size: 'md' }) + C.Button({ label: HostTexts.createAndAdd, icon: 'key-round', variant: 'primary', size: 'md' });
+    return dialogShell({ name: 'SshKeyDialog', title: HostTexts.keyTitle(account.login), description: HostTexts.keyAbout('ed25519', account.service), body: `<div class="form">${field}</div>`, buttons });
+  },
+
+  RemoveAccountDialog({ account }) {
+    const using = account.using.length
+      ? `<div class="v using"><div class="sm">${esc(HostTexts.removeUsing(account.using.length))}</div>${account.using.map((path) => `<div class="xs mono muted">${esc(path)}</div>`).join('')}${C.Checkbox({ label: HostTexts.undoSshCommand, checked: true })}</div>`
+      : '';
+    const buttons = C.Button({ label: HostTexts.cancel, size: 'md' }) + C.Button({ label: HostTexts.remove, variant: 'danger', size: 'md' });
+    return dialogShell({ name: 'RemoveAccountDialog', title: HostTexts.removeTitle(account.login), description: HostTexts.removeAbout(account.service), body: using, buttons });
+  },
+
+  AccountMenu({ accounts, chosen, hot, left = 0, top = 0 }) {
+    const rows = accounts
+      .map(
+        (account) =>
+          `<div class="item${account.login === hot ? ' hot' : ''}"><span class="check">${account.login === chosen ? icon('check', 'sm') : ''}</span>${accountAvatar(account, 20)}<span class="v label"><span>${esc(account.login)}</span><span class="about">${esc(`${account.service} · ${account.server}`)}</span></span></div>`,
+      )
+      .join('');
+    return `<div data-c="AccountMenu" data-base="PopupMenu" class="menu choices accounts sm" style="left:${left}px;top:${top}px">${rows}</div>`;
+  },
+
+  AccountChoiceBar({ host, owner, accounts, chosen, open = false }) {
+    const account = accounts.find((candidate) => candidate.login === chosen);
+    const select = `<div class="none" style="width:210px">${C.Select({ value: account.login, lead: `<span class="prefix">${accountAvatar(account, 18)}</span>`, open })}</div>`;
+    const later = C.Button({ icon: 'close', variant: 'ghost', tooltip: HostTexts.choiceLater });
+    return `<div data-c="AccountChoiceBar" class="account-bar">${icon('user', 'md', 'var(--blue)')}<span class="sm fill ellipsis">${esc(HostTexts.choiceText(host, owner, accounts.length))}</span>${select}${C.Button({ label: HostTexts.use, variant: 'primary', size: 'sm' })}${later}</div>`;
+  },
+
+  RepositoryRow({ repository, selected = false }) {
+    const look = Visibilities[repository.visibility];
+    const glyph = repository.fork ? 'git-fork' : repository.archived ? 'archive' : look.icon;
+    const chips = [
+      repository.visibility !== 'public' && C.Chip({ label: look.label }),
+      repository.fork && C.Chip({ label: 'Fork' }),
+      repository.archived && C.Chip({ label: 'Archived', color: 'var(--yellow)' }),
+    ]
+      .filter(Boolean)
+      .join('');
+    const about = repository.description ? `<div class="xs muted ellipsis">${esc(repository.description)}</div>` : '';
+    const content = `${icon(glyph, 'sm', 'var(--muted)')}<div class="v fill"><div class="h" style="gap:6px"><span class="sm ellipsis"><span class="muted">${esc(repository.owner)}/</span><span class="medium">${esc(repository.name)}</span></span>${chips}</div>${about}</div><span class="xs muted none">${esc(repository.updated)}</span>`;
+    return C.ListRow({ content, selected, extraClass: 'repo-row', name: 'RepositoryRow' });
+  },
+
+  ConnectorFailure({ title, message, action, log, tone = 'error' }) {
+    const glyphs = { error: icon('circle-x', 'md', 'var(--red)'), warning: icon('triangle-alert', 'md', 'var(--yellow)'), wait: icon('clock', 'md', 'var(--muted)') };
+    const lines = log ? `<div class="log mono xs">${log.map(esc).join('<br>')}</div>` : '';
+    const button = action ? `<div class="h" style="margin-top:8px">${C.Button({ label: action, size: 'sm' })}</div>` : '';
+    return `<div data-c="ConnectorFailure" class="connector-failure">${glyphs[tone]}<div class="v fill" style="gap:2px"><div class="sm medium">${esc(title)}</div><div class="sm muted">${esc(message)}</div>${lines}${button}</div></div>`;
+  },
+
+  CloneDialog({ from = 'url', accounts, repositories = [], selected = 0, url = '', folder = 'E:\\Projects', failure, hot }) {
+    const account = accounts.find((candidate) => candidate.login === from);
+    const sourceRow = (key, lead, label, extra = '') =>
+      C.ListRow({ content: `<div class="h fill" style="gap:8px">${lead}<span class="fill sm ellipsis">${esc(label)}</span>${extra}</div>`, selected: key === from, extraClass: key === hot ? 'hot' : '' });
+    const sources = [
+      sourceRow('url', icon('link', 'sm', 'var(--muted)'), HostTexts.url),
+      C.SectionHeader({ title: HostTexts.accounts }),
+      ...accounts.map((each) =>
+        sourceRow(each.login, accountAvatar(each, 18), each.login, each.signedOut ? icon('triangle-alert', 'xs', 'var(--yellow)') : `<span class="xs muted">${esc(each.server === 'github.com' ? 'GitHub' : each.server)}</span>`),
+      ),
+      sourceRow('add', icon('plus', 'sm', 'var(--muted)'), HostTexts.addAccountShort),
+    ].join('');
+    const target = (name) => formField({ label: HostTexts.cloneInto, control: withButton(C.Input({ value: name ? `${folder}\\${name}` : folder }), C.Button({ label: HostTexts.browse, size: 'md' })) });
+    let main;
+    if (!account) {
+      main = formField({ label: HostTexts.repositoryUrl, control: C.Input({ value: url, placeholder: 'https://github.com/owner/name.git', focused: true }), hint: HostTexts.urlHint }) + target(url ? url.replace(/\.git$/, '').split('/').pop() : '');
+    } else if (failure) {
+      main = C.ConnectorFailure(failure);
+    } else {
+      const filters = `<div class="h" style="gap:8px"><div class="none" style="width:180px">${C.Select({ value: HostTexts.allOwners })}</div><div class="fill v">${C.Input({ placeholder: HostTexts.searchIn(account.login), prefix: 'search' })}</div></div>`;
+      const rows = repositories.map((repository, ix) => C.RepositoryRow({ repository, selected: ix === selected })).join('');
+      const more = `<div class="more">${C.Button({ label: HostTexts.loadMore, size: 'sm', variant: 'ghost' })}</div>`;
+      const chosen = repositories[selected];
+      main = `${filters}<div class="repo-list"><div class="v fill" style="overflow:hidden">${rows}</div>${more}</div><div class="h" style="gap:12px;align-items:flex-end"><div class="fill v">${target(chosen.name)}</div>${formField({ label: HostTexts.protocol, control: protocolToggle(Boolean(account.key)) })}</div>`;
+    }
+    const ready = account ? !failure : Boolean(url);
+    const buttons = C.Button({ label: HostTexts.cancel, size: 'md' }) + C.Button({ label: HostTexts.clone, icon: 'download', variant: 'primary', size: 'md', disabled: !ready });
+    const close = `<span class="close">${icon('close', 'sm')}</span>`;
+    return `<div class="overlay"><div data-c="CloneDialog" data-base="Dialog" class="dialog clone">${close}<div class="base semibold">${esc(HostTexts.cloneTitle)}</div><div class="h clone-body"><div class="v clone-sources">${sources}</div><div class="v fill clone-main">${main}</div></div><div class="footer">${buttons}</div></div></div>`;
+  },
+
+  NewRepositoryDialog({ hosted = false, account, owners = [] }) {
+    const name = formField({ label: HostTexts.name, control: C.Input({ value: 'starfall', focused: true }) });
+    const folder = formField({ label: HostTexts.folder, control: withButton(C.Input({ value: 'E:\\Projects' }), C.Button({ label: HostTexts.browse, size: 'md' })), hint: HostTexts.creates('E:\\Projects\\starfall') });
+    const toggle = `<div class="h" style="gap:10px">${C.Checkbox({ label: HostTexts.alsoOn, checked: hosted })}<div class="fill v">${C.Select({ value: `${account.login} · ${account.service}`, lead: `<span class="prefix">${accountAvatar(account, 18)}</span>`, disabled: !hosted })}</div></div>`;
+    const more = hosted
+      ? `<div class="v hosted" style="gap:14px">${formField({ label: HostTexts.owner, control: C.Select({ value: owners[0].login }) })}${formField({ label: HostTexts.visibility, control: visibilityChoice(owners[0].visibilities, 'private') })}${formField({ label: HostTexts.description, control: C.Input({ placeholder: HostTexts.optional }), hint: HostTexts.hostedHint(account.service) })}</div>`
+      : '';
+    const buttons = C.Button({ label: HostTexts.cancel, size: 'md' }) + C.Button({ label: HostTexts.create, icon: 'folder-plus', variant: 'primary', size: 'md' });
+    return dialogShell({ name: 'NewRepositoryDialog', title: HostTexts.newTitle, description: HostTexts.newAbout, body: `<div class="form">${name}${folder}${toggle}${more}</div>`, buttons });
+  },
+
+  PublishDialog({ repository, branch = 'main', account, owner, problem, noAccount = false }) {
+    if (noAccount) {
+      const buttons = C.Button({ label: HostTexts.cancel, size: 'md' }) + C.Button({ label: HostTexts.addAccount, icon: 'plus', variant: 'primary', size: 'md' });
+      return dialogShell({ name: 'PublishDialog', title: HostTexts.publishTitle(repository), description: HostTexts.publishNoAccount(repository), buttons });
+    }
+    const which = formField({ label: HostTexts.account, control: C.Select({ value: `${account.login} · ${account.service}`, lead: `<span class="prefix">${accountAvatar(account, 18)}</span>` }) });
+    const where = `<div class="h" style="gap:8px;align-items:flex-start"><div class="v none" style="width:180px">${formField({ label: HostTexts.owner, control: C.Select({ value: owner.login }) })}</div><span class="slash">/</span><div class="v fill">${formField({ label: HostTexts.name, control: C.Input({ value: repository, focused: Boolean(problem) }), problem })}</div></div>`;
+    const about = formField({ label: HostTexts.description, control: C.Input({ placeholder: HostTexts.optional }) });
+    const shape = `<div class="h" style="gap:24px;align-items:flex-start">${formField({ label: HostTexts.visibility, control: visibilityChoice(owner.visibilities, 'private') })}${formField({ label: HostTexts.protocol, control: protocolToggle(Boolean(account.key)) })}</div>`;
+    const buttons = C.Button({ label: HostTexts.cancel, size: 'md' }) + C.Button({ label: HostTexts.publish, icon: 'upload', variant: 'primary', size: 'md', disabled: Boolean(problem) });
+    return dialogShell({ name: 'PublishDialog', title: HostTexts.publishTitle(repository), description: HostTexts.publishAbout(repository, branch), body: `<div class="form">${which}${where}${about}${shape}</div>`, buttons });
   },
 
   FastGit({ topBar, tabStrip = '', body, overlays = '' }) {

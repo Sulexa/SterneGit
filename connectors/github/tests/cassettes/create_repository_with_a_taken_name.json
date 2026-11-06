@@ -1,0 +1,56 @@
+{
+  "op": "repositories.create",
+  "account": {
+    "id": "github:github.com:583231",
+    "login": "octocat",
+    "endpoints": {
+      "api": "https://api.github.com/",
+      "graphql": "https://api.github.com/graphql",
+      "web": "https://github.com/"
+    }
+  },
+  "input": {
+    "owner": "fastgit-org",
+    "name": "fastgit",
+    "description": null,
+    "visibility": "public",
+    "initialize": false
+  },
+  "exchanges": [
+    {
+      "method": "POST",
+      "url": "https://api.github.com/orgs/fastgit-org/repos",
+      "status": 422,
+      "headers": [
+        [
+          "content-type",
+          "application/json; charset=utf-8"
+        ]
+      ],
+      "body": {
+        "message": "Repository creation failed.",
+        "errors": [
+          {
+            "resource": "Repository",
+            "code": "custom",
+            "field": "name",
+            "message": "name already exists on this account"
+          }
+        ],
+        "status": "422"
+      }
+    }
+  ],
+  "output": {
+    "err": {
+      "kind": "invalid",
+      "fields": [
+        {
+          "field": "name",
+          "message": "name already exists on this account"
+        }
+      ],
+      "message": "Repository creation failed."
+    }
+  }
+}

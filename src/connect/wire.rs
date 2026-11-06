@@ -70,7 +70,7 @@ fn an_answer_is_ok_or_err() {
 #[test]
 fn optional_fields_may_be_missing_and_unknown_fields_are_ignored() {
     let identity: Identity =
-        serde_json::from_value(json!({ "login": "octo", "scopes": [], "plan": "pro" })).unwrap();
+        serde_json::from_value(json!({ "id": "7", "login": "octo", "scopes": [], "plan": "pro" })).unwrap();
     assert_eq!((identity.name, identity.avatar_url), (None, None));
     assert!(serde_json::from_value::<Identity>(json!({ "login": "octo" })).is_err());
 }

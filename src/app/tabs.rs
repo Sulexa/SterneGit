@@ -38,6 +38,12 @@ impl<T> Tabs<T> {
         self.items.len() - 1
     }
 
+    pub(crate) fn replace(&mut self, ix: usize, item: T) {
+        if let Some(slot) = self.items.get_mut(ix) {
+            *slot = item;
+        }
+    }
+
     pub(crate) fn activate(&mut self, ix: usize) -> bool {
         let exists = ix < self.items.len();
         if exists {
@@ -125,6 +131,15 @@ mod tests {
         assert_eq!(tabs.active(), Some(&"a"));
         assert!(tabs.cycle(-1));
         assert_eq!(tabs.active(), Some(&"c"));
+    }
+
+    #[test]
+    fn a_replaced_tab_keeps_its_place_and_stays_active() {
+        let mut tabs = tabs(&["a", "cloning", "c"], 1);
+        tabs.replace(1, "b");
+        tabs.replace(7, "nowhere");
+        assert_eq!(tabs.iter().copied().collect::<Vec<_>>(), ["a", "b", "c"]);
+        assert_eq!(tabs.active(), Some(&"b"));
     }
 
     #[test]

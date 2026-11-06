@@ -467,11 +467,12 @@ mod tests {
 
     #[test]
     fn answers_decode_into_protocol_types_and_ignore_fields_they_do_not_know() {
-        let identity = r#"{"ok":{"login":"octo","name":"Octo Cat","avatar_url":null,"scopes":["repo"],"plan":"pro"}}"#;
+        let identity = r#"{"ok":{"id":"7","login":"octo","name":"Octo Cat","avatar_url":null,"scopes":["repo"],"plan":"pro"}}"#;
         let forge = forge(&answering(identity), FakeHost::quiet(), None);
         assert_eq!(
             smol::block_on(forge.who_am_i()),
             Ok(Identity {
+                id: "7".into(),
                 login: "octo".into(),
                 name: Some("Octo Cat".into()),
                 avatar_url: None,

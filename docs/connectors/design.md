@@ -49,12 +49,13 @@ src/settings/   folders per OS, atomic JSON files
 src/accounts/   accounts, secrets per OS, device flow, refresh, Git Credential Manager import
 src/net/        requests, policy (allow-list, token schemes, redirects), curl transport, proxies, the HostServices implementation
 src/connect/    manifests, grants, discovery and pinning, the wasmi engine, ABI, calls, claims, Forge
-src/git/        access.rs (scoped credential helper), ssh_key.rs; command.rs gains run_with_access
+src/git/        access.rs (scoped credential helper), ssh_key.rs, clone.rs; command.rs gains run_with_access
+src/hosting/    the screens: Settings tab (Accounts, Connectors, approval), sign-in, SSH key, remove, Clone, New repository, Publish, the account bar
 src/cli.rs      --git-credential, --connector-test
 src/ui/load.rs  run_async_in_background
 ```
 
-No `src/` module draws anything new until the mockup is approved. `connect/`, `net/`, `accounts/` and `settings/` are UI-free, like `git/`.
+`src/hosting/` draws the screens approved in the mockup on 2026-11-06; `app::connectors::Connectors` is the Global they read and change. `connect/`, `net/`, `accounts/` and `settings/` stay UI-free, like `git/`.
 
 The `HostServices` trait and its types (section 7) live in `src/net/`, and `net::Gateway` implements it. `connect/` depends on `net/`, never the other way round.
 
@@ -551,6 +552,12 @@ One method per operation, each built on one private `ask(op, input)`.
 ## 9. The GitHub connector
 
 - **Built in milestone 3:** `connectors/github/` with `account.who_am_i` (`GET /user`, scopes from `X-OAuth-Scopes`) and the error mapping below in `refusal.rs`, replayed from three cassettes. Its manifest lists the pasted token and Git Credential Manager's token; the device flow joins it once the OAuth App's client ID exists. Version 0.1.0, 257,272 bytes of wasm, most of it serde.
+- **Built in milestone 4:** version 0.2.0 declares `repositories`, `repositories.create` and `ssh_keys`.
+  - `who_am_i` returns the user's numeric `id`.
+  - `repositories.owners` reads `/user` and `/user/memberships/orgs`; an organization where the user is only a member is read once more for its `members_can_create_*` rules.
+  - `repositories.list` pages `/user/repos`, `/orgs/{owner}/repos` or `/search/repositories` (with `in:name fork:true` and one `user:` qualifier per owner); the cursor is the `Link` URL and must stay on the API endpoint.
+  - `repositories.get` and `repositories.create` (`/user/repos` or `/orgs/{owner}/repos`); `ssh_keys.list`, `ssh_keys.add` and `ssh_keys.host_keys` (`GET /meta`).
+  - 19 cassettes, also replayed through the committed `dist/github.wasm` inside the sandbox by FastGit's own tests.
 - **REST covers:**
   - lists, using `per_page=100` and the `Link` `rel="next"` URL as the cursor, checked to stay on the API endpoint;
   - repositories (`/user/repos` with `affiliation`, and search with `user:` and `org:` qualifiers);
@@ -650,7 +657,7 @@ Gitea needs no FastGit change and should be about 700–900 lines.
    - `build-and-relaunch.ps1` mirroring `connectors/*/dist` into `build/connectors/`.
 
    Built, with remote claims and a first GitHub connector (who-am-I) to pin. Approving, `seen` and claims are tested but have no caller until the screens of milestone 4.
-4. **Accounts and repositories,** mockup first:
+4. **Accounts and repositories,** mockup first (built 2026-11-06):
    - the screens in section 11 up to SSH keys;
    - the device flow, which needs the OAuth App's client ID;
    - GitHub's who-am-I, repositories, creating and publishing, SSH keys and host keys.
@@ -662,8 +669,8 @@ Gitea needs no FastGit change and should be about 700–900 lines.
 
 ## 14. Open items
 
-- **Your step, before milestone 4:** register the FastGit OAuth App on GitHub with "Enable Device Flow" ticked. Its client ID goes in `connector.json`.
-- **Before milestone 4:** account ids are `<connector>:<host>:<user id>`, but `Identity` carries no user id. It needs an `id`, which GitHub's `/user` returns.
+- **Your step:** register the FastGit OAuth App on GitHub with "Enable Device Flow" ticked. Its client ID goes in `connector.json`, as a `device` sign-in with `device_code_url`, `token_url` and `scopes`. FastGit's device flow is built and tested against a local fake OAuth server; the Add account dialog offers it as soon as the manifest does.
+- **Done in milestone 4:** `Identity` carries the user's `id`, so account ids are `<connector>:<host>:<user id>`.
 - **Unverified:**
   - whether macOS curl trusts roots added to the Keychain;
   - whether curl is present on minimal Linux installs;
@@ -680,6 +687,10 @@ Gitea needs no FastGit change and should be about 700–900 lines.
   - with the transport still on `smol::process`, it was +497,664 B;
   - memory over three launches each, opening FastGit's own repository: 149.2 MB of private bytes before, 150.5 MB after, ±1.5 MB from run to run;
   - the GitHub connector: 257,272 B of wasm, started in 6.5 ms, `hello` in 3.0 ms and `who_am_i` in 1.8 ms on a replayed cassette.
+- **Measured at milestone 4,** against milestone 3's release build (39,682,048 B):
+  - +2,091,008 B (+5.27%) in all, for the Settings tab, its pages and dialogs, Clone, New repository, Publish and the account bar (`src/hosting/`, about 4,900 lines with tests), plus sign-in, the device flow, SSH keys and cloning behind them;
+  - memory over three launches each, opening FastGit's own repository: 144.7 MB of private bytes before, 143.7 MB after, within the ±1.5 MB runs vary by;
+  - the GitHub connector grew to 286,295 B of wasm with its repository and SSH key operations.
 - **Later:**
   - avatars, fetched in batches through curl into a cache and drawn with `img(path)`;
   - libcurl at run time;

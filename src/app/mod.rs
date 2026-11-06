@@ -1,4 +1,4 @@
-mod connectors;
+pub(crate) mod connectors;
 mod saved_tabs;
 mod tab_strip;
 mod tabs;
@@ -15,8 +15,9 @@ use gpui_kit::{
 
 use crate::{
     actions::{
-        About, CloseDiff, CloseTab, CopyHash, Fetch, HISTORY_CONTEXT, NewerCommit, NextChange,
-        NextFile, NextTab, OlderCommit, OpenRepository, PreviousChange, PreviousFile, PreviousTab,
+        About, CloneRepository, CloseDiff, CloseTab, CopyHash, Fetch, HISTORY_CONTEXT, NewRepository,
+        NewerCommit, NextChange, NextFile, NextTab, OlderCommit, OpenRepository, OpenSettings,
+        PreviousChange, PreviousFile, PreviousTab,
         LoopChange, MEDIA_CONTEXT, PlayPause, Quit, Refresh, SwitchVersion, WINDOW_CONTEXT, WholeWindow,
     },
     assets::Assets,
@@ -42,6 +43,7 @@ pub(crate) fn run(path: Option<PathBuf>) {
             app_id: Some("fastgit".into()),
             ..TitleBar::window_options()
         };
+        connectors::install_connectors(cx);
         gpui_kit::open_window(options, cx, |window, cx| {
             cx.new(|cx| FastGit::new(path, window, cx))
         })
@@ -80,6 +82,13 @@ fn bind_keys(cx: &mut App) {
             OpenRepository,
             Some(WINDOW_CONTEXT),
         ),
+        KeyBinding::new(
+            primary("cmd-shift-o", "ctrl-shift-o"),
+            CloneRepository,
+            Some(WINDOW_CONTEXT),
+        ),
+        KeyBinding::new(primary("cmd-n", "ctrl-n"), NewRepository, Some(WINDOW_CONTEXT)),
+        KeyBinding::new(primary("cmd-,", "ctrl-,"), OpenSettings, Some(WINDOW_CONTEXT)),
         KeyBinding::new(
             primary("cmd-shift-c", "ctrl-shift-c"),
             CopyHash,
@@ -121,6 +130,11 @@ fn menus() -> Vec<Menu> {
     vec![
         Menu::new("File").items([
             MenuItem::action("Open Repository…", OpenRepository),
+            MenuItem::action("Clone Repository…", CloneRepository),
+            MenuItem::action("New Repository…", NewRepository),
+            MenuItem::separator(),
+            MenuItem::action("Settings…", OpenSettings),
+            MenuItem::separator(),
             MenuItem::action("Close Tab", CloseTab),
             MenuItem::separator(),
             MenuItem::action("Quit", Quit),

@@ -15,6 +15,6 @@
     }
   ],
   "output": {
-    "ok": { "login": "octocat", "name": "The Octocat", "avatar_url": null, "scopes": ["repo", "read:org"] }
+    "ok": { "id": "583231", "login": "octocat", "name": "The Octocat", "avatar_url": null, "scopes": ["repo", "read:org"] }
   }
 }
