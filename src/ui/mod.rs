@@ -13,7 +13,7 @@ mod side;
 mod text;
 
 pub(crate) use avatar::{author_avatar, identicon};
-pub(crate) use badges::{additions, change_badge, deletions, ref_badge, stash_badge};
+pub(crate) use badges::{PullMark, additions, change_badge, deletions, pull_chip, ref_badge, stash_badge};
 pub(crate) use file_view::{FileView, FileViewToggle};
 pub(crate) use folded::Folded;
 pub(crate) use graph_cell::{GraphNode, graph_cell, graph_width, uncommitted_cell};

@@ -1553,3 +1553,33 @@
 .toast .actions { gap: 8px; margin-top: 10px; }
 .notice > .actions { gap: 8px; }
 .mono > .text { font-family: var(--font); }
+
+.pull-chip { flex: none; display: inline-flex; align-items: center; gap: 2px; height: 16px; padding: 0 5px 0 3px; border-radius: 8px; font-size: 11px; line-height: 16px; font-weight: 500; font-variant-numeric: tabular-nums; color: var(--c); background: color-mix(in srgb, var(--c) 16%, transparent); }
+.ref-badge > .pull-chip { margin-right: -3px; }
+.pull-number { font-variant-numeric: tabular-nums; }
+.section-note { gap: 6px; padding-left: 18px; }
+.section-note > .btn { flex: none; }
+.section-more { padding-left: 20px; }
+.menu.checks > .item { gap: 8px; }
+.menu.checks > .item > .check { flex: none; width: 14px; display: flex; }
+.pull-overview { height: 100%; display: flex; flex-direction: column; }
+.pull-head { flex: none; padding: 14px 20px 12px; border-bottom: 1px solid var(--border); }
+.pull-meta { gap: 6px; }
+.pull-scroll { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: 16px; padding: 16px 20px; }
+.pull-body { flex: none; white-space: pre-wrap; }
+.pull-box { flex: none; display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.pull-box > .box-head { display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 8px 12px; }
+.pull-box > .box-head.tall { gap: 12px; min-height: 56px; }
+.pull-box > .check-row { display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 8px 0 12px; border-top: 1px solid var(--border); }
+.check-row > .name { max-width: 220px; }
+.comment { flex: none; display: flex; gap: 10px; align-items: flex-start; }
+.comment-body { white-space: pre-wrap; }
+.comment-box { flex: none; display: flex; flex-direction: column; gap: 8px; }
+.comment-box .problem { color: var(--red); }
+.push-note { gap: 8px; padding: 8px 10px; border-radius: 6px; border: 1px solid color-mix(in srgb, var(--blue) 30%, transparent); background: color-mix(in srgb, var(--blue) 8%, transparent); }
+.dialog.wider { width: 600px; }
+.dialog .arrow { flex: none; padding-bottom: 8px; }
+.method-choices { gap: 6px; }
+.method-choice { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; }
+.method-choice.chosen { border-color: var(--ring); background: var(--list-hover); }
+.method-choice > .radio { flex: none; width: 190px; }

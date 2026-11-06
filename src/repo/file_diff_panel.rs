@@ -41,8 +41,8 @@ use super::{
 };
 use crate::{
     git::{
-        ChangeKind, Conflicted, DifftoolTarget, FileChange, FilePatch, Hunks, Part, PartAction,
-        Repo, Revision, Scope, Side, Version as Kept, Whitespace,
+        Baseline, ChangeKind, Conflicted, DifftoolTarget, FileChange, FilePatch, Hunks, Part,
+        PartAction, Repo, Revision, Scope, Side, Version as Kept, Whitespace,
     },
     media::{
         Backdrop, MediaKind, Picture, Sound, VideoFacts, extension, ffmpeg_installed, media_kind,
@@ -81,6 +81,7 @@ enum Compared {
     WorkingFile(OpenFile),
     CommitFile {
         id: ObjectId,
+        baseline: Baseline,
         short_id: SharedString,
         file: DiffFile,
     },
@@ -486,7 +487,7 @@ impl FileDiffPanel {
     pub(crate) fn open_commit_file(
         &mut self,
         id: ObjectId,
-        parent: Option<ObjectId>,
+        baseline: Baseline,
         short_id: SharedString,
         file: DiffFile,
         cx: &mut Context<Self>,
@@ -495,8 +496,8 @@ impl FileDiffPanel {
         let view = media_view(file.path()).or_else(|| file.is_binary().then_some(MediaView::Other));
         if let Some(view) = view {
             let reload = self.shows_commit_file(id, file.path());
-            let request = commit_request(view, &file, id, parent, &short_id);
-            self.compared = Some(Compared::CommitFile { id, short_id, file });
+            let request = commit_request(view, &file, id, baseline.commit(), &short_id);
+            self.compared = Some(Compared::CommitFile { id, baseline, short_id, file });
             if let Some(repo) = self.repository.read(cx).repo().cloned() {
                 self.open_media(&repo, request, reload, cx);
             }
@@ -518,7 +519,7 @@ impl FileDiffPanel {
         if !same {
             self.stepped = None;
         }
-        self.compared = Some(Compared::CommitFile { id, short_id, file });
+        self.compared = Some(Compared::CommitFile { id, baseline, short_id, file });
         self.reread_commit_file(!same, cx);
         cx.notify();
     }
@@ -930,13 +931,13 @@ impl FileDiffPanel {
     }
 
     fn reread_commit_file(&mut self, from_the_top: bool, cx: &mut Context<Self>) {
-        let Some(Compared::CommitFile { id, file, .. }) = &self.compared else {
+        let Some(Compared::CommitFile { id, baseline, file, .. }) = &self.compared else {
             return;
         };
         let Some(repo) = self.repository.read(cx).repo().cloned() else {
             return;
         };
-        let id = *id;
+        let (id, baseline) = (*id, *baseline);
         let path = file.path().clone();
         let original = renamed_from(file).cloned();
         let kind = change_kind(file);
@@ -948,7 +949,7 @@ impl FileDiffPanel {
                     .chain(&original)
                     .map(|path| OsStr::new(path.as_ref()))
                     .collect();
-                let mut text = repo.commit_file_patch(id, &paths, whitespace)?;
+                let mut text = repo.commit_file_patch(id, baseline, &paths, whitespace)?;
                 if spreads(kind) {
                     text = repo.with_whole_file(text, Revision::Commit(id), OsStr::new(path.as_ref()));
                 }

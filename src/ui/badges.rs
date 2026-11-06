@@ -1,8 +1,8 @@
 use gpui_kit::{
     AnyElement, App, Div, Hsla, InteractiveElement as _, IntoElement, ParentElement as _,
-    SharedString, Stateful, Styled as _,
+    SharedString, Stateful, StatefulInteractiveElement as _, Styled as _,
     assets::IconName,
-    component::{ActiveTheme as _, Icon, Sizable as _, StyledExt as _, h_flex},
+    component::{ActiveTheme as _, Icon, Sizable as _, StyledExt as _, h_flex, tooltip::Tooltip},
     div,
     prelude::FluentBuilder as _,
     px,
@@ -15,6 +15,7 @@ const HEAD_FILL: f32 = 0.35;
 const LABEL_FILL: f32 = 0.14;
 const LABEL_BORDER: f32 = 0.6;
 const CHANGE_FILL: f32 = 0.18;
+const PULL_FILL: f32 = 0.16;
 
 fn ref_icon(kind: RefKind) -> IconName {
     match kind {
@@ -24,7 +25,44 @@ fn ref_icon(kind: RefKind) -> IconName {
     }
 }
 
-pub(crate) fn ref_badge(shown: ShownRef, color: Hsla, cx: &App) -> Stateful<Div> {
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct PullMark {
+    pub(crate) number: u64,
+    pub(crate) draft: bool,
+}
+
+pub(crate) fn pull_chip(mark: PullMark, cx: &App) -> AnyElement {
+    let theme = cx.theme();
+    let (color, icon) = if mark.draft {
+        (theme.muted_foreground, IconName::GitPullRequestDraft)
+    } else {
+        (theme.green, IconName::GitPullRequest)
+    };
+    let words = format!(
+        "Pull request #{}{}",
+        mark.number,
+        if mark.draft { ", a draft" } else { "" }
+    );
+    h_flex()
+        .id(SharedString::from(format!("pull-chip-{}", mark.number)))
+        .flex_none()
+        .h(px(16.))
+        .pl(px(3.))
+        .pr(px(5.))
+        .gap(px(2.))
+        .rounded(px(8.))
+        .bg(color.opacity(PULL_FILL))
+        .text_color(color)
+        .text_size(px(11.))
+        .line_height(px(16.))
+        .font_medium()
+        .child(Icon::new(icon).xsmall().text_color(color))
+        .child(mark.number.to_string())
+        .tooltip(move |window, cx| Tooltip::new(words.clone()).build(window, cx))
+        .into_any_element()
+}
+
+pub(crate) fn ref_badge(shown: ShownRef, color: Hsla, pull: Option<PullMark>, cx: &App) -> Stateful<Div> {
     let label = shown.label;
     let icons = h_flex()
         .flex_none()
@@ -37,7 +75,9 @@ pub(crate) fn ref_badge(shown: ShownRef, color: Hsla, cx: &App) -> Stateful<Div>
                     .text_color(color),
             )
         });
-    badge(icons, label.name.clone(), label.is_head, color, cx).id(label.full_name())
+    badge(icons, label.name.clone(), label.is_head, color, cx)
+        .when_some(pull, |badge, pull| badge.child(pull_chip(pull, cx)))
+        .id(label.full_name())
 }
 
 pub(crate) fn stash_badge(name: SharedString, color: Hsla, cx: &App) -> AnyElement {

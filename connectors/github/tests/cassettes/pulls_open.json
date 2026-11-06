@@ -1,0 +1,327 @@
+{
+  "op": "pulls.list",
+  "account": {
+    "id": "github:github.com:4120511",
+    "login": "alex-martin",
+    "endpoints": {
+      "api": "https://api.github.com/",
+      "graphql": "https://api.github.com/graphql",
+      "web": "https://github.com/"
+    }
+  },
+  "repo": {
+    "owner": "fastgit-org",
+    "name": "fastgit"
+  },
+  "input": {
+    "state": "open",
+    "cursor": null
+  },
+  "exchanges": [
+    {
+      "method": "POST",
+      "url": "https://api.github.com/graphql",
+      "status": 200,
+      "headers": [
+        [
+          "content-type",
+          "application/json; charset=utf-8"
+        ],
+        [
+          "x-github-media-type",
+          "github.v4; param=merge-info-preview; format=json"
+        ]
+      ],
+      "body": {
+        "data": {
+          "repository": {
+            "pullRequests": {
+              "pageInfo": {
+                "hasNextPage": true,
+                "endCursor": "Y3Vyc29yOnYyOpK5MjAyNi0xMS0wMlQxNjoyMDo0NSswMDowMM5tZ9Ql"
+              },
+              "nodes": [
+                {
+                  "number": 142,
+                  "title": "Show pull requests in the left pane",
+                  "state": "OPEN",
+                  "isDraft": false,
+                  "url": "https://github.com/fastgit-org/fastgit/pull/142",
+                  "createdAt": "2026-11-01T09:14:05Z",
+                  "updatedAt": "2026-11-04T09:15:02Z",
+                  "reviewDecision": "REVIEW_REQUIRED",
+                  "author": {
+                    "login": "alex-martin",
+                    "avatarUrl": "https://avatars.githubusercontent.com/u/4120511?v=4",
+                    "name": "Alex Martin"
+                  },
+                  "baseRefName": "main",
+                  "baseRefOid": "1a7e3c95d2b84f60a9c1e7d3b5f2a8c4e6d0b9f1",
+                  "headRefName": "topic/pull-list",
+                  "headRefOid": "4f1d2c9e8b7a6f5e4d3c2b1a0f9e8d7c6b5a4f3e",
+                  "headRepository": {
+                    "name": "fastgit",
+                    "owner": {
+                      "login": "fastgit-org"
+                    }
+                  },
+                  "commits": {
+                    "nodes": [
+                      {
+                        "commit": {
+                          "statusCheckRollup": {
+                            "state": "SUCCESS"
+                          }
+                        }
+                      }
+                    ]
+                  }
+                },
+                {
+                  "number": 141,
+                  "title": "Draw stash rows in the graph",
+                  "state": "OPEN",
+                  "isDraft": true,
+                  "url": "https://github.com/fastgit-org/fastgit/pull/141",
+                  "createdAt": "2026-10-30T15:02:44Z",
+                  "updatedAt": "2026-11-03T21:47:10Z",
+                  "reviewDecision": null,
+                  "author": {
+                    "login": "sam-lee",
+                    "avatarUrl": "https://avatars.githubusercontent.com/u/5523874?v=4",
+                    "name": "Sam Lee"
+                  },
+                  "baseRefName": "main",
+                  "baseRefOid": "1a7e3c95d2b84f60a9c1e7d3b5f2a8c4e6d0b9f1",
+                  "headRefName": "stash-rows",
+                  "headRefOid": "8c2e5a7f1b3d9e4c6a0f2b8d5e7c1a3f9b4d6e2c",
+                  "headRepository": {
+                    "name": "fastgit",
+                    "owner": {
+                      "login": "sam-lee"
+                    }
+                  },
+                  "commits": {
+                    "nodes": [
+                      {
+                        "commit": {
+                          "statusCheckRollup": {
+                            "state": "PENDING"
+                          }
+                        }
+                      }
+                    ]
+                  }
+                },
+                {
+                  "number": 139,
+                  "title": "Speed up the blame view",
+                  "state": "OPEN",
+                  "isDraft": false,
+                  "url": "https://github.com/fastgit-org/fastgit/pull/139",
+                  "createdAt": "2026-10-27T08:30:00Z",
+                  "updatedAt": "2026-11-03T12:05:51Z",
+                  "reviewDecision": "CHANGES_REQUESTED",
+                  "author": {
+                    "login": "robin-chen",
+                    "avatarUrl": "https://avatars.githubusercontent.com/u/6031927?v=4",
+                    "name": null
+                  },
+                  "baseRefName": "main",
+                  "baseRefOid": "7d3f9b1e5a2c8d4f0b6e3a9c1d7f5b2e8a4c0d6f",
+                  "headRefName": "perf/blame",
+                  "headRefOid": "d93b1f7a2c5e8b4d0f6a3c9e1b7d5f2a8c4e0b6d",
+                  "headRepository": {
+                    "name": "fastgit",
+                    "owner": {
+                      "login": "fastgit-org"
+                    }
+                  },
+                  "commits": {
+                    "nodes": [
+                      {
+                        "commit": {
+                          "statusCheckRollup": {
+                            "state": "FAILURE"
+                          }
+                        }
+                      }
+                    ]
+                  }
+                },
+                {
+                  "number": 137,
+                  "title": "Bump wasmi from 0.39.1 to 0.40.0",
+                  "state": "OPEN",
+                  "isDraft": false,
+                  "url": "https://github.com/fastgit-org/fastgit/pull/137",
+                  "createdAt": "2026-10-28T06:01:19Z",
+                  "updatedAt": "2026-11-02T16:20:45Z",
+                  "reviewDecision": "APPROVED",
+                  "author": {
+                    "login": "dependabot",
+                    "avatarUrl": "https://avatars.githubusercontent.com/in/29110?v=4"
+                  },
+                  "baseRefName": "main",
+                  "baseRefOid": "7d3f9b1e5a2c8d4f0b6e3a9c1d7f5b2e8a4c0d6f",
+                  "headRefName": "dependabot/cargo/wasmi-0.40.0",
+                  "headRefOid": "2b6f8d4a0c3e7b1f5d9a2c6e0b4f8d3a7c1e5b9f",
+                  "headRepository": {
+                    "name": "fastgit",
+                    "owner": {
+                      "login": "fastgit-org"
+                    }
+                  },
+                  "commits": {
+                    "nodes": [
+                      {
+                        "commit": {
+                          "statusCheckRollup": null
+                        }
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        }
+      }
+    }
+  ],
+  "output": {
+    "ok": {
+      "items": [
+        {
+          "number": 142,
+          "title": "Show pull requests in the left pane",
+          "state": "open",
+          "draft": false,
+          "author": {
+            "login": "alex-martin",
+            "name": "Alex Martin",
+            "avatar_url": "https://avatars.githubusercontent.com/u/4120511?v=4"
+          },
+          "base": {
+            "branch": "main",
+            "sha": "1a7e3c95d2b84f60a9c1e7d3b5f2a8c4e6d0b9f1",
+            "repo": {
+              "owner": "fastgit-org",
+              "name": "fastgit"
+            }
+          },
+          "head": {
+            "branch": "topic/pull-list",
+            "sha": "4f1d2c9e8b7a6f5e4d3c2b1a0f9e8d7c6b5a4f3e",
+            "repo": {
+              "owner": "fastgit-org",
+              "name": "fastgit"
+            }
+          },
+          "review": "review_required",
+          "checks": "success",
+          "created_at": "2026-11-01T09:14:05Z",
+          "updated_at": "2026-11-04T09:15:02Z",
+          "web_url": "https://github.com/fastgit-org/fastgit/pull/142"
+        },
+        {
+          "number": 141,
+          "title": "Draw stash rows in the graph",
+          "state": "open",
+          "draft": true,
+          "author": {
+            "login": "sam-lee",
+            "name": "Sam Lee",
+            "avatar_url": "https://avatars.githubusercontent.com/u/5523874?v=4"
+          },
+          "base": {
+            "branch": "main",
+            "sha": "1a7e3c95d2b84f60a9c1e7d3b5f2a8c4e6d0b9f1",
+            "repo": {
+              "owner": "fastgit-org",
+              "name": "fastgit"
+            }
+          },
+          "head": {
+            "branch": "stash-rows",
+            "sha": "8c2e5a7f1b3d9e4c6a0f2b8d5e7c1a3f9b4d6e2c",
+            "repo": {
+              "owner": "sam-lee",
+              "name": "fastgit"
+            }
+          },
+          "review": null,
+          "checks": "pending",
+          "created_at": "2026-10-30T15:02:44Z",
+          "updated_at": "2026-11-03T21:47:10Z",
+          "web_url": "https://github.com/fastgit-org/fastgit/pull/141"
+        },
+        {
+          "number": 139,
+          "title": "Speed up the blame view",
+          "state": "open",
+          "draft": false,
+          "author": {
+            "login": "robin-chen",
+            "name": null,
+            "avatar_url": "https://avatars.githubusercontent.com/u/6031927?v=4"
+          },
+          "base": {
+            "branch": "main",
+            "sha": "7d3f9b1e5a2c8d4f0b6e3a9c1d7f5b2e8a4c0d6f",
+            "repo": {
+              "owner": "fastgit-org",
+              "name": "fastgit"
+            }
+          },
+          "head": {
+            "branch": "perf/blame",
+            "sha": "d93b1f7a2c5e8b4d0f6a3c9e1b7d5f2a8c4e0b6d",
+            "repo": {
+              "owner": "fastgit-org",
+              "name": "fastgit"
+            }
+          },
+          "review": "changes_requested",
+          "checks": "failure",
+          "created_at": "2026-10-27T08:30:00Z",
+          "updated_at": "2026-11-03T12:05:51Z",
+          "web_url": "https://github.com/fastgit-org/fastgit/pull/139"
+        },
+        {
+          "number": 137,
+          "title": "Bump wasmi from 0.39.1 to 0.40.0",
+          "state": "open",
+          "draft": false,
+          "author": {
+            "login": "dependabot",
+            "name": null,
+            "avatar_url": "https://avatars.githubusercontent.com/in/29110?v=4"
+          },
+          "base": {
+            "branch": "main",
+            "sha": "7d3f9b1e5a2c8d4f0b6e3a9c1d7f5b2e8a4c0d6f",
+            "repo": {
+              "owner": "fastgit-org",
+              "name": "fastgit"
+            }
+          },
+          "head": {
+            "branch": "dependabot/cargo/wasmi-0.40.0",
+            "sha": "2b6f8d4a0c3e7b1f5d9a2c6e0b4f8d3a7c1e5b9f",
+            "repo": {
+              "owner": "fastgit-org",
+              "name": "fastgit"
+            }
+          },
+          "review": "approved",
+          "checks": null,
+          "created_at": "2026-10-28T06:01:19Z",
+          "updated_at": "2026-11-02T16:20:45Z",
+          "web_url": "https://github.com/fastgit-org/fastgit/pull/137"
+        }
+      ],
+      "next": "Y3Vyc29yOnYyOpK5MjAyNi0xMS0wMlQxNjoyMDo0NSswMDowMM5tZ9Ql"
+    }
+  }
+}

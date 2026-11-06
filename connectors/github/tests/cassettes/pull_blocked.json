@@ -1,0 +1,140 @@
+{
+  "op": "pulls.get",
+  "account": {
+    "id": "github:github.com:4120511",
+    "login": "alex-martin",
+    "endpoints": {
+      "api": "https://api.github.com/",
+      "graphql": "https://api.github.com/graphql",
+      "web": "https://github.com/"
+    }
+  },
+  "repo": {
+    "owner": "fastgit-org",
+    "name": "fastgit"
+  },
+  "input": {
+    "number": 142
+  },
+  "exchanges": [
+    {
+      "method": "POST",
+      "url": "https://api.github.com/graphql",
+      "status": 200,
+      "headers": [
+        [
+          "content-type",
+          "application/json; charset=utf-8"
+        ],
+        [
+          "x-github-media-type",
+          "github.v4; param=merge-info-preview; format=json"
+        ]
+      ],
+      "body": {
+        "data": {
+          "repository": {
+            "mergeCommitAllowed": true,
+            "squashMergeAllowed": true,
+            "rebaseMergeAllowed": true,
+            "pullRequest": {
+              "number": 142,
+              "title": "Show pull requests in the left pane",
+              "state": "OPEN",
+              "isDraft": false,
+              "url": "https://github.com/fastgit-org/fastgit/pull/142",
+              "createdAt": "2026-11-01T09:14:05Z",
+              "updatedAt": "2026-11-04T09:15:02Z",
+              "reviewDecision": "REVIEW_REQUIRED",
+              "author": {
+                "login": "alex-martin",
+                "avatarUrl": "https://avatars.githubusercontent.com/u/4120511?v=4",
+                "name": "Alex Martin"
+              },
+              "baseRefName": "main",
+              "baseRefOid": "1a7e3c95d2b84f60a9c1e7d3b5f2a8c4e6d0b9f1",
+              "headRefName": "topic/pull-list",
+              "headRefOid": "4f1d2c9e8b7a6f5e4d3c2b1a0f9e8d7c6b5a4f3e",
+              "headRepository": {
+                "name": "fastgit",
+                "owner": {
+                  "login": "fastgit-org"
+                }
+              },
+              "commits": {
+                "nodes": [
+                  {
+                    "commit": {
+                      "statusCheckRollup": {
+                        "state": "SUCCESS"
+                      }
+                    }
+                  }
+                ]
+              },
+              "body": "Lists the repository's pull requests in the left pane, newest activity first.\r\n\r\n- state filter: open, closed, all\r\n- badges on branches with an open pull request",
+              "mergeable": "MERGEABLE",
+              "mergeStateStatus": "BLOCKED",
+              "viewerDidAuthor": true
+            }
+          }
+        }
+      }
+    }
+  ],
+  "output": {
+    "ok": {
+      "summary": {
+        "number": 142,
+        "title": "Show pull requests in the left pane",
+        "state": "open",
+        "draft": false,
+        "author": {
+          "login": "alex-martin",
+          "name": "Alex Martin",
+          "avatar_url": "https://avatars.githubusercontent.com/u/4120511?v=4"
+        },
+        "base": {
+          "branch": "main",
+          "sha": "1a7e3c95d2b84f60a9c1e7d3b5f2a8c4e6d0b9f1",
+          "repo": {
+            "owner": "fastgit-org",
+            "name": "fastgit"
+          }
+        },
+        "head": {
+          "branch": "topic/pull-list",
+          "sha": "4f1d2c9e8b7a6f5e4d3c2b1a0f9e8d7c6b5a4f3e",
+          "repo": {
+            "owner": "fastgit-org",
+            "name": "fastgit"
+          }
+        },
+        "review": "review_required",
+        "checks": "success",
+        "created_at": "2026-11-01T09:14:05Z",
+        "updated_at": "2026-11-04T09:15:02Z",
+        "web_url": "https://github.com/fastgit-org/fastgit/pull/142"
+      },
+      "body": "Lists the repository's pull requests in the left pane, newest activity first.\r\n\r\n- state filter: open, closed, all\r\n- badges on branches with an open pull request",
+      "base_sha": "1a7e3c95d2b84f60a9c1e7d3b5f2a8c4e6d0b9f1",
+      "mergeability": {
+        "kind": "blocked",
+        "reason": "At least one approving review is required."
+      },
+      "merge_methods": [
+        "merge",
+        "squash",
+        "rebase"
+      ],
+      "verdicts": [
+        "comment"
+      ],
+      "fetch": {
+        "url": null,
+        "refspec": "refs/pull/142/head",
+        "sha": "4f1d2c9e8b7a6f5e4d3c2b1a0f9e8d7c6b5a4f3e"
+      }
+    }
+  }
+}

@@ -18,6 +18,7 @@ mod navigation;
 mod operation;
 mod operation_bar;
 mod patch_view;
+mod pulls;
 mod ref_tree;
 mod refs_list;
 mod repository;
@@ -27,6 +28,7 @@ mod toolbar;
 
 use std::{ffi::OsString, path::PathBuf, sync::Arc};
 
+use fastgit_protocol::{PullSummary, StateFilter};
 use gix::ObjectId;
 use gpui_kit::{
     AnyElement, AppContext as _, Context, Entity, FocusHandle, InteractiveElement as _,
@@ -49,17 +51,20 @@ use crate::{
         PreviousFile, Refresh, WholeWindow,
     },
     git::{
-        ChangeKind, Commit, FileChange, FileCommit, HISTORY_LIMIT, History, PullMode, RefLabel,
-        Scope, Side, Stash, WorkingChanges, short_id,
+        Baseline, ChangeKind, Commit, FileChange, FileCommit, HISTORY_LIMIT, History, NamedRemote,
+        PullMode, RefLabel, Scope, Side, Stash, WorkingChanges, short_id,
     },
     app::connectors::Connectors,
-    hosting::{AccountQuestion, account_bar, account_question, open_publish},
+    hosting::{
+        AccountQuestion, Fix, SignInStart, account_bar, account_question, open_publish,
+        open_sign_in,
+    },
     ui::{self, Failure, FileView, Folded, Look as _, Notice, run_in_background, thousands},
 };
 use behind_dialog::open_behind_dialog;
 use branch_dialog::open_branch_dialog;
 use stash_menu::{StashAction, StashMenu};
-use branch_menu::{BranchAction, BranchMenu, confirm_delete};
+use branch_menu::{BranchAction, BranchMenu, PullOffers, confirm_delete};
 use changes_list::{ChangesList, SideFolds, SideScrolls, discard_question};
 use commit_form::CommitForm;
 use commit_panel::{CommitPanel, OpenCommitFile, ShowFileHistory, copy_commit_hash};
@@ -71,6 +76,10 @@ use history_list::HistoryList;
 use navigation::{OpenFile, Step, Target};
 use operation::{Finish, Operation, Outcome};
 use operation_bar::OperationBar;
+use pulls::{
+    CreatePull, Listing, PullMarks, PullView, PullViewEvent, Pulls, PullsSection, Reach,
+    SectionState, filter_label, marks_for, open_create_pull,
+};
 use ref_tree::RefGroup;
 use refs_list::RefsList;
 pub(crate) use repository::{Repository, RepositoryEvent};
@@ -81,6 +90,12 @@ use toolbar::{RepoToolbar, ToolbarState, notification};
 enum Openable {
     Working(Side, FileChange),
     Commit(DiffFile),
+    Pull(DiffFile),
+}
+
+struct PullPane {
+    view: Entity<PullView>,
+    _subscriptions: [Subscription; 2],
 }
 
 pub(crate) struct RepoView {
@@ -104,7 +119,10 @@ pub(crate) struct RepoView {
     account_question: Option<AccountQuestion>,
     question_dismissed: bool,
     reading_remotes: Option<Task<()>>,
-    _subscriptions: [Subscription; 6],
+    pulls: Entity<Pulls>,
+    pull_pane: Option<PullPane>,
+    pulls_folded: bool,
+    _subscriptions: [Subscription; 7],
 }
 
 impl RepoView {
@@ -113,11 +131,12 @@ impl RepoView {
         let commit_panel = cx.new(|_| CommitPanel::new());
         let commit_form = cx.new(|cx| CommitForm::new(repository.clone(), window, cx));
         let file_diff = cx.new(|cx| FileDiffPanel::new(repository.clone(), cx));
+        let pulls = cx.new(|cx| Pulls::new(repository.clone(), cx));
         let subscriptions = [
             cx.subscribe_in(&repository, window, |this, _, event, window, cx| match event {
                 RepositoryEvent::HistoryRead => this.on_history_read(cx),
                 RepositoryEvent::ChangesRead => this.on_changes_read(cx),
-                RepositoryEvent::Committed => {}
+                RepositoryEvent::Committed | RepositoryEvent::Fetched => {}
                 RepositoryEvent::Unpublished => open_publish(this.repository.clone(), window, cx),
                 RepositoryEvent::Operated(operated) => {
                     match &operated.outcome {
@@ -164,6 +183,7 @@ impl RepoView {
                 this.place_file(cx)
             }),
             cx.observe_global::<Connectors>(|this, cx| this.ask_which_account(cx)),
+            cx.observe(&pulls, |_, _, cx| cx.notify()),
         ];
         Self {
             repository,
@@ -186,6 +206,9 @@ impl RepoView {
             account_question: None,
             question_dismissed: false,
             reading_remotes: None,
+            pulls,
+            pull_pane: None,
+            pulls_folded: false,
             _subscriptions: subscriptions,
         }
     }
@@ -194,13 +217,19 @@ impl RepoView {
         let Some(repo) = self.repository.read(cx).repo().cloned() else {
             return;
         };
-        self.reading_remotes = Some(run_in_background(cx, move || repo.remote_urls(), |this, urls, cx| {
-            this.reading_remotes = None;
-            if this.remote_urls != urls {
-                this.remote_urls = urls;
-                this.ask_which_account(cx);
-            }
-        }));
+        self.reading_remotes = Some(run_in_background(
+            cx,
+            move || repo.named_remotes(),
+            |this, remotes: Vec<NamedRemote>, cx| {
+                this.reading_remotes = None;
+                let urls: Vec<String> = remotes.iter().map(|remote| remote.url.clone()).collect();
+                this.pulls.update(cx, |pulls, cx| pulls.track(remotes, cx));
+                if this.remote_urls != urls {
+                    this.remote_urls = urls;
+                    this.ask_which_account(cx);
+                }
+            },
+        ));
     }
 
     fn ask_which_account(&mut self, cx: &mut Context<Self>) {
@@ -265,6 +294,7 @@ impl RepoView {
             Target::Commit { id, .. } => self.show_commit(id, cx),
             Target::Nothing => {
                 self.target = Target::Nothing;
+                self.pull_pane = None;
                 self.commit_panel.update(cx, |panel, cx| panel.clear(cx));
                 self.file_diff.update(cx, |panel, cx| panel.close(cx));
             }
@@ -366,6 +396,7 @@ impl RepoView {
         };
         if self.target.commit() != Some(id) {
             self.target = Target::at_commit(id);
+            self.pull_pane = None;
             self.file_diff.update(cx, |panel, cx| panel.close(cx));
         }
         self.commit_panel
@@ -379,8 +410,188 @@ impl RepoView {
         if !self.target.is_working_tree() {
             self.close_file(cx);
             self.target = Target::WorkingTree { open: None };
+            self.pull_pane = None;
             cx.notify();
         }
+    }
+
+    fn select_pull(&mut self, number: u64, window: &mut Window, cx: &mut Context<Self>) {
+        if self.target.pull() == Some(number) {
+            self.close_file(cx);
+            return;
+        }
+        let pulls = self.pulls.read(cx);
+        let (Some(hosting), Some(summary)) = (pulls.hosting().cloned(), pulls.find(number).cloned()) else {
+            return;
+        };
+        self.show_pull(summary, hosting, window, cx);
+    }
+
+    fn show_pull(
+        &mut self,
+        summary: PullSummary,
+        hosting: pulls::Hosting,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.file_history = None;
+        self.file_diff.update(cx, |panel, cx| panel.close(cx));
+        self.target = Target::Pull {
+            number: summary.number,
+            open: None,
+        };
+        let repository = self.repository.clone();
+        let view = cx.new(|cx| PullView::new(hosting, repository, summary, window, cx));
+        let subscriptions = [
+            cx.subscribe(&view, |this, _, event: &PullViewEvent, cx| match event {
+                PullViewEvent::OpenFile(file) => this.open_pull_file(file.clone(), cx),
+            }),
+            cx.observe(&view, |_, _, cx| cx.notify()),
+        ];
+        self.pull_pane = Some(PullPane {
+            view,
+            _subscriptions: subscriptions,
+        });
+        self.middle_focus.focus(window, cx);
+        cx.notify();
+    }
+
+    fn leave_pull(&mut self, cx: &mut Context<Self>) {
+        let next = self
+            .repository
+            .read(cx)
+            .history()
+            .map_or(Target::Nothing, |history| Target::Nothing.after_history_read(history, None));
+        self.target = Target::Nothing;
+        self.pull_pane = None;
+        match next.commit() {
+            Some(id) => self.show_commit(id, cx),
+            None => cx.notify(),
+        }
+    }
+
+    fn open_pull_file(&mut self, file: DiffFile, cx: &mut Context<Self>) {
+        let Some(pane) = &self.pull_pane else {
+            return;
+        };
+        let view = pane.view.clone();
+        let Some((head, merge_base)) = view.read(cx).compared() else {
+            return;
+        };
+        let Target::Pull { number, open } = &mut self.target else {
+            return;
+        };
+        let path = file.path().clone();
+        *open = Some(path.clone());
+        let label: SharedString = format!("#{number}").into();
+        view.update(cx, |view, cx| view.mark_open(Some(path), cx));
+        self.file_diff.update(cx, |panel, cx| {
+            panel.open_commit_file(head, Baseline::Commit(merge_base), label, file, cx)
+        });
+        self.place_file(cx);
+        cx.notify();
+    }
+
+    fn pull_marks(&self, history: &History, cx: &Context<Self>) -> Arc<PullMarks> {
+        let pulls = self.pulls.read(cx);
+        match pulls.hosting() {
+            Some(hosting) => Arc::new(marks_for(pulls.open(), &history.refs, &hosting.remote, &hosting.repo)),
+            None => Arc::default(),
+        }
+    }
+
+    fn pull_offers(&self, marks: Arc<PullMarks>, cx: &Context<Self>) -> Option<PullOffers> {
+        let pulls = self.pulls.read(cx);
+        let hosting = pulls.hosting()?;
+        Some(PullOffers {
+            marks,
+            creates: hosting.creates,
+            default_branch: pulls.default_branch().map(str::to_owned),
+        })
+    }
+
+    fn create_pull(&mut self, label: RefLabel, window: &mut Window, cx: &mut Context<Self>) {
+        let pulls = self.pulls.read(cx);
+        let Some(hosting) = pulls.hosting().cloned() else {
+            return;
+        };
+        let into = pulls.default_branch().map(str::to_owned);
+        let created_in = hosting.clone();
+        let request = CreatePull {
+            hosting,
+            repository: self.repository.clone(),
+            from: label,
+            into,
+            on_created: ui::handler(cx.listener(move |this, summary: &PullSummary, window, cx| {
+                this.pulls.update(cx, |pulls, cx| pulls.reread(cx));
+                this.show_pull(summary.clone(), created_in.clone(), window, cx);
+            })),
+        };
+        open_create_pull(request, window, cx);
+    }
+
+    fn pulls_section(&self, cx: &mut Context<Self>) -> Option<PullsSection> {
+        let pulls = self.pulls.read(cx);
+        let reach = pulls.reach().clone();
+        let state = match &reach {
+            Reach::Unclaimed => return None,
+            Reach::NoAccount { service, server } => SectionState::no_account(service, server),
+            Reach::Choosing => SectionState::choosing(),
+            Reach::SignedOut { login, .. } => SectionState::signed_out(login),
+            Reach::Hosted => match pulls.listing() {
+                Listing::Idle | Listing::Reading(_) => SectionState::Reading,
+                Listing::Read { pulls: listed, next } => SectionState::Listed {
+                    pulls: listed.clone(),
+                    more: next.is_some(),
+                    loading_more: pulls.is_loading_more(),
+                },
+                Listing::Failed(trouble) => SectionState::failed(trouble),
+            },
+        };
+        let account = match &reach {
+            Reach::SignedOut { account, .. } => Some(account.clone()),
+            _ => pulls.hosting().map(|hosting| hosting.account.clone()),
+        };
+        Some(PullsSection {
+            state,
+            filter: pulls.filter(),
+            open: !self.pulls_folded,
+            selected: self.target.pull(),
+            needs_an_account: matches!(reach, Reach::NoAccount { .. }),
+            on_select: Some(ui::handler(cx.listener(|this, number: &u64, window, cx| {
+                this.select_pull(*number, window, cx)
+            }))),
+            on_toggle: Some(ui::handler(cx.listener(|this, _: &(), _, cx| {
+                this.pulls_folded = !this.pulls_folded;
+                cx.notify();
+            }))),
+            on_filter: Some(ui::handler(cx.listener(|this, filter: &StateFilter, _, cx| {
+                this.pulls.update(cx, |pulls, cx| pulls.choose_filter(*filter, cx))
+            }))),
+            on_more: Some(ui::handler(cx.listener(|this, _: &(), _, cx| {
+                this.pulls.update(cx, |pulls, cx| pulls.load_more(cx))
+            }))),
+            on_fix: Some(ui::handler(cx.listener(move |this, fix: &Fix, window, cx| match fix {
+                Fix::Retry => this.pulls.update(cx, |pulls, cx| pulls.retry(cx)),
+                Fix::SignInAgain | Fix::SignInWithBrowser => {
+                    let start = match &account {
+                        Some(account) if !matches!(this.pulls.read(cx).reach(), Reach::NoAccount { .. }) => {
+                            SignInStart::Again(account.clone())
+                        }
+                        _ => SignInStart::Fresh,
+                    };
+                    open_sign_in(start, window, cx)
+                }
+                Fix::CopyLog | Fix::Nothing => {}
+            }))),
+        })
+    }
+
+    fn pull_position(&self, cx: &Context<Self>) -> Option<String> {
+        let number = self.target.pull()?;
+        let pulls = self.pulls.read(cx);
+        let filter = filter_label(pulls.filter()).to_lowercase();
+        Some(format!("Pull request #{number} · {} {filter}", thousands(pulls.listed().len())))
     }
 
     fn open_working_file(&mut self, side: Side, change: FileChange, cx: &mut Context<Self>) {
@@ -426,7 +637,7 @@ impl RepoView {
         self.commit_panel
             .update(cx, |panel, cx| panel.mark_open(Some(path), cx));
         self.file_diff.update(cx, |panel, cx| {
-            panel.open_commit_file(id, parent, short_id(id), file, cx)
+            panel.open_commit_file(id, Baseline::FirstParent(parent), short_id(id), file, cx)
         });
         self.place_file(cx);
         cx.notify();
@@ -626,6 +837,18 @@ impl RepoView {
                     })
                     .collect()
             }
+            Target::Pull { .. } => {
+                let Some(files) = self.pull_pane.as_ref().and_then(|pane| pane.view.read(cx).files()) else {
+                    return Vec::new();
+                };
+                file_rows(view, files.iter().map(|file| file.path().as_ref()), &unfolded)
+                    .into_iter()
+                    .filter_map(|row| match row {
+                        FileTreeRow::File { ix, .. } => Some(Openable::Pull(files[ix].clone())),
+                        FileTreeRow::Folder { .. } => None,
+                    })
+                    .collect()
+            }
             Target::Nothing => Vec::new(),
         }
     }
@@ -635,7 +858,8 @@ impl RepoView {
             (Openable::Working(side, change), Target::WorkingTree { open: Some(open) }) => {
                 *side == open.side && change.path == open.path
             }
-            (Openable::Commit(file), Target::Commit { open: Some(path), .. }) => file.path() == path,
+            (Openable::Commit(file), Target::Commit { open: Some(path), .. })
+            | (Openable::Pull(file), Target::Pull { open: Some(path), .. }) => file.path() == path,
             _ => false,
         })
     }
@@ -665,6 +889,7 @@ impl RepoView {
         match next.and_then(|next| files.get(next)).cloned() {
             Some(Openable::Working(side, change)) => self.open_working_file(side, change, cx),
             Some(Openable::Commit(file)) => self.open_commit_file(file, cx),
+            Some(Openable::Pull(file)) => self.open_pull_file(file, cx),
             None => {}
         }
     }
@@ -677,6 +902,11 @@ impl RepoView {
     }
 
     fn close(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if matches!(self.target, Target::Pull { open: None, .. }) {
+            self.leave_pull(cx);
+            self.middle_focus.focus(window, cx);
+            return;
+        }
         let leaving_history = self.file_history.is_some();
         self.close_file(cx);
         if leaving_history {
@@ -702,6 +932,9 @@ impl RepoView {
         if self.target.close_file() {
             self.commit_panel
                 .update(cx, |panel, cx| panel.mark_open(None, cx));
+            if let Some(pane) = &self.pull_pane {
+                pane.view.update(cx, |view, cx| view.mark_open(None, cx));
+            }
             self.file_diff.update(cx, |panel, cx| panel.close(cx));
             cx.notify();
         }
@@ -721,7 +954,7 @@ impl RepoView {
         match self.target.step(step, history, repository.has_changes()) {
             Some(Target::Commit { id, .. }) => self.select_commit(id, cx),
             Some(Target::WorkingTree { .. }) => self.select_working_tree(cx),
-            Some(Target::Nothing) | None => {}
+            Some(Target::Nothing | Target::Pull { .. }) | None => {}
         }
     }
 
@@ -831,12 +1064,15 @@ impl RepoView {
     }
 
     fn branch_menu(&self, history: &History, cx: &mut Context<Self>) -> BranchMenu {
+        let marks = self.pull_marks(history, cx);
+        let offers = self.pull_offers(marks, cx);
         let repository = self.repository.read(cx);
         BranchMenu::new(
             history.branch.clone(),
             repository.pull_mode(),
             repository.is_writing(),
         )
+        .pulls(offers)
         .on_action(cx.listener(
             |this, (label, action): &(RefLabel, BranchAction), window, cx| {
                 this.act_on_branch(label.clone(), *action, window, cx)
@@ -873,6 +1109,8 @@ impl RepoView {
                 open_branch_dialog(repository, start, window, cx)
             }
             BranchAction::Delete => confirm_delete(repository, label, window, cx),
+            BranchAction::ShowPull(number) => self.select_pull(number, window, cx),
+            BranchAction::CreatePull => self.create_pull(label, window, cx),
         }
     }
 
@@ -935,26 +1173,33 @@ impl RepoView {
                     }),
             )
             .child(resizable_panel().size_range(rem * 30. ..rem * 400.).child(
-                if self.target.has_open_file() {
-                    div()
+                match (&self.target, &self.pull_pane) {
+                    _ if self.target.has_open_file() => div()
                         .pane()
                         .track_focus(&self.middle_focus)
                         .child(self.file_diff.clone())
-                        .into_any_element()
-                } else {
-                    self.history_list(history, cx).into_any_element()
+                        .into_any_element(),
+                    (Target::Pull { .. }, Some(pane)) => div()
+                        .pane()
+                        .track_focus(&self.middle_focus)
+                        .child(pane.view.clone())
+                        .into_any_element(),
+                    _ => self.history_list(history, cx).into_any_element(),
                 },
             ))
             .child(
                 resizable_panel()
                     .size(rem * 30.)
                     .size_range(rem * 22. ..rem * 90.)
-                    .child(match &self.target {
-                        Target::WorkingTree { open } => {
+                    .child(match (&self.target, self.pull_pane.as_ref().map(|pane| pane.view.clone())) {
+                        (Target::WorkingTree { open }, _) => {
                             self.changes_list(open.clone(), cx).into_any_element()
                         }
-                        Target::Commit { .. } => self.commit_panel.clone().into_any_element(),
-                        Target::Nothing => ui::hint("Select a commit to see its changes.", cx),
+                        (Target::Commit { .. }, _) => self.commit_panel.clone().into_any_element(),
+                        (Target::Pull { .. }, Some(view)) => view.update(cx, |view, cx| view.files_panel(cx)),
+                        (Target::Pull { .. } | Target::Nothing, _) => {
+                            ui::hint("Select a commit to see its changes.", cx)
+                        }
                     }),
             )
             .into_any_element()
@@ -983,7 +1228,10 @@ impl RepoView {
     fn refs_list(&self, history: Arc<History>, cx: &mut Context<Self>) -> RefsList {
         let branch_menu = self.branch_menu(&history, cx);
         let stash_menu = self.stash_menu(cx);
+        let marks = self.pull_marks(&history, cx);
+        let section = self.pulls_section(cx);
         RefsList::new(history, &self.folded_refs, self.refs_scroll.clone())
+            .pulls(section, marks)
             .selected(self.target.commit())
             .branch_menu(branch_menu)
             .stash_menu(stash_menu)
@@ -1003,6 +1251,7 @@ impl RepoView {
         let changes = self.repository.read(cx).changes().cloned();
         let branch_menu = self.branch_menu(&history, cx);
         let stash_menu = self.stash_menu(cx);
+        let marks = self.pull_marks(&history, cx);
         HistoryList::new(
             history,
             self.middle_focus.clone(),
@@ -1010,6 +1259,7 @@ impl RepoView {
         )
         .branch_menu(branch_menu)
         .stash_menu(stash_menu)
+        .marks(marks)
         .selected(self.target.commit())
         .uncommitted(changes, self.target.is_working_tree())
         .on_select_commit(cx.listener(|this, id: &ObjectId, _, cx| this.select_commit(*id, cx)))
@@ -1057,7 +1307,8 @@ impl RepoView {
 impl Render for RepoView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let status_bar = RepoStatusBar::new(self.repository.read(cx), self.target.commit())
-            .in_file_history(self.file_history.as_ref().and_then(FileHistory::place));
+            .in_file_history(self.file_history.as_ref().and_then(FileHistory::place))
+            .at_pull(self.pull_position(cx));
         v_flex()
             .pane()
             .on_action(cx.listener(|this, _: &OlderCommit, _, cx| this.step(Step::Older, cx)))

@@ -31,6 +31,10 @@ pub(crate) enum Target {
     WorkingTree {
         open: Option<OpenFile>,
     },
+    Pull {
+        number: u64,
+        open: Option<SharedString>,
+    },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -47,13 +51,20 @@ impl Target {
     pub(crate) fn commit(&self) -> Option<ObjectId> {
         match self {
             Target::Commit { id, .. } => Some(*id),
-            Target::Nothing | Target::WorkingTree { .. } => None,
+            Target::Nothing | Target::WorkingTree { .. } | Target::Pull { .. } => None,
+        }
+    }
+
+    pub(crate) fn pull(&self) -> Option<u64> {
+        match self {
+            Target::Pull { number, .. } => Some(*number),
+            Target::Nothing | Target::Commit { .. } | Target::WorkingTree { .. } => None,
         }
     }
 
     pub(crate) fn has_open_file(&self) -> bool {
         match self {
-            Target::Commit { open, .. } => open.is_some(),
+            Target::Commit { open, .. } | Target::Pull { open, .. } => open.is_some(),
             Target::WorkingTree { open } => open.is_some(),
             Target::Nothing => false,
         }
@@ -61,7 +72,7 @@ impl Target {
 
     pub(crate) fn close_file(&mut self) -> bool {
         match self {
-            Target::Commit { open, .. } => open.take().is_some(),
+            Target::Commit { open, .. } | Target::Pull { open, .. } => open.take().is_some(),
             Target::WorkingTree { open } => open.take().is_some(),
             Target::Nothing => false,
         }
@@ -85,6 +96,7 @@ impl Target {
             Target::WorkingTree { .. } => self.clone(),
             Target::Commit { id, .. } if history.row_of(id).is_some() => self.clone(),
             Target::Commit { .. } => commit_or_nothing(history.newest()),
+            Target::Pull { .. } => self.clone(),
             Target::Nothing => commit_or_nothing(head_or_newest(history)),
         }
     }
@@ -105,6 +117,7 @@ impl Target {
     pub(crate) fn step(&self, step: Step, history: &History, has_changes: bool) -> Option<Target> {
         let newest = history.newest()?;
         match (self, step) {
+            (Target::Pull { .. }, _) => None,
             (Target::WorkingTree { .. }, Step::Older) => Some(Target::at_commit(newest)),
             (Target::WorkingTree { .. }, Step::Newer) => None,
             (Target::Commit { id, .. }, Step::Newer) if *id == newest && has_changes => {
@@ -193,6 +206,22 @@ mod tests {
                 path: path.to_owned().into(),
             }),
         }
+    }
+
+    #[test]
+    fn a_pull_request_stays_selected_through_reads_and_ignores_steps() {
+        let history = linear_history(&[3, 2, 1], Some(2));
+        let pull = Target::Pull {
+            number: 12,
+            open: Some("src/main.rs".into()),
+        };
+        assert_eq!(pull.after_history_read(&history, None), pull);
+        assert_eq!(pull.after_changes_read(&dirty_at(2, &["a.txt"], &[]), &history), pull);
+        assert_eq!(pull.step(Step::Older, &history, true), None);
+        assert_eq!((pull.pull(), pull.commit(), pull.has_open_file()), (Some(12), None, true));
+        let mut closing = pull.clone();
+        assert!(closing.close_file());
+        assert_eq!(closing, Target::Pull { number: 12, open: None });
     }
 
     #[test]

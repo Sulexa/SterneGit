@@ -74,6 +74,10 @@ impl Forge {
         }
     }
 
+    pub(crate) fn account(&self) -> &AccountId {
+        &self.account
+    }
+
     pub(crate) fn exchange<I: Serialize>(
         &self,
         op: &'static str,

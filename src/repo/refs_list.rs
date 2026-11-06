@@ -16,14 +16,15 @@ use gpui_kit::{
 
 use super::{
     branch_menu::BranchMenu,
+    pulls::{PullMarks, PullsSection},
     ref_tree::{RefGroup, RefTreeRow, Section, last_segment, ref_tree},
     stash_menu::StashMenu,
 };
 use crate::{
     git::{AheadBehind, History, RefKind, RefLabel, Stash},
     ui::{
-        Folded, Handler, Look as _, SectionHeader, counted, handler, is_double_click, list_row,
-        thousands, tree_line,
+        Folded, Handler, Look as _, PullMark, SectionHeader, counted, handler, is_double_click,
+        list_row, pull_chip, thousands, tree_line,
     },
 };
 
@@ -39,6 +40,8 @@ pub(crate) struct RefsList {
     on_toggle: Option<Handler<RefGroup>>,
     branch_menu: Option<BranchMenu>,
     stash_menu: Option<StashMenu>,
+    pulls: Option<PullsSection>,
+    marks: Arc<PullMarks>,
 }
 
 impl RefsList {
@@ -58,7 +61,15 @@ impl RefsList {
             on_toggle: None,
             branch_menu: None,
             stash_menu: None,
+            pulls: None,
+            marks: Arc::default(),
         }
+    }
+
+    pub(crate) fn pulls(mut self, pulls: Option<PullsSection>, marks: Arc<PullMarks>) -> Self {
+        self.pulls = pulls;
+        self.marks = marks;
+        self
     }
 
     pub(crate) fn branch_menu(mut self, menu: BranchMenu) -> Self {
@@ -122,7 +133,18 @@ impl RenderOnce for RefsList {
             on_toggle,
             branch_menu,
             stash_menu,
+            pulls,
+            marks,
         } = self;
+        let pull_rows = pulls.as_ref().map_or(0, PullsSection::len);
+        let handlers = RowHandlers {
+            on_reveal,
+            on_reveal_stash,
+            on_check_out,
+            on_toggle,
+            branch_menu,
+            stash_menu,
+        };
         div()
             .id("refs")
             .relative()
@@ -130,41 +152,13 @@ impl RenderOnce for RefsList {
             .min_h_0()
             .bg(cx.theme().sidebar)
             .child(
-                uniform_list("ref-list", rows.len(), move |range, _, cx| {
-                    rows[range]
-                        .iter()
-                        .map(|row| match row {
-                            &RefTreeRow::Section {
-                                section,
-                                count,
-                                open,
-                            } => section_header(section, count, open, on_toggle.clone()),
-                            RefTreeRow::Folder {
-                                kind,
-                                path,
-                                depth,
-                                open,
-                            } => folder_row(*kind, path, *depth, *open, on_toggle.clone(), cx),
-                            &RefTreeRow::Ref { ix, depth } => ref_row(
-                                &history.refs[ix],
-                                ix,
-                                depth,
-                                selected,
-                                RefClicks {
-                                    on_reveal: on_reveal.clone(),
-                                    on_check_out: on_check_out.clone(),
-                                },
-                                branch_menu.clone(),
-                                cx,
-                            ),
-                            &RefTreeRow::Stash { ix } => stash_row(
-                                &history.stashes[ix],
-                                ix,
-                                selected,
-                                on_reveal_stash.clone(),
-                                stash_menu.clone(),
-                                cx,
-                            ),
+                uniform_list("ref-list", pull_rows + rows.len(), move |range, _, cx| {
+                    range
+                        .map(|ix| match ix.checked_sub(pull_rows) {
+                            None => pulls
+                                .as_ref()
+                                .map_or_else(|| div().into_any_element(), |pulls| pulls.row(ix, cx)),
+                            Some(ix) => ref_tree_row(&rows[ix], &history, selected, &marks, &handlers, cx),
                         })
                         .collect::<Vec<_>>()
                 })
@@ -172,6 +166,67 @@ impl RenderOnce for RefsList {
                 .track_scroll(&scroll),
             )
             .child(Scrollbar::vertical(&scroll))
+    }
+}
+
+struct RowHandlers {
+    on_reveal: Option<Handler<usize>>,
+    on_reveal_stash: Option<Handler<ObjectId>>,
+    on_check_out: Option<Handler<RefLabel>>,
+    on_toggle: Option<Handler<RefGroup>>,
+    branch_menu: Option<BranchMenu>,
+    stash_menu: Option<StashMenu>,
+}
+
+fn ref_tree_row(
+    row: &RefTreeRow,
+    history: &History,
+    selected: Option<ObjectId>,
+    marks: &PullMarks,
+    handlers: &RowHandlers,
+    cx: &App,
+) -> AnyElement {
+    let RowHandlers {
+        on_reveal,
+        on_reveal_stash,
+        on_check_out,
+        on_toggle,
+        branch_menu,
+        stash_menu,
+    } = handlers;
+    match row {
+        &RefTreeRow::Section {
+            section,
+            count,
+            open,
+        } => section_header(section, count, open, on_toggle.clone()),
+        RefTreeRow::Folder {
+            kind,
+            path,
+            depth,
+            open,
+        } => folder_row(*kind, path, *depth, *open, on_toggle.clone(), cx),
+        &RefTreeRow::Ref { ix, depth } => ref_row(
+            &history.refs[ix],
+            ix,
+            depth,
+            selected,
+            marks.get(&history.refs[ix].full_name()).copied(),
+            RefClicks {
+                on_reveal: on_reveal.clone(),
+                on_check_out: on_check_out.clone(),
+            },
+            branch_menu.clone(),
+            cx,
+        ),
+        &RefTreeRow::Stash { ix } => stash_row(
+            &history.stashes[ix],
+            ix,
+            selected,
+            on_reveal_stash.clone(),
+            stash_menu.clone(),
+            cx,
+        ),
     }
 }
 
@@ -249,6 +304,7 @@ fn ref_row(
     ix: usize,
     depth: usize,
     selected: Option<ObjectId>,
+    mark: Option<PullMark>,
     clicks: RefClicks,
     branch_menu: Option<BranchMenu>,
     cx: &App,
@@ -280,6 +336,7 @@ fn ref_row(
                 )
                 .flex_1(),
             )
+            .children(mark.map(|mark| pull_chip(mark, cx)))
             .children(ahead_behind(label, cx)),
     )
     .on_click(move |event, window, cx| {

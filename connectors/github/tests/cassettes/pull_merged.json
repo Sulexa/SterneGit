@@ -1,0 +1,141 @@
+{
+  "op": "pulls.get",
+  "account": {
+    "id": "github:github.com:4120511",
+    "login": "alex-martin",
+    "endpoints": {
+      "api": "https://api.github.com/",
+      "graphql": "https://api.github.com/graphql",
+      "web": "https://github.com/"
+    }
+  },
+  "repo": {
+    "owner": "fastgit-org",
+    "name": "fastgit"
+  },
+  "input": {
+    "number": 136
+  },
+  "exchanges": [
+    {
+      "method": "POST",
+      "url": "https://api.github.com/graphql",
+      "status": 200,
+      "headers": [
+        [
+          "content-type",
+          "application/json; charset=utf-8"
+        ],
+        [
+          "x-github-media-type",
+          "github.v4; param=merge-info-preview; format=json"
+        ]
+      ],
+      "body": {
+        "data": {
+          "repository": {
+            "mergeCommitAllowed": true,
+            "squashMergeAllowed": true,
+            "rebaseMergeAllowed": true,
+            "pullRequest": {
+              "number": 136,
+              "title": "Keep background fetches silent",
+              "state": "MERGED",
+              "isDraft": false,
+              "url": "https://github.com/fastgit-org/fastgit/pull/136",
+              "createdAt": "2026-10-20T10:44:12Z",
+              "updatedAt": "2026-10-24T17:03:39Z",
+              "reviewDecision": "APPROVED",
+              "author": {
+                "login": "robin-chen",
+                "avatarUrl": "https://avatars.githubusercontent.com/u/6031927?v=4",
+                "name": null
+              },
+              "baseRefName": "main",
+              "baseRefOid": "7d3f9b1e5a2c8d4f0b6e3a9c1d7f5b2e8a4c0d6f",
+              "headRefName": "quiet-fetch",
+              "headRefOid": "e5a9c3f7b1d4e8a2c6f0b3d7e1a5c9f2b6d0e4a8",
+              "headRepository": {
+                "name": "fastgit",
+                "owner": {
+                  "login": "fastgit-org"
+                }
+              },
+              "commits": {
+                "nodes": [
+                  {
+                    "commit": {
+                      "statusCheckRollup": {
+                        "state": "SUCCESS"
+                      }
+                    }
+                  }
+                ]
+              },
+              "body": "Background fetches no longer pop up a progress bar.",
+              "mergeable": "UNKNOWN",
+              "mergeStateStatus": "UNKNOWN",
+              "viewerDidAuthor": false
+            }
+          }
+        }
+      }
+    }
+  ],
+  "output": {
+    "ok": {
+      "summary": {
+        "number": 136,
+        "title": "Keep background fetches silent",
+        "state": "merged",
+        "draft": false,
+        "author": {
+          "login": "robin-chen",
+          "name": null,
+          "avatar_url": "https://avatars.githubusercontent.com/u/6031927?v=4"
+        },
+        "base": {
+          "branch": "main",
+          "sha": "7d3f9b1e5a2c8d4f0b6e3a9c1d7f5b2e8a4c0d6f",
+          "repo": {
+            "owner": "fastgit-org",
+            "name": "fastgit"
+          }
+        },
+        "head": {
+          "branch": "quiet-fetch",
+          "sha": "e5a9c3f7b1d4e8a2c6f0b3d7e1a5c9f2b6d0e4a8",
+          "repo": {
+            "owner": "fastgit-org",
+            "name": "fastgit"
+          }
+        },
+        "review": "approved",
+        "checks": "success",
+        "created_at": "2026-10-20T10:44:12Z",
+        "updated_at": "2026-10-24T17:03:39Z",
+        "web_url": "https://github.com/fastgit-org/fastgit/pull/136"
+      },
+      "body": "Background fetches no longer pop up a progress bar.",
+      "base_sha": "7d3f9b1e5a2c8d4f0b6e3a9c1d7f5b2e8a4c0d6f",
+      "mergeability": {
+        "kind": "unknown"
+      },
+      "merge_methods": [
+        "merge",
+        "squash",
+        "rebase"
+      ],
+      "verdicts": [
+        "comment",
+        "approve",
+        "request_changes"
+      ],
+      "fetch": {
+        "url": null,
+        "refspec": "refs/pull/136/head",
+        "sha": "e5a9c3f7b1d4e8a2c6f0b3d7e1a5c9f2b6d0e4a8"
+      }
+    }
+  }
+}

@@ -43,6 +43,7 @@
           "base": { "branch": "main", "sha": "0000000000000000000000000000000000000000", "repo": { "owner": "octo-org", "name": "hello" } },
           "head": { "branch": "topic", "sha": "0000000000000000000000000000000000000000", "repo": { "owner": "octo-org", "name": "hello" } },
           "review": null,
+          "checks": null,
           "created_at": "2026-11-01T10:00:00Z",
           "updated_at": "2026-11-01T10:00:00Z",
           "web_url": "https://github.com/octo-org/hello/pull/7"

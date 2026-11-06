@@ -1,0 +1,29 @@
+{
+  "op": "pulls.merge",
+  "account": {
+    "id": "github:github.com:4120511",
+    "login": "alex-martin",
+    "endpoints": {
+      "api": "https://api.github.com/",
+      "graphql": "https://api.github.com/graphql",
+      "web": "https://github.com/"
+    }
+  },
+  "repo": {
+    "owner": "fastgit-org",
+    "name": "fastgit"
+  },
+  "input": {
+    "number": 142,
+    "method": "fast_forward",
+    "title": null,
+    "message": null,
+    "expected_head": "4f1d2c9e8b7a6f5e4d3c2b1a0f9e8d7c6b5a4f3e"
+  },
+  "exchanges": [],
+  "output": {
+    "err": {
+      "kind": "unsupported"
+    }
+  }
+}

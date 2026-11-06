@@ -83,6 +83,7 @@ fn summary(repo: &RepoRef, pull: &Value) -> PullSummary {
         base: tip("main"),
         head: tip("topic"),
         review: None,
+        checks: None,
         created_at: text(&pull["created_at"]),
         updated_at: text(&pull["created_at"]),
         web_url: text(&pull["html_url"]),

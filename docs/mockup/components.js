@@ -73,6 +73,14 @@ const IconPaths = {
   book: '<path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/>',
   'trash-2': '<path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><path d="M10 11v6"/><path d="M14 11v6"/>',
   'folder-plus': '<path d="M12 10v6"/><path d="M9 13h6"/><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>',
+  'git-pull-request': '<circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><path d="M6 9v12"/>',
+  'git-pull-request-draft': '<circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M18 6V5"/><path d="M18 11v-1"/><path d="M6 9v12"/>',
+  'git-pull-request-closed': '<circle cx="6" cy="6" r="3"/><path d="M6 9v12"/><path d="m21 3-6 6"/><path d="m21 9-6-6"/><path d="M18 11.5V15"/><circle cx="18" cy="18" r="3"/>',
+  'list-filter': '<path d="M3 6h18"/><path d="M7 12h10"/><path d="M10 18h4"/>',
+  'circle-minus': '<circle cx="12" cy="12" r="10"/><path d="M8 12h8"/>',
+  eye: '<path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/>',
+  'message-square': '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+  'arrow-right': '<path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>',
 };
 
 const IconSizes = { xs: 12, sm: 14, md: 16, lg: 24 };
@@ -532,6 +540,123 @@ const Failures = {
   unavailable: { title: 'Not available', message: "This connector doesn't offer it.", tone: 'wait' },
 };
 
+const PullStates = {
+  open: { label: 'Open', icon: 'git-pull-request', color: 'var(--green)' },
+  draft: { label: 'Draft', icon: 'git-pull-request-draft', color: 'var(--muted)' },
+  merged: { label: 'Merged', icon: 'git-merge', color: 'var(--magenta)' },
+  closed: { label: 'Closed', icon: 'git-pull-request-closed', color: 'var(--red)' },
+};
+
+const pullLook = (pull) => PullStates[pull.state === 'open' && pull.draft ? 'draft' : pull.state];
+
+const ReviewLooks = {
+  approved: { label: 'Approved', icon: 'circle-check', color: 'var(--green)' },
+  changes_requested: { label: 'Changes requested', icon: 'circle-alert', color: 'var(--red)' },
+  review_required: { label: 'Review required', icon: 'eye', color: 'var(--yellow)' },
+};
+
+const CheckLooks = {
+  failure: { icon: 'circle-x', color: 'var(--red)', word: 'failing' },
+  action_required: { icon: 'circle-alert', color: 'var(--yellow)', word: 'waiting for you' },
+  running: { icon: 'loader', color: 'var(--yellow)', word: 'running', spin: true },
+  pending: { icon: 'clock', color: 'var(--yellow)', word: 'waiting' },
+  success: { icon: 'circle-check', color: 'var(--green)', word: 'passed' },
+  neutral: { icon: 'circle-minus', color: 'var(--muted)', word: 'neutral' },
+  skipped: { icon: 'circle-minus', color: 'var(--muted)', word: 'skipped' },
+  cancelled: { icon: 'circle-minus', color: 'var(--muted)', word: 'cancelled' },
+};
+
+const MergeMethodLabels = {
+  merge: { label: 'Create a merge commit', button: 'Merge', about: 'Keeps every commit and adds a merge commit' },
+  squash: { label: 'Squash and merge', button: 'Squash and merge', about: 'Makes one commit of all the changes' },
+  rebase: { label: 'Rebase and merge', button: 'Rebase and merge', about: 'Replays each commit onto the base, without a merge commit' },
+  semi_linear: { label: 'Semi-linear merge', button: 'Merge', about: 'Rebases, then adds a merge commit' },
+  fast_forward: { label: 'Fast-forward', button: 'Fast-forward', about: 'Moves the base to the head, without a merge commit' },
+};
+
+const MergeLooks = {
+  ready: { icon: 'circle-check', color: 'var(--green)', title: () => 'Ready to merge', about: (pull) => `No conflicts with ${pull.base}, and the checks the repository requires passed.`, can: true },
+  failing: { icon: 'triangle-alert', color: 'var(--yellow)', title: () => 'Some checks failed', about: () => "The repository doesn't require them, so it can still be merged.", can: true },
+  checking: { icon: 'loader', spin: true, color: 'var(--muted)', title: () => 'Checking whether it can merge…', about: () => 'The server is still working it out. FastGit asks again after the next fetch.' },
+  conflicts: { icon: 'circle-x', color: 'var(--red)', title: (pull) => `Conflicts with ${pull.base}`, about: (pull) => `Merge ${pull.base} into ${pull.head} or rebase it, resolve the conflicts, then push.` },
+  behind: { icon: 'arrow-down', color: 'var(--yellow)', title: (pull) => `${pull.base} moved on`, about: (pull) => `The repository requires ${pull.head} to contain ${pull.base}: merge it in or rebase, then push.` },
+  draft: { icon: 'git-pull-request-draft', color: 'var(--muted)', title: () => 'Still a draft', about: () => 'Mark it ready for review on the server to merge it.' },
+  blocked: { icon: 'lock', color: 'var(--red)', title: () => 'Merging is blocked', about: (pull, details) => details.blockedBy },
+  merged: { icon: 'git-merge', color: 'var(--magenta)', title: (pull) => `Merged into ${pull.base}`, about: (pull) => `The branch ${pull.head} isn't needed any more.` },
+  closed: { icon: 'git-pull-request-closed', color: 'var(--red)', title: () => 'Closed without merging', about: () => 'Reopen it on the server to merge it.' },
+};
+
+const PullTexts = {
+  section: 'Pull requests',
+  filters: { open: 'Open', closed: 'Closed', all: 'All' },
+  filterAbout: { open: 'Waiting to be merged', closed: 'Merged or closed, newest first', all: 'Every pull request, newest first' },
+  filterTooltip: 'Choose which pull requests to list',
+  filterHeading: 'List',
+  reading: 'Reading pull requests…',
+  none: { open: 'No open pull requests', closed: 'No closed pull requests', all: 'No pull requests yet' },
+  noAccount: (service, server) => `Add a ${service} account to see the pull requests of ${server}`,
+  signedOut: (login) => `${login} is signed out`,
+  rowTooltip: (pull) => `#${pull.number} by ${pull.author}: ${pull.head} into ${pull.base}`,
+  wantsToMerge: (author, head, base, merged) => `${author} ${merged ? 'merged' : 'wants to merge'} ${head} into ${base}`,
+  opened: (date) => `opened ${date}`,
+  checkOut: 'Check out',
+  checkOutTooltip: (head) => `Check out ${head} and track it`,
+  checkOutFork: (number, head) => `Check out pr/${number}-${head}, made from the fork's branch`,
+  checkedOut: 'Checked out',
+  openOn: (service) => `Open on ${service}`,
+  noDescription: 'No description.',
+  checks: 'Checks',
+  checksSummary: (checks) => {
+    const counts = new Map();
+    for (const check of checks) counts.set(check.state, (counts.get(check.state) || 0) + 1);
+    return Object.keys(CheckLooks).filter((state) => counts.has(state)).map((state) => `${thousands(counts.get(state))} ${CheckLooks[state].word}`).join(', ');
+  },
+  noChecks: 'No checks ran on this commit.',
+  conversation: 'Conversation',
+  noComments: 'No comments yet.',
+  commentPlaceholder: 'Write a comment',
+  comment: 'Comment',
+  plainText: 'Sent as you type it. FastGit shows comments as plain text.',
+  merge: 'Merge…',
+  changesIn: (n) => `Changes in #${n}`,
+  sinceBase: (n, base) => `${counted(n, 'commit', 'commits')} since ${base}, where it branched off`,
+  fetching: (n, remote) => `Fetching #${n} from ${remote}…`,
+  fetchFailed: "Couldn't fetch this pull request",
+  position: (n, count, filter) => `Pull request #${n} · ${thousands(count)} ${filter.toLowerCase()}`,
+  showItem: (n) => `Show pull request #${n}`,
+  createItem: 'Create pull request…',
+  createTitle: 'Create a pull request',
+  createAbout: (service) => `Asks ${service} to merge a branch into another. Reviewers and labels are set on ${service}.`,
+  from: 'From',
+  into: 'Into',
+  title: 'Title',
+  description: 'Description',
+  draft: 'Create as draft',
+  draftAbout: "Can't be merged until it is marked ready for review",
+  pushFirst: (branch, n, remote) => `${branch} has ${counted(n, 'commit', 'commits')} that ${remote} doesn't. FastGit pushes ${n === 1 ? 'it' : 'them'} first.`,
+  publishFirst: (branch, remote) => `${branch} isn't on ${remote} yet. FastGit pushes it first and makes ${remote}/${branch} its upstream.`,
+  compared: (n, files) => `${counted(n, 'commit', 'commits')} and ${counted(files, 'file', 'files')} changed since it branched off`,
+  create: 'Create pull request',
+  alreadyOpen: (n) => `A pull request from this branch is already open: #${n}.`,
+  mergeTitle: (n) => `Merge pull request #${n}`,
+  mergeAbout: (head, base, sha) => `${head} is merged into ${base} on GitHub, only if its head is still ${sha}.`,
+  method: 'Method',
+  commitTitle: 'Commit title',
+  commitMessage: 'Commit message',
+  rebaseNote: (n, base) => `Each of the ${counted(n, 'commit', 'commits')} is replayed onto ${base}; GitHub keeps their messages.`,
+  merged: (n, base) => `Merged #${n} into ${base}`,
+  mergedMessage: (head) => `${head} isn't needed any more.`,
+  deleteBranchTooltip: 'Delete it from the remote, and here unless it is checked out or holds other commits',
+  deleteBranch: 'Delete branch',
+  movedOn: (head) => `${head} moved since FastGit read it, so nothing was merged. Look at the new commits first.`,
+  checkedOutHead: (branch, upstream) => `Checked out ${branch}, tracking ${upstream}`,
+  checkedOutFork: (branch, owner) => `Checked out ${branch} from ${owner}'s fork, without an upstream`,
+  choosing: 'Pick an account above to see pull requests',
+  failed: (title, message) => `${title}: ${message}`,
+  created: (n) => `Created pull request #${n}`,
+  commented: 'Comment posted',
+};
+
 const esc = (text) =>
   String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
@@ -969,13 +1094,14 @@ function remoteParts(name) {
   return { remote, branch: rest.join('/') };
 }
 
-function branchMenuItems({ label, current, mode = 'merge' }) {
+function branchMenuItems({ label, current, mode = 'merge', pull }) {
   const remote = label.kind === 'remote' && remoteParts(label.name);
   const checkedOut = Boolean(label.head);
   const item = (text) => [text, ''];
   const groups = [
     !checkedOut && [item(Texts.checkOut(remote ? remote.branch : label.name))],
     !remote && [item(checkedOut ? Texts.pullWithMode(pullMode(mode).label) : Texts.pullFastForward), item(Texts.push)],
+    pull && [item(pull === 'create' ? PullTexts.createItem : PullTexts.showItem(pull.number))],
     current && !checkedOut && [item(Texts.merge(label.name, current)), item(Texts.rebase(current, label.name))],
     [item(Texts.branchHere)],
     !checkedOut && [item(remote ? Texts.deleteRemoteBranch(remote.branch, remote.remote) : Texts.deleteBranch(label.name))],
@@ -999,6 +1125,25 @@ function grantSummary(grant) {
 
 function slotted(text, slot, label) {
   return esc(text).replace(esc(slot), `<span class="slot">${esc(label)}</span>`);
+}
+
+function checkIcon(state, size = 'sm') {
+  const look = CheckLooks[state];
+  const glyph = icon(look.icon, size, look.color);
+  return look.spin ? glyph.replace('class="icon"', 'class="icon spinner"') : glyph;
+}
+
+function checkRollup(checks) {
+  return Object.keys(CheckLooks).find((state) => checks.some((check) => check.state === state));
+}
+
+function personAvatar(login, size) {
+  return C.AuthorAvatar({ name: login, email: login, size });
+}
+
+function pullChip(pull) {
+  const look = pullLook(pull);
+  return `<span class="pull-chip" style="--c:${look.color}" title="${esc(`Pull request #${pull.number}${pull.draft ? ', a draft' : ''}`)}">${icon(look.icon, 'xs')}${thousands(pull.number)}</span>`;
 }
 
 function accountAvatar(account, size) {
@@ -1129,9 +1274,9 @@ const C = {
     return `<div data-c="SectionHeader" class="section-header${foldable ? ' foldable' : ''}">${foldable ? twisty(open) : ''}<span class="title ellipsis">${esc(title)}</span>${shownCount}${action || ''}</div>`;
   },
 
-  RefBadge({ name, kind, head = false, synced = false, color = LaneColors[0] }) {
+  RefBadge({ name, kind, head = false, synced = false, color = LaneColors[0], pull }) {
     const icons = icon(RefIcons[kind], 'xs') + (synced ? icon(RefIcons.remote, 'xs') : '');
-    return `<div data-c="RefBadge" class="ref-badge${head ? ' head' : ''}" style="--c:${color}"><div class="icons">${icons}</div><div class="name ellipsis">${esc(name)}</div></div>`;
+    return `<div data-c="RefBadge" class="ref-badge${head ? ' head' : ''}" style="--c:${color}"><div class="icons">${icons}</div><div class="name ellipsis">${esc(name)}</div>${pull ? pullChip(pull) : ''}</div>`;
   },
 
   ChangeBadge({ kind }) {
@@ -1216,7 +1361,8 @@ const C = {
 
   RefRow({ label, name = label.name, depth = 0, selected = false }) {
     const apart = label.ahead || label.behind ? C.AheadBehind(label) : '';
-    const content = `<div class="h fill tree-row" style="padding-left:${depth * TreeIndent}px">${twisty(null)}${icon(TreeIcons[label.kind].ref, 'sm', 'var(--muted)')}<div class="fill ellipsis sm${label.head ? ' semibold' : ''}">${esc(name)}</div>${apart}</div>`;
+    const pull = label.pull ? pullChip(label.pull) : '';
+    const content = `<div class="h fill tree-row" style="padding-left:${depth * TreeIndent}px">${twisty(null)}${icon(TreeIcons[label.kind].ref, 'sm', 'var(--muted)')}<div class="fill ellipsis sm${label.head ? ' semibold' : ''}">${esc(name)}</div>${pull}${apart}</div>`;
     return C.ListRow({ content, selected, name: 'RefRow' });
   },
 
@@ -1231,7 +1377,7 @@ const C = {
     return C.ListRow({ content, selected, name: 'StashRow' });
   },
 
-  RefsList({ refs, stashes = [], selectedRow, collapsed = [] }) {
+  RefsList({ refs, stashes = [], selectedRow, collapsed = [], pulls }) {
     const closed = new Set(collapsed);
     const nodes = (kind, list, depth) =>
       list
@@ -1254,14 +1400,15 @@ const C = {
       const open = !closed.has(kind);
       return treeGroup(open, C.SectionHeader({ title, count: items.length, open }), nodes(kind, refTree(items), 0));
     });
-    return `<div data-c="RefsList" class="refs">${sections.join('')}</div>`;
+    const pullSection = pulls ? C.PullsSection({ ...pulls, open: !closed.has('pulls') }) : '';
+    return `<div data-c="RefsList" class="refs">${pullSection}${sections.join('')}</div>`;
   },
 
-  CommitRow({ commit, selected = false, width }) {
+  CommitRow({ commit, selected = false, width, pulls = {} }) {
     const color = LaneColors[commit.graph[0] % LaneColors.length];
     const refs = foldSyncedRefs(commit.refs);
     const stashBadge = commit.stash ? C.RefBadge({ name: commit.stash, kind: 'stash', color }) : '';
-    const badges = stashBadge + refs.slice(0, 3).map((label) => C.RefBadge({ ...label, color })).join('');
+    const badges = stashBadge + refs.slice(0, 3).map((label) => C.RefBadge({ ...label, color, pull: label.kind === 'local' ? pulls[label.name] : undefined })).join('');
     const more = refs.length > 3 ? `<div class="none xs muted">+${refs.length - 3}</div>` : '';
     const subject = commit.subject
       ? `<div class="fill ellipsis sm">${esc(commit.subject)}</div>`
@@ -1286,7 +1433,7 @@ const C = {
   HistoryList({ history, selectedRow, changes, wipSelected = false }) {
     const width = graphWidth(history.commits);
     const wip = changes && (changes.conflicted?.length || changes.unstaged.length || changes.staged.length) ? C.UncommittedRow({ changes, selected: wipSelected }) : '';
-    const rows = history.commits.map((commit, ix) => C.CommitRow({ commit, selected: ix === selectedRow, width })).join('');
+    const rows = history.commits.map((commit, ix) => C.CommitRow({ commit, selected: ix === selectedRow, width, pulls: history.pulls })).join('');
     const thumb = Math.max(20, Math.round((28 / history.total) * 800));
     return `<div data-c="HistoryList" class="history v">${wip}<div class="fill" style="position:relative;overflow:hidden">${rows}<div class="scrollbar" style="top:2px;height:${thumb}px"></div></div></div>`;
   },
@@ -2023,8 +2170,8 @@ const C = {
     );
   },
 
-  BranchMenu({ label, current, mode, left = 0, top = 0, hot }) {
-    return C.Menu({ items: branchMenuItems({ label, current, mode }), left, top, hot, name: 'BranchMenu' });
+  BranchMenu({ label, current, mode, left = 0, top = 0, hot, pull }) {
+    return C.Menu({ items: branchMenuItems({ label, current, mode, pull }), left, top, hot, name: 'BranchMenu' });
   },
 
   StashMenu({ stash, left = 0, top = 0, hot }) {
@@ -2398,6 +2545,142 @@ const C = {
     const shape = `<div class="h" style="gap:24px;align-items:flex-start">${formField({ label: HostTexts.visibility, control: visibilityChoice(owner.visibilities, 'private') })}${formField({ label: HostTexts.protocol, control: protocolToggle(Boolean(account.key)) })}</div>`;
     const buttons = C.Button({ label: HostTexts.cancel, size: 'md' }) + C.Button({ label: HostTexts.publish, icon: 'upload', variant: 'primary', size: 'md', disabled: Boolean(problem) });
     return dialogShell({ name: 'PublishDialog', title: HostTexts.publishTitle(repository), description: HostTexts.publishAbout(repository, branch), body: `<div class="form">${which}${where}${about}${shape}</div>`, buttons });
+  },
+
+  PullRow({ pull, selected = false }) {
+    const look = pullLook(pull);
+    const checks = pull.checks ? `<span class="none h" title="${esc(`Checks ${CheckLooks[pull.checks].word}`)}">${checkIcon(pull.checks, 'xs')}</span>` : '';
+    const content = `<div class="h fill tree-row" title="${esc(PullTexts.rowTooltip(pull))}">${twisty(null)}${icon(look.icon, 'sm', look.color)}<div class="fill ellipsis sm">${esc(pull.title)}</div>${checks}<span class="none xs muted pull-number">#${pull.number}</span></div>`;
+    return C.ListRow({ content, selected, name: 'PullRow' });
+  },
+
+  PullsSection({ pulls = [], filter = 'open', state = 'ready', selected, open = true, more = false, service = 'GitHub', server = 'github.com', login }) {
+    const filterButton = C.Button({ icon: 'list-filter', label: filter === 'open' ? '' : PullTexts.filters[filter], variant: 'ghost', tooltip: PullTexts.filterTooltip });
+    const header = C.SectionHeader({ title: PullTexts.section, count: state === 'ready' ? pulls.length : undefined, open, action: state === 'ready' ? filterButton : '' });
+    const note = (glyph, text, action = '') => C.ListRow({ content: `<div class="h fill section-note xs muted" title="${esc(text)}">${glyph}<span class="fill ellipsis">${esc(text)}</span>${action}</div>`, name: 'ListRow' });
+    const loadMore = more ? C.ListRow({ content: `<div class="h fill section-more xs muted">${esc(HostTexts.loadMore)}</div>` }) : '';
+    const states = {
+      loading: () => note(C.Spinner({ size: 'xs' }), PullTexts.reading),
+      none: () => note(icon('user', 'xs'), PullTexts.noAccount(service, server), C.Button({ label: HostTexts.addAccountShort, variant: 'ghost' })),
+      signedOut: () => note(icon('triangle-alert', 'xs'), PullTexts.signedOut(login), C.Button({ label: HostTexts.signInAgain, variant: 'ghost' })),
+      choosing: () => note(icon('user', 'xs'), PullTexts.choosing),
+      failed: () => note(icon('circle-x', 'xs'), PullTexts.failed(Failures.net.title, Failures.net.message), C.Button({ label: 'Retry', variant: 'ghost' })),
+      ready: () => (pulls.length ? pulls.map((pull) => C.PullRow({ pull, selected: pull.number === selected })).join('') + loadMore : note('', PullTexts.none[filter])),
+    };
+    return `<div data-c="PullsSection" class="pulls-section">${treeGroup(open, header, states[state]())}</div>`;
+  },
+
+  PullFilterMenu({ filter = 'open', left = 0, top = 0, hot }) {
+    const rows = Object.keys(PullTexts.filters)
+      .map(
+        (key) =>
+          `<div class="item${key === hot ? ' hot' : ''}"><span class="check">${key === filter ? icon('check', 'sm') : ''}</span><span class="label">${esc(PullTexts.filters[key])}</span></div>`,
+      )
+      .join('');
+    return `<div data-c="PullFilterMenu" data-base="PopupMenu" class="menu checks sm" style="left:${left}px;top:${top}px;min-width:120px">${rows}</div>`;
+  },
+
+  ChecksBox({ checks, state = 'ready' }) {
+    if (state === 'loading') return `<div data-c="ChecksBox" class="pull-box"><div class="box-head">${C.Spinner({ size: 'sm' })}<span class="sm muted">${esc(PullTexts.checks)}</span></div></div>`;
+    if (!checks.length) return `<div data-c="ChecksBox" class="pull-box"><div class="box-head">${icon('circle-minus', 'sm', 'var(--muted)')}<span class="sm muted">${esc(PullTexts.noChecks)}</span></div></div>`;
+    const rows = checks
+      .map(
+        (check) =>
+          `<div class="check-row">${checkIcon(check.state, 'sm')}<span class="sm none name">${esc(check.name)}</span><span class="xs muted fill ellipsis">${esc(check.description || '')}</span>${C.Button({ icon: 'external-link', variant: 'ghost', tooltip: 'Open on GitHub' })}</div>`,
+      )
+      .join('');
+    return `<div data-c="ChecksBox" class="pull-box"><div class="box-head">${checkIcon(checkRollup(checks), 'sm')}<span class="sm medium">${esc(PullTexts.checks)}</span><span class="xs muted fill">${esc(PullTexts.checksSummary(checks))}</span></div>${rows}</div>`;
+  },
+
+  MergeBox({ pull, details, look: key = details.mergeability, running = false }) {
+    const look = MergeLooks[key];
+    const glyph = look.spin ? icon(look.icon, 'md', look.color).replace('class="icon"', 'class="icon spinner"') : icon(look.icon, 'md', look.color);
+    const actions =
+      key === 'merged'
+        ? C.Button({ label: PullTexts.deleteBranch, icon: 'trash-2', size: 'sm', tooltip: PullTexts.deleteBranchTooltip })
+        : key === 'closed'
+          ? ''
+          : C.Button({ label: PullTexts.merge, icon: 'git-merge', size: 'sm', variant: look.can ? 'primary' : 'default', disabled: !look.can || running, loading: running });
+    return `<div data-c="MergeBox" class="pull-box merge-box"><div class="box-head tall">${glyph}<div class="v fill"><span class="sm medium">${esc(look.title(pull, details))}</span><span class="xs muted">${esc(look.about(pull, details))}</span></div>${actions}</div></div>`;
+  },
+
+  CommentRow({ comment }) {
+    return `<div data-c="CommentRow" class="comment">${personAvatar(comment.author, 24)}<div class="v fill" style="gap:2px"><div class="h" style="gap:8px"><span class="sm medium">${esc(comment.author)}</span><span class="xs muted">${esc(comment.date)}</span></div><div class="sm comment-body">${esc(comment.body)}</div></div></div>`;
+  },
+
+  CommentBox({ value = '', posting = false, problem }) {
+    const note = problem ? `<span class="xs problem fill">${esc(problem)}</span>` : `<span class="xs muted fill">${esc(PullTexts.plainText)}</span>`;
+    return `<div data-c="CommentBox" class="comment-box">${C.Input({ value, placeholder: PullTexts.commentPlaceholder, lines: 3 })}<div class="h" style="gap:8px">${note}${C.Button({ label: PullTexts.comment, icon: 'message-square', size: 'sm', variant: 'primary', disabled: !value || posting, loading: posting })}</div></div>`;
+  },
+
+  PullOverview({ pull, details, state = 'ready', checksState = 'ready', merge, checkedOut = false, comment = {} }) {
+    const look = pullLook(pull);
+    const review = pull.review && pull.state === 'open' ? C.Chip({ label: ReviewLooks[pull.review].label, color: ReviewLooks[pull.review].color, icon: ReviewLooks[pull.review].icon }) : '';
+    const branch = (name) => C.Chip({ label: pull.headOwner && name === pull.head ? `${pull.headOwner}:${name}` : name, icon: 'git-branch' });
+    const head = `<span class="none">${branch(pull.head)}</span>`;
+    const meta =
+      `<div class="h pull-meta xs muted">${C.Chip({ label: look.label, color: look.color, icon: look.icon })}${review}` +
+      `<span class="none">${esc(pull.author)}</span><span class="none">${pull.state === 'merged' ? 'merged' : 'wants to merge'}</span>${head}<span class="none">into</span><span class="none">${branch(pull.base)}</span></div>`;
+    const checkOut = checkedOut
+      ? C.Chip({ label: PullTexts.checkedOut, icon: 'check' })
+      : C.Button({ label: PullTexts.checkOut, icon: 'git-branch', size: 'sm', tooltip: pull.headOwner ? PullTexts.checkOutFork(pull.number, pull.head) : PullTexts.checkOutTooltip(pull.head) });
+    const actions = `<div class="h none" style="gap:6px">${pull.state === 'open' ? checkOut : ''}${C.Button({ icon: 'external-link', size: 'sm', variant: 'ghost', tooltip: PullTexts.openOn('GitHub') })}</div>`;
+    const top = `<div class="pull-head"><div class="h" style="gap:12px;align-items:flex-start"><div class="v fill" style="gap:6px"><div class="lg semibold">${esc(pull.title)} <span class="muted">#${pull.number}</span></div>${meta}</div>${actions}</div></div>`;
+    if (state === 'loading') return `<div data-c="PullOverview" class="pull-overview">${top}<div class="fill v">${C.Loading({ message: `Reading #${pull.number}…` })}</div></div>`;
+    const body = `<div class="comment">${personAvatar(pull.author, 24)}<div class="v fill" style="gap:2px"><div class="h" style="gap:8px"><span class="sm medium">${esc(pull.author)}</span><span class="xs muted">${esc(PullTexts.opened(pull.created))}</span></div><div class="pull-body sm${details.body ? '' : ' muted'}">${esc(details.body || PullTexts.noDescription)}</div></div></div>`;
+    const conversation = details.conversation.length ? details.conversation.map((each) => C.CommentRow({ comment: each })).join('') : `<div class="sm muted">${esc(PullTexts.noComments)}</div>`;
+    const mergeBox = C.MergeBox({ pull, details, look: merge || (pull.state === 'open' ? (pull.draft ? 'draft' : details.mergeability) : pull.state) });
+    const talk = `<div class="v" style="gap:12px"><div class="h sm semibold" style="gap:6px">${esc(PullTexts.conversation)}<span class="xs muted">${thousands(details.conversation.length)}</span></div>${conversation}${pull.state === 'open' ? C.CommentBox(comment) : ''}</div>`;
+    return `<div data-c="PullOverview" class="pull-overview">${top}<div class="pull-scroll">${body}${C.ChecksBox({ checks: details.checks, state: checksState })}${mergeBox}${talk}</div></div>`;
+  },
+
+  PullFiles({ pull, details, state = 'ready', open, view = 'list', reason = '' }) {
+    const files = details.files;
+    const additions = files.reduce((sum, f) => sum + (f.additions || 0), 0);
+    const deletions = files.reduce((sum, f) => sum + (f.deletions || 0), 0);
+    const head = pull.headOwner ? `${pull.headOwner}:${pull.head}` : pull.head;
+    const ready = state === 'ready';
+    const facts = ready ? `<div class="h xs muted" style="gap:8px"><span class="mono">${esc(details.headSha)}</span><span class="ellipsis">${esc(PullTexts.sinceBase(details.commits, details.mergeBase))}</span></div>` : '';
+    const stats = ready ? `<div class="h xs" style="gap:12px"><div class="muted">${counted(files.length, 'file', 'files')}</div>${C.Additions({ count: additions })}${C.Deletions({ count: deletions })}<div class="fill"></div>${C.FileViewToggle({ view })}</div>` : '';
+    const header = `<div class="panel-header"><div class="base medium">${esc(PullTexts.changesIn(pull.number))}</div><div class="h xs muted" style="gap:6px">${C.Chip({ label: head, icon: 'git-branch' })}${icon('arrow-right', 'xs')}${C.Chip({ label: pull.base, icon: 'git-branch' })}</div>${facts}${stats}</div>`;
+    const content =
+      state === 'loading'
+        ? C.Loading({ message: PullTexts.fetching(pull.number, 'origin') })
+        : state === 'failed'
+          ? C.Failure({ title: PullTexts.fetchFailed, reason })
+          : C.CommitFiles({ files, open, view });
+    return `<div data-c="PullFiles" class="commit-panel">${header}<div class="fill v">${content}</div></div>`;
+  },
+
+  CreatePullDialog({ head, base = 'main', title = '', body = '', draft = false, ahead = 0, unpublished = false, commits = 3, files = 5, problem, creating = false }) {
+    const from = formField({ label: PullTexts.from, control: C.Select({ value: head, lead: `<span class="prefix">${icon('git-branch', 'sm')}</span>` }) });
+    const into = formField({ label: PullTexts.into, control: C.Select({ value: base, lead: `<span class="prefix">${icon('git-branch', 'sm')}</span>` }) });
+    const ends = `<div class="h" style="gap:8px;align-items:flex-end"><div class="v fill">${from}</div><span class="arrow">${icon('arrow-right', 'sm', 'var(--muted)')}</span><div class="v fill">${into}</div></div>`;
+    const push = unpublished ? PullTexts.publishFirst(head, 'origin') : ahead ? PullTexts.pushFirst(head, ahead, 'origin') : '';
+    const pushNote = push ? `<div class="h push-note xs">${icon('arrow-up-from-line', 'xs', 'var(--blue)')}<span>${esc(push)}</span></div>` : '';
+    const name = formField({ label: PullTexts.title, control: C.Input({ value: title, focused: true }), problem });
+    const about = formField({ label: PullTexts.description, control: C.Input({ value: body, placeholder: HostTexts.optional, lines: 5 }), hint: PullTexts.compared(commits, files) });
+    const draftBox = `<div class="h" style="gap:8px">${C.Checkbox({ label: PullTexts.draft, checked: draft })}<span class="xs muted">${esc(PullTexts.draftAbout)}</span></div>`;
+    const buttons = C.Button({ label: HostTexts.cancel, size: 'md' }) + C.Button({ label: PullTexts.create, icon: 'git-pull-request', variant: 'primary', size: 'md', disabled: !title || creating, loading: creating });
+    return dialogShell({ name: 'CreatePullDialog', title: PullTexts.createTitle, description: PullTexts.createAbout('GitHub'), body: `<div class="form">${ends}${pushNote}${name}${about}${draftBox}</div>`, buttons, size: 'wider' });
+  },
+
+  MergePullDialog({ pull, details, method = details.method, problem }) {
+    const choices = details.methods
+      .map((key) => `<div class="method-choice${key === method ? ' chosen' : ''}">${C.Radio({ label: MergeMethodLabels[key].label, checked: key === method })}<span class="xs muted">${esc(MergeMethodLabels[key].about)}</span></div>`)
+      .join('');
+    const methodField = formField({ label: PullTexts.method, control: `<div class="v method-choices">${choices}</div>` });
+    const squashTitle = `${pull.title} (#${pull.number})`;
+    const mergeTitle = `Merge pull request #${pull.number} from fastgit-org/${pull.head}`;
+    const squashMessage = ['* Render side-by-side diffs with syntax colors', '* Keep each side\'s scroll per file', '* Measure the exe after adding syntect'].join('\n');
+    const words =
+      method === 'rebase'
+        ? `<div class="sm muted">${esc(PullTexts.rebaseNote(details.commits, pull.base))}</div>`
+        : formField({ label: PullTexts.commitTitle, control: C.Input({ value: method === 'squash' ? squashTitle : mergeTitle }) }) +
+          formField({ label: PullTexts.commitMessage, control: C.Input({ value: method === 'squash' ? squashMessage : pull.title, lines: 4 }) });
+    const failure = problem ? `<div class="dialog-status">${icon('circle-x', 'md', 'var(--red)')}<span>${esc(problem)}</span></div>` : '';
+    const buttons = C.Button({ label: HostTexts.cancel, size: 'md' }) + C.Button({ label: MergeMethodLabels[method].button, icon: 'git-merge', variant: 'primary', size: 'md', disabled: Boolean(problem) });
+    return dialogShell({ name: 'MergePullDialog', title: PullTexts.mergeTitle(pull.number), description: PullTexts.mergeAbout(pull.head, pull.base, details.headSha), body: `<div class="form">${methodField}${words}</div>${failure}`, buttons, size: 'wider' });
   },
 
   FastGit({ topBar, tabStrip = '', body, overlays = '' }) {

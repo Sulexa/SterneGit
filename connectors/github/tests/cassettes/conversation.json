@@ -1,0 +1,112 @@
+{
+  "op": "pulls.conversation",
+  "account": {
+    "id": "github:github.com:4120511",
+    "login": "alex-martin",
+    "endpoints": {
+      "api": "https://api.github.com/",
+      "graphql": "https://api.github.com/graphql",
+      "web": "https://github.com/"
+    }
+  },
+  "repo": {
+    "owner": "fastgit-org",
+    "name": "fastgit"
+  },
+  "input": {
+    "number": 142,
+    "cursor": null
+  },
+  "exchanges": [
+    {
+      "method": "GET",
+      "url": "https://api.github.com/repos/fastgit-org/fastgit/issues/142/comments?per_page=100",
+      "status": 200,
+      "headers": [
+        [
+          "content-type",
+          "application/json; charset=utf-8"
+        ],
+        [
+          "x-github-media-type",
+          "github.v3; format=json"
+        ],
+        [
+          "link",
+          "<https://api.github.com/repositories/861200417/issues/142/comments?per_page=100&page=2>; rel=\"next\", <https://api.github.com/repositories/861200417/issues/142/comments?per_page=100&page=2>; rel=\"last\""
+        ]
+      ],
+      "body": [
+        {
+          "id": 2461803912,
+          "node_id": "IC_kwDOM1a2b86SvX3912",
+          "html_url": "https://github.com/fastgit-org/fastgit/pull/142#issuecomment-2461803912",
+          "issue_url": "https://api.github.com/repos/fastgit-org/fastgit/issues/142",
+          "user": {
+            "login": "sam-lee",
+            "id": 5523874,
+            "node_id": "MDQ6VXNlcj5523874",
+            "avatar_url": "https://avatars.githubusercontent.com/u/5523874?v=4",
+            "html_url": "https://github.com/sam-lee",
+            "type": "User",
+            "site_admin": false
+          },
+          "created_at": "2026-11-03T10:12:40Z",
+          "updated_at": "2026-11-03T10:12:40Z",
+          "author_association": "MEMBER",
+          "body": "Tried it on a repository with 400 open pull requests; the list pages smoothly."
+        },
+        {
+          "id": 2461877405,
+          "node_id": "IC_kwDOM1a2b86SvX7405",
+          "html_url": "https://github.com/fastgit-org/fastgit/pull/142#issuecomment-2461877405",
+          "issue_url": "https://api.github.com/repos/fastgit-org/fastgit/issues/142",
+          "user": {
+            "login": "alex-martin",
+            "id": 4120511,
+            "node_id": "MDQ6VXNlcj4120511",
+            "avatar_url": "https://avatars.githubusercontent.com/u/4120511?v=4",
+            "html_url": "https://github.com/alex-martin",
+            "type": "User",
+            "site_admin": false
+          },
+          "created_at": "2026-11-03T10:31:02Z",
+          "updated_at": "2026-11-03T10:31:02Z",
+          "author_association": "MEMBER",
+          "body": "Thanks! The state filter comes next."
+        }
+      ]
+    }
+  ],
+  "output": {
+    "ok": {
+      "items": [
+        {
+          "id": "2461803912",
+          "author": {
+            "login": "sam-lee",
+            "name": null,
+            "avatar_url": "https://avatars.githubusercontent.com/u/5523874?v=4"
+          },
+          "body": "Tried it on a repository with 400 open pull requests; the list pages smoothly.",
+          "created_at": "2026-11-03T10:12:40Z",
+          "reply_to": null,
+          "web_url": "https://github.com/fastgit-org/fastgit/pull/142#issuecomment-2461803912"
+        },
+        {
+          "id": "2461877405",
+          "author": {
+            "login": "alex-martin",
+            "name": null,
+            "avatar_url": "https://avatars.githubusercontent.com/u/4120511?v=4"
+          },
+          "body": "Thanks! The state filter comes next.",
+          "created_at": "2026-11-03T10:31:02Z",
+          "reply_to": null,
+          "web_url": "https://github.com/fastgit-org/fastgit/pull/142#issuecomment-2461877405"
+        }
+      ],
+      "next": "https://api.github.com/repositories/861200417/issues/142/comments?per_page=100&page=2"
+    }
+  }
+}

@@ -44,7 +44,13 @@ gpui_kit::assets::icon_assets!(
         Server,
         Image,
         GitFork,
-        FolderPlus
+        FolderPlus,
+        GitPullRequest,
+        GitPullRequestDraft,
+        GitPullRequestClosed,
+        ListFilter,
+        CircleMinus,
+        MessageSquare
     ]
 );
 

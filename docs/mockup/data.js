@@ -764,10 +764,95 @@ const Sample = (() => {
 
   const hosting = { accounts, serverKeys, connectors, gitlabUpdate, owners, repositories, deviceCode: '8F2C-K7QD' };
 
+  const pullList = {
+    open: [
+      { number: 14, title: 'Stash and pop from the header', author: 'alex-martin', head: 'feature/stash', base: 'main', state: 'open', review: 'changes_requested', checks: 'failure', created: '2026-11-02 10:30', updated: '2026-11-05 16:20' },
+      { number: 12, title: 'Render side-by-side diffs with syntax colors', author: 'sam-lee', head: 'feature/diff-view', base: 'main', state: 'open', review: 'approved', checks: 'success', created: '2026-11-03 18:50', updated: '2026-11-04 08:15' },
+      { number: 11, title: 'Blame view in the file comparison', author: 'sam-lee', head: 'feature/blame', base: 'main', state: 'open', draft: true, checks: 'running', created: '2026-11-01 22:40', updated: '2026-11-01 22:40' },
+      { number: 9, title: 'Fix the build steps in the README', author: 'robin-chen', head: 'patch-1', headOwner: 'robin-chen', base: 'main', state: 'open', review: 'review_required', checks: 'pending', created: '2026-10-30 11:48', updated: '2026-10-30 12:02' },
+    ],
+    closed: [
+      { number: 13, title: 'Keep one tab per repository', author: 'robin-chen', head: 'topic/tabs', base: 'main', state: 'merged', created: '2026-11-02 16:58', updated: '2026-11-03 17:05' },
+      { number: 10, title: 'Try egui for the commit list', author: 'sam-lee', head: 'spike/egui', base: 'main', state: 'closed', created: '2026-10-28 14:02', updated: '2026-10-29 09:12' },
+      { number: 8, title: 'Read history with libgit2', author: 'alex-martin', head: 'spike/libgit2', base: 'main', state: 'closed', created: '2026-10-26 10:15', updated: '2026-10-27 18:40' },
+      { number: 7, title: 'Add a menu top bar', author: 'alex-martin', head: 'topic/menu', base: 'main', state: 'merged', created: '2026-11-02 09:30', updated: '2026-11-02 20:13' },
+    ],
+  };
+
+  const pullBadges = {
+    'feature/diff-view': { number: 12, state: 'open' },
+    'feature/stash': { number: 14, state: 'open' },
+    'feature/blame': { number: 11, state: 'open', draft: true },
+  };
+
+  const pulled = { ...history, pulls: pullBadges, refs: refs.map((label) => (label.kind === 'local' && pullBadges[label.name] ? { ...label, pull: pullBadges[label.name] } : label)) };
+
+  const shownPull = pullList.open[1];
+
+  const pullDetails = {
+    body: "The file comparison now uses the kit's diff view in split mode, with syntax colors from syntect, which the kit already bundles: the exe grows by 40 KB.\n\nEach side keeps its own scroll position when you switch files.\n\nCloses #7.",
+    headSha: '8ff3473',
+    mergeBase: 'b47d0a8',
+    commits: 3,
+    mergeability: 'ready',
+    methods: ['merge', 'squash', 'rebase'],
+    method: 'squash',
+    checks: [
+      { name: 'build (windows-latest)', state: 'success', description: 'Successful in 4m 12s' },
+      { name: 'build (ubuntu-latest)', state: 'success', description: 'Successful in 3m 05s' },
+      { name: 'build (macos-latest)', state: 'success', description: 'Successful in 5m 40s' },
+      { name: 'clippy', state: 'success', description: 'Successful in 1m 58s' },
+      { name: 'size report', state: 'neutral', description: 'The exe grew by 40 KB' },
+    ],
+    conversation: [
+      { author: 'alex-martin', date: '2026-11-03 19:02', body: 'Looks good. Could the split view keep the scroll position when switching files?' },
+      { author: 'sam-lee', date: '2026-11-03 19:40', body: 'Done in 8ff3473: each side keeps its own scroll per file.' },
+      { author: 'robin-chen', date: '2026-11-04 08:15', body: "Tried it on a 4K screen: the colors match the kit's theme, and the size report is fine." },
+    ],
+    files: commitDetails.files,
+  };
+
+  const failingPull = pullList.open[0];
+
+  const failingDetails = {
+    ...pullDetails,
+    body: 'Pull, Push, Branch, Stash and Pop get a header above the graph. Pop brings back the newest stash.',
+    headSha: '4540215',
+    mergeBase: 'a708a7a',
+    commits: 5,
+    mergeability: 'failing',
+    method: 'merge',
+    checks: [
+      { name: 'build (windows-latest)', state: 'success', description: 'Successful in 4m 02s' },
+      { name: 'build (ubuntu-latest)', state: 'failure', description: 'Failing after 1m 12s: error[E0425]: cannot find value `stash_menu` in this scope' },
+      { name: 'build (macos-latest)', state: 'running', description: 'Running for 3 minutes' },
+      { name: 'clippy', state: 'pending', description: 'Waiting for a runner' },
+    ],
+    conversation: [{ author: 'robin-chen', date: '2026-11-05 16:20', body: 'Pop should be greyed out when there is no stash, as in the mockup.' }],
+  };
+
+  const forkPull = pullList.open[3];
+
+  const forkDetails = {
+    ...pullDetails,
+    body: 'cargo build --release needs the wasm target for the connectors; the README now says so.',
+    headSha: 'c41d7e0',
+    mergeBase: '538453d',
+    commits: 1,
+    mergeability: 'blocked',
+    blockedBy: 'At least one approving review is required by reviewers with write access.',
+    checks: [{ name: 'build (windows-latest)', state: 'pending', description: 'Waiting for approval to run workflows from a fork' }],
+    conversation: [],
+    files: [{ path: 'README.md', kind: 'M', additions: 4, deletions: 1 }],
+  };
+
+  const pulls = { list: pullList, badges: pullBadges, pulled, shown: shownPull, details: pullDetails, failing: failingPull, failingDetails, fork: forkPull, forkDetails, mergedSha: '5d1c2e9' };
+
   return {
     history, tracked, stashed, collapsed, changes, partlyStaged, draft, commitDetails, commitFileDiff, fileHistory, fileDiff, stagedHunkDiff, partlyStagedDiff, selectedLines, tabs,
     starfall, assets, slimeDiff, crownIcon, introDiff, themeDiff, modelDiff,
     rebasing, rebase, merge, starfallMerge, rebaseChanges, rebaseOneLeft, rebaseResolved, statusConflicts, statusMerged, slimeConflict, starfallConflicts,
     hosting,
+    pulls,
   };
 })();

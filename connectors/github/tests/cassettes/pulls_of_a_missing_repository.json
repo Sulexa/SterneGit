@@ -1,0 +1,62 @@
+{
+  "op": "pulls.list",
+  "account": {
+    "id": "github:github.com:4120511",
+    "login": "alex-martin",
+    "endpoints": {
+      "api": "https://api.github.com/",
+      "graphql": "https://api.github.com/graphql",
+      "web": "https://github.com/"
+    }
+  },
+  "repo": {
+    "owner": "fastgit-org",
+    "name": "gone"
+  },
+  "input": {
+    "state": "all",
+    "cursor": null
+  },
+  "exchanges": [
+    {
+      "method": "POST",
+      "url": "https://api.github.com/graphql",
+      "status": 200,
+      "headers": [
+        [
+          "content-type",
+          "application/json; charset=utf-8"
+        ],
+        [
+          "x-github-media-type",
+          "github.v4; param=merge-info-preview; format=json"
+        ]
+      ],
+      "body": {
+        "data": {
+          "repository": null
+        },
+        "errors": [
+          {
+            "type": "NOT_FOUND",
+            "path": [
+              "repository"
+            ],
+            "locations": [
+              {
+                "line": 1,
+                "column": 108
+              }
+            ],
+            "message": "Could not resolve to a Repository with the name 'fastgit-org/gone'."
+          }
+        ]
+      }
+    }
+  ],
+  "output": {
+    "err": {
+      "kind": "not_found"
+    }
+  }
+}

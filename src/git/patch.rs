@@ -44,6 +44,8 @@ const FILE_PATCH: &[&str] = &[
     "--dst-prefix=b/",
 ];
 
+const FIND_RENAMES: &str = "--find-renames";
+
 const NOTHING: &str = "/dev/null";
 
 const IGNORE_WHITESPACE: &str = "--ignore-all-space";
@@ -62,6 +64,21 @@ impl Whitespace {
         match self {
             Whitespace::Compared => None,
             Whitespace::Ignored => Some(IGNORE_WHITESPACE),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Baseline {
+    FirstParent(Option<ObjectId>),
+    Commit(ObjectId),
+}
+
+impl Baseline {
+    pub(crate) fn commit(self) -> Option<ObjectId> {
+        match self {
+            Baseline::FirstParent(parent) => parent,
+            Baseline::Commit(base) => Some(base),
         }
     }
 }
@@ -135,14 +152,31 @@ impl Repo {
     pub(crate) fn commit_file_patch(
         &self,
         id: ObjectId,
+        baseline: Baseline,
         paths: &[&OsStr],
         whitespace: Whitespace,
     ) -> Result<String> {
         let id = id.to_string();
-        let mut args: Vec<&OsStr> = COMMIT_PATCH.iter().map(OsStr::new).collect();
+        let base = baseline.commit().map(|base| base.to_string());
+        let mut args: Vec<&OsStr> = match (baseline, &base) {
+            (Baseline::Commit(_), Some(base)) => FILE_PATCH
+                .iter()
+                .copied()
+                .chain([FIND_RENAMES, base.as_str()])
+                .map(OsStr::new)
+                .collect(),
+            _ => COMMIT_PATCH.iter().map(OsStr::new).collect(),
+        };
         args.extend(whitespace.option().map(OsStr::new));
         args.extend([OsStr::new(&id), OsStr::new("--")]);
         args.extend(paths);
+        run_text(&self.location, &args, Exit::Success)
+    }
+
+    pub(crate) fn range_patch(&self, base: ObjectId, head: ObjectId) -> Result<String> {
+        let (base, head) = (base.to_string(), head.to_string());
+        let mut args = FILE_PATCH.to_vec();
+        args.extend([FIND_RENAMES, base.as_str(), head.as_str(), "--"]);
         run_text(&self.location, &args, Exit::Success)
     }
 

@@ -1,0 +1,148 @@
+{
+  "op": "pulls.create",
+  "account": {
+    "id": "github:github.com:4120511",
+    "login": "alex-martin",
+    "endpoints": {
+      "api": "https://api.github.com/",
+      "graphql": "https://api.github.com/graphql",
+      "web": "https://github.com/"
+    }
+  },
+  "repo": {
+    "owner": "fastgit-org",
+    "name": "fastgit"
+  },
+  "input": {
+    "base": "main",
+    "head": "clone-folder",
+    "head_owner": "sam-lee",
+    "title": "Remember the clone folder",
+    "body": "Remembers the last folder each repository was cloned into.",
+    "draft": false
+  },
+  "exchanges": [
+    {
+      "method": "POST",
+      "url": "https://api.github.com/repos/fastgit-org/fastgit/pulls",
+      "status": 201,
+      "headers": [
+        [
+          "content-type",
+          "application/json; charset=utf-8"
+        ],
+        [
+          "x-github-media-type",
+          "github.v3; format=json"
+        ]
+      ],
+      "body": {
+        "url": "https://api.github.com/repos/fastgit-org/fastgit/pulls/144",
+        "id": 2190455144,
+        "node_id": "PR_kwDOM1a2b86C144",
+        "html_url": "https://github.com/fastgit-org/fastgit/pull/144",
+        "diff_url": "https://github.com/fastgit-org/fastgit/pull/144.diff",
+        "number": 144,
+        "state": "open",
+        "locked": false,
+        "title": "Remember the clone folder",
+        "user": {
+          "login": "sam-lee",
+          "id": 5523874,
+          "node_id": "MDQ6VXNlcj5523874",
+          "avatar_url": "https://avatars.githubusercontent.com/u/5523874?v=4",
+          "html_url": "https://github.com/sam-lee",
+          "type": "User",
+          "site_admin": false
+        },
+        "body": "Remembers the last folder each repository was cloned into.",
+        "created_at": "2026-11-04T13:02:37Z",
+        "updated_at": "2026-11-04T13:02:37Z",
+        "closed_at": null,
+        "merged_at": null,
+        "merge_commit_sha": null,
+        "draft": false,
+        "head": {
+          "label": "sam-lee:clone-folder",
+          "ref": "clone-folder",
+          "sha": "3e7b1d5f9a2c6e0b4d8f1a5c9e3b7d0f2a6c4e8b",
+          "user": {
+            "login": "sam-lee"
+          },
+          "repo": {
+            "id": 874411203,
+            "name": "fastgit",
+            "full_name": "sam-lee/fastgit",
+            "owner": {
+              "login": "sam-lee",
+              "id": 5523874,
+              "type": "User"
+            },
+            "private": false,
+            "html_url": "https://github.com/sam-lee/fastgit",
+            "fork": true,
+            "default_branch": "main"
+          }
+        },
+        "base": {
+          "label": "fastgit-org:main",
+          "ref": "main",
+          "sha": "1a7e3c95d2b84f60a9c1e7d3b5f2a8c4e6d0b9f1",
+          "user": {
+            "login": "fastgit-org"
+          },
+          "repo": {
+            "id": 861200417,
+            "name": "fastgit",
+            "full_name": "fastgit-org/fastgit",
+            "owner": {
+              "login": "fastgit-org",
+              "id": 9120334,
+              "type": "Organization"
+            },
+            "private": false,
+            "html_url": "https://github.com/fastgit-org/fastgit",
+            "fork": false,
+            "default_branch": "main"
+          }
+        },
+        "author_association": "MEMBER",
+        "auto_merge": null
+      }
+    }
+  ],
+  "output": {
+    "ok": {
+      "number": 144,
+      "title": "Remember the clone folder",
+      "state": "open",
+      "draft": false,
+      "author": {
+        "login": "sam-lee",
+        "name": null,
+        "avatar_url": "https://avatars.githubusercontent.com/u/5523874?v=4"
+      },
+      "base": {
+        "branch": "main",
+        "sha": "1a7e3c95d2b84f60a9c1e7d3b5f2a8c4e6d0b9f1",
+        "repo": {
+          "owner": "fastgit-org",
+          "name": "fastgit"
+        }
+      },
+      "head": {
+        "branch": "clone-folder",
+        "sha": "3e7b1d5f9a2c6e0b4d8f1a5c9e3b7d0f2a6c4e8b",
+        "repo": {
+          "owner": "sam-lee",
+          "name": "fastgit"
+        }
+      },
+      "review": null,
+      "checks": null,
+      "created_at": "2026-11-04T13:02:37Z",
+      "updated_at": "2026-11-04T13:02:37Z",
+      "web_url": "https://github.com/fastgit-org/fastgit/pull/144"
+    }
+  }
+}

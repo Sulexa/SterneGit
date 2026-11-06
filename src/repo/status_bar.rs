@@ -66,6 +66,13 @@ impl RepoStatusBar {
 }
 
 impl RepoStatusBar {
+    pub(crate) fn at_pull(mut self, place: Option<String>) -> Self {
+        if let Some(place) = place {
+            self.position = place;
+        }
+        self
+    }
+
     pub(crate) fn in_file_history(mut self, place: Option<HistoryPlace>) -> Self {
         if let Some(place) = place {
             self.position = format!(

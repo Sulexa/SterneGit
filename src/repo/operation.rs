@@ -146,6 +146,18 @@ pub(crate) fn checked_out(checked_out: &CheckedOut) -> SharedString {
     }
 }
 
+pub(crate) fn checked_out_fork(branch: &str, owner: &str) -> SharedString {
+    format!("Checked out {branch} from {owner} fork, without an upstream").into()
+}
+
+pub(crate) fn pull_branch_deleted(branch: &str, remote: &str, local: Option<&str>) -> SharedString {
+    match local {
+        Some(local) if local == branch => format!("Deleted {branch} from {remote} and here").into(),
+        Some(local) => format!("Deleted {branch} from {remote}, and {local} here").into(),
+        None => format!("Deleted {branch} from {remote}").into(),
+    }
+}
+
 pub(crate) fn switched(done: SharedString, branch: &str, carried: Carried) -> Outcome {
     put_back(done, branch, carried)
 }

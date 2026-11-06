@@ -41,7 +41,7 @@ pub(crate) fn failure(response: &Response) -> Failure {
         },
         422 => Failure::Invalid {
             fields: fields(response),
-            message: reason(response),
+            message: unattributed_reason(response).unwrap_or_else(|| reason(response)),
         },
         status => Failure::Refused {
             status,
@@ -50,7 +50,7 @@ pub(crate) fn failure(response: &Response) -> Failure {
     }
 }
 
-fn rate_limit_wait(response: &Response) -> Option<u64> {
+pub(crate) fn rate_limit_wait(response: &Response) -> Option<u64> {
     if let Some(seconds) = response
         .header(RETRY_AFTER)
         .and_then(|value| value.trim().parse().ok())
@@ -103,6 +103,18 @@ fn reason(response: &Response) -> String {
         "" => "The server gave no reason".to_owned(),
         text => text.chars().take(LONGEST_REASON).collect(),
     }
+}
+
+fn unattributed_reason(response: &Response) -> Option<String> {
+    let body = body(response);
+    let messages: Vec<&str> = body["errors"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|error| error["field"].is_null())
+        .filter_map(|error| error["message"].as_str())
+        .collect();
+    (!messages.is_empty()).then(|| messages.join(" "))
 }
 
 fn fields(response: &Response) -> Vec<FieldError> {
@@ -230,6 +242,27 @@ mod tests {
                     FieldError { field: "visibility".into(), message: "invalid".into() },
                 ],
                 message: "Validation Failed".into(),
+            }
+        );
+    }
+
+    #[test]
+    fn an_invalid_request_without_a_field_says_what_github_found_wrong() {
+        let duplicate = response(
+            422,
+            &[],
+            json!({
+                "message": "Validation Failed",
+                "errors": [
+                    { "resource": "PullRequest", "code": "custom", "message": "A pull request already exists for fastgit-org:topic/tabs." }
+                ]
+            }),
+        );
+        assert_eq!(
+            failure(&duplicate),
+            Failure::Invalid {
+                fields: Vec::new(),
+                message: "A pull request already exists for fastgit-org:topic/tabs.".into(),
             }
         );
     }

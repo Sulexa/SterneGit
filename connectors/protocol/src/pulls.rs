@@ -46,6 +46,7 @@ pub struct PullSummary {
     pub base: Tip,
     pub head: Tip,
     pub review: Option<ReviewStanding>,
+    pub checks: Option<CheckState>,
     pub created_at: Timestamp,
     pub updated_at: Timestamp,
     pub web_url: String,

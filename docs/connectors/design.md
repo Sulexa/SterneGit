@@ -51,11 +51,13 @@ src/net/        requests, policy (allow-list, token schemes, redirects), curl tr
 src/connect/    manifests, grants, discovery and pinning, the wasmi engine, ABI, calls, claims, Forge
 src/git/        access.rs (scoped credential helper), ssh_key.rs, clone.rs; command.rs gains run_with_access
 src/hosting/    the screens: Settings tab (Accounts, Connectors, approval), sign-in, SSH key, remove, Clone, New repository, Publish, the account bar
+src/repo/pulls/ the repository tab's pull requests: the left-pane section, branch marks, the overview and files of one, Create and Merge dialogs
+src/git/pull_head.rs  fetching a pull request's head into refs/fastgit/pull/N, comparing it with where it branched off, checking it out
 src/cli.rs      --git-credential, --connector-test
 src/ui/load.rs  run_async_in_background
 ```
 
-`src/hosting/` draws the screens approved in the mockup on 2026-11-06; `app::connectors::Connectors` is the Global they read and change. `connect/`, `net/`, `accounts/` and `settings/` stay UI-free, like `git/`.
+`src/hosting/` draws the screens approved in the mockup on 2026-11-06; `app::connectors::Connectors` is the Global they read and change. `src/repo/pulls/` draws the pull request screens approved the same day. `connect/`, `net/`, `accounts/` and `settings/` stay UI-free, like `git/`.
 
 The `HostServices` trait and its types (section 7) live in `src/net/`, and `net::Gateway` implements it. `connect/` depends on `net/`, never the other way round.
 
@@ -284,8 +286,8 @@ pub struct Tip { pub branch: String, pub sha: String, pub repo: Option<RepoRef> 
 pub enum PullState { Open, Closed, Merged, Unknown }
 pub enum ReviewStanding { Approved, ChangesRequested, ReviewRequired, Unknown }
 pub struct PullSummary { pub number: u64, pub title: String, pub state: PullState, pub draft: bool, pub author: Person,
-    pub base: Tip, pub head: Tip, pub review: Option<ReviewStanding>, pub created_at: Timestamp,
-    pub updated_at: Timestamp, pub web_url: String }
+    pub base: Tip, pub head: Tip, pub review: Option<ReviewStanding>, pub checks: Option<CheckState>,
+    pub created_at: Timestamp, pub updated_at: Timestamp, pub web_url: String }
 pub enum Mergeability { Checking, Ready, Conflicts, Behind, FailingChecks, Draft, Blocked { reason: String }, Unknown }
 pub enum MergeMethod { Merge, Squash, Rebase, SemiLinear, FastForward, Unknown }
 pub enum Verdict { Comment, Approve, RequestChanges, Unknown }
@@ -326,6 +328,7 @@ pub enum Failure {
 ```
 
 The fields worth explaining:
+- **`PullSummary.checks`** is the overall state of the head commit's checks, worst first, when the server gives it with the list (GitHub's GraphQL `statusCheckRollup`); `None` otherwise. Added in milestone 5 as an optional field, so protocol 1.0 still reads older answers.
 - **`Line`** holds both line numbers. GitHub reads one side from it, while GitLab needs both on unchanged lines, and FastGit knows both from its own diff.
 - **`Spot`** with no `last` is a comment on the whole file, or an outdated thread whose position is gone.
 - **`Anchor.extra`** carries platform data FastGit passes back untouched: GitLab's `line_code`, Azure DevOps' iteration ids.
@@ -541,10 +544,13 @@ One method per operation, each built on one private `ask(op, input)`.
   - A literal host lists every account of that connector and service; `{field.host}` lists the accounts whose server has that host.
   - When several accounts fit, the owner choice remembered in `accounts.json` narrows them to one.
   - A claim may list no account: the tab can then offer to sign in.
-- **`Repository`:**
-  - gains `hosted: Option<Forge>` from `Catalog::claims`, plus `pulls`, `pull` and `threads` as `Load`s, and `review` and `merge` as `Job`s;
-  - when a remote matches accounts in two connectors, or two accounts on one server, the tab asks once and `accounts.json` remembers;
-  - pull requests are read when the tab opens and after each fetch finishes, so no timer is added.
+- **Pull requests (built in milestone 5):**
+  - `repo::pulls::Pulls`, one per tab, finds its `Hosting` (forge, account, remote, locator, offered features) from the tab's remotes, `origin` first, and lists pull requests with `pulls.list`; `Reach` says why there is none (no claim, no account, two accounts to choose from, signed out);
+  - `repo::pulls::PullView` is the selected pull request: `pulls.get`, `pulls.checks`, `pulls.conversation` and the local comparison, each read on its own and kept while it is read again;
+  - the head is fetched with `FetchSpec.refspec` into `refs/fastgit/pull/N` (the ref digest ignores those refs, so no history reread follows), together with the base branch; the files are `git diff --find-renames <merge-base> <head>`, and a file opens in the comparison with `Baseline::Commit(merge_base)`;
+  - `FetchSpec.url` is fetched only when it is `https://`, and the refspec must be a plain `refs/…` name;
+  - when a remote matches accounts in two connectors, or two accounts on one server, the tab asks once and `accounts.json` remembers; the section waits for the answer;
+  - pull requests are read when the tab opens and after each fetch finishes (`RepositoryEvent::Fetched`), so no timer is added.
 - **`src/cli.rs`** gains, both recognized only in first position:
   - `--git-credential <account> <get|store|erase>`;
   - `--connector-test <folder> [cassette]`, which runs a connector in the real sandbox without a window and prints outputs, logs, fuel and memory.
@@ -558,6 +564,7 @@ One method per operation, each built on one private `ask(op, input)`.
   - `repositories.list` pages `/user/repos`, `/orgs/{owner}/repos` or `/search/repositories` (with `in:name fork:true` and one `user:` qualifier per owner); the cursor is the `Link` URL and must stay on the API endpoint.
   - `repositories.get` and `repositories.create` (`/user/repos` or `/orgs/{owner}/repos`); `ssh_keys.list`, `ssh_keys.add` and `ssh_keys.host_keys` (`GET /meta`).
   - 19 cassettes, also replayed through the committed `dist/github.wasm` inside the sandbox by FastGit's own tests.
+- **Built in milestone 5:** version 0.3.0 declares `pulls`, `pulls.create` and `pulls.merge`, with `pulls.list` and `pulls.get` in GraphQL, `pulls.for_branch`, `pulls.checks` (check runs and commit statuses, sent together), `pulls.conversation`, `pulls.comment`, `pulls.create` and `pulls.merge` in REST; 39 cassettes; 324,657 B of wasm (+38,362 B).
 - **REST covers:**
   - lists, using `per_page=100` and the `Link` `rel="next"` URL as the cursor, checked to stay on the API endpoint;
   - repositories (`/user/repos` with `affiliation`, and search with `user:` and `org:` qualifiers);
@@ -661,7 +668,7 @@ Gitea needs no FastGit change and should be about 700–900 lines.
    - the screens in section 11 up to SSH keys;
    - the device flow, which needs the OAuth App's client ID;
    - GitHub's who-am-I, repositories, creating and publishing, SSH keys and host keys.
-5. **Pull requests,** mockup first: list, branch badges, details, checks, fetching the head and diffing it locally, create, merge.
+5. **Pull requests,** mockup first (built 2026-11-06): list, branch badges, details, checks, conversation and comments, fetching the head and diffing it locally, check out, create, merge, deleting the merged branch.
 6. **Reviews,** mockup first:
    - threads in the comparison view, which needs changes to the vendored diff component;
    - drafts, submit, reply, resolve.
@@ -691,6 +698,11 @@ Gitea needs no FastGit change and should be about 700–900 lines.
   - +2,091,008 B (+5.27%) in all, for the Settings tab, its pages and dialogs, Clone, New repository, Publish and the account bar (`src/hosting/`, about 4,900 lines with tests), plus sign-in, the device flow, SSH keys and cloning behind them;
   - memory over three launches each, opening FastGit's own repository: 144.7 MB of private bytes before, 143.7 MB after, within the ±1.5 MB runs vary by;
   - the GitHub connector grew to 286,295 B of wasm with its repository and SSH key operations.
+- **Measured at milestone 5,** against milestone 4's release build (41,769,984 B):
+  - +1,081,856 B (+2.59%) in all, for the Pull requests section, branch marks, the overview, files, Create and Merge dialogs (`src/repo/pulls/`, about 2,800 lines with tests) and fetching, comparing and checking out a head (`src/git/pull_head.rs`);
+  - memory over three launches each, opening FastGit's own repository (no remote, so no section): 149.8 MB of private bytes before, 149.4 MB after; a small repository with three pull requests listed: 138.8 MB;
+  - the GitHub connector grew to 324,657 B of wasm with its eight pull request operations;
+  - live-checked against a fake GitHub Enterprise Server on 127.0.0.1 whose remote URL `insteadOf` pointed git at a local bare repository: list, filter, badges, overview, checks, conversation and comment, file comparison, check out (same repository and fork), squash merge, deleting the merged branch, creating a pull request from an unpublished branch.
 - **Later:**
   - avatars, fetched in batches through curl into a cache and drawn with `img(path)`;
   - libcurl at run time;

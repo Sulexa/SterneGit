@@ -7,7 +7,9 @@ use gpui_kit::{
     },
 };
 
-use super::{repository::Repository, toolbar::mode_label};
+use std::sync::Arc;
+
+use super::{pulls::PullMarks, repository::Repository, toolbar::mode_label};
 use crate::{
     git::{HISTORY_LIMIT, History, PullMode, RefKind, RefLabel, RemoteBranch},
     ui::{Handler, handler, thousands},
@@ -17,6 +19,7 @@ const PULL_FAST_FORWARD_ONLY: &str = "Pull (fast-forward only)";
 const PUSH: &str = "Push";
 const BRANCH_HERE: &str = "Create branch here…";
 const DELETE: &str = "Delete";
+const CREATE_PULL: &str = "Create pull request…";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum BranchAction {
@@ -27,6 +30,25 @@ pub(crate) enum BranchAction {
     Rebase,
     BranchHere,
     Delete,
+    ShowPull(u64),
+    CreatePull,
+}
+
+#[derive(Clone, Default)]
+pub(crate) struct PullOffers {
+    pub(crate) marks: Arc<PullMarks>,
+    pub(crate) creates: bool,
+    pub(crate) default_branch: Option<String>,
+}
+
+impl PullOffers {
+    fn offered(&self, label: &RefLabel) -> Option<BranchAction> {
+        if let Some(mark) = self.marks.get(&label.full_name()) {
+            return Some(BranchAction::ShowPull(mark.number));
+        }
+        let default = self.default_branch.as_deref() == Some(label.local_name());
+        (self.creates && !default).then_some(BranchAction::CreatePull)
+    }
 }
 
 #[derive(Clone)]
@@ -34,6 +56,7 @@ pub(crate) struct BranchMenu {
     checked_out: Option<SharedString>,
     pull_mode: PullMode,
     writing: bool,
+    pulls: Option<PullOffers>,
     on_action: Option<Handler<(RefLabel, BranchAction)>>,
 }
 
@@ -47,8 +70,14 @@ impl BranchMenu {
             checked_out,
             pull_mode,
             writing,
+            pulls: None,
             on_action: None,
         }
+    }
+
+    pub(crate) fn pulls(mut self, offers: Option<PullOffers>) -> Self {
+        self.pulls = offers;
+        self
     }
 
     pub(crate) fn on_action(
@@ -79,6 +108,10 @@ impl BranchMenu {
         [
             label.can_be_checked_out().then(|| vec![CheckOut]),
             local.then(|| vec![Pull, Push]),
+            self.pulls
+                .as_ref()
+                .and_then(|offers| offers.offered(label))
+                .map(|action| vec![action]),
             another_branch_is_checked_out.then(|| vec![Merge, Rebase]),
             Some(vec![BranchHere]),
             (!checked_out).then(|| vec![Delete]),
@@ -100,6 +133,8 @@ impl BranchMenu {
             BranchAction::Merge => format!("Merge {} into {checked_out}", label.name),
             BranchAction::Rebase => format!("Rebase {checked_out} onto {}", label.name),
             BranchAction::BranchHere => BRANCH_HERE.to_owned(),
+            BranchAction::ShowPull(number) => format!("Show pull request #{number}"),
+            BranchAction::CreatePull => CREATE_PULL.to_owned(),
             BranchAction::Delete => match label.on_remote() {
                 Some(RemoteBranch { remote, branch }) => format!("Delete {branch} from {remote}…"),
                 None => format!("Delete {}…", label.name),
@@ -189,8 +224,14 @@ pub(crate) fn confirm_delete(
 
 #[cfg(test)]
 mod tests {
-    use super::{BranchAction::*, BranchMenu, what_deleting_loses};
-    use crate::git::{PullMode, RefKind, RefLabel, fixtures::id};
+    use std::sync::Arc;
+
+    use super::{BranchAction::*, BranchMenu, PullOffers, what_deleting_loses};
+    use crate::{
+        git::{PullMode, RefKind, RefLabel, fixtures::id},
+        repo::pulls::PullMarks,
+        ui::PullMark,
+    };
 
     fn label(name: &str, kind: RefKind, is_head: bool) -> RefLabel {
         RefLabel {
@@ -235,6 +276,24 @@ mod tests {
                 vec!["Delete feature/blame…"],
             ]
         );
+    }
+
+    #[test]
+    fn with_a_connector_a_branch_offers_its_pull_request_or_to_create_one() {
+        let marks: PullMarks = [("refs/heads/feature/diff-view".to_owned(), PullMark { number: 12, draft: false })].into();
+        let offers = PullOffers {
+            marks: Arc::new(marks),
+            creates: true,
+            default_branch: Some("main".into()),
+        };
+        let menu = on_main().pulls(Some(offers));
+        let diff_view = label("feature/diff-view", RefKind::LocalBranch, false);
+        assert_eq!(texts(&menu, &diff_view)[2], ["Show pull request #12"]);
+        let tabs = label("topic/tabs", RefKind::RemoteBranch, false);
+        assert!(texts(&menu, &tabs).contains(&vec!["Create pull request…".to_owned()]));
+        let main = label("origin/main", RefKind::RemoteBranch, false);
+        assert!(!menu.offered(&main).iter().flatten().any(|action| *action == CreatePull));
+        assert!(!on_main().offered(&tabs).iter().flatten().any(|action| *action == CreatePull));
     }
 
     #[test]

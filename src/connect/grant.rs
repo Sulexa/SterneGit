@@ -136,14 +136,14 @@ mod tests {
         let granted = github();
         assert_eq!(granted.beyond(&granted), None);
         let mut update = granted.clone();
-        update.features.insert("pulls".into());
+        update.features.insert("pulls.review".into());
         update.remote_hosts.insert("gist.github.com".into());
         update.endpoints.remove("https://github.com/");
         assert_eq!(
             update.beyond(&granted),
             Some(Grant {
                 remote_hosts: set(&["gist.github.com"]),
-                features: set(&["pulls"]),
+                features: set(&["pulls.review"]),
                 ..Grant::default()
             })
         );

@@ -333,7 +333,7 @@ impl Repo {
         .unwrap_or_default()
     }
 
-    fn reach<A: AsRef<OsStr>>(&self, args: &[A]) -> Result<Vec<u8>> {
+    pub(super) fn reach<A: AsRef<OsStr>>(&self, args: &[A]) -> Result<Vec<u8>> {
         run_with_access(&self.location, &self.access, args, Exit::Success)
     }
 

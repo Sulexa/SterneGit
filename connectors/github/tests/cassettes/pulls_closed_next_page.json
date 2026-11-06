@@ -1,0 +1,182 @@
+{
+  "op": "pulls.list",
+  "account": {
+    "id": "github:github.com:4120511",
+    "login": "alex-martin",
+    "endpoints": {
+      "api": "https://api.github.com/",
+      "graphql": "https://api.github.com/graphql",
+      "web": "https://github.com/"
+    }
+  },
+  "repo": {
+    "owner": "fastgit-org",
+    "name": "fastgit"
+  },
+  "input": {
+    "state": "closed",
+    "cursor": "Y3Vyc29yOnYyOpK5MjAyNi0xMS0wMlQxNjoyMDo0NSswMDowMM5tZ9Ql"
+  },
+  "exchanges": [
+    {
+      "method": "POST",
+      "url": "https://api.github.com/graphql",
+      "status": 200,
+      "headers": [
+        [
+          "content-type",
+          "application/json; charset=utf-8"
+        ],
+        [
+          "x-github-media-type",
+          "github.v4; param=merge-info-preview; format=json"
+        ]
+      ],
+      "body": {
+        "data": {
+          "repository": {
+            "pullRequests": {
+              "pageInfo": {
+                "hasNextPage": false,
+                "endCursor": "Y3Vyc29yOnYyOpK5MjAyNi0xMC0xMlQxMToyMjozMyswMDowMM5j1Afk"
+              },
+              "nodes": [
+                {
+                  "number": 136,
+                  "title": "Keep background fetches silent",
+                  "state": "MERGED",
+                  "isDraft": false,
+                  "url": "https://github.com/fastgit-org/fastgit/pull/136",
+                  "createdAt": "2026-10-20T10:44:12Z",
+                  "updatedAt": "2026-10-24T17:03:39Z",
+                  "reviewDecision": "APPROVED",
+                  "author": {
+                    "login": "robin-chen",
+                    "avatarUrl": "https://avatars.githubusercontent.com/u/6031927?v=4",
+                    "name": null
+                  },
+                  "baseRefName": "main",
+                  "baseRefOid": "7d3f9b1e5a2c8d4f0b6e3a9c1d7f5b2e8a4c0d6f",
+                  "headRefName": "quiet-fetch",
+                  "headRefOid": "e5a9c3f7b1d4e8a2c6f0b3d7e1a5c9f2b6d0e4a8",
+                  "headRepository": {
+                    "name": "fastgit",
+                    "owner": {
+                      "login": "fastgit-org"
+                    }
+                  },
+                  "commits": {
+                    "nodes": [
+                      {
+                        "commit": {
+                          "statusCheckRollup": {
+                            "state": "ERROR"
+                          }
+                        }
+                      }
+                    ]
+                  }
+                },
+                {
+                  "number": 130,
+                  "title": "Add a dark theme toggle",
+                  "state": "CLOSED",
+                  "isDraft": false,
+                  "url": "https://github.com/fastgit-org/fastgit/pull/130",
+                  "createdAt": "2026-10-02T13:20:00Z",
+                  "updatedAt": "2026-10-12T11:22:33Z",
+                  "reviewDecision": null,
+                  "author": null,
+                  "baseRefName": "main",
+                  "baseRefOid": "7d3f9b1e5a2c8d4f0b6e3a9c1d7f5b2e8a4c0d6f",
+                  "headRefName": "dark-toggle",
+                  "headRefOid": "0c4a8e2f6b9d3a7e1c5f8b2d6a0e4c9f3b7d1a5e",
+                  "headRepository": null,
+                  "commits": {
+                    "nodes": [
+                      {
+                        "commit": {
+                          "statusCheckRollup": {
+                            "state": "EXPECTED"
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        }
+      }
+    }
+  ],
+  "output": {
+    "ok": {
+      "items": [
+        {
+          "number": 136,
+          "title": "Keep background fetches silent",
+          "state": "merged",
+          "draft": false,
+          "author": {
+            "login": "robin-chen",
+            "name": null,
+            "avatar_url": "https://avatars.githubusercontent.com/u/6031927?v=4"
+          },
+          "base": {
+            "branch": "main",
+            "sha": "7d3f9b1e5a2c8d4f0b6e3a9c1d7f5b2e8a4c0d6f",
+            "repo": {
+              "owner": "fastgit-org",
+              "name": "fastgit"
+            }
+          },
+          "head": {
+            "branch": "quiet-fetch",
+            "sha": "e5a9c3f7b1d4e8a2c6f0b3d7e1a5c9f2b6d0e4a8",
+            "repo": {
+              "owner": "fastgit-org",
+              "name": "fastgit"
+            }
+          },
+          "review": "approved",
+          "checks": "failure",
+          "created_at": "2026-10-20T10:44:12Z",
+          "updated_at": "2026-10-24T17:03:39Z",
+          "web_url": "https://github.com/fastgit-org/fastgit/pull/136"
+        },
+        {
+          "number": 130,
+          "title": "Add a dark theme toggle",
+          "state": "closed",
+          "draft": false,
+          "author": {
+            "login": "ghost",
+            "name": null,
+            "avatar_url": null
+          },
+          "base": {
+            "branch": "main",
+            "sha": "7d3f9b1e5a2c8d4f0b6e3a9c1d7f5b2e8a4c0d6f",
+            "repo": {
+              "owner": "fastgit-org",
+              "name": "fastgit"
+            }
+          },
+          "head": {
+            "branch": "dark-toggle",
+            "sha": "0c4a8e2f6b9d3a7e1c5f8b2d6a0e4c9f3b7d1a5e",
+            "repo": null
+          },
+          "review": null,
+          "checks": "pending",
+          "created_at": "2026-10-02T13:20:00Z",
+          "updated_at": "2026-10-12T11:22:33Z",
+          "web_url": "https://github.com/fastgit-org/fastgit/pull/130"
+        }
+      ],
+      "next": null
+    }
+  }
+}

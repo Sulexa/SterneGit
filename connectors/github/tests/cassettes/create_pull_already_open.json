@@ -1,0 +1,56 @@
+{
+  "op": "pulls.create",
+  "account": {
+    "id": "github:github.com:4120511",
+    "login": "alex-martin",
+    "endpoints": {
+      "api": "https://api.github.com/",
+      "graphql": "https://api.github.com/graphql",
+      "web": "https://github.com/"
+    }
+  },
+  "repo": {
+    "owner": "fastgit-org",
+    "name": "fastgit"
+  },
+  "input": {
+    "base": "main",
+    "head": "topic/tabs",
+    "head_owner": null,
+    "title": "Open files in tabs",
+    "body": "",
+    "draft": false
+  },
+  "exchanges": [
+    {
+      "method": "POST",
+      "url": "https://api.github.com/repos/fastgit-org/fastgit/pulls",
+      "status": 422,
+      "headers": [
+        [
+          "content-type",
+          "application/json; charset=utf-8"
+        ]
+      ],
+      "body": {
+        "message": "Validation Failed",
+        "errors": [
+          {
+            "resource": "PullRequest",
+            "code": "custom",
+            "message": "A pull request already exists for fastgit-org:topic/tabs."
+          }
+        ],
+        "documentation_url": "https://docs.github.com/rest/pulls/pulls#create-a-pull-request",
+        "status": "422"
+      }
+    }
+  ],
+  "output": {
+    "err": {
+      "kind": "invalid",
+      "fields": [],
+      "message": "A pull request already exists for fastgit-org:topic/tabs."
+    }
+  }
+}

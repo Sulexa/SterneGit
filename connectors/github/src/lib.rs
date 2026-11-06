@@ -1,11 +1,18 @@
+mod checks;
+mod conversation;
+mod graphql;
 mod keys;
 mod listing;
+mod moments;
+mod pulls;
 mod refusal;
 mod repositories;
 
 use fastgit_sdk::{
-    AccountContext, Connector, Failure, Identity, NewRepository, NewSshKey, Owner, Page, RepoRef,
-    Repository, RepositoryQuery, Request, Response, SshKey, export,
+    AccountContext, BranchQuery, Check, Comment, CommitQuery, Connector, ConversationQuery, Failure,
+    Identity, Merge, Merged, NewComment, NewPull, NewRepository, NewSshKey, Owner, Page, PullDetails,
+    PullNumber, PullSummary, PullsQuery, RepoRef, Repository, RepositoryQuery, Request, Response,
+    SshKey, export,
 };
 use serde_json::Value;
 
@@ -69,6 +76,53 @@ impl Connector for GitHub {
 
     fn host_keys(&self, _account: &AccountContext) -> Result<Vec<String>, Failure> {
         keys::host_keys()
+    }
+
+    fn pulls(
+        &self,
+        account: &AccountContext,
+        repo: &RepoRef,
+        query: PullsQuery,
+    ) -> Result<Page<PullSummary>, Failure> {
+        pulls::list(account, repo, query)
+    }
+
+    fn pulls_for_branch(
+        &self,
+        _account: &AccountContext,
+        repo: &RepoRef,
+        query: BranchQuery,
+    ) -> Result<Vec<PullSummary>, Failure> {
+        pulls::for_branch(repo, query)
+    }
+
+    fn pull(&self, account: &AccountContext, repo: &RepoRef, query: PullNumber) -> Result<PullDetails, Failure> {
+        pulls::get(account, repo, query)
+    }
+
+    fn checks(&self, _account: &AccountContext, repo: &RepoRef, query: CommitQuery) -> Result<Vec<Check>, Failure> {
+        checks::list(repo, query)
+    }
+
+    fn conversation(
+        &self,
+        account: &AccountContext,
+        repo: &RepoRef,
+        query: ConversationQuery,
+    ) -> Result<Page<Comment>, Failure> {
+        conversation::list(account, repo, query)
+    }
+
+    fn comment(&self, _account: &AccountContext, repo: &RepoRef, new: NewComment) -> Result<Comment, Failure> {
+        conversation::add(repo, new)
+    }
+
+    fn create_pull(&self, _account: &AccountContext, repo: &RepoRef, new: NewPull) -> Result<PullSummary, Failure> {
+        pulls::create(repo, new)
+    }
+
+    fn merge(&self, _account: &AccountContext, repo: &RepoRef, merge: Merge) -> Result<Merged, Failure> {
+        pulls::merge(repo, merge)
     }
 }
 

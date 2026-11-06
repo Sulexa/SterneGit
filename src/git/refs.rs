@@ -9,7 +9,7 @@ use gix::{
 };
 use gpui_kit::SharedString;
 
-use super::{stash::stash_ids_newest_first, text::decode};
+use super::{pull_head::PULL_REFS, stash::stash_ids_newest_first, text::decode};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) enum RefKind {
@@ -117,6 +117,9 @@ impl RefDigest {
         repo.head_id().ok().map(|id| id.detach()).hash(&mut hasher);
         for reference in repo.references()?.all()? {
             let Ok(reference) = reference else { continue };
+            if reference.name().as_bstr().starts_with(PULL_REFS.as_bytes()) {
+                continue;
+            }
             reference.name().as_bstr().hash(&mut hasher);
             match reference.target() {
                 TargetRef::Object(id) => id.as_bytes().hash(&mut hasher),

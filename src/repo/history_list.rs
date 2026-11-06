@@ -11,7 +11,7 @@ use gpui_kit::{
     px, uniform_list,
 };
 
-use super::{branch_menu::BranchMenu, stash_menu::StashMenu};
+use super::{branch_menu::BranchMenu, pulls::PullMarks, stash_menu::StashMenu};
 use crate::{
     actions::HISTORY_CONTEXT,
     git::{History, RefLabel, ShownRef, WorkingChanges},
@@ -39,6 +39,7 @@ pub(crate) struct HistoryList {
     on_check_out: Option<Handler<RefLabel>>,
     branch_menu: Option<BranchMenu>,
     stash_menu: Option<StashMenu>,
+    marks: Arc<PullMarks>,
 }
 
 #[derive(Clone)]
@@ -47,6 +48,7 @@ struct RowActions {
     on_check_out: Option<Handler<RefLabel>>,
     branch_menu: Option<BranchMenu>,
     stash_menu: Option<StashMenu>,
+    marks: Arc<PullMarks>,
 }
 
 impl HistoryList {
@@ -66,7 +68,13 @@ impl HistoryList {
             on_check_out: None,
             branch_menu: None,
             stash_menu: None,
+            marks: Arc::default(),
         }
+    }
+
+    pub(crate) fn marks(mut self, marks: Arc<PullMarks>) -> Self {
+        self.marks = marks;
+        self
     }
 
     pub(crate) fn branch_menu(mut self, menu: BranchMenu) -> Self {
@@ -133,12 +141,14 @@ impl RenderOnce for HistoryList {
             on_check_out,
             branch_menu,
             stash_menu,
+            marks,
         } = self;
         let actions = RowActions {
             on_select: on_select_commit,
             on_check_out,
             branch_menu,
             stash_menu,
+            marks,
         };
         let palette = Palette::new(cx);
         let uncommitted_row = uncommitted.map(|(changes, selected)| {
@@ -295,7 +305,8 @@ fn branch_badge(shown: ShownRef, color: Hsla, actions: &RowActions, cx: &App) ->
         .clone()
         .filter(|_| label.can_be_checked_out());
     let double_clicked = label.clone();
-    let badge = ref_badge(shown, color, cx).when_some(on_check_out, |badge, on_check_out| {
+    let mark = actions.marks.get(&label.full_name()).copied();
+    let badge = ref_badge(shown, color, mark, cx).when_some(on_check_out, |badge, on_check_out| {
         badge.on_click(move |event, window, cx| {
             if is_double_click(event) {
                 on_check_out(&double_clicked, window, cx)

@@ -1,4 +1,4 @@
-use fastgit_sdk::{AccountContext, Failure, Request};
+use fastgit_sdk::{AccountContext, Failure, RepoRef, Request};
 use serde_json::Value;
 
 use crate::{api, refusal::succeeded};
@@ -6,6 +6,27 @@ use crate::{api, refusal::succeeded};
 const API_ENDPOINT: &str = "api";
 const PAGES_READ_AT_MOST: usize = 10;
 const UNRESERVED: &[u8] = b"-._~";
+
+pub(crate) fn repo_path(repo: &RepoRef) -> String {
+    format!("repos/{}/{}", encoded(&repo.owner), encoded(&repo.name))
+}
+
+pub(crate) fn cursor_on_api(account: &AccountContext, cursor: String) -> Result<String, Failure> {
+    on_api(account, Some(cursor)).ok_or_else(|| Failure::Protocol {
+        message: "The page asked for isn't on GitHub's API".to_owned(),
+    })
+}
+
+pub(crate) fn text(value: &Value) -> Option<String> {
+    value.as_str().map(str::to_owned)
+}
+
+pub(crate) fn written(value: &Value) -> Option<String> {
+    value
+        .as_str()
+        .filter(|text| !text.trim().is_empty())
+        .map(str::to_owned)
+}
 
 pub(crate) fn every_page(account: &AccountContext, first: &str) -> Result<Vec<Value>, Failure> {
     let mut items = Vec::new();

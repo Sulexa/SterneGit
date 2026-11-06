@@ -1,0 +1,70 @@
+{
+  "op": "pulls.comment",
+  "account": {
+    "id": "github:github.com:4120511",
+    "login": "alex-martin",
+    "endpoints": {
+      "api": "https://api.github.com/",
+      "graphql": "https://api.github.com/graphql",
+      "web": "https://github.com/"
+    }
+  },
+  "repo": {
+    "owner": "fastgit-org",
+    "name": "fastgit"
+  },
+  "input": {
+    "number": 142,
+    "body": "Rebased on main; the checks are green again."
+  },
+  "exchanges": [
+    {
+      "method": "POST",
+      "url": "https://api.github.com/repos/fastgit-org/fastgit/issues/142/comments",
+      "status": 201,
+      "headers": [
+        [
+          "content-type",
+          "application/json; charset=utf-8"
+        ],
+        [
+          "x-github-media-type",
+          "github.v3; format=json"
+        ]
+      ],
+      "body": {
+        "id": 2464500129,
+        "node_id": "IC_kwDOM1a2b86SvX0129",
+        "html_url": "https://github.com/fastgit-org/fastgit/pull/142#issuecomment-2464500129",
+        "issue_url": "https://api.github.com/repos/fastgit-org/fastgit/issues/142",
+        "user": {
+          "login": "alex-martin",
+          "id": 4120511,
+          "node_id": "MDQ6VXNlcj4120511",
+          "avatar_url": "https://avatars.githubusercontent.com/u/4120511?v=4",
+          "html_url": "https://github.com/alex-martin",
+          "type": "User",
+          "site_admin": false
+        },
+        "created_at": "2026-11-04T08:55:16Z",
+        "updated_at": "2026-11-04T08:55:16Z",
+        "author_association": "MEMBER",
+        "body": "Rebased on main; the checks are green again."
+      }
+    }
+  ],
+  "output": {
+    "ok": {
+      "id": "2464500129",
+      "author": {
+        "login": "alex-martin",
+        "name": null,
+        "avatar_url": "https://avatars.githubusercontent.com/u/4120511?v=4"
+      },
+      "body": "Rebased on main; the checks are green again.",
+      "created_at": "2026-11-04T08:55:16Z",
+      "reply_to": null,
+      "web_url": "https://github.com/fastgit-org/fastgit/pull/142#issuecomment-2464500129"
+    }
+  }
+}

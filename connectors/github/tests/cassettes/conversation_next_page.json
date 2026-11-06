@@ -1,0 +1,104 @@
+{
+  "op": "pulls.conversation",
+  "account": {
+    "id": "github:github.com:4120511",
+    "login": "alex-martin",
+    "endpoints": {
+      "api": "https://api.github.com/",
+      "graphql": "https://api.github.com/graphql",
+      "web": "https://github.com/"
+    }
+  },
+  "repo": {
+    "owner": "fastgit-org",
+    "name": "fastgit"
+  },
+  "input": {
+    "number": 142,
+    "cursor": "https://api.github.com/repositories/861200417/issues/142/comments?per_page=100&page=2"
+  },
+  "exchanges": [
+    {
+      "method": "GET",
+      "url": "https://api.github.com/repositories/861200417/issues/142/comments?per_page=100&page=2",
+      "status": 200,
+      "headers": [
+        [
+          "content-type",
+          "application/json; charset=utf-8"
+        ],
+        [
+          "x-github-media-type",
+          "github.v3; format=json"
+        ],
+        [
+          "link",
+          "<https://api.github.com/repositories/861200417/issues/142/comments?per_page=100&page=1>; rel=\"prev\", <https://api.github.com/repositories/861200417/issues/142/comments?per_page=100&page=1>; rel=\"first\""
+        ]
+      ],
+      "body": [
+        {
+          "id": 2463120577,
+          "node_id": "IC_kwDOM1a2b86SvX0577",
+          "html_url": "https://github.com/fastgit-org/fastgit/pull/142#issuecomment-2463120577",
+          "issue_url": "https://api.github.com/repos/fastgit-org/fastgit/issues/142",
+          "user": null,
+          "created_at": "2026-11-03T19:02:11Z",
+          "updated_at": "2026-11-03T19:02:11Z",
+          "author_association": "NONE",
+          "body": "Does this also show pull requests from forks?"
+        },
+        {
+          "id": 2463198834,
+          "node_id": "IC_kwDOM1a2b86SvX8834",
+          "html_url": "https://github.com/fastgit-org/fastgit/pull/142#issuecomment-2463198834",
+          "issue_url": "https://api.github.com/repos/fastgit-org/fastgit/issues/142",
+          "user": {
+            "login": "robin-chen",
+            "id": 6031927,
+            "node_id": "MDQ6VXNlcj6031927",
+            "avatar_url": "https://avatars.githubusercontent.com/u/6031927?v=4",
+            "html_url": "https://github.com/robin-chen",
+            "type": "User",
+            "site_admin": false
+          },
+          "created_at": "2026-11-03T19:20:47Z",
+          "updated_at": "2026-11-03T19:20:47Z",
+          "author_association": "MEMBER",
+          "body": "It does: the head names the fork."
+        }
+      ]
+    }
+  ],
+  "output": {
+    "ok": {
+      "items": [
+        {
+          "id": "2463120577",
+          "author": {
+            "login": "ghost",
+            "name": null,
+            "avatar_url": null
+          },
+          "body": "Does this also show pull requests from forks?",
+          "created_at": "2026-11-03T19:02:11Z",
+          "reply_to": null,
+          "web_url": "https://github.com/fastgit-org/fastgit/pull/142#issuecomment-2463120577"
+        },
+        {
+          "id": "2463198834",
+          "author": {
+            "login": "robin-chen",
+            "name": null,
+            "avatar_url": "https://avatars.githubusercontent.com/u/6031927?v=4"
+          },
+          "body": "It does: the head names the fork.",
+          "created_at": "2026-11-03T19:20:47Z",
+          "reply_to": null,
+          "web_url": "https://github.com/fastgit-org/fastgit/pull/142#issuecomment-2463198834"
+        }
+      ],
+      "next": null
+    }
+  }
+}

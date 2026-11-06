@@ -6,7 +6,7 @@ use serde_json::{Value, json};
 
 use crate::{
     api,
-    listing::{encoded, every_page, on_api},
+    listing::{cursor_on_api, encoded, every_page, on_api, repo_path, text},
     refusal::succeeded,
 };
 
@@ -77,9 +77,7 @@ fn organization_owner(login: String, avatar_url: Option<String>, admin: bool, ru
 pub(crate) fn list(account: &AccountContext, query: RepositoryQuery) -> Result<Page<Repository>, Failure> {
     let search = query.search.as_deref().map(str::trim).filter(|search| !search.is_empty());
     let url = match (query.cursor, search, query.owner.as_deref()) {
-        (Some(cursor), ..) => on_api(account, Some(cursor)).ok_or_else(|| Failure::Protocol {
-            message: "The page asked for isn't on GitHub's API".to_owned(),
-        })?,
+        (Some(cursor), ..) => cursor_on_api(account, cursor)?,
         (None, Some(search), owner) => search_url(account, search, owner)?,
         (None, None, Some(owner)) if owner.eq_ignore_ascii_case(&account.login) => {
             format!("user/repos?affiliation=owner&sort=updated&{PER_PAGE}")
@@ -119,8 +117,7 @@ fn search_url(account: &AccountContext, search: &str, owner: Option<&str>) -> Re
 }
 
 pub(crate) fn get(repo: &RepoRef) -> Result<Repository, Failure> {
-    let url = format!("repos/{}/{}", encoded(&repo.owner), encoded(&repo.name));
-    repository(&succeeded(api(Request::get(url)).fetch())?.json()?)
+    repository(&succeeded(api(Request::get(repo_path(repo))).fetch())?.json()?)
 }
 
 pub(crate) fn create(account: &AccountContext, new: NewRepository) -> Result<Repository, Failure> {
@@ -178,10 +175,6 @@ fn visibility(item: &Value) -> Visibility {
         _ if item["private"].as_bool() == Some(true) => Visibility::Private,
         _ => Visibility::Public,
     }
-}
-
-fn text(value: &Value) -> Option<String> {
-    value.as_str().map(str::to_owned)
 }
 
 #[cfg(test)]

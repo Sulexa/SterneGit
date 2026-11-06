@@ -282,6 +282,8 @@ const Catalog = (() => {
             ['Tag', () => C.RefBadge({ name: 'v0.2.0', kind: 'tag', color: LaneColors[2] })],
             ['Long name', () => C.RefBadge({ name: 'origin/feature/a-very-long-branch-name', kind: 'remote', color: LaneColors[3] })],
             ['Stash', () => C.RefBadge({ name: 'stash@{1}', kind: 'stash', color: LaneColors[1] })],
+            ['Head of an open pull request', () => C.RefBadge({ name: 'feature/diff-view', kind: 'local', synced: true, color: LaneColors[1], pull: Sample.pulls.badges['feature/diff-view'] })],
+            ['Head of a draft', () => C.RefBadge({ name: 'feature/blame', kind: 'local', color: LaneColors[1], pull: Sample.pulls.badges['feature/blame'] })],
           ],
         },
         {
@@ -567,6 +569,8 @@ const Catalog = (() => {
             ['Both ways, long name, selected', () => C.RefRow({ label: { name: 'feature/version-entalto-rework', kind: 'local', ahead: 3, behind: 12, upstream: 'origin/feature/version-entalto-rework' }, name: 'version-entalto-rework', depth: 1, selected: true }), { w: 224 }],
             ['Remote branch', () => C.RefRow({ label: ref('origin/main'), name: 'main', depth: 1 }), { w: 224 }],
             ['Tag', () => C.RefRow({ label: ref('v0.2.0') }), { w: 224 }],
+            ['Head of an open pull request', () => C.RefRow({ label: Sample.pulls.pulled.refs.find((label) => label.name === 'feature/diff-view'), name: 'diff-view', depth: 1 }), { w: 224 }],
+            ['Head of a draft, behind its upstream', () => C.RefRow({ label: { ...Sample.pulls.pulled.refs.find((label) => label.name === 'feature/blame'), behind: 2, upstream: 'origin/feature/blame' }, name: 'blame', depth: 1 }), { w: 224 }],
           ],
         },
         {
@@ -601,6 +605,8 @@ const Catalog = (() => {
             ['Checked-out branch', () => menuFrame(C.BranchMenu({ label: ref('main'), current: 'main' }), 280)],
             ['Remote branch', () => menuFrame(C.BranchMenu({ label: ref('origin/feature/diff-view'), current: 'main' }), 340)],
             ['Detached HEAD', () => menuFrame(C.BranchMenu({ label: ref('feature/blame') }), 280)],
+            ['With a connector, no pull request yet', () => menuFrame(C.BranchMenu({ label: ref('topic/tabs'), current: 'main', pull: 'create' }), 280)],
+            ['With a connector, an open pull request', () => menuFrame(C.BranchMenu({ label: ref('feature/diff-view'), current: 'main', pull: { number: 12 } }), 280)],
           ],
         },
         {
@@ -1228,7 +1234,145 @@ const Catalog = (() => {
         },
       ],
     },
+    pullsGroup(),
   ];
+
+  function pullsGroup() {
+    const { list, shown, details, failing, failingDetails, fork, forkDetails, mergedSha } = Sample.pulls;
+    const box = (html, width = 700) => `<div style="width:${width}px">${html}</div>`;
+    const merging = (look, pull = shown, info = details) => box(C.MergeBox({ pull, details: { ...info, mergedSha }, look }));
+    return {
+      key: 'pulls',
+      title: 'Pull requests',
+      about: 'Milestone 5 of docs/connectors/design.md: the Pull requests section of the left pane, branch badges, the overview in the middle pane and the files in the right one, creating and merging. Every piece is drawn by FastGit from what the connector answers.',
+      items: [
+        {
+          name: 'PullsSection',
+          code: 'repo::pulls::PullsSection',
+          source: 'src/repo/pulls/section.rs',
+          about: 'The first section of the RefsList, when a started connector claims the remote. It folds like the others; its header counts the rows read and ends with the filter button. Rows come from pulls.list, a hundred at a time.',
+          variants: [
+            ['Open', () => C.PullsSection({ pulls: list.open, selected: 12 }), { w: 224 }],
+            ['Closed, more to read', () => C.PullsSection({ pulls: list.closed, filter: 'closed', more: true }), { w: 224 }],
+            ['None open', () => C.PullsSection({ pulls: [] }), { w: 224 }],
+            ['Reading', () => C.PullsSection({ state: 'loading' }), { w: 224 }],
+            ['No account fits the remote', () => C.PullsSection({ state: 'none' }), { w: 224 }],
+            ['Signed out', () => C.PullsSection({ state: 'signedOut', login: 'alex-acme' }), { w: 224 }],
+            ['Two accounts fit', () => C.PullsSection({ state: 'choosing' }), { w: 224 }],
+            ['Read failed', () => C.PullsSection({ state: 'failed' }), { w: 224 }],
+          ],
+        },
+        {
+          name: 'PullRow',
+          code: 'repo::pulls::section::PullsSection::pull_row',
+          source: 'src/repo/pulls/section.rs',
+          about: "The state's icon (open green, draft grey, merged magenta, closed red), the title, the overall state of the checks when the connector gives one, and the number. The tooltip names the author and the branches. A click selects it.",
+          variants: [...list.open, ...list.closed.slice(0, 2)].map((pull, ix) => [pull.title, () => C.PullRow({ pull, selected: ix === 1 }), { w: 224 }]),
+        },
+        {
+          name: 'PullFilterMenu',
+          code: 'repo::pulls::section::PullsSection::filter_button',
+          source: 'src/repo/pulls/section.rs',
+          about: 'Open, Closed or All, for this tab only: a plain kit dropdown with the chosen one ticked.',
+          variants: [['Closed chosen', () => `<div style="position:relative;width:260px;height:190px">${C.PullFilterMenu({ filter: 'closed', hot: 'all' })}</div>`]],
+        },
+        {
+          name: 'PullOverview',
+          code: 'repo::pulls::PullView',
+          source: 'src/repo/pulls/overview.rs',
+          about: 'The middle pane while a pull request is selected: a header with its title, number, state, review, author and branches, Check out and Open on GitHub; then a scrolling column with the description as the first comment, the ChecksBox, the MergeBox, the conversation and the CommentBox. Text is shown as typed, without rendering Markdown.',
+          variants: [
+            ['Ready to merge', () => C.PullOverview({ pull: shown, details }), { w: 736, h: 760 }],
+            ['Checks failing', () => C.PullOverview({ pull: failing, details: failingDetails }), { w: 736, h: 640 }],
+            ['From a fork, checked out', () => C.PullOverview({ pull: fork, details: forkDetails, checkedOut: true }), { w: 736, h: 520 }],
+            ['Reading', () => C.PullOverview({ pull: shown, details, state: 'loading' }), { w: 736, h: 240 }],
+          ],
+        },
+        {
+          name: 'ChecksBox',
+          code: 'repo::pulls::overview::PullView::checks_box',
+          source: 'src/repo/pulls/overview.rs',
+          about: 'pulls.checks on the head commit: a summary with the worst state first, then one row per check with its description and a link to its page.',
+          variants: [
+            ['All passed', () => box(C.ChecksBox({ checks: details.checks }))],
+            ['Mixed', () => box(C.ChecksBox({ checks: failingDetails.checks }))],
+            ['None', () => box(C.ChecksBox({ checks: [] }))],
+            ['Reading', () => box(C.ChecksBox({ checks: [], state: 'loading' }))],
+          ],
+        },
+        {
+          name: 'MergeBox',
+          code: 'repo::pulls::overview::PullView::merge_box',
+          source: 'src/repo/pulls/overview.rs',
+          about: 'What PullDetails.mergeability says, in words, with Merge… when GitHub allows it. Merged offers Delete branch while the branch exists.',
+          variants: [
+            ['Ready', () => merging('ready')],
+            ['Checks failing, not required', () => merging('failing', failing, failingDetails)],
+            ['Checking', () => merging('checking')],
+            ['Conflicts', () => merging('conflicts')],
+            ['Behind', () => merging('behind')],
+            ['Draft', () => merging('draft')],
+            ['Blocked', () => merging('blocked', fork, forkDetails)],
+            ['Merged', () => merging('merged')],
+            ['Closed', () => merging('closed')],
+          ],
+        },
+        {
+          name: 'CommentRow',
+          code: 'repo::pulls::overview::comment_block',
+          source: 'src/repo/pulls/overview.rs',
+          about: 'One comment of pulls.conversation: avatar, login, date and the text as typed.',
+          variants: details.conversation.map((comment) => [comment.author, () => box(C.CommentRow({ comment }))]),
+        },
+        {
+          name: 'CommentBox',
+          code: 'repo::pulls::overview::PullView::comment_box',
+          source: 'src/repo/pulls/overview.rs',
+          about: 'Comment sends pulls.comment and adds the answer to the conversation; Ctrl+Enter does the same. The text stays when it fails.',
+          variants: [
+            ['Empty', () => box(C.CommentBox({}))],
+            ['Posting', () => box(C.CommentBox({ value: 'Merging once the macOS build passes.', posting: true }))],
+            ['Failed', () => box(C.CommentBox({ value: 'Merging once the macOS build passes.', problem: "Couldn't reach api.github.com: the comment wasn't posted." }))],
+          ],
+        },
+        {
+          name: 'PullFiles',
+          code: 'repo::pulls::PullView::files_panel',
+          source: 'src/repo/pulls/overview.rs',
+          about: 'The right pane while a pull request is selected: its branches, its head, how many commits it adds since it branched off, then CommitFiles for git diff base...head on the fetched head. A click on a file compares it in the middle pane.',
+          variants: [
+            ['Ready', () => C.PullFiles({ pull: shown, details }), { w: 480, h: 360 }],
+            ['A file open, as a tree', () => C.PullFiles({ pull: shown, details, open: details.files[0].path, view: 'tree' }), { w: 480, h: 420 }],
+            ['Fetching', () => C.PullFiles({ pull: shown, details, state: 'loading' }), { w: 480, h: 260 }],
+            ['Fetch failed', () => C.PullFiles({ pull: shown, details, state: 'failed', reason: "fatal: couldn't find remote ref refs/pull/12/head" }), { w: 480, h: 260 }],
+          ],
+        },
+        {
+          name: 'CreatePullDialog',
+          code: 'repo::pulls::create::CreateForm',
+          source: 'src/repo/pulls/create.rs',
+          about: 'Create pull request… in the BranchMenu. Pushes the branch first when origin lacks it or some of its commits.',
+          variants: [
+            ['Not on origin yet', () => bigDialog(C.CreatePullDialog({ head: 'topic/tabs', title: 'Keep one tab per repository', body: '- Keep one tab per repository\n- Open each repository in its own tab', unpublished: true, commits: 2, files: 4 }), 600, 640)],
+            ['Two commits to push, as a draft', () => bigDialog(C.CreatePullDialog({ head: 'feature/stash', title: 'Stash and pop from the header', ahead: 2, draft: true, commits: 5, files: 5 }), 600, 640)],
+            ['Already open', () => bigDialog(C.CreatePullDialog({ head: 'feature/diff-view', title: 'Render side-by-side diffs with syntax colors', commits: 3, files: 5, problem: PullTexts.alreadyOpen(12) }), 600, 640)],
+          ],
+        },
+        {
+          name: 'MergePullDialog',
+          code: 'repo::pulls::merge::MergeForm',
+          source: 'src/repo/pulls/merge.rs',
+          about: 'Merge… in the MergeBox: the methods the repository allows, then the commit title and message where the method makes a commit. pulls.merge carries the head FastGit showed.',
+          variants: [
+            ['Squash and merge', () => bigDialog(C.MergePullDialog({ pull: shown, details }), 560, 640)],
+            ['Create a merge commit', () => bigDialog(C.MergePullDialog({ pull: shown, details, method: 'merge' }), 560, 640)],
+            ['Rebase and merge', () => bigDialog(C.MergePullDialog({ pull: shown, details, method: 'rebase' }), 380, 640)],
+            ['Head moved', () => bigDialog(C.MergePullDialog({ pull: shown, details, problem: PullTexts.movedOn('feature/diff-view') }), 620, 640)],
+          ],
+        },
+      ],
+    };
+  }
 
   function commitSelectedBody() {
     return C.RepoView({

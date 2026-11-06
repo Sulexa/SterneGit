@@ -14,7 +14,8 @@ use crate::{
     accounts,
     git::{
         self, Attendance, Behind, CheckedOut, FileChange, History, PartAction, PullMode,
-        RefLabel, RemoteBranch, Repo, Scope, Side, Stash, Underway, Version, WorkingChanges,
+        PullSource, RefLabel, RemoteBranch, Repo, Scope, Side, Stash, Underway, Version,
+        WorkingChanges,
     },
     ui::{Failure, Job, Load, run_in_background},
 };
@@ -22,10 +23,23 @@ use crate::{
 pub(crate) enum RepositoryEvent {
     HistoryRead,
     ChangesRead,
+    Fetched,
     Committed,
     Unpublished,
     Operated(Operated),
     PullModeNotSaved(Failure),
+}
+
+pub(crate) enum PullCheckOut {
+    Tracking {
+        remote: String,
+        branch: String,
+    },
+    Fork {
+        source: PullSource,
+        branch: String,
+        owner: String,
+    },
 }
 
 #[derive(Clone)]
@@ -283,6 +297,7 @@ impl Repository {
                     Ok(_) => {
                         this.fetch_failure = None;
                         this.check_for_changes(cx);
+                        cx.emit(RepositoryEvent::Fetched);
                     }
                     Err(error) => this.fetch_failure = Some(Failure::git_reason(&error)),
                 }
@@ -510,6 +525,55 @@ impl Repository {
             move |repo| {
                 repo.rebase_onto(&revision)
                     .map(|rebased| operation::rebased(&branch, &onto, rebased))
+            },
+            cx,
+        );
+    }
+
+    pub(crate) fn reached_repo(&self) -> Option<Repo> {
+        self.repo()
+            .cloned()
+            .map(|repo| reaching(repo, Attendance::Attended))
+    }
+
+    pub(crate) fn check_out_pull(&mut self, how: PullCheckOut, cx: &mut Context<Self>) {
+        let failed: SharedString = "Couldn't check out the pull request".into();
+        self.write_and_report(
+            None,
+            failed,
+            move |repo| match how {
+                PullCheckOut::Tracking { remote, branch } => {
+                    let (checked_out, carried) = repo.check_out_pull_branch(&remote, &branch)?;
+                    let done = operation::checked_out(&checked_out);
+                    Ok(operation::switched(done, &branch, carried))
+                }
+                PullCheckOut::Fork { source, branch, owner } => {
+                    let carried = repo.check_out_fork_pull(&source, &branch)?;
+                    let done = operation::checked_out_fork(&branch, &owner);
+                    Ok(operation::switched(done, &branch, carried))
+                }
+            },
+            cx,
+        );
+    }
+
+    pub(crate) fn delete_pull_branch(
+        &mut self,
+        remote: String,
+        branch: String,
+        local: Option<String>,
+        cx: &mut Context<Self>,
+    ) {
+        let failed: SharedString = format!("Couldn't delete {branch}").into();
+        self.write_and_report(
+            None,
+            failed,
+            move |repo| {
+                repo.delete_remote_branch(&remote, &branch)?;
+                if let Some(local) = &local {
+                    repo.delete_branch(local)?;
+                }
+                Ok(operation::pull_branch_deleted(&branch, &remote, local.as_deref()))
             },
             cx,
         );

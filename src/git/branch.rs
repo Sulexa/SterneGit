@@ -87,15 +87,11 @@ impl Repo {
 
     pub(crate) fn delete_remote_branch(&self, remote: &str, branch: &str) -> Result<()> {
         let there = format!("{BRANCHES}{branch}");
-        run(
-            &self.location,
-            &["push", "--quiet", remote, "--delete", &there],
-            Exit::Success,
-        )
-        .map(drop)
+        self.reach(&["push", "--quiet", remote, "--delete", &there])
+            .map(drop)
     }
 
-    fn has_branch(&self, name: &str) -> bool {
+    pub(super) fn has_branch(&self, name: &str) -> bool {
         self.local()
             .try_find_reference(format!("{BRANCHES}{name}").as_str())
             .is_ok_and(|found| found.is_some())

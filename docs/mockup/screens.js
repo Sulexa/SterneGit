@@ -859,5 +859,192 @@ const Screens = (() => {
         },
       ];
     })(),
+    ...(() => {
+      const { list, pulled, shown, details, failing, failingDetails, fork, forkDetails, mergedSha } = Sample.pulls;
+      const refsWithPulls = (pulls, refs = pulled.refs, selectedRow = null) => C.RefsList({ refs, selectedRow, collapsed, pulls: { pulls: list.open, ...pulls } });
+      const graph = (selectedRow = selected) => C.HistoryList({ history: pulled, selectedRow, changes });
+      const pullView = ({ pull = shown, info = details, middle, right, pulls = {}, refs, overlays = '', position, head = history.head }) =>
+        C.FastGit({
+          topBar: topBar({ head }),
+          tabStrip: tabStrip(),
+          body: C.RepoView({
+            left: refsWithPulls({ selected: pull.number, ...pulls }, refs),
+            middle: middle || C.PullOverview({ pull, details: info }),
+            right: right || C.PullFiles({ pull, details: info }),
+            status: C.RepoStatusBar({ summary: historySummary(history), position: position || PullTexts.position(pull.number, list.open.length, PullTexts.filters.open) }),
+          }),
+          overlays,
+        });
+      const topicTabs = ref('topic/tabs');
+      const forkBranch = 'pr/9-patch-1';
+      const forkRefs = [...pulled.refs.map((label) => (label.head ? { ...label, head: false } : label)), { name: forkBranch, kind: 'local', row: 0, head: true }];
+      const toast = (notification) => `<div class="toasts">${notification}</div>`;
+      return [
+        {
+          id: 'pulls',
+          title: 'Pull requests in the left pane',
+          about: "When a started connector claims the repository's remote and an account fits it, the left pane starts with Pull requests, above Branches. FastGit reads them with pulls.list when the tab opens and after each fetch finishes, never on a timer of its own. Each row has its state's icon (open in green, a draft in grey), the title, the overall state of its checks and its number; hovering it names the author and the branches. A local branch that is the head of an open pull request carries its number, in the left pane and on its badge in the graph: here feature/diff-view (#12), feature/stash (#14) and the draft feature/blame (#11). A pull request from a fork has no branch here, so it is only in the list. The section folds like the others and is left out when no connector claims the remote.",
+          source: 'src/repo/pulls/section.rs',
+          render: () =>
+            C.FastGit({
+              topBar: topBar(),
+              tabStrip: tabStrip(),
+              body: C.RepoView({
+                left: refsWithPulls({}, pulled.refs, selected),
+                middle: graph(),
+                right: C.CommitPanel({ commit: history.commits[selected], details: commitDetails }),
+                status: C.RepoStatusBar({ summary: historySummary(history), position: position(selected) }),
+              }),
+            }),
+        },
+        {
+          id: 'pull-filter',
+          title: 'Closed pull requests',
+          about: 'The button at the right of the section header picks which pull requests to list: Open, Closed (merged or closed, newest first) or All. Away from Open, the button says which. A hundred are read at a time; Load more, the last row, reads the next hundred. The choice belongs to the tab and isn\'t saved. Branch badges keep showing the open pull requests read last.',
+          source: 'src/repo/pulls/section.rs',
+          render: () =>
+            C.FastGit({
+              topBar: topBar(),
+              tabStrip: tabStrip(),
+              body: C.RepoView({
+                left: refsWithPulls({ pulls: list.closed, filter: 'closed', more: true }, pulled.refs, selected),
+                middle: graph(),
+                right: C.CommitPanel({ commit: history.commits[selected], details: commitDetails }),
+                status: C.RepoStatusBar({ summary: historySummary(history), position: position(selected) }),
+              }),
+              overlays: C.PullFilterMenu({ filter: 'closed', left: 150, top: 144, hot: 'all' }),
+            }),
+        },
+        {
+          id: 'pull-overview',
+          title: 'Pull request selected',
+          about: "Clicking a pull request selects it. The middle pane swaps the graph for its overview: title and number; its state, review, author and branches; Check out and Open on GitHub. Then its description as plain text, its checks (pulls.checks on the head commit), whether it can merge with Merge…, and the conversation with a box to comment. The right pane fetches the head into refs/fastgit/pull/12 and lists the files it changes since the commit where it branched off, as git diff main...head would; the list or tree choice is the one every file list shares. The overview is read again after each fetch. Esc, or a click on a branch, a tag or a stash, brings the graph back.",
+          source: 'src/repo/pulls/overview.rs',
+          render: () => pullView({}),
+        },
+        {
+          id: 'pull-reading',
+          title: 'Pull request opening',
+          about: "The row's facts show at once. The details come from GitHub while Git fetches the head; each part shows when it is ready. A failure stays in its part, with the way out: Retry for a fetch or an unreachable server, Sign in again for a refused token, the connector's last log lines when it stopped.",
+          source: 'src/repo/pulls/overview.rs',
+          render: () => pullView({ middle: C.PullOverview({ pull: shown, details, state: 'loading' }), right: C.PullFiles({ pull: shown, details, state: 'loading' }) }),
+        },
+        {
+          id: 'pull-file',
+          title: "Pull request file comparison",
+          about: 'A click on a file compares it in the middle pane: the file where the branch started on the left, at the head on the right, with every view the commit comparison has. Esc or × in the file bar goes back to the overview; another file opens another comparison; Alt+Left and Alt+Right step through the files.',
+          source: 'src/repo/file_diff_panel.rs',
+          render: () =>
+            pullView({
+              middle: C.FileDiffPanel({ diff: { ...commitFileDiff, commit: `#${shown.number}` }, mode: 'split', filePosition: [1, details.files.length] }),
+              right: C.PullFiles({ pull: shown, details, open: commitFileDiff.change.path }),
+            }),
+        },
+        {
+          id: 'pull-checks-failing',
+          title: 'Checks failing',
+          about: 'One row per check run and commit status on the head commit, each opening its page on GitHub. The summary counts them, worst first: failing, waiting for you, running, waiting, passed, then the rest. Running and waiting checks are read again with the next fetch. A yellow merge box can still merge: GitHub says none of the failing checks is required.',
+          source: 'src/repo/pulls/overview.rs',
+          render: () => pullView({ pull: failing, info: failingDetails }),
+        },
+        {
+          id: 'pull-merge',
+          title: 'Merge a pull request',
+          about: "Merge… asks how, offering only the methods the repository allows, with the first one picked. Squash and merge and Create a merge commit take a commit title and message, filled in as GitHub would; Rebase and merge takes none. FastGit sends the head it showed with pulls.merge: if someone pushed since, GitHub refuses, nothing is merged, and the dialog says so. Enter merges, Esc cancels.",
+          source: 'src/repo/pulls/merge.rs',
+          render: () => pullView({ overlays: C.MergePullDialog({ pull: shown, details }) }),
+        },
+        {
+          id: 'pull-merged',
+          title: 'Pull request merged',
+          about: 'Once the server merges it, FastGit fetches; the overview shows Merged and the pull request leaves the Open list, but stays selected. A notification offers Delete branch for a few seconds, and the merge box keeps offering it while origin still has the branch: git push --delete removes feature/diff-view from origin, then the local branch goes too unless it is checked out or points somewhere else than the merged head.',
+          source: 'src/repo/pulls/overview.rs',
+          render: () =>
+            pullView({
+              pull: { ...shown, state: 'merged' },
+              info: { ...details, mergedSha },
+              pulls: { pulls: list.open.filter((pull) => pull.number !== shown.number) },
+              refs: pulled.refs.map((label) => (label.pull && label.pull.number === shown.number ? { ...label, pull: undefined } : label)),
+              position: `Pull request #${shown.number} · merged`,
+              overlays: toast(C.Notification({ kind: 'success', title: PullTexts.merged(shown.number, shown.base), message: PullTexts.mergedMessage(shown.head), action: C.Button({ label: PullTexts.deleteBranch, icon: 'trash-2', size: 'sm', tooltip: PullTexts.deleteBranchTooltip }) })),
+            }),
+        },
+        {
+          id: 'pull-checked-out-fork',
+          title: 'Check out a pull request from a fork',
+          about: 'Check out on a pull request from this repository checks out its branch tracking origin\'s copy, as Check out on a remote branch does. One from a fork has no branch on origin: FastGit fetches refs/pull/9/head and makes a local pr/9-patch-1 from it, without an upstream; the branch carries the pull request\'s number. Uncommitted changes come along unless they clash, as for any check out. Here the merge is blocked until someone with write access approves.',
+          source: 'src/repo/pulls/overview.rs',
+          render: () =>
+            pullView({
+              pull: fork,
+              info: forkDetails,
+              head: forkBranch,
+              refs: forkRefs,
+              middle: C.PullOverview({ pull: fork, details: forkDetails, checkedOut: true }),
+              overlays: toast(C.Notification({ kind: 'success', message: PullTexts.checkedOutFork(forkBranch, fork.headOwner) })),
+            }),
+        },
+        {
+          id: 'create-pull-menu',
+          title: 'Right-click on a branch — pull request',
+          about: "When the remote has a connector and an account, the branch menu gains Create pull request…, or Show pull request #12 for a branch that already has an open one, which selects it. It is offered on local and remote branches, in the left pane and on badges in the graph, but not on the default branch.",
+          source: 'src/repo/branch_menu.rs',
+          render: () =>
+            C.FastGit({
+              topBar: topBar(),
+              tabStrip: tabStrip(),
+              body: C.RepoView({
+                left: refsWithPulls({}, pulled.refs, selected),
+                middle: graph(),
+                right: C.CommitPanel({ commit: history.commits[selected], details: commitDetails }),
+                status: C.RepoStatusBar({ summary: historySummary(history), position: position(selected) }),
+              }),
+              overlays: C.BranchMenu({ label: topicTabs, current: history.head, left: 92, top: 470, hot: PullTexts.createItem, pull: 'create' }),
+            }),
+        },
+        {
+          id: 'create-pull',
+          title: 'Create a pull request',
+          about: "From is the branch that was right-clicked, Into lists origin's branches with the default one picked. The title is the newest commit's subject, and the description lists the subjects when there are several. A branch that isn't on origin yet, or has commits origin lacks, is pushed first, and the dialog says so. Create sends pulls.create, selects the new pull request and says Created pull request #15; a refusal, such as one already open for the branch, shows under the title. Ctrl+Enter creates, Esc cancels.",
+          source: 'src/repo/pulls/create.rs',
+          render: () =>
+            C.FastGit({
+              topBar: topBar(),
+              tabStrip: tabStrip(),
+              body: C.RepoView({
+                left: refsWithPulls({}, pulled.refs, selected),
+                middle: graph(),
+                right: C.CommitPanel({ commit: history.commits[selected], details: commitDetails }),
+                status: C.RepoStatusBar({ summary: historySummary(history), position: position(selected) }),
+              }),
+              overlays: C.CreatePullDialog({
+                head: topicTabs.name,
+                title: 'Keep one tab per repository',
+                body: '- Keep one tab per repository\n- Open each repository in its own tab',
+                unpublished: true,
+                commits: 2,
+                files: 4,
+              }),
+            }),
+        },
+        {
+          id: 'pulls-no-account',
+          title: 'Pull requests without an account',
+          about: 'A connector claims the remote but no account fits it: the section\'s one row says so, and Add account… opens the Add an account dialog. A refused token says the account is signed out, with Sign in again; nothing is asked before, and fetches keep using Git\'s own credentials. The first read shows a spinner; another failure shows its reason with Retry. When two accounts fit and FastGit asks which one, the row says to pick one above. Hovering a row shows its whole text.',
+          source: 'src/repo/pulls/section.rs',
+          render: () =>
+            C.FastGit({
+              topBar: topBar(),
+              tabStrip: tabStrip(),
+              body: C.RepoView({
+                left: C.RefsList({ refs: history.refs, selectedRow: selected, collapsed, pulls: { state: 'none' } }),
+                middle: C.HistoryList({ history, selectedRow: selected, changes }),
+                right: C.CommitPanel({ commit: history.commits[selected], details: commitDetails }),
+                status: C.RepoStatusBar({ summary: historySummary(history), position: position(selected) }),
+              }),
+            }),
+        },
+      ];
+    })(),
   ];
 })();
