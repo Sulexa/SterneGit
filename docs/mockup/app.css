@@ -656,6 +656,39 @@
   white-space: pre-line;
 }
 
+.commit-message {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: -4px -8px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  cursor: text;
+}
+.commit-message.hot { background: var(--list-hover); }
+.commit-message > .tip {
+  position: absolute;
+  left: 120px;
+  top: calc(100% + 4px);
+  z-index: 2;
+  padding: 4px 8px;
+  white-space: nowrap;
+  background: var(--popover);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px #0006;
+}
+
+.message-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.message-editor > .edit-warn { gap: 6px; color: var(--yellow); }
+.message-editor > .edit-actions { gap: 8px; }
+.message-editor > .failure { color: var(--red); }
+
 .file-row {
   gap: 8px;
   padding-left: 12px;

@@ -364,6 +364,17 @@ const Texts = {
   copyHash: 'Copy hash',
   copyMessage: 'Copy message',
   messageCopied: 'Commit message copied',
+  editMessageTip: 'Click to edit the message',
+  saveMessage: 'Save message',
+  savingMessage: 'Saving…',
+  saveMessageTooltip: 'Save the message  Ctrl+Enter',
+  rewrites: (after, branches) =>
+    after
+      ? `Saving gives this commit and the ${counted(after, 'commit', 'commits')} after it new hashes, and moves ${listed(branches)}.`
+      : `Saving gives this commit a new hash and moves ${listed(branches)} to it.`,
+  pushedAlready: (remotes) => `${listed(remotes)} already ${remotes.length > 1 ? 'have' : 'has'} it: the next push needs Force push.`,
+  tagsStay: (tags) => `${listed(tags)} ${tags.length > 1 ? 'stay' : 'stays'} on the old ${tags.length > 1 ? 'commits' : 'commit'}.`,
+  messageSaved: (old, id) => `Message saved: ${old} is now ${id}`,
   checkedOutCommit: (id) => `Checked out ${id}: HEAD is detached`,
   resetDone: (branch, id) => `Reset ${branch} to ${id}`,
   reverted: (id) => `Reverted ${id}`,
@@ -796,6 +807,8 @@ const thousands = (n) => n.toLocaleString('en-US');
 const counted = (n, singular, plural) => `${thousands(n)} ${n === 1 ? singular : plural}`;
 
 const join = (parts) => parts.filter(Boolean).join('');
+
+const listed = (names) => (names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : names[0] || '');
 
 const Bits64 = 0xffffffffffffffffn;
 
@@ -1756,7 +1769,7 @@ const C = {
     return C.ListRow({ content, extraClass: 'folder-row', name: 'FolderRow' });
   },
 
-  CommitPanel({ commit, details, state = 'ready', reason = '', open, view = 'list', collapsed, pointed }) {
+  CommitPanel({ commit, details, state = 'ready', reason = '', open, view = 'list', collapsed, pointed, pointing = false, edit }) {
     if (!commit || state === 'none') return `<div data-c="CommitPanel" class="commit-panel">${C.Hint({ message: Texts.selectCommit })}</div>`;
     const ready = state === 'ready' || state === 'empty';
     const files = state === 'empty' ? [] : details.files;
@@ -1770,10 +1783,13 @@ const C = {
         ? `<div class="h xs" style="gap:12px"><div class="muted">${counted(files.length, 'file', 'files')}</div>${C.Additions({ count: additions })}${C.Deletions({ count: deletions })}<div class="fill"></div>${C.FileViewToggle({ view })}</div>`
         : '';
     const copy = C.Button({ label: 'Copy hash', variant: 'ghost', tooltip: 'Copy the full hash  Ctrl+Shift+C' });
+    const tip = pointing ? `<div class="tip xs">${esc(Texts.editMessageTip)}</div>` : '';
+    const message = edit
+      ? C.MessageEditor({ subject: commit.subject, description: details.body, ...edit })
+      : `<div class="commit-message${pointing ? ' hot' : ''}"><div class="base medium">${esc(commit.subject || '(no message)')}</div>${body}${tip}</div>`;
     const header =
       `<div class="panel-header">` +
-      `<div class="base medium">${esc(commit.subject || '(no message)')}</div>` +
-      body +
+      message +
       `<div class="h xs muted" style="gap:8px">${C.AuthorAvatar({ name: commit.author, email: commit.email, size: 20 })}<span>${esc(commit.author)}</span><span>·</span><span>${esc(commit.date)}</span></div>` +
       `<div class="h xs muted" style="gap:8px"><span class="mono">${esc(commit.id)}</span>${parents ? `<span>${relation} ${esc(parents)}</span>` : ''}<div class="fill"></div>${copy}</div>` +
       stats +
@@ -1787,6 +1803,24 @@ const C = {
             ? C.Hint({ message: Texts.commitEmpty })
             : C.CommitFiles({ files, open, view, collapsed, pointed });
     return `<div data-c="CommitPanel" class="commit-panel">${header}<div class="fill v">${content}</div></div>`;
+  },
+
+  MessageEditor({ subject = '', description = '', focus, after = 0, branches = [], remotes = [], tags = [], saving = false, changed = true, failure }) {
+    const lines = [
+      `<div class="xs muted">${esc(Texts.rewrites(after, branches))}</div>`,
+      remotes.length ? `<div class="h xs edit-warn">${icon('triangle-alert', 'xs')}<span>${esc(Texts.pushedAlready(remotes))}</span></div>` : '',
+      tags.length ? `<div class="xs muted">${esc(Texts.tagsStay(tags))}</div>` : '',
+    ];
+    const save = C.Button({ label: saving ? Texts.savingMessage : Texts.saveMessage, variant: 'primary', size: 'sm', loading: saving, disabled: !changed || subject.trim() === '', tooltip: Texts.saveMessageTooltip });
+    return (
+      `<div data-c="MessageEditor" class="message-editor">` +
+      C.Input({ value: subject, placeholder: Texts.commitMessage, focused: focus === 'subject', disabled: saving }) +
+      C.Input({ value: description, placeholder: Texts.commitDescription, lines: 4, focused: focus === 'description', disabled: saving }) +
+      join(lines) +
+      `<div class="h edit-actions"><div class="fill"></div>${C.Button({ label: 'Cancel', size: 'sm', disabled: saving })}${save}</div>` +
+      (failure ? `<div class="failure xs">${esc(failure)}</div>` : '') +
+      `</div>`
+    );
   },
 
   FileRow({ kind, path, depth, selected = false, trailing = '', name = 'FileRow' }) {

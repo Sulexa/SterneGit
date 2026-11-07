@@ -15,6 +15,7 @@ mod history_list;
 mod hunk_actions;
 mod merge_editor;
 mod merge_text;
+mod message_editor;
 mod navigation;
 mod operation;
 mod operation_bar;
@@ -99,6 +100,8 @@ use pulls::{
 use ref_tree::RefGroup;
 use refs_list::{RefsList, WorktreeSection};
 pub(crate) use repository::{Repository, RepositoryEvent};
+use message_editor::{NOT_SAVED, message_saved};
+use repository::Reworded;
 use status_bar::RepoStatusBar;
 use toolbar::{RepoToolbar, ToolbarState, notification};
 use worktree_bar::worktree_bar;
@@ -181,7 +184,7 @@ impl EventEmitter<RepoViewEvent> for RepoView {}
 impl RepoView {
     pub(crate) fn new(path: PathBuf, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let repository = cx.new(|_| Repository::new(path));
-        let commit_panel = cx.new(|_| CommitPanel::new());
+        let commit_panel = cx.new(|_| CommitPanel::new(repository.clone()));
         let commit_form = cx.new(|cx| CommitForm::new(repository.clone(), window, cx));
         let file_diff = cx.new(|cx| FileDiffPanel::new(repository.clone(), cx));
         let pulls = cx.new(|cx| Pulls::new(repository.clone(), cx));
@@ -209,6 +212,7 @@ impl RepoView {
                         window.push_notification(notification, cx)
                     }
                 }
+                RepositoryEvent::Reworded(reworded) => this.on_reworded(reworded, window, cx),
                 RepositoryEvent::PullModeNotSaved(failure) => window.push_notification(
                     Notification::error(failure.message())
                         .title("Couldn't save the pull mode")
@@ -473,6 +477,29 @@ impl RepoView {
         }
         self.repository
             .update(cx, |repository, cx| repository.finish_underway(finish, cx));
+    }
+
+    fn on_reworded(&mut self, reworded: &Reworded, window: &mut Window, cx: &mut Context<Self>) {
+        match reworded.outcome.as_ref() {
+            Ok(now) => {
+                window.push_notification(
+                    Notification::success(message_saved(reworded.id, *now)),
+                    cx,
+                );
+                if self.target.commit() == Some(reworded.id) {
+                    self.target = Target::at_commit(*now);
+                    self.file_diff.update(cx, |panel, cx| panel.close(cx));
+                }
+            }
+            Err(failure) if !self.commit_panel.read(cx).is_editing(reworded.id, cx) => window
+                .push_notification(
+                    Notification::error(failure.message())
+                        .title(NOT_SAVED)
+                        .autohide(false),
+                    cx,
+                ),
+            Err(_) => {}
+        }
     }
 
     fn select_commit(&mut self, id: ObjectId, cx: &mut Context<Self>) {

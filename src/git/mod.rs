@@ -23,6 +23,7 @@ mod refs;
 mod refusal;
 mod remote;
 mod reset;
+mod reword;
 pub(crate) mod ssh_key;
 mod stash;
 mod status;
@@ -68,6 +69,7 @@ pub(crate) use refs::{AheadBehind, RefDigest, RefKind, RefLabel, RemoteBranch, S
 pub(crate) use refusal::{Refusal, Tracking};
 pub(crate) use remote::{Behind, CaughtUp, Pulled, Pushed};
 pub(crate) use reset::ResetMode;
+pub(crate) use reword::RewordScope;
 pub(crate) use stash::{Carried, Stash};
 pub(crate) use status::{ChangeKind, FileChange, Side, WorkingChanges};
 pub(crate) use tag::new_tag_name;

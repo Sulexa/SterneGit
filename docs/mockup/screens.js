@@ -176,6 +176,72 @@ const Screens = (() => {
         }),
     },
     {
+      id: 'commit-message-hover',
+      title: 'Pointing at a commit message',
+      about: "The message of the selected commit can be edited in place. Pointing at its subject or description lights them up, with a text cursor and a tooltip: Click to edit the message. That works for any commit a local branch holds, or a detached HEAD, however old. A commit that only remote branches or tags hold, a stash, and every commit while a rebase, a merge, a cherry-pick or a revert waits or another Git write runs, don't light up and ignore the click.",
+      source: 'src/repo/commit_panel.rs',
+      render: () => C.SterneGit({ topBar: topBar(), tabStrip: tabStrip(), body: commitSelected(undefined, { pointing: true }) }),
+    },
+    {
+      id: 'edit-message',
+      title: 'Edit a commit message',
+      about: "A click on the subject or the description turns both into fields, the one clicked taking the focus, as in the CommitForm: Enter in the subject moves to the description, Ctrl+Enter saves, Esc, Cancel or selecting another commit drops the edit. Under them a line says what saving rewrites. Git can't change a commit in place, so saving writes a new commit with the same files, author and date and the new message, then writes every commit after it again on top, merges included, on every local branch that holds it. Each keeps its own files, author, date and message, so nothing can conflict, and the working files, the staged changes and the stashes stay as they are. Those branches then move to the new commits, each only if it hasn't moved meanwhile; the new commits name you as committer, now, as git commit --amend does. Save message stays disabled while the subject is empty or nothing changed. Here main holds the commit and one more after it, neither pushed yet, and a description is being added to a commit that had none.",
+      source: 'src/repo/commit_panel.rs',
+      render: () =>
+        C.SterneGit({
+          topBar: topBar(),
+          tabStrip: tabStrip(),
+          body: repo({
+            selectedRow: 1,
+            left: C.RefsList({ refs: tracked.refs, selectedRow: 1, collapsed }),
+            middle: C.HistoryList({ history: tracked, selectedRow: 1, changes }),
+            right: C.CommitPanel({
+              commit: tracked.commits[1],
+              details: { ...commitDetails, body: '' },
+              edit: { description: 'parse_patch moves to patch_view.rs, so the FileDiffPanel\ncan read a patch without the commit panel.', focus: 'description', after: 1, branches: ['main'] },
+            }),
+          }),
+        }),
+    },
+    {
+      id: 'edit-pushed-message',
+      title: 'Edit the message of a pushed commit',
+      about: "When a remote branch already has the commit, a warning says so: the remote keeps the old commit, so the next push of the branch is refused and its question offers Force push, which replaces the old commit there too. Tags on the commit or on the commits after it stay where they are, on the old commits, and a line names them; so do remote branches. The old commits stay in the graph as long as a tag or a remote branch holds them. Here only feature/diff-view holds the commit, which origin/feature/diff-view already has.",
+      source: 'src/repo/commit_panel.rs',
+      render: () =>
+        C.SterneGit({
+          topBar: topBar(),
+          tabStrip: tabStrip(),
+          body: commitSelected(undefined, {
+            edit: { subject: 'Render split diffs with syntax colors', focus: 'subject', after: 0, branches: ['feature/diff-view'], remotes: ['origin/feature/diff-view'] },
+          }),
+        }),
+    },
+    {
+      id: 'message-saved',
+      title: 'Commit message saved',
+      about: "Once saved, the commit shows again with its new message and its new hash, still selected, and a notification names the old hash and the new one. The commit after it got a new hash too, and main moved to it: it is still two commits ahead of origin/main, since neither was pushed.",
+      source: 'src/repo/commit_panel.rs',
+      render: () => {
+        const renamed = { [tracked.commits[0].id]: '3fa81c2', [tracked.commits[1].id]: '9d02e6b' };
+        const saved = { ...tracked, commits: tracked.commits.map((commit) => ({ ...commit, id: renamed[commit.id] || commit.id })) };
+        return C.SterneGit({
+          topBar: topBar(),
+          tabStrip: tabStrip(),
+          body: repo({
+            selectedRow: 1,
+            left: C.RefsList({ refs: saved.refs, selectedRow: 1, collapsed }),
+            middle: C.HistoryList({ history: saved, selectedRow: 1, changes }),
+            right: C.CommitPanel({
+              commit: saved.commits[1],
+              details: { ...commitDetails, body: 'parse_patch moves to patch_view.rs, so the FileDiffPanel\ncan read a patch without the commit panel.' },
+            }),
+          }),
+          overlays: `<div class="toasts">${C.Notification({ kind: 'success', message: Texts.messageSaved(tracked.commits[1].id, '9d02e6b') })}</div>`,
+        });
+      },
+    },
+    {
       id: 'commit-menu',
       title: 'Right-click on a commit',
       about: "A right-click on a commit row in the graph opens its menu where the pointer is, without selecting it. Check out this commit checks out the commit itself: HEAD is detached and the head pill reads detached at its id; uncommitted changes in the way are stashed and brought back, as for a branch. Create branch here… and Create tag here… start a branch or a tag at the commit. Revert this commit adds a commit on main that undoes it; a merge is reverted against its first parent. Reset main to here opens a submenu that moves main to the commit: Soft keeps what main leaves behind staged, Mixed keeps it unstaged, and Hard asks first, then throws every uncommitted change away. Copy hash copies the full hash and Copy message the whole message, each with a notification. The HEAD commit has no Check out and no Reset. Every Git write runs like the branch menu's: one at a time, items disabled while one runs, then a notification such as Reverted b47d0a8 or Reset main to b47d0a8; its changes are unstaged. While a rebase, a merge, a cherry-pick or a revert waits, only Create tag here… and the two Copy items stay enabled, since Git won't switch branches then.",

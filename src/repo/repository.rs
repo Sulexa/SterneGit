@@ -28,7 +28,13 @@ pub(crate) enum RepositoryEvent {
     Committed,
     Unpublished,
     Operated(Operated),
+    Reworded(Reworded),
     PullModeNotSaved(Failure),
+}
+
+pub(crate) struct Reworded {
+    pub(crate) id: ObjectId,
+    pub(crate) outcome: Result<ObjectId, Failure>,
 }
 
 pub(crate) enum PullCheckOut {
@@ -467,6 +473,29 @@ impl Repository {
                         this.read_status(StatusCheck::Forced, cx);
                     }
                 }
+                cx.notify();
+            },
+        );
+        self.write.run(task);
+        cx.notify();
+    }
+
+    pub(crate) fn reword(&mut self, id: ObjectId, message: String, cx: &mut Context<Self>) {
+        if self.write.is_running() {
+            return;
+        }
+        let Some(repo) = self.repo().cloned() else {
+            return;
+        };
+        self.status_read.cancel();
+        let task = run_in_background(
+            cx,
+            move || repo.reword(id, &message),
+            move |this, result, cx| {
+                this.write.finish();
+                let outcome = result.map_err(|error| Failure::git_reason(&error));
+                cx.emit(RepositoryEvent::Reworded(Reworded { id, outcome }));
+                this.refresh(cx);
                 cx.notify();
             },
         );
