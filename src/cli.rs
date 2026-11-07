@@ -8,16 +8,19 @@ use serde_json::Value;
 
 use crate::{
     accounts,
+    app::Opening,
     connect::{self, CallError, Played, Trial, Usage},
     git::{GIT_CREDENTIAL_FLAG, Repo},
     ui::{counted, thousands},
 };
 
 const CONNECTOR_TEST_FLAG: &str = "--connector-test";
-const USAGE: &str = "Usage: sternegit [--check] [repository]\n       \
+const ASIDE_FLAG: &str = "--aside";
+const USAGE: &str = "Usage: sternegit [--check] [--aside] [repository]\n       \
                      sternegit --connector-test <folder> [cassette]";
 const HELP: &str = "Brings back the tabs open last time, plus the repository containing the given path.\n\
                     --check reads the history without opening a window and reports how long it took.\n\
+                    --aside opens the window on the rightmost screen without taking focus.\n\
                     --connector-test starts the connector in the folder in its sandbox, without a window,\n\
                     replays the cassette's call against it if one is given, and prints the answer, the log,\n\
                     the fuel and the memory used.";
@@ -28,7 +31,7 @@ pub(crate) enum Invocation {
     Help,
     Misuse,
     Check(PathBuf),
-    Open(Option<PathBuf>),
+    Open(Option<PathBuf>, Opening),
     GitCredential { account: String, operation: String },
     ConnectorTest { folder: PathBuf, cassette: Option<PathBuf> },
 }
@@ -48,12 +51,15 @@ pub(crate) fn parse(arguments: impl IntoIterator<Item = OsString>) -> Invocation
         return connector_test(arguments.collect());
     }
     let mut check = false;
+    let mut opening = Opening::InFront;
     let mut path = None;
     for argument in arguments {
         if argument == "--help" || argument == "-h" {
             return Invocation::Help;
         } else if argument == "--check" {
             check = true;
+        } else if argument == ASIDE_FLAG {
+            opening = Opening::Aside;
         } else if path.is_none() && !argument.to_string_lossy().starts_with('-') {
             path = Some(PathBuf::from(argument));
         } else {
@@ -63,7 +69,7 @@ pub(crate) fn parse(arguments: impl IntoIterator<Item = OsString>) -> Invocation
     if check {
         Invocation::Check(path.unwrap_or_else(|| PathBuf::from(".")))
     } else {
-        Invocation::Open(path)
+        Invocation::Open(path, opening)
     }
 }
 
@@ -242,7 +248,7 @@ pub(crate) fn check(path: &Path) {
 mod tests {
     use std::{ffi::OsString, path::PathBuf, time::Duration};
 
-    use super::{Invocation, indented_log, milliseconds, parse, size};
+    use super::{Invocation, Opening, indented_log, milliseconds, parse, size};
 
     fn parsed(arguments: &[&str]) -> Invocation {
         parse(arguments.iter().map(OsString::from))
@@ -250,15 +256,23 @@ mod tests {
 
     #[test]
     fn no_arguments_open_no_repository_beyond_the_saved_tabs() {
-        assert_eq!(parsed(&[]), Invocation::Open(None));
+        assert_eq!(parsed(&[]), Invocation::Open(None, Opening::InFront));
     }
 
     #[test]
     fn a_path_opens_that_repository() {
         assert_eq!(
             parsed(&["repo"]),
-            Invocation::Open(Some(PathBuf::from("repo")))
+            Invocation::Open(Some(PathBuf::from("repo")), Opening::InFront)
         );
+    }
+
+    #[test]
+    fn aside_opens_out_of_the_way_before_or_after_the_path() {
+        let aside = Invocation::Open(Some(PathBuf::from("repo")), Opening::Aside);
+        assert_eq!(parsed(&["--aside", "repo"]), aside);
+        assert_eq!(parsed(&["repo", "--aside"]), aside);
+        assert_eq!(parsed(&["--aside"]), Invocation::Open(None, Opening::Aside));
     }
 
     #[test]

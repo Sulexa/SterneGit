@@ -23,7 +23,7 @@ fn main() {
         Invocation::Help => cli::print_help(),
         Invocation::Misuse => cli::exit_with_usage(),
         Invocation::Check(path) => cli::check(&path),
-        Invocation::Open(path) => app::run(path),
+        Invocation::Open(path, opening) => app::run(path, opening),
         Invocation::GitCredential { account, operation } => {
             cli::answer_git_credential(&account, &operation)
         }

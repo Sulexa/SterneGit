@@ -1,5 +1,6 @@
 pub(crate) mod connectors;
 mod logo;
+mod opening;
 mod saved_tabs;
 mod tab_strip;
 mod tabs;
@@ -10,7 +11,7 @@ pub(crate) mod zoom;
 use std::{path::PathBuf, rc::Rc};
 
 use gpui_kit::{
-    Action, App, AppContext as _, KeyBinding, KeyBindingContextPredicate, Menu, MenuItem,
+    Action, App, AppContext as _, Bounds, KeyBinding, KeyBindingContextPredicate, Menu, MenuItem,
     WindowBounds, WindowOptions,
     component::{GlobalState, TitleBar},
     px, size,
@@ -26,6 +27,7 @@ use crate::{
     },
     assets::Assets,
 };
+pub(crate) use opening::Opening;
 use window::SterneGit;
 
 const WINDOW_WIDTH: f32 = 1440.;
@@ -33,16 +35,20 @@ const WINDOW_HEIGHT: f32 = 900.;
 const MIN_WINDOW_WIDTH: f32 = 960.;
 const MIN_WINDOW_HEIGHT: f32 = 600.;
 
-pub(crate) fn run(path: Option<PathBuf>) {
+pub(crate) fn run(path: Option<PathBuf>, opening: Opening) {
     gpui_kit::application().with_assets(Assets).run(move |cx| {
         gpui_kit::init(cx);
         bind_keys(cx);
         install_menus(cx);
+        let display_id = opening.display(cx);
         let options = WindowOptions {
-            window_bounds: Some(WindowBounds::centered(
+            window_bounds: Some(WindowBounds::Windowed(Bounds::centered(
+                display_id,
                 size(px(WINDOW_WIDTH), px(WINDOW_HEIGHT)),
                 cx,
-            )),
+            ))),
+            display_id,
+            focus: opening.takes_focus(),
             window_min_size: Some(size(px(MIN_WINDOW_WIDTH), px(MIN_WINDOW_HEIGHT))),
             app_id: Some("sternegit".into()),
             ..TitleBar::window_options()
@@ -53,7 +59,9 @@ pub(crate) fn run(path: Option<PathBuf>) {
             cx.new(|cx| SterneGit::new(path, window, cx))
         })
         .expect("failed to open the SterneGit window");
-        cx.activate(true);
+        if opening.takes_focus() {
+            cx.activate(true);
+        }
         connectors::start_connectors(cx);
     });
 }

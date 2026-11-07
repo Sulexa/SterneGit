@@ -87,8 +87,8 @@ for ($attempt = 1; ; $attempt++) {
 }
 
 if ($running.Count -gt 0) {
-    Start-Process -FilePath $installed -WorkingDirectory $root
-    Write-Report 'SterneGit rebuilt and relaunched from build\sternegit.exe.'
+    Start-Process -FilePath $installed -ArgumentList '--aside' -WorkingDirectory $root
+    Write-Report 'SterneGit rebuilt and relaunched from build\sternegit.exe on the right-hand screen.'
 }
 else {
     Write-Report 'SterneGit rebuilt into build\sternegit.exe. It was not running, so it was not started.'

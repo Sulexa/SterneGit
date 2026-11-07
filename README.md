@@ -28,7 +28,8 @@ cargo run -- --check path/to/repository
 
 On Windows, `scripts/build-and-relaunch.ps1` builds a release and copies it to
 `build/sternegit.exe`, which Git ignores, replacing the previous copy. If that copy
-is running, it's closed and started again on the new build. Nothing happens when
+is running, it's closed and started again on the new build with `--aside`, which
+opens the window on the rightmost screen without taking focus. Nothing happens when
 the build hasn't changed.
 
 On Linux, building needs the same system packages Zed needs (Wayland or X11,
