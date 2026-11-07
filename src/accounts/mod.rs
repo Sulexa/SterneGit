@@ -6,7 +6,7 @@ mod git_token;
 mod helper;
 mod secrets;
 
-pub(crate) use access::{access_as, access_for_repo, access_for_url};
+pub(crate) use access::{access_as, access_for_repo, access_for_url, serves};
 #[cfg(test)]
 pub(crate) use account::fixtures;
 pub(crate) use account::{

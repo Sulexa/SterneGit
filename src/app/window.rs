@@ -1,4 +1,8 @@
-use std::{collections::BTreeSet, path::PathBuf, time::Duration};
+use std::{
+    collections::BTreeSet,
+    path::PathBuf,
+    time::{Duration, SystemTime},
+};
 
 use gpui_kit::{
     AnyElement, App, AppContext as _, Context, Entity, Focusable as _, InteractiveElement as _,
@@ -35,7 +39,10 @@ use crate::{
         CloneEvent, CloneJob, CloneView, Page, SettingsTab, open_clone_dialog,
         open_new_repository,
     },
-    net::services::ConnectorId,
+    net::{
+        online::{self, Online},
+        services::ConnectorId,
+    },
     repo::{RepoView, RepoViewEvent, Repository},
     ui::{Look as _, Notice},
 };
@@ -43,6 +50,7 @@ use crate::{
 const CHECK_FOR_OUTSIDE_CHANGES_EVERY: Duration = Duration::from_secs(3);
 const FETCH_IN_THE_BACKGROUND_EVERY: Duration = Duration::from_secs(5 * 60);
 const FETCH_ON_RETURN_UNLESS_FETCHED_WITHIN: Duration = Duration::from_secs(60);
+const SLEPT_IF_A_CHECK_WAITED: Duration = Duration::from_secs(30);
 const SETTINGS: &str = "Settings";
 const REVIEW: &str = "Review…";
 const WELCOME_TITLE: &str = "Open a Git repository";
@@ -88,11 +96,24 @@ impl SterneGit {
         Theme::change(ThemeMode::Dark, Some(window), cx);
         let menu_bar = draws_its_own_menu_bar(cx).then(|| AppMenuBar::new(cx));
         let poll = cx.spawn(async move |this, cx| {
+            let mut online = Online::default();
             loop {
+                let waiting_since = SystemTime::now();
                 cx.background_executor()
                     .timer(CHECK_FOR_OUTSIDE_CHANGES_EVERY)
                     .await;
-                if this.update(cx, |this, cx| this.poll(cx)).is_err() {
+                if waiting_since
+                    .elapsed()
+                    .is_ok_and(|waited| waited >= SLEPT_IF_A_CHECK_WAITED)
+                {
+                    online.woke();
+                }
+                let addresses = cx
+                    .background_executor()
+                    .spawn(async { online::addresses() })
+                    .await;
+                let network_came_back = online.came_back(addresses);
+                if this.update(cx, |this, cx| this.poll(network_came_back, cx)).is_err() {
                     break;
                 }
             }
@@ -145,7 +166,7 @@ impl SterneGit {
         saved.save();
     }
 
-    fn poll(&mut self, cx: &mut Context<Self>) {
+    fn poll(&mut self, network_came_back: bool, cx: &mut Context<Self>) {
         let active = self.tabs.active_index();
         for (ix, tab) in self.tabs.iter().enumerate() {
             let Some(repository) = tab.repository() else {
@@ -155,7 +176,11 @@ impl SterneGit {
                 if ix == active {
                     repository.check_for_changes(cx);
                 }
-                repository.fetch_if_older_than(FETCH_IN_THE_BACKGROUND_EVERY, cx);
+                if network_came_back {
+                    repository.fetch_unattended(cx);
+                } else {
+                    repository.fetch_if_older_than(FETCH_IN_THE_BACKGROUND_EVERY, cx);
+                }
             });
         }
     }

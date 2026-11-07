@@ -349,8 +349,12 @@ impl Repository {
             .last_fetch
             .is_none_or(|started| started.elapsed() >= age)
         {
-            self.fetch_as(Attendance::Unattended, cx);
+            self.fetch_unattended(cx);
         }
+    }
+
+    pub(crate) fn fetch_unattended(&mut self, cx: &mut Context<Self>) {
+        self.fetch_as(Attendance::Unattended, cx);
     }
 
     pub(crate) fn fetch(&mut self, cx: &mut Context<Self>) {

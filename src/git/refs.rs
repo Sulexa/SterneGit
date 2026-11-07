@@ -11,6 +11,8 @@ use gpui_kit::SharedString;
 
 use super::{pull_head::PULL_REFS, stash::stash_ids_newest_first, text::decode};
 
+const LOCAL_CONFIG: &str = "config";
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) enum RefKind {
     LocalBranch,
@@ -129,8 +131,14 @@ impl RefDigest {
         }
         stash_ids_newest_first(repo).hash(&mut hasher);
         hash_worktrees(repo, &mut hasher);
+        hash_local_config(repo, &mut hasher);
         Ok(Self(hasher.finish()))
     }
+}
+
+fn hash_local_config(repo: &gix::Repository, hasher: &mut DefaultHasher) {
+    let common_dir = repo.current_dir().join(repo.common_dir());
+    std::fs::read(common_dir.join(LOCAL_CONFIG)).ok().hash(hasher);
 }
 
 fn hash_worktrees(repo: &gix::Repository, hasher: &mut DefaultHasher) {
@@ -421,6 +429,19 @@ mod tests {
             after_commit,
             "a new branch is a new ref"
         );
+        Ok(())
+    }
+
+    #[test]
+    fn the_ref_digest_follows_remotes_added_or_moved_in_the_config() -> Result<()> {
+        let scratch = ScratchRepo::new("remote-digest")?;
+        scratch.commit("first")?;
+        let (repo, history) = scratch.open()?;
+        scratch.git(&["remote", "add", "origin", "https://example.com/a.git"])?;
+        let added = repo.ref_digest()?;
+        assert_ne!(added, history.digest, "a remote added");
+        scratch.git(&["remote", "set-url", "origin", "https://example.com/b.git"])?;
+        assert_ne!(repo.ref_digest()?, added, "a remote moved to another URL");
         Ok(())
     }
 }

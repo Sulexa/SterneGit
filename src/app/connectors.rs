@@ -33,6 +33,7 @@ struct Running {
     secrets: Arc<dyn Secrets>,
     transport: Arc<dyn Transport>,
     signed_out: BTreeSet<AccountId>,
+    connected: Vec<AccountId>,
 }
 
 #[derive(Clone)]
@@ -82,6 +83,17 @@ impl Connectors {
         self.running
             .as_ref()
             .is_some_and(|running| running.signed_out.contains(id))
+    }
+
+    pub(crate) fn connections(&self) -> usize {
+        self.running.as_ref().map_or(0, |running| running.connected.len())
+    }
+
+    pub(crate) fn connected_after(&self, seen: usize) -> &[AccountId] {
+        self.running
+            .as_ref()
+            .and_then(|running| running.connected.get(seen..))
+            .unwrap_or_default()
     }
 
     pub(crate) fn connectors(&self) -> &[Connector] {
@@ -176,6 +188,7 @@ pub(crate) fn keep_account(cx: &mut App, account: Account, token: &Token) -> io:
         let running = connectors.running.as_mut().ok_or_else(not_ready)?;
         running.secrets.write(&account.id, &account.login, token)?;
         running.signed_out.remove(&account.id);
+        running.connected.push(account.id.clone());
         connectors.change_book(|book| book.sign_in(account))
     })
 }
@@ -205,6 +218,8 @@ pub(crate) fn change_account(
 
 pub(crate) fn choose_owner(cx: &mut App, host: &str, owner: &str, account: AccountId) -> io::Result<()> {
     cx.update_global::<Connectors, _>(|connectors, _| {
+        let running = connectors.running.as_mut().ok_or_else(not_ready)?;
+        running.connected.push(account.clone());
         connectors.change_book(|book| book.choose(host, owner, account))
     })
 }
@@ -286,6 +301,7 @@ fn run() -> Running {
         secrets,
         transport,
         signed_out: BTreeSet::new(),
+        connected: Vec::new(),
     }
 }
 

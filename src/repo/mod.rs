@@ -56,6 +56,7 @@ use gpui_kit::{
 };
 
 use crate::{
+    accounts,
     actions::{
         CloseDiff, CopyHash, Fetch, NewerCommit, NextChange, NextFile, OlderCommit, PreviousChange,
         PreviousFile, Refresh, WholeWindow,
@@ -164,8 +165,10 @@ pub(crate) struct RepoView {
     history_scroll: UniformListScrollHandle,
     refs_scroll: UniformListScrollHandle,
     remote_urls: Vec<String>,
+    remotes_read: bool,
     account_question: Option<AccountQuestion>,
     question_dismissed: bool,
+    connections_seen: usize,
     reading_remotes: Option<Task<()>>,
     pulls: Entity<Pulls>,
     pull_pane: Option<PullPane>,
@@ -235,7 +238,10 @@ impl RepoView {
                 this.open_history_file(cx);
                 this.place_file(cx)
             }),
-            cx.observe_global::<Connectors>(|this, cx| this.ask_which_account(cx)),
+            cx.observe_global::<Connectors>(|this, cx| {
+                this.ask_which_account(cx);
+                this.fetch_once_connected(cx);
+            }),
             cx.observe(&pulls, |_, _, cx| cx.notify()),
         ];
         Self {
@@ -255,8 +261,10 @@ impl RepoView {
             history_scroll: UniformListScrollHandle::new(),
             refs_scroll: UniformListScrollHandle::new(),
             remote_urls: Vec::new(),
+            remotes_read: false,
             account_question: None,
             question_dismissed: false,
+            connections_seen: Connectors::of(cx).connections(),
             reading_remotes: None,
             pulls,
             pull_pane: None,
@@ -275,10 +283,17 @@ impl RepoView {
             |this, remotes: Vec<NamedRemote>, cx| {
                 this.reading_remotes = None;
                 let urls: Vec<String> = remotes.iter().map(|remote| remote.url.clone()).collect();
+                let remote_connected =
+                    this.remotes_read && urls.iter().any(|url| !this.remote_urls.contains(url));
+                this.remotes_read = true;
                 this.pulls.update(cx, |pulls, cx| pulls.track(remotes, cx));
                 if this.remote_urls != urls {
                     this.remote_urls = urls;
                     this.ask_which_account(cx);
+                }
+                if remote_connected {
+                    this.repository
+                        .update(cx, |repository, cx| repository.fetch_unattended(cx));
                 }
             },
         ));
@@ -296,6 +311,23 @@ impl RepoView {
         }
         self.account_question = asked;
         cx.notify();
+    }
+
+    fn fetch_once_connected(&mut self, cx: &mut Context<Self>) {
+        let connectors = Connectors::of(cx);
+        let connected = connectors.connected_after(self.connections_seen);
+        if connected.is_empty() {
+            return;
+        }
+        let book = connectors.book_copy();
+        let serves_this_repository = connected
+            .iter()
+            .any(|account| accounts::serves(&book, &self.remote_urls, account));
+        self.connections_seen = connectors.connections();
+        if serves_this_repository {
+            self.repository
+                .update(cx, |repository, cx| repository.fetch_unattended(cx));
+        }
     }
 
     fn account_choice(&self, cx: &mut Context<Self>) -> Option<AnyElement> {

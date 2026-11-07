@@ -22,7 +22,10 @@ sternegit-protocol = { path = "connectors/protocol" }
 wasmi = { version = "~2.0.0", default-features = false, features = ["std", "validate", "auto-dispatch"] }
 
 [target.'cfg(windows)'.dependencies]
-windows = { version = "0.62.2", features = ["Win32_Foundation", "Win32_Security_Credentials"] }
+windows = { version = "0.62.2", features = ["Win32_Foundation", "Win32_Security_Credentials", "Win32_NetworkManagement_IpHelper", "Win32_NetworkManagement_Ndis", "Win32_Networking_WinSock"] }
+
+[target.'cfg(not(windows))'.dependencies]
+libc = "0.2.191"
 
 [build-dependencies]
 crc32fast = "1.5.4"

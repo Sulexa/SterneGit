@@ -14,7 +14,7 @@ Chosen on 2026-11-05. This is the reference for building connectors and drawing 
 | Bundled | A `connectors/` folder beside the exe. The exe carries the SHA-256 of every bundled file, and a file that doesn't match is treated as installed. |
 | Installing | Copy a connector into the user's connectors folder. No store, no auto-update. |
 | Screens | Connectors only supply data. SterneGit draws every screen, in the mockup first. |
-| Network | Only when a tab opens, after each fetch (every 5 minutes, on window return, Ctrl+Shift+R) and when the user acts. No new timers. |
+| Network | Only when a tab opens, after each fetch (every 5 minutes, on window return, when the network comes back, when a remote is added or moved, when an account that serves it signs in, Ctrl+Shift+R) and when the user acts. No new timers. |
 | v1 platform | GitHub: github.com, and Enterprise Server through a server address and a token. |
 | v1 features | Sign-in; who am I; browse, clone, create and publish repositories; SSH keys; pull requests (list, view, checks, create, check out, review with line comments, reply, resolve, merge). |
 | Accounts | Several, even two on one server. A repository finds its account from its remote URL; when two fit, SterneGit asks once per remote owner and remembers. |

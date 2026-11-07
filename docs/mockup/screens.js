@@ -731,7 +731,7 @@ const Screens = (() => {
     {
       id: 'fetching',
       title: 'Copy hash and fetch',
-      about: 'Copy hash shows a notification. A fetch runs in the background every five minutes and when the window comes back; the status bar shows it.',
+      about: 'Copy hash shows a notification. A fetch runs in the background every five minutes, when the window comes back, when the network comes back (a new address settles, or the computer wakes), when a remote is added or its URL changes, and when an account that serves the remote signs in or is chosen for its owner; the status bar shows it.',
       source: 'src/repo/status_bar.rs',
       render: () =>
         C.SterneGit({
