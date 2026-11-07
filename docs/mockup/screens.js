@@ -632,6 +632,19 @@ const Screens = (() => {
         }),
     },
     {
+      id: 'push-rewritten',
+      title: 'Header — push after rewriting pushed commits',
+      about: "When every commit origin/main has and main doesn't makes the same changes as one of main's, those commits are older versions: main rewrote them after they were pushed, with Edit message or a rebase. SterneGit checks it with git rev-list --cherry-pick right after counting. The question then says so and offers only Cancel and Force push, which is the primary button and what Enter picks: pulling would bring the old versions back beside the new ones, so Pull and push is left out. Force push keeps its lease on the counted upstream commit, so it still overwrites nothing someone pushed in between. A rewritten merge has no equivalent by Git's rules, so when the old versions include a merge the usual question shows.",
+      source: 'src/repo/behind_dialog.rs',
+      render: () =>
+        C.SterneGit({
+          topBar: topBar(),
+          tabStrip: tabStrip(),
+          body: commitSelected(),
+          overlays: C.BehindDialog({ branch: 'main', upstream: 'origin/main', theirs: 2, ours: 2, rewritten: true }),
+        }),
+    },
+    {
       id: 'pulled-and-pushed',
       title: 'Header — pulled, then pushed',
       about: 'Pull and push says both steps in one notification. Force push says Force pushed main to origin/main. When the upstream moved again before Force push ran, the push fails and the notification stays until it is closed; pushing again asks with fresh counts.',

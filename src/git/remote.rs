@@ -54,6 +54,7 @@ pub(crate) struct Behind {
     pub(crate) ours: usize,
     pub(crate) checked_out: bool,
     pub(crate) upstream_at: ObjectId,
+    pub(crate) rewritten: bool,
 }
 
 impl Behind {
@@ -250,12 +251,18 @@ impl Repo {
         let Some((ours, theirs)) = each_side(&counted).filter(|&(_, theirs)| theirs > 0) else {
             return Err(error);
         };
+        let without_a_copy = run_text(
+            &self.location,
+            &["rev-list", "--right-only", "--cherry-pick", "--count", &range],
+            Exit::Success,
+        )?;
         Ok(Pushed::Behind(Behind {
             tracking: upstream.tracking,
             theirs,
             ours,
             checked_out: repo.head_name()? == Some(local),
             upstream_at,
+            rewritten: without_a_copy.trim() == "0",
         }))
     }
 
@@ -402,6 +409,7 @@ fn each_side(counted: &str) -> Option<(usize, usize)> {
 #[cfg(test)]
 mod tests {
     use anyhow::Result;
+    use gix::ObjectId;
 
     use super::{Behind, CaughtUp, Fetched, Pulled, Pushed};
     use crate::git::{Carried, PullMode, Refusal, Tracking, scratch::ScratchRepo};
@@ -698,6 +706,31 @@ mod tests {
             shared.ours.git(&["rev-parse", "origin/main~1"])?.trim(),
             theirs
         );
+        Ok(())
+    }
+
+    #[test]
+    fn a_push_after_rewording_pushed_commits_knows_they_were_rewritten() -> Result<()> {
+        let shared = Shared::new("push-rewritten")?;
+        for file in ["a.txt", "b.txt"] {
+            shared.ours.write(file, file)?;
+            shared.ours.git(&["add", file])?;
+            shared.ours.git(&["commit", "--quiet", "-m", file])?;
+        }
+        shared.ours.git(&["push", "--quiet"])?;
+        let first = shared.ours.git(&["rev-parse", "HEAD~1"])?;
+        let first = ObjectId::from_hex(first.trim().as_bytes())?;
+        shared.ours.open()?.0.reword(first, "Add a")?;
+        let behind = shared.behind()?;
+        assert_eq!((behind.theirs, behind.ours, behind.rewritten), (2, 2, true));
+        Ok(())
+    }
+
+    #[test]
+    fn new_commits_on_the_upstream_are_not_taken_for_rewritten_ones() -> Result<()> {
+        let shared = Shared::new("push-not-rewritten")?;
+        shared.both_change("shared.txt")?;
+        assert!(!shared.behind()?.rewritten);
         Ok(())
     }
 

@@ -340,6 +340,13 @@ const Texts = {
   behindFastForward: (branch, upstream) => `Pull fast-forwards ${branch} to ${upstream}.`,
   behindCheckOut: (branch) => `Check out ${branch} to pull them in: a branch that isn't checked out can only fast-forward.`,
   behindForce: (branch, upstream, theirs) => `Force push replaces ${upstream} with ${branch}, dropping ${theirs === 1 ? 'the new commit' : `the ${theirs} new commits`} for everyone.`,
+  behindRewrittenTitle: (branch, upstream) => `${upstream} has older versions of ${branch}'s commits`,
+  behindRewritten: (branch, upstream, theirs) =>
+    theirs === 1
+      ? `The commit ${upstream} has and ${branch} doesn't makes the same changes as one of ${branch}'s: it was rewritten after it was pushed, with a new message or a rebase.`
+      : `The ${theirs} commits ${upstream} has and ${branch} doesn't make the same changes as commits of ${branch}: they were rewritten after they were pushed, with a new message or a rebase.`,
+  behindRewrittenForce: (branch, upstream, theirs) =>
+    `Force push replaces ${theirs === 1 ? 'it' : 'them'} on ${upstream} with ${branch}'s versions, so no change is lost. Pulling would bring the old versions back beside the new ones.`,
   pullAndPush: 'Pull and push',
   pullOnly: 'Pull',
   forcePush: 'Force push',
@@ -2555,7 +2562,12 @@ const C = {
     return C.AlertDialog({ title: Texts.deleteBranchTitle(label.name), description, confirm: 'Delete', name: 'DeleteBranchDialog' });
   },
 
-  BehindDialog({ branch, upstream, theirs, ours, checkedOut = true }) {
+  BehindDialog({ branch, upstream, theirs, ours, checkedOut = true, rewritten = false }) {
+    if (rewritten) {
+      const description = [Texts.behindRewritten(branch, upstream, theirs), Texts.behindRewrittenForce(branch, upstream, theirs)].join(' ');
+      const buttons = C.Button({ label: 'Cancel', size: 'md' }) + C.Button({ label: Texts.forcePush, variant: 'primary', size: 'md' });
+      return `<div class="overlay"><div data-c="BehindDialog" data-base="AlertDialog" class="dialog"><div class="base semibold">${esc(Texts.behindRewrittenTitle(branch, upstream))}</div><div class="sm muted">${esc(description)}</div><div class="footer stretch">${buttons}</div></div></div>`;
+    }
     const pull = ours === 0 ? Texts.behindFastForward(branch, upstream) : checkedOut ? Texts.behindPull(branch) : Texts.behindCheckOut(branch);
     const description = [Texts.behindCounts(branch, upstream, theirs, ours), pull, Texts.behindForce(branch, upstream, theirs)].join(' ');
     const pullButton = ours === 0 || checkedOut ? C.Button({ label: ours === 0 ? Texts.pullOnly : Texts.pullAndPush, variant: 'primary', size: 'md' }) : '';

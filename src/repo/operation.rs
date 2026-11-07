@@ -547,6 +547,7 @@ mod tests {
             ours: 1,
             checked_out: true,
             upstream_at: id(1),
+            rewritten: false,
         }
     }
 

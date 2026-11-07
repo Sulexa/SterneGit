@@ -20,14 +20,23 @@ const FORCE_PUSH: &str = "Force push";
 const PULL_AND_PUSH: &str = "Pull and push";
 const PULL: &str = "Pull";
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Primary {
+    Pull(&'static str),
+    ForcePush,
+}
+
 #[derive(Debug, PartialEq, Eq)]
 struct BehindQuestion {
     title: String,
     description: String,
-    pull: Option<&'static str>,
+    primary: Option<Primary>,
 }
 
 fn behind_question(behind: &Behind) -> BehindQuestion {
+    if behind.rewritten {
+        return rewritten_question(behind);
+    }
     let Behind {
         tracking: Tracking { branch, upstream },
         theirs,
@@ -60,9 +69,34 @@ fn behind_question(behind: &Behind) -> BehindQuestion {
     BehindQuestion {
         title: format!("{upstream} has commits that {branch} doesn't have"),
         description: format!("{counts} {pull} {force}"),
-        pull: behind
+        primary: behind
             .can_pull()
-            .then_some(if ours == 0 { PULL } else { PULL_AND_PUSH }),
+            .then_some(Primary::Pull(if ours == 0 { PULL } else { PULL_AND_PUSH })),
+    }
+}
+
+fn rewritten_question(behind: &Behind) -> BehindQuestion {
+    let Tracking { branch, upstream } = &behind.tracking;
+    let (versions, them) = match behind.theirs {
+        1 => (
+            format!(
+                "The commit {upstream} has and {branch} doesn't makes the same changes as one of {branch}'s: it was rewritten after it was pushed, with a new message or a rebase."
+            ),
+            "it",
+        ),
+        theirs => (
+            format!(
+                "The {theirs} commits {upstream} has and {branch} doesn't make the same changes as commits of {branch}: they were rewritten after they were pushed, with a new message or a rebase."
+            ),
+            "them",
+        ),
+    };
+    BehindQuestion {
+        title: format!("{upstream} has older versions of {branch}'s commits"),
+        description: format!(
+            "{versions} Force push replaces {them} on {upstream} with {branch}'s versions, so no change is lost. Pulling would bring the old versions back beside the new ones."
+        ),
+        primary: Some(Primary::ForcePush),
     }
 }
 
@@ -75,9 +109,28 @@ pub(crate) fn open_behind_dialog(
     let question = behind_question(&behind);
     window.open_alert_dialog(cx, move |alert, _, _| {
         let forced = (repository.clone(), behind.clone());
-        let pulled = (repository.clone(), behind.clone());
-        let pull_button = question.pull.map(|label| {
-            DialogAction::new().child(Button::new("behind-pull").primary().label(label))
+        let chosen = (repository.clone(), behind.clone());
+        let primary = question.primary;
+        let primary_button = primary.map(|primary| {
+            let label = match primary {
+                Primary::Pull(label) => label,
+                Primary::ForcePush => FORCE_PUSH,
+            };
+            DialogAction::new().child(Button::new("behind-primary").primary().label(label))
+        });
+        let force_button = (primary != Some(Primary::ForcePush)).then(|| {
+            div().size_full().child(
+                Button::new("behind-force-push")
+                    .danger()
+                    .label(FORCE_PUSH)
+                    .on_click(move |_, window, cx| {
+                        let (repository, behind) = &forced;
+                        repository.update(cx, |repository, cx| {
+                            repository.force_push(behind.clone(), cx)
+                        });
+                        window.close_dialog(cx);
+                    }),
+            )
         });
         alert
             .title(question.title.clone())
@@ -85,27 +138,15 @@ pub(crate) fn open_behind_dialog(
             .footer(
                 DialogFooter::new()
                     .child(DialogClose::new().trigger(|button| button.label(CANCEL)))
-                    .child(
-                        div().size_full().child(
-                            Button::new("behind-force-push")
-                                .danger()
-                                .label(FORCE_PUSH)
-                                .on_click(move |_, window, cx| {
-                                    let (repository, behind) = &forced;
-                                    repository.update(cx, |repository, cx| {
-                                        repository.force_push(behind.clone(), cx)
-                                    });
-                                    window.close_dialog(cx);
-                                }),
-                        ),
-                    )
-                    .children(pull_button),
+                    .children(force_button)
+                    .children(primary_button),
             )
-            .when(question.pull.is_some(), |alert| {
+            .when_some(primary, |alert, primary| {
                 alert.on_ok(move |_, _, cx| {
-                    let (repository, behind) = &pulled;
-                    repository.update(cx, |repository, cx| {
-                        repository.pull_then_push(behind.clone(), cx)
+                    let (repository, behind) = &chosen;
+                    repository.update(cx, |repository, cx| match primary {
+                        Primary::Pull(_) => repository.pull_then_push(behind.clone(), cx),
+                        Primary::ForcePush => repository.force_push(behind.clone(), cx),
                     });
                     true
                 })
@@ -115,7 +156,7 @@ pub(crate) fn open_behind_dialog(
 
 #[cfg(test)]
 mod tests {
-    use super::{BehindQuestion, PULL, PULL_AND_PUSH, behind_question};
+    use super::{BehindQuestion, PULL, PULL_AND_PUSH, Primary, behind_question};
     use crate::git::{Behind, Tracking, fixtures::id};
 
     fn behind(branch: &str, theirs: usize, ours: usize, checked_out: bool) -> Behind {
@@ -128,6 +169,7 @@ mod tests {
             ours,
             checked_out,
             upstream_at: id(1),
+            rewritten: false,
         }
     }
 
@@ -141,8 +183,35 @@ mod tests {
                               Pull and push brings them into main, with a merge commit if main can't fast-forward, then pushes. \
                               Force push replaces origin/main with main, dropping the 2 new commits for everyone."
                     .into(),
-                pull: Some(PULL_AND_PUSH),
+                primary: Some(Primary::Pull(PULL_AND_PUSH)),
             }
+        );
+    }
+
+    #[test]
+    fn commits_rewritten_since_they_were_pushed_offer_only_force_push() {
+        let rewritten = |theirs| Behind {
+            rewritten: true,
+            ..behind("main", theirs, theirs, true)
+        };
+        assert_eq!(
+            behind_question(&rewritten(2)),
+            BehindQuestion {
+                title: "origin/main has older versions of main's commits".into(),
+                description: "The 2 commits origin/main has and main doesn't make the same changes as commits of main: \
+                              they were rewritten after they were pushed, with a new message or a rebase. \
+                              Force push replaces them on origin/main with main's versions, so no change is lost. \
+                              Pulling would bring the old versions back beside the new ones."
+                    .into(),
+                primary: Some(Primary::ForcePush),
+            }
+        );
+        assert_eq!(
+            behind_question(&rewritten(1)).description,
+            "The commit origin/main has and main doesn't makes the same changes as one of main's: \
+             it was rewritten after it was pushed, with a new message or a rebase. \
+             Force push replaces it on origin/main with main's versions, so no change is lost. \
+             Pulling would bring the old versions back beside the new ones."
         );
     }
 
@@ -155,10 +224,10 @@ mod tests {
              Pull fast-forwards main to origin/main. \
              Force push replaces origin/main with main, dropping the new commit for everyone."
         );
-        assert_eq!(question.pull, Some(PULL));
+        assert_eq!(question.primary, Some(Primary::Pull(PULL)));
         assert_eq!(
-            behind_question(&behind("feature/blame", 3, 0, false)).pull,
-            Some(PULL)
+            behind_question(&behind("feature/blame", 3, 0, false)).primary,
+            Some(Primary::Pull(PULL))
         );
     }
 
@@ -171,6 +240,6 @@ mod tests {
              Check out feature/blame to pull them in: a branch that isn't checked out can only fast-forward. \
              Force push replaces origin/feature/blame with feature/blame, dropping the 3 new commits for everyone."
         );
-        assert_eq!(question.pull, None);
+        assert_eq!(question.primary, None);
     }
 }
