@@ -30,6 +30,7 @@ pub(crate) enum BranchAction {
     Rebase,
     BranchHere,
     NewWorktree,
+    NewWorktreeFrom,
     OpenWorktree,
     Delete,
     ShowPull(u64),
@@ -56,6 +57,7 @@ impl PullOffers {
 #[derive(Clone)]
 pub(crate) struct BranchMenu {
     checked_out: Option<SharedString>,
+    checked_out_elsewhere: Arc<[SharedString]>,
     pull_mode: PullMode,
     writing: bool,
     pulls: Option<PullOffers>,
@@ -70,11 +72,20 @@ impl BranchMenu {
     ) -> Self {
         Self {
             checked_out,
+            checked_out_elsewhere: Arc::from([]),
             pull_mode,
             writing,
             pulls: None,
             on_action: None,
         }
+    }
+
+    pub(crate) fn checked_out_elsewhere(
+        mut self,
+        branches: impl IntoIterator<Item = SharedString>,
+    ) -> Self {
+        self.checked_out_elsewhere = branches.into_iter().collect();
+        self
     }
 
     pub(crate) fn pulls(mut self, offers: Option<PullOffers>) -> Self {
@@ -108,9 +119,9 @@ impl BranchMenu {
         let local = label.kind == RefKind::LocalBranch;
         let another_branch_is_checked_out = self.checked_out.is_some() && !checked_out;
         let elsewhere = label.worktree.is_some();
-        let worktree = match (checked_out, elsewhere) {
-            (false, false) => vec![BranchHere, NewWorktree],
-            _ => vec![BranchHere],
+        let worktree = match self.is_checked_out_anywhere(label) {
+            true => NewWorktreeFrom,
+            false => NewWorktree,
         };
         [
             label.can_be_checked_out().then(|| vec![CheckOut]),
@@ -121,12 +132,20 @@ impl BranchMenu {
                 .and_then(|offers| offers.offered(label))
                 .map(|action| vec![action]),
             another_branch_is_checked_out.then(|| vec![Merge, Rebase]),
-            Some(worktree),
+            Some(vec![BranchHere, worktree]),
             (!checked_out && !elsewhere).then(|| vec![Delete]),
         ]
         .into_iter()
         .flatten()
         .collect()
+    }
+
+    fn is_checked_out_anywhere(&self, label: &RefLabel) -> bool {
+        let local = label.local_name();
+        label.is_head
+            || label.worktree.is_some()
+            || self.checked_out.as_deref() == Some(local)
+            || self.checked_out_elsewhere.iter().any(|branch| branch.as_str() == local)
     }
 
     fn text(&self, action: BranchAction, label: &RefLabel) -> String {
@@ -142,6 +161,7 @@ impl BranchMenu {
             BranchAction::Rebase => format!("Rebase {checked_out} onto {}", label.name),
             BranchAction::BranchHere => BRANCH_HERE.to_owned(),
             BranchAction::NewWorktree => format!("New worktree for {}…", label.local_name()),
+            BranchAction::NewWorktreeFrom => format!("New worktree from {}…", label.name),
             BranchAction::OpenWorktree => format!(
                 "Open the worktree {}",
                 label.worktree.as_deref().unwrap_or_default()
@@ -242,7 +262,7 @@ mod tests {
     use super::{BranchAction::*, BranchMenu, PullOffers, what_deleting_loses};
     use crate::{
         git::{PullMode, RefKind, RefLabel, fixtures::id},
-        repo::pulls::PullMarks,
+        repo::{pulls::PullMarks, worktree_dialog::taken_by},
         ui::PullMark,
     };
 
@@ -315,7 +335,7 @@ mod tests {
         let main = label("main", RefKind::LocalBranch, true);
         assert_eq!(
             on_main().offered(&main),
-            [vec![Pull, Push], vec![BranchHere]]
+            [vec![Pull, Push], vec![BranchHere, NewWorktreeFrom]]
         );
         let rebasing = BranchMenu::new(Some("main".into()), PullMode::Rebase, false);
         assert_eq!(rebasing.text(Pull, &main), "Pull (rebase)");
@@ -368,9 +388,48 @@ mod tests {
                     "Merge feature/diff-view into main",
                     "Rebase main onto feature/diff-view"
                 ],
-                vec!["Create branch here…"],
+                vec!["Create branch here…", "New worktree from feature/diff-view…"],
             ]
         );
+    }
+
+    #[test]
+    fn a_checked_out_branch_offers_a_new_worktree_on_a_new_branch_from_it() {
+        let main = label("main", RefKind::LocalBranch, true);
+        assert_eq!(texts(&on_main(), &main)[1], ["Create branch here…", "New worktree from main…"]);
+        let origin_main = label("origin/main", RefKind::RemoteBranch, false);
+        assert_eq!(
+            on_main().text(on_main().offered(&origin_main)[2][1], &origin_main),
+            "New worktree from origin/main…"
+        );
+        let origin_blame = label("origin/feature/blame", RefKind::RemoteBranch, false);
+        let blame_elsewhere = on_main().checked_out_elsewhere(["feature/blame".into()]);
+        assert_eq!(
+            blame_elsewhere.offered(&origin_blame)[2],
+            [BranchHere, NewWorktreeFrom]
+        );
+        assert_eq!(on_main().offered(&origin_blame)[2], [BranchHere, NewWorktree]);
+    }
+
+    #[test]
+    fn the_menu_offers_a_new_branch_exactly_when_the_new_worktree_dialog_finds_the_branch_taken() {
+        let refs = [
+            label("main", RefKind::LocalBranch, true),
+            RefLabel {
+                worktree: Some("topic-tree".into()),
+                ..label("topic", RefKind::LocalBranch, false)
+            },
+            label("free", RefKind::LocalBranch, false),
+            label("origin/main", RefKind::RemoteBranch, false),
+            label("origin/topic", RefKind::RemoteBranch, false),
+            label("origin/free", RefKind::RemoteBranch, false),
+            label("origin/other", RefKind::RemoteBranch, false),
+        ];
+        let menu = on_main().checked_out_elsewhere(["topic".into()]);
+        for branch in &refs {
+            let offers_new_branch = menu.offered(branch).iter().flatten().any(|action| *action == NewWorktreeFrom);
+            assert_eq!(offers_new_branch, taken_by(&refs, branch).is_some(), "{}", branch.name);
+        }
     }
 
     #[test]

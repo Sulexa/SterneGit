@@ -31,7 +31,7 @@ use crate::{
 const WIDTH: f32 = 600.;
 const TITLE: &str = "New worktree";
 const ABOUT: &str = "Another folder with its own checkout of this repository. Commits, branches and stashes are shared with every worktree; the files, the staged changes and HEAD are its own.";
-const ONE_CHECKOUT: &str = "A branch can be checked out in one worktree at a time. Remote branches get a local branch that tracks them.";
+const ONE_CHECKOUT: &str = "A branch can be checked out in one worktree at a time. A remote branch checks out its local branch, or gets one that tracks it.";
 const NOT_EMPTY: &str = "This folder already exists and isn't empty";
 const PICK_A_BRANCH: &str = "Pick a branch";
 const MENU_HEIGHT: f32 = 320.;
@@ -91,7 +91,7 @@ impl WorktreeForm {
             .iter()
             .find(|label| label.is_head)
             .cloned();
-        let available = start.clone().filter(|label| taken_by(&history, label).is_none());
+        let available = start.clone().filter(|label| taken_by(&history.refs, label).is_none());
         let mut form = Self {
             fresh: available.is_none(),
             branch: available,
@@ -114,7 +114,7 @@ impl WorktreeForm {
             .filter(|label| label.is_branch())
             .map(|label| Choice {
                 label: label.clone(),
-                taken_by: taken_by(&self.history, label),
+                taken_by: taken_by(&self.history.refs, label),
             })
             .collect()
     }
@@ -175,13 +175,7 @@ impl WorktreeForm {
             return Some(WorktreeStart::NewBranch { name, from });
         }
         let label = self.branch.as_ref()?;
-        Some(match label.on_remote() {
-            Some(remote) => WorktreeStart::Tracking {
-                branch: remote.branch.to_owned(),
-                upstream: label.name.to_string(),
-            },
-            None => WorktreeStart::Branch(label.name.to_string()),
-        })
+        Some(worktree_start(label, &self.history.refs))
     }
 
     fn ready(&self, cx: &App) -> Option<(PathBuf, WorktreeStart)> {
@@ -270,22 +264,30 @@ impl WorktreeForm {
     }
 }
 
-fn taken_by(history: &History, label: &RefLabel) -> Option<SharedString> {
+fn local_branch<'a>(refs: &'a [RefLabel], label: &'a RefLabel) -> Option<&'a RefLabel> {
+    if label.kind == RefKind::LocalBranch {
+        return Some(label);
+    }
     let local = label.local_name();
-    let local_label = history
-        .refs
-        .iter()
-        .find(|other| other.kind == RefKind::LocalBranch && other.name.as_str() == local);
-    match (label.kind, local_label) {
-        (RefKind::LocalBranch, _) if label.is_head => Some("this tab".into()),
-        (RefKind::LocalBranch, _) => label.worktree.clone(),
-        (_, Some(local_label)) => Some(
-            local_label
-                .worktree
-                .clone()
-                .unwrap_or_else(|| format!("{} here", local_label.name).into()),
-        ),
-        _ => None,
+    refs.iter()
+        .find(|other| other.kind == RefKind::LocalBranch && other.name.as_str() == local)
+}
+
+fn worktree_start(label: &RefLabel, refs: &[RefLabel]) -> WorktreeStart {
+    match label.on_remote() {
+        Some(remote) if local_branch(refs, label).is_none() => WorktreeStart::Tracking {
+            branch: remote.branch.to_owned(),
+            upstream: label.name.to_string(),
+        },
+        _ => WorktreeStart::Branch(label.local_name().to_owned()),
+    }
+}
+
+pub(super) fn taken_by(refs: &[RefLabel], label: &RefLabel) -> Option<SharedString> {
+    let local = local_branch(refs, label)?;
+    match local.is_head {
+        true => Some("this tab".into()),
+        false => local.worktree.clone(),
     }
 }
 
@@ -387,6 +389,7 @@ pub(crate) fn open_worktree_dialog(
         .map(|worktree| worktree.location.to_path_buf())
         .unwrap_or_else(|| repository.read(cx).path().to_path_buf());
     let form = cx.new(|cx| WorktreeForm::new(history, main, start, window, cx));
+    let name = form.read(cx).fresh.then(|| form.read(cx).name.clone());
     window.open_dialog(cx, move |dialog, _, cx| {
         let ready = form.read(cx).ready(cx).is_some();
         let form_on_ok = form.clone();
@@ -417,12 +420,15 @@ pub(crate) fn open_worktree_dialog(
                 true
             })
     });
+    if let Some(name) = name {
+        window.defer(cx, move |window, cx| name.update(cx, |state, cx| state.focus(window, cx)));
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::taken_by;
-    use crate::git::{RefKind, RefLabel, fixtures::{id, linear_history}};
+    use super::{taken_by, worktree_start};
+    use crate::git::{RefKind, RefLabel, WorktreeStart, fixtures::{id, linear_history}};
 
     fn label(name: &str, kind: RefKind, is_head: bool, worktree: Option<&str>) -> RefLabel {
         RefLabel {
@@ -443,13 +449,15 @@ mod tests {
             label("main", RefKind::LocalBranch, true, None),
             label("topic", RefKind::LocalBranch, false, Some("topic-tree")),
             label("free", RefKind::LocalBranch, false, None),
+            label("origin/main", RefKind::RemoteBranch, false, None),
             label("origin/topic", RefKind::RemoteBranch, false, None),
+            label("origin/free", RefKind::RemoteBranch, false, None),
             label("origin/other", RefKind::RemoteBranch, false, None),
         ];
         let taken: Vec<Option<String>> = history
             .refs
             .iter()
-            .map(|label| taken_by(&history, label).map(|place| place.to_string()))
+            .map(|label| taken_by(&history.refs, label).map(|place| place.to_string()))
             .collect();
         assert_eq!(
             taken,
@@ -457,9 +465,32 @@ mod tests {
                 Some("this tab".to_owned()),
                 Some("topic-tree".to_owned()),
                 None,
+                Some("this tab".to_owned()),
                 Some("topic-tree".to_owned()),
+                None,
                 None
             ]
+        );
+    }
+
+    #[test]
+    fn a_remote_branch_checks_out_its_local_branch_when_there_is_one() {
+        let refs = [
+            label("free", RefKind::LocalBranch, false, None),
+            label("origin/free", RefKind::RemoteBranch, false, None),
+            label("origin/other", RefKind::RemoteBranch, false, None),
+        ];
+        let starts: Vec<String> = refs
+            .iter()
+            .map(|label| match worktree_start(label, &refs) {
+                WorktreeStart::Branch(branch) => format!("checks out {branch}"),
+                WorktreeStart::Tracking { branch, upstream } => format!("makes {branch} tracking {upstream}"),
+                WorktreeStart::NewBranch { name, from } => format!("makes {name} from {from}"),
+            })
+            .collect();
+        assert_eq!(
+            starts,
+            ["checks out free", "checks out free", "makes other tracking origin/other"]
         );
     }
 }

@@ -594,7 +594,7 @@ const Screens = (() => {
     {
       id: 'branch-menu',
       title: 'Right-click on a branch',
-      about: "A right-click on a branch, in the left list or on its badge in the graph, opens its menu where the pointer is, without selecting its commit. Here feature/blame is not checked out, so it offers Check out, Pull, Push, Merge it into main or Rebase main onto it, Create branch here… and Delete…. Pull is fast-forward only, because Git can't merge into or rebase a branch that isn't checked out. The checked-out branch offers Pull with the header's pull mode, Push and Create branch here…. A remote branch offers Check out, Merge, Rebase, Create branch here… and Delete from its remote. With a detached HEAD there is no Merge or Rebase. Tags and folders have no menu; a badge that holds a branch and its upstream opens the menu of the local branch. Each action runs like the header buttons: one Git write at a time, then a notification; Pull and Push spin the header's button while they run. A double-click on a branch, in the left list or on its badge in the graph, checks it out straight away; it does nothing on the checked-out branch, on a tag, or while Git writes.",
+      about: "A right-click on a branch, in the left list or on its badge in the graph, opens its menu where the pointer is, without selecting its commit. Here feature/blame is not checked out, so it offers Check out, Pull, Push, Merge it into main or Rebase main onto it, Create branch here…, New worktree for feature/blame… and Delete…. Pull is fast-forward only, because Git can't merge into or rebase a branch that isn't checked out. The checked-out branch offers Pull with the header's pull mode, Push, Create branch here… and New worktree from main…. A remote branch offers Check out, Merge, Rebase, Create branch here…, New worktree for … and Delete from its remote. With a detached HEAD there is no Merge or Rebase. Tags and folders have no menu; a badge that holds a branch and its upstream opens the menu of the local branch. Each action runs like the header buttons: one Git write at a time, then a notification; Pull and Push spin the header's button while they run. A double-click on a branch, in the left list or on its badge in the graph, checks it out straight away; it does nothing on the checked-out branch, on a tag, or while Git writes.",
       source: 'src/repo/branch_menu.rs',
       render: () =>
         C.SterneGit({
@@ -1208,14 +1208,28 @@ const Screens = (() => {
         {
           id: 'worktree-branch-menu',
           title: 'Worktrees — new worktree from a branch',
-          about: "The BranchMenu of a local or remote branch gains New worktree for …, under Create branch here…. It opens the New worktree dialog with that branch picked. Git won't check out one branch in two worktrees, so a branch already checked out in a worktree has Open the worktree in place of Check out, and no Delete.",
+          about: "The BranchMenu of every local or remote branch has a worktree item under Create branch here…. A branch checked out nowhere offers New worktree for …, which opens the New worktree dialog with that branch picked. Git won't check out one branch in two worktrees, so a branch already checked out in a worktree has Open the worktree in place of Check out, and no Delete.",
           source: 'src/repo/branch_menu.rs',
-          render: () => overGraph(C.BranchMenu({ label: inGraph.refs.find((label) => label.name === 'topic/tabs'), current: inGraph.head, left: 92, top: 336, hot: WorktreeTexts.newFor('topic/tabs'), worktree: true })),
+          render: () => overGraph(C.BranchMenu({ label: inGraph.refs.find((label) => label.name === 'topic/tabs'), current: inGraph.head, left: 92, top: 336, hot: WorktreeTexts.newFor('topic/tabs') })),
+        },
+        {
+          id: 'worktree-branch-menu-taken',
+          title: 'Worktrees — new worktree from a checked-out branch',
+          about: "A branch already checked out, in this tab or in another worktree, can't get a second worktree of its own, so its BranchMenu offers New worktree from … instead. The same goes for a remote branch whose local branch is checked out. It opens the New worktree dialog on New branch, starting from that branch, with the focus in Name.",
+          source: 'src/repo/branch_menu.rs',
+          render: () => overGraph(C.BranchMenu({ label: inGraph.refs.find((label) => label.name === inGraph.head), current: inGraph.head, left: 352, top: 166, hot: WorktreeTexts.newFrom(inGraph.head) })),
+        },
+        {
+          id: 'create-worktree-from',
+          title: 'Worktrees — the New worktree dialog from a checked-out branch',
+          about: "New worktree from main… opens the dialog on New branch, Starting from main, with the focus in Name. The folder follows the name as it is typed, as long as it wasn't edited. Existing branch is still there, with main listed as taken.",
+          source: 'src/repo/worktree_dialog.rs',
+          render: () => overGraph(C.WorktreeDialog({ fresh: true, name: 'fix/tab-order', from: inGraph.head, folder: 'E:\\Projects\\sternegit-worktrees\\tab-order', parent: 'E:\\Projects\\sternegit-worktrees' })),
         },
         {
           id: 'create-worktree',
           title: 'Worktrees — the New worktree dialog',
-          about: "Opened by New worktree for … in a BranchMenu, or New worktree… in the Worktrees panel. Existing branch checks out a branch, local or remote; branches already checked out in a worktree are listed but can't be picked, and say where. New branch asks for a name and where it starts, HEAD by default. The folder is suggested next to the repository, in sternegit-worktrees, named after the last part of the branch, so it never shows up as untracked files in the main worktree; Browse… picks another. Create worktree runs git worktree add; the new worktree then shows in the section and in the graph through its branch, and in a new tab too when Open it in a new tab is ticked, which stays as it was last left. Create stays disabled while the branch is taken, the name is refused by Git, or the folder exists and isn't empty; the reason shows under the field. Enter creates, Esc cancels.",
+          about: "Opened by New worktree for … or New worktree from … in a BranchMenu, or New worktree… in the Worktrees panel. Existing branch checks out a branch, local or remote, a remote one through its local branch when it has one; branches already checked out in a worktree are listed but can't be picked, and say where. New branch asks for a name and where it starts, HEAD by default. The folder is suggested next to the repository, in sternegit-worktrees, named after the last part of the branch, so it never shows up as untracked files in the main worktree; Browse… picks another. Create worktree runs git worktree add; the new worktree then shows in the section and in the graph through its branch, and in a new tab too when Open it in a new tab is ticked, which stays as it was last left. Create stays disabled while the branch is taken, the name is refused by Git, or the folder exists and isn't empty; the reason shows under the field. Enter creates, Esc cancels.",
           source: 'src/repo/worktree_dialog.rs',
           render: () => overGraph(C.WorktreeDialog({ branch: 'topic/tabs', folder: 'E:\\Projects\\sternegit-worktrees\\tabs', parent: 'E:\\Projects\\sternegit-worktrees' })),
         },

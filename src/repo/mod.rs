@@ -62,7 +62,7 @@ use crate::{
     },
     git::{
         Baseline, ChangeKind, Commit, FileChange, FileCommit, HISTORY_LIMIT, History, NamedRemote,
-        PullMode, RefLabel, ResetMode, Scope, Side, Stash, WorkingChanges, Worktree, short_id,
+        PullMode, RefKind, RefLabel, ResetMode, Scope, Side, Stash, WorkingChanges, Worktree, short_id,
     },
     app::connectors::Connectors,
     hosting::{
@@ -1409,6 +1409,13 @@ impl RepoView {
             repository.pull_mode(),
             repository.is_writing(),
         )
+        .checked_out_elsewhere(
+            history
+                .refs
+                .iter()
+                .filter(|label| label.kind == RefKind::LocalBranch && label.worktree.is_some())
+                .map(|label| label.name.clone()),
+        )
         .pulls(offers)
         .on_action(cx.listener(
             |this, (label, action): &(RefLabel, BranchAction), window, cx| {
@@ -1445,7 +1452,9 @@ impl RepoView {
                 let start = (!label.is_head).then_some(label);
                 open_branch_dialog(repository, start, window, cx)
             }
-            BranchAction::NewWorktree => open_worktree_dialog(repository, Some(label), window, cx),
+            BranchAction::NewWorktree | BranchAction::NewWorktreeFrom => {
+                open_worktree_dialog(repository, Some(label), window, cx)
+            }
             BranchAction::OpenWorktree => {
                 let location = repository.read(cx).history().and_then(|history| {
                     history

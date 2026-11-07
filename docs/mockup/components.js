@@ -666,13 +666,14 @@ const WorktreeTexts = {
   remove: 'Remove worktree…',
   newWorktree: 'New worktree…',
   newFor: (branch) => `New worktree for ${branch}…`,
+  newFrom: (branch) => `New worktree from ${branch}…`,
   openWorktree: (name) => `Open the worktree ${name}`,
   dialogTitle: 'New worktree',
   dialogAbout: 'Another folder with its own checkout of this repository. Commits, branches and stashes are shared with every worktree; the files, the staged changes and HEAD are its own.',
   existing: 'Existing branch',
   fresh: 'New branch',
   branch: 'Branch',
-  oneCheckout: 'A branch can be checked out in one worktree at a time. Remote branches get a local branch that tracks them.',
+  oneCheckout: 'A branch can be checked out in one worktree at a time. A remote branch checks out its local branch, or gets one that tracks it.',
   branchName: 'Name',
   from: 'Starting from',
   folder: 'Folder',
@@ -1226,17 +1227,18 @@ function remoteParts(name) {
   return { remote, branch: rest.join('/') };
 }
 
-function branchMenuItems({ label, current, mode = 'merge', pull, worktree = false }) {
+function branchMenuItems({ label, current, mode = 'merge', pull }) {
   const remote = label.kind === 'remote' && remoteParts(label.name);
   const checkedOut = Boolean(label.head);
   const elsewhere = label.worktree;
+  const taken = checkedOut || elsewhere || (remote && remote.branch === current);
   const item = (text) => [text, ''];
   const groups = [
     !checkedOut && [item(elsewhere ? WorktreeTexts.openWorktree(elsewhere) : Texts.checkOut(remote ? remote.branch : label.name))],
     !remote && [item(checkedOut ? Texts.pullWithMode(pullMode(mode).label) : Texts.pullFastForward), item(Texts.push)],
     pull && [item(pull === 'create' ? PullTexts.createItem : PullTexts.showItem(pull.number))],
     current && !checkedOut && [item(Texts.merge(label.name, current)), item(Texts.rebase(current, label.name))],
-    [item(Texts.branchHere), worktree && !checkedOut && !elsewhere && item(WorktreeTexts.newFor(remote ? remote.branch : label.name))].filter(Boolean),
+    [item(Texts.branchHere), item(taken ? WorktreeTexts.newFrom(label.name) : WorktreeTexts.newFor(remote ? remote.branch : label.name))],
     !checkedOut && !elsewhere && [item(remote ? Texts.deleteRemoteBranch(remote.branch, remote.remote) : Texts.deleteBranch(label.name))],
   ].filter(Boolean);
   return groups.flatMap((group, ix) => (ix ? ['-', ...group] : group));
@@ -2386,8 +2388,8 @@ const C = {
     );
   },
 
-  BranchMenu({ label, current, mode, left = 0, top = 0, hot, pull, worktree }) {
-    return C.Menu({ items: branchMenuItems({ label, current, mode, pull, worktree }), left, top, hot, name: 'BranchMenu' });
+  BranchMenu({ label, current, mode, left = 0, top = 0, hot, pull }) {
+    return C.Menu({ items: branchMenuItems({ label, current, mode, pull }), left, top, hot, name: 'BranchMenu' });
   },
 
   WorktreeMenu({ tree, here = false, left = 0, top = 0, hot }) {
