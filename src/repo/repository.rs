@@ -316,7 +316,7 @@ impl Repository {
     }
 
     fn check_worktrees(&mut self, cx: &mut Context<Self>) {
-        if self.worktree_check.is_running() || self.opened.is_loading() {
+        if self.worktree_check.is_running() || self.write.is_running() || self.opened.is_loading() {
             return;
         }
         let Some(history) = self.history().cloned() else {
@@ -731,13 +731,15 @@ impl Repository {
             None,
             operation::worktree_remove_failed(&names),
             move |repo| {
+                let mut folders_left = Vec::new();
                 for (location, _) in &removed {
-                    repo.remove_worktree(location)?;
+                    folders_left.extend(repo.remove_worktree(location)?);
                 }
-                if let Some(branch) = &delete_branch {
-                    repo.delete_branch(branch)?;
-                }
-                Ok(operation::worktrees_removed(&names, delete_branch.as_deref()))
+                let branch = delete_branch.map(|branch| {
+                    let deleted = repo.delete_branch(&branch);
+                    (branch, deleted)
+                });
+                Ok(operation::worktrees_removed(&names, &folders_left, branch))
             },
             cx,
         );

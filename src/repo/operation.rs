@@ -2,8 +2,8 @@ use gpui_kit::SharedString;
 
 use crate::{
     git::{
-        Behind, Carried, CaughtUp, CheckedOut, Continued, Merged, Picked, Pulled, Pushed,
-        Rebased, RefLabel, Refusal, RemoteBranch, ResetMode, Tracking, Underway,
+        Behind, Carried, CaughtUp, CheckedOut, Continued, FolderLeft, Merged, Picked, Pulled,
+        Pushed, Rebased, RefLabel, Refusal, RemoteBranch, ResetMode, Tracking, Underway,
     },
     ui::{Failure, thousands},
 };
@@ -339,13 +339,36 @@ pub(crate) fn worktree_add_failed(name: &str) -> SharedString {
     format!("Couldn't create the worktree {name}").into()
 }
 
-pub(crate) fn worktrees_removed(names: &[SharedString], deleted_branch: Option<&str>) -> SharedString {
-    match (names, deleted_branch) {
+pub(crate) fn worktrees_removed(
+    names: &[SharedString],
+    folders_left: &[FolderLeft],
+    branch: Option<(String, anyhow::Result<()>)>,
+) -> Outcome {
+    let deleted_branch = branch
+        .as_ref()
+        .filter(|(_, deleted)| deleted.is_ok())
+        .map(|(branch, _)| branch);
+    let title: SharedString = match (names, deleted_branch) {
         ([name], None) => format!("Removed the worktree {name}"),
         ([name], Some(branch)) => format!("Removed the worktree {name} and the branch {branch}"),
         _ => format!("Removed {} worktrees", thousands(names.len())),
     }
-    .into()
+    .into();
+    let left = folders_left
+        .iter()
+        .map(|left| format!("Couldn't delete {}: {}", left.folder.display(), left.error));
+    let kept = branch.iter().filter_map(|(branch, deleted)| {
+        let error = deleted.as_ref().err()?;
+        Some(format!("Couldn't delete the branch {branch}: {}", Failure::git_reason(error).message()))
+    });
+    let problems: Vec<String> = left.chain(kept).collect();
+    match problems.is_empty() {
+        true => Outcome::Done(title),
+        false => Outcome::Warning {
+            title,
+            message: problems.join("\n").into(),
+        },
+    }
 }
 
 pub(crate) fn worktree_remove_failed(names: &[SharedString]) -> SharedString {
@@ -400,13 +423,41 @@ mod tests {
     use super::{
         Finish, Outcome, aborted, caught_up, checked_out, cherry_picked, continued, deleted,
         failure, finish_failed, merged, pulled, pulled_back, pushed, rebased, reverted,
-        switched, tag_created,
+        switched, tag_created, worktrees_removed,
     };
     use crate::git::{
-        Behind, Carried, CaughtUp, CheckedOut, Continued, Merged, Merging, Picked, Picking,
-        Pulled, Pushed, Rebased, Rebasing, RefKind, RefLabel, Refusal, Replaying, Tracking,
-        Underway, fixtures::id,
+        Behind, Carried, CaughtUp, CheckedOut, Continued, FolderLeft, Merged, Merging, Picked,
+        Picking, Pulled, Pushed, Rebased, Rebasing, RefKind, RefLabel, Refusal, Replaying,
+        Tracking, Underway, fixtures::id,
     };
+
+    #[test]
+    fn a_worktree_folder_left_behind_still_reports_the_deleted_branch() {
+        let names = ["topic".into()];
+        assert_eq!(
+            worktrees_removed(&names, &[], Some(("topic".into(), Ok(())))),
+            Outcome::Done("Removed the worktree topic and the branch topic".into())
+        );
+        let left = FolderLeft {
+            folder: "/projects/app-worktrees/topic".into(),
+            error: std::io::Error::other("in use"),
+        };
+        assert_eq!(
+            worktrees_removed(&names, &[left], Some(("topic".into(), Ok(())))),
+            Outcome::Warning {
+                title: "Removed the worktree topic and the branch topic".into(),
+                message: "Couldn't delete /projects/app-worktrees/topic: in use".into(),
+            }
+        );
+        let kept = anyhow::anyhow!("error: branch 'topic' not found.");
+        assert_eq!(
+            worktrees_removed(&names, &[], Some(("topic".into(), Err(kept)))),
+            Outcome::Warning {
+                title: "Removed the worktree topic".into(),
+                message: "Couldn't delete the branch topic: error: branch 'topic' not found.".into(),
+            }
+        );
+    }
 
     #[test]
     fn picking_and_reverting_say_what_happened_to_the_branch() {

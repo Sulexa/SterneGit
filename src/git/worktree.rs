@@ -3,6 +3,7 @@ use std::{
     hash::{DefaultHasher, Hash as _, Hasher as _},
     path::{Path, PathBuf},
     sync::Arc,
+    time::Duration,
 };
 
 use anyhow::Result;
@@ -18,6 +19,12 @@ use super::{
 
 const FOLDER_OF_WORKTREES: &str = "-worktrees";
 const ROW_ID_MARK: [u8; 4] = *b"wip:";
+const PAUSES_BEFORE_DELETING_LEFTOVERS: [Duration; 4] = [
+    Duration::from_millis(100),
+    Duration::from_millis(200),
+    Duration::from_millis(400),
+    Duration::from_millis(800),
+];
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct Worktree {
@@ -66,6 +73,12 @@ pub(crate) enum WorktreeStart {
     Branch(String),
     Tracking { branch: String, upstream: String },
     NewBranch { name: String, from: String },
+}
+
+#[derive(Debug)]
+pub(crate) struct FolderLeft {
+    pub(crate) folder: PathBuf,
+    pub(crate) error: std::io::Error,
 }
 
 #[derive(Clone)]
@@ -196,6 +209,21 @@ pub(crate) fn suggested_folder(main: &Path, branch: &str) -> PathBuf {
         .expect("an endless list of names always holds a free one")
 }
 
+fn delete_leftovers(folder: &Path) -> std::io::Result<()> {
+    let mut deleted = Ok(());
+    for pause in PAUSES_BEFORE_DELETING_LEFTOVERS {
+        std::thread::sleep(pause);
+        deleted = match std::fs::remove_dir_all(folder) {
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            tried => tried,
+        };
+        if deleted.is_ok() {
+            break;
+        }
+    }
+    deleted
+}
+
 pub(crate) fn folder_is_free(path: &Path) -> bool {
     match std::fs::read_dir(path) {
         Ok(mut entries) => entries.next().is_none(),
@@ -230,10 +258,29 @@ impl Repo {
         Ok(())
     }
 
-    pub(crate) fn remove_worktree(&self, location: &Path) -> Result<()> {
+    pub(crate) fn remove_worktree(&self, location: &Path) -> Result<Option<FolderLeft>> {
         let args = [OsStr::new("worktree"), OsStr::new("remove"), OsStr::new("--force"), location.as_os_str()];
-        run(&self.location, &args, Exit::Success)?;
-        Ok(())
+        let Err(refused) = run(&self.location, &args, Exit::Success) else {
+            return Ok(None);
+        };
+        if self.may_have_worktree_at(location) {
+            return Err(refused);
+        }
+        Ok(delete_leftovers(location).err().map(|error| FolderLeft {
+            folder: location.to_owned(),
+            error,
+        }))
+    }
+
+    fn may_have_worktree_at(&self, location: &Path) -> bool {
+        let key = same_folder_key(location);
+        let local = self.local();
+        let Ok(proxies) = local.worktrees() else {
+            return true;
+        };
+        proxies
+            .iter()
+            .any(|proxy| proxy.base().map_or(true, |base| same_folder_key(&absolute(&base)) == key))
     }
 
     pub(crate) fn lock_worktree(&self, location: &Path, reason: &str) -> Result<()> {
@@ -261,7 +308,7 @@ impl Repo {
 
 #[cfg(test)]
 mod tests {
-    use std::path::Path;
+    use std::path::{Path, PathBuf};
 
     use anyhow::Result;
 
@@ -346,9 +393,87 @@ mod tests {
         assert_eq!(elsewhere.len(), 1);
         assert_eq!(elsewhere[0].changes.unstaged.len(), 1);
         repo.unlock_worktree(&linked)?;
-        repo.remove_worktree(&linked)?;
+        assert!(repo.remove_worktree(&linked)?.is_none());
         assert!(!linked.exists());
         assert_eq!(read_worktrees(&local, &scratch.dir).len(), 1);
+        Ok(())
+    }
+
+    fn beside(scratch: &ScratchRepo, suffix: &str) -> PathBuf {
+        let folder = scratch
+            .dir
+            .with_file_name(format!("{}-{suffix}", scratch.dir.file_name().unwrap().to_string_lossy()));
+        let _ = std::fs::remove_dir_all(&folder);
+        folder
+    }
+
+    fn new_branch(name: &str) -> WorktreeStart {
+        WorktreeStart::NewBranch {
+            name: name.into(),
+            from: "main".into(),
+        }
+    }
+
+    #[cfg(windows)]
+    fn held_shut(file: &Path) -> Result<std::fs::File> {
+        use std::os::windows::fs::OpenOptionsExt as _;
+        std::fs::write(file, "held")?;
+        Ok(std::fs::OpenOptions::new().read(true).share_mode(0).open(file)?)
+    }
+
+    #[test]
+    fn a_refused_removal_keeps_the_worktree_and_its_folder() -> Result<()> {
+        let scratch = ScratchRepo::new("worktree-refused")?;
+        scratch.commit("first")?;
+        let (repo, _) = scratch.open()?;
+        let linked = beside(&scratch, "refused");
+        repo.add_worktree(&linked, &new_branch("refused"))?;
+        repo.lock_worktree(&linked, "kept")?;
+        assert!(repo.remove_worktree(&linked).is_err());
+        assert!(linked.join(".git").exists());
+        let local = gix::open(&scratch.dir)?;
+        assert_eq!(read_worktrees(&local, &scratch.dir).len(), 2);
+        repo.unlock_worktree(&linked)?;
+        repo.remove_worktree(&linked)?;
+        Ok(())
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_worktree_whose_folder_stays_in_use_is_removed_and_frees_its_branch() -> Result<()> {
+        let scratch = ScratchRepo::new("worktree-in-use")?;
+        scratch.commit("first")?;
+        let (repo, _) = scratch.open()?;
+        let linked = beside(&scratch, "in-use");
+        repo.add_worktree(&linked, &new_branch("in-use"))?;
+        let held = held_shut(&linked.join("held.txt"))?;
+        let left = repo.remove_worktree(&linked)?.expect("the held file keeps the folder");
+        assert_eq!(left.folder, linked);
+        let local = gix::open(&scratch.dir)?;
+        assert_eq!(read_worktrees(&local, &scratch.dir).len(), 1);
+        repo.delete_branch("in-use")?;
+        drop(held);
+        std::fs::remove_dir_all(&linked)?;
+        Ok(())
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_worktree_folder_freed_moments_later_is_deleted_entirely() -> Result<()> {
+        let scratch = ScratchRepo::new("worktree-freed")?;
+        scratch.commit("first")?;
+        let (repo, _) = scratch.open()?;
+        let linked = beside(&scratch, "freed");
+        repo.add_worktree(&linked, &new_branch("freed"))?;
+        let held = held_shut(&linked.join("held.txt"))?;
+        let release = std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(600));
+            drop(held);
+        });
+        let left = repo.remove_worktree(&linked)?;
+        release.join().expect("the file is released");
+        assert!(left.is_none(), "{left:?}");
+        assert!(!linked.exists());
         Ok(())
     }
 

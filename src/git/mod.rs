@@ -76,8 +76,8 @@ pub(crate) use underway::{Continued, Picking, Rebasing, Underway};
 pub(crate) use underway::{Merging, Replaying};
 pub(crate) use version::{Conflicted, Revision, Version};
 pub(crate) use worktree::{
-    Worktree, WorktreeChanges, WorktreeStart, changes_elsewhere, folder_is_free, folder_of_worktrees,
-    is_linked_worktree, suggested_folder,
+    FolderLeft, Worktree, WorktreeChanges, WorktreeStart, changes_elsewhere, folder_is_free,
+    folder_of_worktrees, is_linked_worktree, suggested_folder,
 };
 
 const OBJECT_CACHE_BYTES: usize = 4 * 1024 * 1024;
