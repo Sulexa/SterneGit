@@ -72,3 +72,4 @@ opt-level = "s"
 
 [patch.crates-io]
 gpui-component = { path = "vendor/gpui-component" }
+gpui-pre = { path = "vendor/gpui-pre" }

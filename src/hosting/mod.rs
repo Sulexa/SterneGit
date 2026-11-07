@@ -5,6 +5,7 @@ mod clone_view;
 mod connectors_page;
 mod failure;
 mod hosted;
+mod interface_page;
 mod new_repository;
 mod parts;
 mod publish;

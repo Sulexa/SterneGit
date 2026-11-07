@@ -1,5 +1,6 @@
 mod avatar;
 mod badges;
+mod ctrl_wheel;
 mod file_view;
 mod folded;
 mod graph_cell;
@@ -18,6 +19,7 @@ pub(crate) use badges::{
     PullMark, additions, change_badge, checked_out_in, deletions, pull_chip, ref_badge, stash_badge,
     worktree_badge,
 };
+pub(crate) use ctrl_wheel::{ctrl_wheel_area, ctrl_wheel_elsewhere};
 pub(crate) use file_view::{FileView, FileViewToggle};
 pub(crate) use folded::Folded;
 pub(crate) use graph_cell::{GraphNode, graph_cell, graph_width, uncommitted_cell};

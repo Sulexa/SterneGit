@@ -13,6 +13,7 @@ needs them.
 | `Diff::render_hunk_suffix` | `src/diff/mod.rs` | Puts Stage, Unstage and Discard hunk buttons at the right end of each `@@` header |
 | `DiffState::refresh_files` | `src/diff/state.rs` | Re-reads a file after a hunk moves without jumping back to its top |
 | `Diff::on_line_secondary_press`, `Diff::on_hunk_secondary_press` | `src/diff/mod.rs` | Tell the right-click menu which line or hunk header was pressed. `on_line_hover` can't: moving down from one line to the next reports the new line, then `None` for the old one |
+| `window.viewport_size()` instead of `window.bounds().size` | `src/menu/`, `src/input/popovers/`, `src/window_border.rs` | Menus and popovers fit themselves into the window's layout size. `bounds()` is the window on the screen, which stops matching the layout once the window is zoomed (see gpui-pre below) |
 
 `gpui-component.patch` holds exactly these changes against the release.
 
@@ -29,3 +30,34 @@ needs them.
 
 3. Once a release offers these additions upstream, delete this folder and the
    `[patch.crates-io]` section.
+
+## gpui-pre 0.3.11
+
+`gpui-pre/` is the crates.io release of gpui-pre 0.3.11, the GPUI core behind
+`gpui_kit::*`, with a content zoom added to `Window`. `Cargo.toml` points at it
+with `[patch.crates-io]`. The crate's `examples/`, `tests/`, `benches/`,
+`Cargo.lock` and `Cargo.toml.orig` were left out, and so were the `[[example]]`
+and `[[test]]` targets that need them.
+
+| Change | Where | Why |
+| --- | --- | --- |
+| `Window::content_zoom`, `Window::set_content_zoom` | `src/window.rs`, `src/window/zoom.rs` | Zooms everything a window draws, like a browser's zoom: the window reports a scale factor `zoom` times larger and a viewport `zoom` times smaller, so text, pictures and hit testing all follow. SterneGit's Ctrl + wheel and Settings → Interface set it |
+| Input from the platform moved into zoomed units | `src/window.rs` (`on_input`), `src/window/zoom.rs` | Mouse, wheel, touch and file-drop positions arrive in platform units. Only events from the platform are converted: GPUI dispatches events of its own that are already in window units |
+| Lengths sent to the platform moved out of zoomed units | `src/window.rs`, `src/platform.rs` | `resize`, the IME candidate box, the window menu, client insets, corner radii, input regions and the macOS traffic lights take platform units; insets and the visual viewport come back from it |
+
+`gpui-pre.patch` holds exactly these changes against the release.
+
+### Moving to a newer release
+
+1. Copy `src/`, `resources/`, `docs/`, `build.rs`, `README.md`, `LICENSE-APACHE`
+   and `Cargo.toml` from `~/.cargo/registry/src/*/gpui-pre-<version>/` over
+   `gpui-pre/`, then delete the `[[example]]` and `[[test]]` sections of
+   `Cargo.toml`. Every `gpui-pre-*` crate must stay at the same version.
+2. Apply the changes again from the `gpui-pre` folder:
+
+   ```bash
+   git apply -p1 ../gpui-pre.patch
+   ```
+
+3. Once GPUI offers a window zoom upstream, delete this folder and its line in
+   `[patch.crates-io]`.

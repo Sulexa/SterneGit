@@ -19,7 +19,7 @@ use super::{
 use crate::{
     actions::{LoopChange, MEDIA_CONTEXT, PlayPause, SwitchVersion},
     media::{Player, Region, Sound, audible_changes},
-    ui::{Look as _, handler},
+    ui::{Look as _, ctrl_wheel_area, handler},
 };
 
 const RULER: f32 = 28.;
@@ -363,14 +363,19 @@ impl SoundCompare {
         }
     }
 
+    fn zoom_by_wheel(&mut self, event: &ScrollEvent, cx: &mut Context<Self>) -> bool {
+        let delta = event.delta.pixel_delta(px(WHEEL_LINE));
+        let at = self.time_at(event.position.x).unwrap_or((self.view.0 + self.view.1) / 2.);
+        let factor = if f32::from(delta.y) > 0. { 1. / ZOOM_STEP } else { ZOOM_STEP };
+        self.zoom_around(at, factor);
+        cx.notify();
+        true
+    }
+
     fn on_wheel(&mut self, event: &ScrollEvent, cx: &mut Context<Self>) {
         let delta = event.delta.pixel_delta(px(WHEEL_LINE));
         let span = self.view.1 - self.view.0;
-        if event.modifiers.secondary(cx) {
-            let at = self.time_at(event.position.x).unwrap_or((self.view.0 + self.view.1) / 2.);
-            let factor = if f32::from(delta.y) > 0. { 1. / ZOOM_STEP } else { ZOOM_STEP };
-            self.zoom_around(at, factor);
-        } else if let Some(area) = self.area {
+        if let Some(area) = self.area {
             let moved = if f32::from(delta.x).abs() > f32::from(delta.y).abs() { delta.x } else { delta.y };
             let shift = -f64::from(moved / area.size.width) * span;
             let longest = self.sounds.longest().max(SHORTEST_VIEW);
@@ -718,7 +723,8 @@ impl Render for SoundCompare {
                         .on_mouse_up(MouseButton::Left, cx.listener(|this, _, _, _| this.scrubbing = false))
                         .on_scroll(cx.listener(|this, event: &ScrollEvent, _, cx| this.on_wheel(event, cx)))
                         .child(waves)
-                        .children(overlays),
+                        .children(overlays)
+                        .child(ctrl_wheel_area(cx.entity().downgrade(), Self::zoom_by_wheel)),
                 ),
             )
             .child(transport)

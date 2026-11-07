@@ -853,6 +853,8 @@
 .file-stepper { margin-right: 4px; }
 .file-stepper > span { padding: 0 4px; white-space: nowrap; }
 .zoom-control > .percent { min-width: 52px; text-align: center; white-space: nowrap; }
+.zoom-stepper { flex: none; display: flex; align-items: center; gap: 4px; }
+.zoom-stepper > .percent { min-width: 52px; text-align: center; white-space: nowrap; font-variant-numeric: tabular-nums; }
 
 .swatch {
   flex: none;

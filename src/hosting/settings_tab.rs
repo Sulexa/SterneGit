@@ -9,10 +9,13 @@ use gpui_kit::{
     px,
 };
 
-use super::failure::Trouble;
+use super::{failure::Trouble, interface_page::zoom_label};
 use crate::{
     accounts::AccountId,
-    app::connectors::{Connectors, mark_seen, note_failure},
+    app::{
+        connectors::{Connectors, mark_seen, note_failure},
+        zoom::{Zoom, current_zoom},
+    },
     connect::Standing,
     net::services::ConnectorId,
     ui::{Look as _, SectionHeader, list_row, run_async_in_background},
@@ -22,6 +25,7 @@ const NAV_WIDTH: f32 = 224.;
 const SETTINGS: &str = "Settings";
 const ACCOUNTS: &str = "Accounts";
 const CONNECTORS: &str = "Connectors";
+const INTERFACE: &str = "Interface";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum Page {
@@ -29,6 +33,7 @@ pub(crate) enum Page {
     Account(AccountId),
     Connectors,
     Connector(ConnectorId),
+    Interface,
 }
 
 pub(crate) enum ServerKeys {
@@ -120,7 +125,7 @@ impl SettingsTab {
         let gone = match &self.page {
             Page::Account(id) => connectors.is_ready() && connectors.account(id).is_none(),
             Page::Connector(id) => connectors.is_ready() && connectors.connector(id).is_none(),
-            Page::Accounts | Page::Connectors => false,
+            Page::Accounts | Page::Connectors | Page::Interface => false,
         };
         if gone {
             self.page = match self.page {
@@ -135,6 +140,8 @@ impl SettingsTab {
         let accounts = connectors.accounts().len();
         let waiting = connectors.waiting().count();
         let on_accounts = matches!(self.page, Page::Accounts | Page::Account(_));
+        let on_connectors = matches!(self.page, Page::Connectors | Page::Connector(_));
+        let zoom = current_zoom(cx);
         let theme = cx.theme();
         let (muted, yellow, sidebar, border) = (theme.muted_foreground, theme.yellow, theme.sidebar, theme.border);
         let nav_row = |id: &'static str, icon: IconName, label: &'static str, selected: bool, trailing: AnyElement| {
@@ -148,6 +155,10 @@ impl SettingsTab {
             )
         };
         let count = div().xs_text().text_color(muted).child(accounts.to_string()).into_any_element();
+        let zoomed = match zoom == Zoom::ACTUAL_SIZE {
+            true => div().into_any_element(),
+            false => div().xs_text().text_color(muted).child(zoom_label(zoom)).into_any_element(),
+        };
         let badge = match waiting {
             0 => div().into_any_element(),
             waiting => div()
@@ -177,8 +188,12 @@ impl SettingsTab {
                     .on_click(cx.listener(|this, _, _, cx| this.show(Page::Accounts, cx))),
             )
             .child(
-                nav_row("settings-connectors", IconName::Plug, CONNECTORS, !on_accounts, badge)
+                nav_row("settings-connectors", IconName::Plug, CONNECTORS, on_connectors, badge)
                     .on_click(cx.listener(|this, _, _, cx| this.show(Page::Connectors, cx))),
+            )
+            .child(
+                nav_row("settings-interface", IconName::Monitor, INTERFACE, self.page == Page::Interface, zoomed)
+                    .on_click(cx.listener(|this, _, _, cx| this.show(Page::Interface, cx))),
             )
     }
 }
@@ -196,6 +211,7 @@ impl Render for SettingsTab {
             Page::Account(id) => self.account_page(&id, window, cx),
             Page::Connectors => self.connectors_page(cx),
             Page::Connector(id) => self.connector_page(&id, cx),
+            Page::Interface => self.interface_page(cx),
         };
         h_flex()
             .size_full()

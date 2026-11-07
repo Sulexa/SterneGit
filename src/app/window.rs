@@ -28,11 +28,12 @@ use super::{
     tab_strip::{TabLabel, TabState, TabStrip},
     tabs::Tabs,
     top_bar::TopBar,
+    zoom::{apply_zoom, reset_zoom, zoom_by_wheel, zoom_in, zoom_out},
 };
 use crate::{
     actions::{
         About, CloneRepository, CloseTab, CopyHash, Fetch, NewRepository, NextTab, OpenRepository,
-        OpenSettings, PreviousTab, Quit, Refresh, WINDOW_CONTEXT,
+        OpenSettings, PreviousTab, Quit, Refresh, ResetZoom, WINDOW_CONTEXT, ZoomIn, ZoomOut,
     },
     git,
     hosting::{
@@ -44,7 +45,7 @@ use crate::{
         services::ConnectorId,
     },
     repo::{RepoView, RepoViewEvent, Repository},
-    ui::{Look as _, Notice},
+    ui::{Look as _, Notice, ctrl_wheel_elsewhere},
 };
 
 const CHECK_FOR_OUTSIDE_CHANGES_EVERY: Duration = Duration::from_secs(3);
@@ -94,6 +95,7 @@ pub(crate) struct SterneGit {
 impl SterneGit {
     pub(crate) fn new(path: Option<PathBuf>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         Theme::change(ThemeMode::Dark, Some(window), cx);
+        apply_zoom(window, cx);
         let menu_bar = draws_its_own_menu_bar(cx).then(|| AppMenuBar::new(cx));
         let poll = cx.spawn(async move |this, cx| {
             let mut online = Online::default();
@@ -581,10 +583,14 @@ impl Render for SterneGit {
                 this.update_active_repository(cx, |repository, cx| repository.fetch(cx))
             }))
             .on_action(cx.listener(|this, _: &CopyHash, window, cx| this.copy_hash(window, cx)))
+            .on_action(|_: &ZoomIn, window, cx| zoom_in(window, cx))
+            .on_action(|_: &ZoomOut, window, cx| zoom_out(window, cx))
+            .on_action(|_: &ResetZoom, window, cx| reset_zoom(window, cx))
             .on_action(|_: &About, window, cx| Self::show_about(window, cx))
             .on_action(|_: &Quit, _, cx| cx.quit())
             .child(self.top_bar(cx))
             .when(!self.tabs.is_empty(), |this| this.child(self.tab_strip(cx)))
             .child(div().fill_height().child(body))
+            .child(ctrl_wheel_elsewhere(zoom_by_wheel))
     }
 }

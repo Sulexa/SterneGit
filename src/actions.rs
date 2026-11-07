@@ -22,6 +22,9 @@ gpui_kit::actions!(
         CloseTab,
         NextTab,
         PreviousTab,
+        ZoomIn,
+        ZoomOut,
+        ResetZoom,
         About,
         Quit
     ]

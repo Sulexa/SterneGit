@@ -718,7 +718,7 @@ const Screens = (() => {
     {
       id: 'menu',
       title: 'View menu open',
-      about: 'On Windows and Linux SterneGit draws its own menu bar in the top bar; on macOS the same menus go to the system menu bar.',
+      about: 'On Windows and Linux SterneGit draws its own menu bar in the top bar; on macOS the same menus go to the system menu bar. Zoom In, Zoom Out and Reset Zoom step the zoom of the whole window, like Ctrl + mouse wheel.',
       source: 'src/app/mod.rs',
       render: () =>
         C.SterneGit({
@@ -758,12 +758,13 @@ const Screens = (() => {
       const { accounts, serverKeys, connectors, gitlabUpdate, owners, repositories } = Sample.hosting;
       const [personal, work, enterprise] = accounts;
       const settingsTabs = [...tabs, { name: HostTexts.settings, icon: 'settings' }];
-      const settings = (page, content, overlays = '') =>
+      const settings = (page, content, overlays = '', zoom = 100) =>
         C.SterneGit({
           topBar: C.TopBar(),
           tabStrip: C.TabStrip({ tabs: settingsTabs, active: settingsTabs.length - 1 }),
-          body: C.SettingsTab({ page, content, nav: { accounts: accounts.length, waiting: 1 } }),
+          body: C.SettingsTab({ page, content, nav: { accounts: accounts.length, waiting: 1, zoom } }),
           overlays,
+          zoom,
         });
       const accountsPage = () => C.AccountsPage({ accounts });
       const personalPage = (account = personal) => C.AccountPage({ account, keys: serverKeys.filter((key) => account.key || !key.sternegit) });
@@ -872,6 +873,33 @@ const Screens = (() => {
           about: 'A new version that asks for nothing new starts on its own and shows Updated. One that asks for more waits, and its page lists only the additions; the old version keeps running meanwhile.',
           source: 'src/connect/grant.rs',
           render: () => settings('connectors', C.ApprovalPage({ connector: gitlabUpdate, update: true })),
+        },
+        {
+          id: 'settings-interface',
+          title: 'Settings — interface',
+          about: "Interface is the third page of Settings. Zoom scales the whole window, like a browser's zoom: text, rows, icons, menus, dialogs and the top bar, with crisp text at every size. − and + step through 50, 67, 75, 80, 90, 100, 110, 125, 150, 175 and 200 %; each end turns its button off. Reset goes back to 100 % and is off there. SterneGit saves the zoom in %APPDATA%\\SterneGit\\settings.json and opens at it next time.",
+          source: 'src/hosting/interface_page.rs',
+          render: () => settings('interface', C.InterfacePage({ zoom: 100 })),
+        },
+        {
+          id: 'settings-interface-zoomed',
+          title: 'Settings — interface, zoomed to 125 %',
+          about: 'The same page at 125 %: everything is a quarter bigger, so less fits in the window. Beside Interface, the nav shows the zoom whenever it is not 100 %.',
+          source: 'src/hosting/interface_page.rs',
+          render: () => settings('interface', C.InterfacePage({ zoom: 125 }), '', 125),
+        },
+        {
+          id: 'wheel-zoom',
+          title: 'Ctrl + wheel zooms the window',
+          about: "Holding Ctrl and turning the mouse wheel steps one zoom level per notch, anywhere in the window: lists don't scroll meanwhile. A touchpad steps once per 50 px of scrolling. Over a picture or a sound being compared, Ctrl + wheel keeps zooming that instead, as before. View → Zoom In (Ctrl+=), Zoom Out (Ctrl+-) and Reset Zoom (Ctrl+0) do the same from the keyboard. Each key also works where it sits on a US keyboard, so on a French one Ctrl+0 is the key that also reads à.",
+          source: 'src/app/zoom.rs',
+          render: () =>
+            C.SterneGit({
+              topBar: topBar(),
+              tabStrip: tabStrip(),
+              body: commitSelected(),
+              zoom: 110,
+            }),
         },
         {
           id: 'connector-waiting',

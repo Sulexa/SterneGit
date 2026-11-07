@@ -1107,10 +1107,32 @@ const Catalog = (() => {
           name: 'SettingsNav',
           code: 'app::settings_tab::SettingsNav',
           source: 'src/app/connectors.rs',
-          about: 'The Settings pages: Accounts with how many there are, Connectors with a yellow badge counting the ones waiting for approval.',
+          about: 'The Settings pages: Accounts with how many there are, Connectors with a yellow badge counting the ones waiting for approval, Interface with the zoom when it is not 100 %.',
           variants: [
             ['A connector waiting', () => C.SettingsNav({ page: 'accounts', accounts: 3, waiting: 1 }), { w: 224 }],
             ['Nothing waiting', () => C.SettingsNav({ page: 'connectors', accounts: 3 }), { w: 224 }],
+            ['Zoomed to 125 %', () => C.SettingsNav({ page: 'interface', accounts: 3, zoom: 125 }), { w: 224 }],
+          ],
+        },
+        {
+          name: 'InterfacePage',
+          code: 'hosting::interface_page::SettingsTab::interface_page',
+          source: 'src/hosting/interface_page.rs',
+          about: 'How SterneGit draws its window: for now the zoom of the whole window, with what Ctrl + mouse wheel does.',
+          variants: [
+            ['100 %', () => C.InterfacePage({ zoom: 100 }), { w: 816 }],
+            ['125 %', () => C.InterfacePage({ zoom: 125 }), { w: 816 }],
+          ],
+        },
+        {
+          name: 'ZoomStepper',
+          code: 'hosting::interface_page::zoom_stepper',
+          source: 'src/hosting/interface_page.rs',
+          about: 'One zoom level down, the zoom, one level up. The levels go from 50 to 200 %; each end turns its button off.',
+          variants: [
+            ['100 %', () => C.ZoomStepper({ percent: 100 })],
+            ['Smallest', () => C.ZoomStepper({ percent: 50 })],
+            ['Largest', () => C.ZoomStepper({ percent: 200 })],
           ],
         },
         {

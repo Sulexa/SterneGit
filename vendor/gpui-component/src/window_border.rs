@@ -167,7 +167,7 @@ impl RenderOnce for WindowBorder {
         };
         let resize_hit_size = self.resize_hit_size;
         window.set_client_inset(platform_inset);
-        let window_size = window.window_bounds().get_bounds().size;
+        let window_size = window.viewport_size();
         let is_window_active = window.is_window_active();
         let border_color = if cx.theme().is_dark() {
             Hsla {
@@ -211,7 +211,7 @@ impl RenderOnce for WindowBorder {
                 if tiling.top && tiling.bottom && tiling.left && tiling.right {
                     return;
                 }
-                let size = window.window_bounds().get_bounds().size;
+                let size = window.viewport_size();
                 let pos = window.mouse_position();
                 let insets = client_frame_insets(platform_inset, &tiling);
 

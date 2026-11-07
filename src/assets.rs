@@ -51,7 +51,8 @@ gpui_kit::assets::icon_assets!(
         ListFilter,
         CircleMinus,
         MessageSquare,
-        FolderGit
+        FolderGit,
+        Monitor
     ]
 );
 

@@ -7,6 +7,7 @@ const IconPaths = {
   'rows-2': '<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 12h18"/>',
   plus: '<path d="M5 12h14"/><path d="M12 5v14"/>',
   minus: '<path d="M5 12h14"/>',
+  monitor: '<rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/>',
   close: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
   'undo-2': '<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11"/>',
   'triangle-alert': '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
@@ -224,6 +225,10 @@ const Menus = {
     '-',
     ['Next Tab', 'Ctrl+Tab'],
     ['Previous Tab', 'Ctrl+Shift+Tab'],
+    '-',
+    ['Zoom In', 'Ctrl+='],
+    ['Zoom Out', 'Ctrl+-'],
+    ['Reset Zoom', 'Ctrl+0'],
   ],
   About: [['About SterneGit', '']],
 };
@@ -446,10 +451,20 @@ const Visibilities = {
   internal: { label: 'Internal', icon: 'building', about: 'Everyone in the organization' },
 };
 
+const ZoomLevels = [50, 67, 75, 80, 90, 100, 110, 125, 150, 175, 200];
+
 const HostTexts = {
   settings: 'Settings',
   accounts: 'Accounts',
   connectors: 'Connectors',
+  interface: 'Interface',
+  interfaceAbout: 'How SterneGit draws its window on this computer.',
+  zoom: 'Zoom',
+  zoomAbout: 'Makes everything in the window bigger or smaller. Hold Ctrl and turn the mouse wheel to zoom from anywhere; over a picture or a sound being compared, the wheel zooms that instead.',
+  zoomOut: 'Zoom out  Ctrl+-',
+  zoomIn: 'Zoom in  Ctrl+=',
+  resetZoom: 'Reset',
+  resetZoomTip: 'Back to 100 %  Ctrl+0',
   accountsAbout: "SterneGit signs in to hosting services to clone, create and publish repositories. It keeps their tokens in Windows Credential Manager under its own names, apart from the credentials Git uses in a terminal.",
   addAccount: 'Add account…',
   noAccounts: 'No accounts yet',
@@ -2597,16 +2612,29 @@ const C = {
     return `<div data-c="PageHeader" class="page-head">${crumbs}<div class="h top">${media}<div class="v fill" style="gap:2px"><div class="lg semibold">${esc(title)}</div>${subtitle}${text}</div>${actions ? `<div class="h actions">${actions}</div>` : ''}</div></div>`;
   },
 
-  SettingsNav({ page = 'accounts', accounts = 0, waiting = 0 }) {
+  SettingsNav({ page = 'accounts', accounts = 0, waiting = 0, zoom = 100 }) {
     const row = (key, label, glyph, extra) =>
       C.ListRow({ content: `<div class="h fill" style="gap:8px">${icon(glyph, 'sm', 'var(--muted)')}<span class="fill sm">${esc(label)}</span>${extra}</div>`, selected: key === page });
     const count = accounts ? `<span class="xs muted">${thousands(accounts)}</span>` : '';
     const badge = waiting ? `<span class="count-badge" title="${esc(counted(waiting, 'connector waits', 'connectors wait'))} for your approval">${thousands(waiting)}</span>` : '';
-    return `<div data-c="SettingsNav" class="settings-nav">${C.SectionHeader({ title: HostTexts.settings })}${row('accounts', HostTexts.accounts, 'user', count)}${row('connectors', HostTexts.connectors, 'plug', badge)}</div>`;
+    const zoomed = zoom === 100 ? '' : `<span class="xs muted">${thousands(zoom)} %</span>`;
+    return `<div data-c="SettingsNav" class="settings-nav">${C.SectionHeader({ title: HostTexts.settings })}${row('accounts', HostTexts.accounts, 'user', count)}${row('connectors', HostTexts.connectors, 'plug', badge)}${row('interface', HostTexts.interface, 'monitor', zoomed)}</div>`;
   },
 
   SettingsTab({ page, content, nav = {} }) {
     return `<div data-c="SettingsTab" class="settings">${C.SettingsNav({ page, ...nav })}<div class="settings-page"><div class="page-body">${content}</div></div></div>`;
+  },
+
+  ZoomStepper({ percent = 100 }) {
+    const out = C.Button({ icon: 'minus', size: 'sm', tooltip: HostTexts.zoomOut, disabled: percent <= ZoomLevels[0] });
+    const into = C.Button({ icon: 'plus', size: 'sm', tooltip: HostTexts.zoomIn, disabled: percent >= ZoomLevels[ZoomLevels.length - 1] });
+    return `<div data-c="ZoomStepper" class="zoom-stepper">${out}<span class="sm percent">${thousands(percent)} %</span>${into}</div>`;
+  },
+
+  InterfacePage({ zoom = 100 }) {
+    const reset = C.Button({ label: HostTexts.resetZoom, size: 'sm', variant: 'ghost', tooltip: HostTexts.resetZoomTip, disabled: zoom === 100 });
+    const row = `<div class="row"><div class="v fill" style="gap:2px"><span class="sm medium">${esc(HostTexts.zoom)}</span><span class="xs muted">${esc(HostTexts.zoomAbout)}</span></div>${C.ZoomStepper({ percent: zoom })}${reset}</div>`;
+    return `<div data-c="InterfacePage" class="v page">${C.PageHeader({ title: HostTexts.interface, about: HostTexts.interfaceAbout })}${C.GroupBox({ rows: [row] })}</div>`;
   },
 
   AccountRow({ account, hot = false }) {
@@ -2998,7 +3026,8 @@ const C = {
     return dialogShell({ name: 'MergePullDialog', title: PullTexts.mergeTitle(pull.number), description: PullTexts.mergeAbout(pull.head, pull.base, details.headSha), body: `<div class="form">${methodField}${words}</div>${failure}`, buttons, size: 'wider' });
   },
 
-  SterneGit({ topBar, tabStrip = '', body, overlays = '' }) {
-    return `<div data-c="SterneGit" class="fg fg-window">${topBar}${tabStrip}<div class="fill v">${body}</div>${overlays}</div>`;
+  SterneGit({ topBar, tabStrip = '', body, overlays = '', zoom = 100 }) {
+    const zoomed = zoom === 100 ? '' : ` style="zoom:${zoom / 100};width:${144000 / zoom}px;height:${90000 / zoom}px"`;
+    return `<div data-c="SterneGit" class="fg fg-window"${zoomed}>${topBar}${tabStrip}<div class="fill v">${body}</div>${overlays}</div>`;
   },
 };

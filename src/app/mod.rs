@@ -5,11 +5,13 @@ mod tab_strip;
 mod tabs;
 mod top_bar;
 mod window;
+pub(crate) mod zoom;
 
-use std::path::PathBuf;
+use std::{path::PathBuf, rc::Rc};
 
 use gpui_kit::{
-    Action, App, AppContext as _, KeyBinding, Menu, MenuItem, WindowBounds, WindowOptions,
+    Action, App, AppContext as _, KeyBinding, KeyBindingContextPredicate, Menu, MenuItem,
+    WindowBounds, WindowOptions,
     component::{GlobalState, TitleBar},
     px, size,
 };
@@ -18,8 +20,9 @@ use crate::{
     actions::{
         About, CloneRepository, CloseDiff, CloseTab, CopyHash, Fetch, HISTORY_CONTEXT, NewRepository,
         NewerCommit, NextChange, NextFile, NextTab, OlderCommit, OpenRepository, OpenSettings,
-        PreviousChange, PreviousFile, PreviousTab,
+        PreviousChange, PreviousFile, PreviousTab, ResetZoom,
         LoopChange, MEDIA_CONTEXT, PlayPause, Quit, Refresh, SwitchVersion, WINDOW_CONTEXT, WholeWindow,
+        ZoomIn, ZoomOut,
     },
     assets::Assets,
 };
@@ -45,6 +48,7 @@ pub(crate) fn run(path: Option<PathBuf>) {
             ..TitleBar::window_options()
         };
         connectors::install_connectors(cx);
+        zoom::install_zoom(cx);
         gpui_kit::open_window(options, cx, |window, cx| {
             cx.new(|cx| SterneGit::new(path, window, cx))
         })
@@ -61,6 +65,8 @@ fn draws_its_own_menu_bar(cx: &App) -> bool {
 fn bind_keys(cx: &mut App) {
     let is_mac = cx.platform_info().is_mac();
     let primary = |mac: &'static str, other: &'static str| if is_mac { mac } else { other };
+    let zoom_keys_where_they_sit_on_a_us_keyboard = zoom_keys_by_position(is_mac, cx);
+    cx.bind_keys(zoom_keys_where_they_sit_on_a_us_keyboard);
     cx.bind_keys(menus_show_the_last_key(
         OlderCommit,
         ["j", "down"],
@@ -70,6 +76,11 @@ fn bind_keys(cx: &mut App) {
         NewerCommit,
         ["k", "up"],
         HISTORY_CONTEXT,
+    ));
+    cx.bind_keys(menus_show_the_last_key(
+        ZoomIn,
+        [primary("cmd-+", "ctrl-+"), primary("cmd-=", "ctrl-=")],
+        WINDOW_CONTEXT,
     ));
     cx.bind_keys([
         KeyBinding::new(primary("cmd-r", "ctrl-r"), Refresh, Some(WINDOW_CONTEXT)),
@@ -106,8 +117,26 @@ fn bind_keys(cx: &mut App) {
         KeyBinding::new(primary("cmd-w", "ctrl-w"), CloseTab, Some(WINDOW_CONTEXT)),
         KeyBinding::new("ctrl-tab", NextTab, Some(WINDOW_CONTEXT)),
         KeyBinding::new("ctrl-shift-tab", PreviousTab, Some(WINDOW_CONTEXT)),
+        KeyBinding::new(primary("cmd--", "ctrl--"), ZoomOut, Some(WINDOW_CONTEXT)),
+        KeyBinding::new(primary("cmd-0", "ctrl-0"), ResetZoom, Some(WINDOW_CONTEXT)),
         KeyBinding::new(primary("cmd-q", "ctrl-q"), Quit, Some(WINDOW_CONTEXT)),
     ]);
+}
+
+fn zoom_keys_by_position(is_mac: bool, cx: &App) -> Vec<KeyBinding> {
+    let primary = if is_mac { "cmd" } else { "ctrl" };
+    let window = KeyBindingContextPredicate::parse(WINDOW_CONTEXT).ok().map(Rc::new);
+    let at = |key: &str, action: Box<dyn Action>| {
+        KeyBinding::load(&format!("{primary}-{key}"), action, window.clone(), true, None, cx).ok()
+    };
+    [
+        at("=", ZoomIn.boxed_clone()),
+        at("-", ZoomOut.boxed_clone()),
+        at("0", ResetZoom.boxed_clone()),
+    ]
+    .into_iter()
+    .flatten()
+    .collect()
 }
 
 fn menus_show_the_last_key<A: Action + Clone>(
@@ -156,6 +185,10 @@ fn menus() -> Vec<Menu> {
             MenuItem::separator(),
             MenuItem::action("Next Tab", NextTab),
             MenuItem::action("Previous Tab", PreviousTab),
+            MenuItem::separator(),
+            MenuItem::action("Zoom In", ZoomIn),
+            MenuItem::action("Zoom Out", ZoomOut),
+            MenuItem::action("Reset Zoom", ResetZoom),
         ]),
         Menu::new("About").items([MenuItem::action("About SterneGit", About)]),
     ]

@@ -229,3 +229,117 @@ index fb309b8..f2ba66e 100644
      /// Changes the display mode while preserving source-line selection and a
      /// nearby source row.
      pub fn set_mode(&mut self, mode: DiffMode, cx: &mut Context<Self>) {
+diff --git a/src/input/popovers/code_action_menu.rs b/src/input/popovers/code_action_menu.rs
+index 1e3af71..bece509 100644
+--- a/src/input/popovers/code_action_menu.rs
++++ b/src/input/popovers/code_action_menu.rs
+@@ -303,7 +303,7 @@ impl Render for CodeActionMenu {
+         deferred(CaretAnchoredPopup::new(
+             self.state.clone(),
+             move |anchor, window, cx| {
+-                let max_width = MAX_MENU_WIDTH.min(window.bounds().size.width - anchor.x);
++                let max_width = MAX_MENU_WIDTH.min(window.viewport_size().width - anchor.x);
+ 
+                 // A flex root measures to its contents; a block root would
+                 // stretch its outside-click hitbox across the viewport.
+diff --git a/src/input/popovers/completion_menu.rs b/src/input/popovers/completion_menu.rs
+index 8c19e60..605be79 100644
+--- a/src/input/popovers/completion_menu.rs
++++ b/src/input/popovers/completion_menu.rs
+@@ -434,10 +434,10 @@ impl Render for CompletionMenu {
+             self.editor.clone(),
+             move |anchor, window, cx| {
+                 // `anchor` is in window coordinates, from the current frame.
+-                let max_width = configured_max.min(window.bounds().size.width - anchor.x);
++                let max_width = configured_max.min(window.viewport_size().width - anchor.x);
+                 let vertical_layout =
+                     anchor.x + configured_max + POPOVER_GAP + configured_max + POPOVER_GAP
+-                        > window.bounds().size.width;
++                        > window.viewport_size().width;
+ 
+                 let selected_documentation = list
+                     .read(cx)
+diff --git a/src/input/popovers/hover_popover.rs b/src/input/popovers/hover_popover.rs
+index 1259afb..df9277d 100644
+--- a/src/input/popovers/hover_popover.rs
++++ b/src/input/popovers/hover_popover.rs
+@@ -155,9 +155,9 @@ impl Element for Popover {
+         let max_width = self
+             .width_limit
+             .end
+-            .min(window.bounds().size.width - SNAP_TO_EDGE * 2)
++            .min(window.viewport_size().width - SNAP_TO_EDGE * 2)
+             .max(px(200.));
+-        let max_height = (window.bounds().size.height - SNAP_TO_EDGE * 2).min(px(320.));
++        let max_height = (window.viewport_size().height - SNAP_TO_EDGE * 2).min(px(320.));
+ 
+         let mut popover = deferred(
+             div()
+@@ -180,7 +180,7 @@ impl Element for Popover {
+         let popover_size = popover.layout_as_root(AvailableSpace::min_size(), window, cx);
+         const SNAP_TO_EDGE: Pixels = px(8.);
+         let top_space = trigger_bounds.top() - SNAP_TO_EDGE;
+-        let right_space = window.bounds().size.width - trigger_bounds.left() - SNAP_TO_EDGE;
++        let right_space = window.viewport_size().width - trigger_bounds.left() - SNAP_TO_EDGE;
+ 
+         let mut pos = point(
+             trigger_bounds.left(),
+diff --git a/src/menu/context_menu.rs b/src/menu/context_menu.rs
+index 94c25d3..751af32 100644
+--- a/src/menu/context_menu.rs
++++ b/src/menu/context_menu.rs
+@@ -181,8 +181,8 @@ impl DeferredMenu {
+         deferred(
+             anchored().child(
+                 div()
+-                    .w(window.bounds().size.width)
+-                    .h(window.bounds().size.height)
++                    .w(window.viewport_size().width)
++                    .h(window.viewport_size().height)
+                     .on_scroll(|_, _, cx| {
+                         cx.stop_propagation();
+                     })
+diff --git a/src/menu/popup_menu.rs b/src/menu/popup_menu.rs
+index e5849c1..19ac794 100644
+--- a/src/menu/popup_menu.rs
++++ b/src/menu/popup_menu.rs
+@@ -1248,7 +1248,7 @@ impl PopupMenu {
+             (Anchor::TopLeft, bounds.size.width - px(8.))
+         };
+ 
+-        let is_bottom_pos = bounds.origin.y + bounds.size.height > window.bounds().size.height;
++        let is_bottom_pos = bounds.origin.y + bounds.size.height > window.viewport_size().height;
+         self.submenu_anchor = if is_bottom_pos {
+             (anchor.other_side_along(gpui::Axis::Vertical), left)
+         } else {
+@@ -1526,7 +1526,7 @@ impl Render for PopupMenu {
+         let items_count = self.menu_items.len();
+ 
+         let max_height = self.max_height.unwrap_or_else(|| {
+-            let window_half_height = window.window_bounds().get_bounds().size.height * 0.5;
++            let window_half_height = window.viewport_size().height * 0.5;
+             window_half_height.min(px(450.))
+         });
+ 
+diff --git a/src/window_border.rs b/src/window_border.rs
+index 2e950d6..c7973c5 100644
+--- a/src/window_border.rs
++++ b/src/window_border.rs
+@@ -167,7 +167,7 @@ impl RenderOnce for WindowBorder {
+         };
+         let resize_hit_size = self.resize_hit_size;
+         window.set_client_inset(platform_inset);
+-        let window_size = window.window_bounds().get_bounds().size;
++        let window_size = window.viewport_size();
+         let is_window_active = window.is_window_active();
+         let border_color = if cx.theme().is_dark() {
+             Hsla {
+@@ -211,7 +211,7 @@ impl RenderOnce for WindowBorder {
+                 if tiling.top && tiling.bottom && tiling.left && tiling.right {
+                     return;
+                 }
+-                let size = window.window_bounds().get_bounds().size;
++                let size = window.viewport_size();
+                 let pos = window.mouse_position();
+                 let insets = client_frame_insets(platform_inset, &tiling);
+ 

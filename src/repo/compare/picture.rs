@@ -21,7 +21,7 @@ use super::{
 };
 use crate::{
     media::{Area, Backdrop, Layer, Picture, PixelDifference, Placement, Surface, rasterize},
-    ui::{Look as _, thousands},
+    ui::{Look as _, ctrl_wheel_area, thousands},
 };
 
 const FIT_SHARE: f64 = 0.9;
@@ -557,38 +557,44 @@ impl PictureCompare {
         self.frames().into_iter().find(|shown| shown.pane.contains(&position))
     }
 
+    fn zoom_by_wheel(&mut self, event: &ScrollEvent, cx: &mut Context<Self>) -> bool {
+        let Some(shown) = self.shown_at(event.position) else {
+            return false;
+        };
+        let delta = event.delta.pixel_delta(px(LINE_HEIGHT_FOR_WHEEL));
+        let factor = if f32::from(delta.y) > 0. { ZOOM_STEP } else { 1. / ZOOM_STEP };
+        let scale = (shown.scale * factor).clamp(LEAST_ZOOM, MOST_ZOOM);
+        let center = shown.pane.center();
+        let offset = (
+            f64::from(f32::from(event.position.x - center.x)),
+            f64::from(f32::from(event.position.y - center.y)),
+        );
+        let width = f64::from(shown.width);
+        let height = f64::from(shown.height);
+        let under = (
+            self.focus.0 + offset.0 / (width * shown.scale),
+            self.focus.1 + offset.1 / (height * shown.scale),
+        );
+        self.focus = (
+            under.0 - offset.0 / (width * scale),
+            under.1 - offset.1 / (height * scale),
+        );
+        self.zoom = Zoom::Scale(scale);
+        cx.notify();
+        true
+    }
+
     fn on_wheel(&mut self, event: &ScrollEvent, cx: &mut Context<Self>) {
         let Some(shown) = self.shown_at(event.position) else {
             return;
         };
         let delta = event.delta.pixel_delta(px(LINE_HEIGHT_FOR_WHEEL));
-        if event.modifiers.secondary(cx) {
-            let factor = if f32::from(delta.y) > 0. { ZOOM_STEP } else { 1. / ZOOM_STEP };
-            let scale = (shown.scale * factor).clamp(LEAST_ZOOM, MOST_ZOOM);
-            let center = shown.pane.center();
-            let offset = (
-                f64::from(f32::from(event.position.x - center.x)),
-                f64::from(f32::from(event.position.y - center.y)),
-            );
-            let width = f64::from(shown.width);
-            let height = f64::from(shown.height);
-            let under = (
-                self.focus.0 + offset.0 / (width * shown.scale),
-                self.focus.1 + offset.1 / (height * shown.scale),
-            );
-            self.focus = (
-                under.0 - offset.0 / (width * scale),
-                under.1 - offset.1 / (height * scale),
-            );
-            self.zoom = Zoom::Scale(scale);
+        let (dx, dy) = if event.modifiers.shift {
+            (f32::from(delta.y), 0.)
         } else {
-            let (dx, dy) = if event.modifiers.shift {
-                (f32::from(delta.y), 0.)
-            } else {
-                (f32::from(delta.x), f32::from(delta.y))
-            };
-            self.pan_by(&shown, f64::from(dx), f64::from(dy));
-        }
+            (f32::from(delta.x), f32::from(delta.y))
+        };
+        self.pan_by(&shown, f64::from(dx), f64::from(dy));
         cx.notify();
     }
 
@@ -1085,7 +1091,8 @@ impl Render for PictureCompare {
                     .on_mouse_up_out(MouseButton::Left, cx.listener(|this, _, _, cx| this.release(cx)))
                     .child(pictures)
                     .children(divider)
-                    .children(overlays),
+                    .children(overlays)
+                    .child(ctrl_wheel_area(cx.entity().downgrade(), Self::zoom_by_wheel)),
             )
             .when(self.shows_details, |this| this.child(self.details()))
     }
