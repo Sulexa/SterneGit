@@ -166,19 +166,32 @@ struct Shown {
     height: u32,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Sheet {
+    Whole,
+    Before,
+    After,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct RasterKey {
     pane: usize,
     mode: PictureMode,
+    sheet: Sheet,
     generation: u64,
     placement: (u64, u64, u64, u32, u32),
     surface: Surface,
     mix: u32,
-    split: u32,
 }
 
 struct Rendered {
     key: RasterKey,
+    image: Arc<RenderImage>,
+}
+
+struct Painted {
+    clip: Bounds<Pixels>,
+    target: Bounds<Pixels>,
     image: Arc<RenderImage>,
 }
 
@@ -422,7 +435,7 @@ impl PictureCompare {
             .collect()
     }
 
-    fn prepare(&mut self, viewport: Bounds<Pixels>, window: &mut Window, cx: &mut Context<Self>) -> Vec<(Bounds<Pixels>, Arc<RenderImage>)> {
+    fn prepare(&mut self, viewport: Bounds<Pixels>, window: &mut Window, cx: &mut Context<Self>) -> Vec<Painted> {
         if self.viewport != Some(viewport) {
             self.viewport = Some(viewport);
             cx.on_next_frame(window, |_, _, cx| cx.notify());
@@ -463,54 +476,76 @@ impl PictureCompare {
             if placement.width == 0 || placement.height == 0 {
                 continue;
             }
-            let split = ((device_of(shown.image.origin.x) + self.swipe * shown.image.size.width.as_f32() as f64 * device) - left)
-                .clamp(0., f64::from(placement.width)) as u32;
-            let key = RasterKey {
-                pane: ix,
-                mode: self.mode,
-                generation: self.generation,
-                placement: (
-                    placement.left.to_bits(),
-                    placement.top.to_bits(),
-                    placement.scale.to_bits(),
-                    placement.width,
-                    placement.height,
-                ),
-                surface,
-                mix: if self.mode == PictureMode::Onion { mix.to_bits() } else { 0 },
-                split: if self.mode == PictureMode::Swipe { split } else { 0 },
-            };
             let target = Bounds::from_corners(
                 point(px((left / device) as f32), px((top / device) as f32)),
                 point(px((right / device) as f32), px((bottom / device) as f32)),
             );
-            if let Some(at) = self.rendered.iter().position(|rendered| rendered.key == key) {
-                let rendered = self.rendered.remove(at);
-                painted.push((target, rendered.image.clone()));
-                kept.push(rendered);
+            let Some(picture) = pictures.get(ix).or(pictures.first()) else {
                 continue;
+            };
+            let sheets = if self.mode == PictureMode::Swipe && self.compares_both() {
+                let line = (device_of(shown.image.origin.x) + self.swipe * device_of(shown.image.size.width))
+                    .round()
+                    .clamp(left, right);
+                let line = px((line / device) as f32);
+                vec![
+                    (Sheet::Before, Bounds::from_corners(target.origin, point(line, target.bottom()))),
+                    (Sheet::After, Bounds::from_corners(point(line, target.top()), target.bottom_right())),
+                ]
+            } else {
+                vec![(Sheet::Whole, target)]
+            };
+            for (sheet, clip) in sheets {
+                let key = RasterKey {
+                    pane: ix,
+                    mode: self.mode,
+                    sheet,
+                    generation: self.generation,
+                    placement: (
+                        placement.left.to_bits(),
+                        placement.top.to_bits(),
+                        placement.scale.to_bits(),
+                        placement.width,
+                        placement.height,
+                    ),
+                    surface,
+                    mix: if self.mode == PictureMode::Onion { mix.to_bits() } else { 0 },
+                };
+                if let Some(at) = self.rendered.iter().position(|rendered| rendered.key == key) {
+                    let rendered = self.rendered.remove(at);
+                    painted.push(Painted {
+                        clip,
+                        target,
+                        image: rendered.image.clone(),
+                    });
+                    kept.push(rendered);
+                    continue;
+                }
+                let layer = match (self.mode, sheet, self.pictures.both(), self.pictures.difference.as_ref()) {
+                    (PictureMode::Swipe, Sheet::Before, Some((before, after)), _) => Layer::Stretched {
+                        picture: before,
+                        onto: after,
+                    },
+                    (PictureMode::Onion, _, Some((before, after)), _) => Layer::Onion { before, after, mix },
+                    (PictureMode::Difference, _, Some((_, after)), Some(difference)) => Layer::Difference {
+                        after,
+                        difference,
+                        colors: change_colors,
+                    },
+                    _ => Layer::Picture(picture),
+                };
+                let bgra = rasterize(&layer, placement, surface);
+                let Some(buffer) = image::RgbaImage::from_raw(placement.width, placement.height, bgra) else {
+                    continue;
+                };
+                let image = Arc::new(RenderImage::new(vec![image::Frame::new(buffer)]));
+                painted.push(Painted {
+                    clip,
+                    target,
+                    image: image.clone(),
+                });
+                kept.push(Rendered { key, image });
             }
-            let picture = pictures.get(ix).or(pictures.first());
-            let Some(picture) = picture else {
-                continue;
-            };
-            let layer = match (self.mode, self.pictures.both(), self.pictures.difference.as_ref()) {
-                (PictureMode::Swipe, Some((before, after)), _) => Layer::Swipe { before, after, split },
-                (PictureMode::Onion, Some((before, after)), _) => Layer::Onion { before, after, mix },
-                (PictureMode::Difference, Some((_, after)), Some(difference)) => Layer::Difference {
-                    after,
-                    difference,
-                    colors: change_colors,
-                },
-                _ => Layer::Picture(picture),
-            };
-            let bgra = rasterize(&layer, placement, surface);
-            let Some(buffer) = image::RgbaImage::from_raw(placement.width, placement.height, bgra) else {
-                continue;
-            };
-            let image = Arc::new(RenderImage::new(vec![image::Frame::new(buffer)]));
-            painted.push((target, image.clone()));
-            kept.push(Rendered { key, image });
         }
         for stale in std::mem::replace(&mut self.rendered, kept) {
             let _ = window.drop_image(stale.image);
@@ -1017,8 +1052,8 @@ impl Render for PictureCompare {
         let pictures = canvas(
             move |bounds, window, cx| entity.update(cx, |this, cx| this.prepare(bounds, window, cx)),
             |_, painted, window, _| {
-                for (bounds, image) in painted {
-                    let _ = window.paint_image(bounds, bounds, Corners::default(), image, 0, false);
+                for Painted { clip, target, image } in painted {
+                    let _ = window.paint_image(clip, target, Corners::default(), image, 0, false);
                 }
             },
         )

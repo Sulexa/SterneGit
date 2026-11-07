@@ -67,10 +67,9 @@ pub(crate) struct Surface {
 
 pub(crate) enum Layer<'a> {
     Picture(&'a Picture),
-    Swipe {
-        before: &'a Picture,
-        after: &'a Picture,
-        split: u32,
+    Stretched {
+        picture: &'a Picture,
+        onto: &'a Picture,
     },
     Onion {
         before: &'a Picture,
@@ -87,8 +86,8 @@ pub(crate) enum Layer<'a> {
 impl Layer<'_> {
     fn reference(&self) -> (u32, u32) {
         let picture = match self {
-            Layer::Picture(picture) => picture,
-            Layer::Swipe { after, .. } | Layer::Onion { after, .. } | Layer::Difference { after, .. } => after,
+            Layer::Picture(picture) | Layer::Stretched { onto: picture, .. } => picture,
+            Layer::Onion { after, .. } | Layer::Difference { after, .. } => after,
         };
         (picture.width, picture.height)
     }
@@ -144,30 +143,39 @@ impl<'a> Source<'a> {
 }
 
 pub(crate) fn rasterize(layer: &Layer, placement: Placement, surface: Surface) -> Vec<u8> {
+    let row = placement.width as usize * 4;
+    let mut out = vec![0; row * placement.height as usize];
+    let threads = std::thread::available_parallelism().map_or(1, usize::from);
+    let rows_per_band = (placement.height as usize).div_ceil(threads).max(1);
+    std::thread::scope(|scope| {
+        for (band, rows) in out.chunks_mut((rows_per_band * row).max(1)).enumerate() {
+            let top = (band * rows_per_band) as u32;
+            scope.spawn(move || paint_rows(layer, placement, surface, top, rows));
+        }
+    });
+    out
+}
+
+fn paint_rows(layer: &Layer, placement: Placement, surface: Surface, top: u32, rows: &mut [u8]) {
     let reference = layer.reference();
     let sources = match layer {
-        Layer::Picture(picture) => (Source::new(picture, reference), None),
-        Layer::Swipe { before, after, .. } | Layer::Onion { before, after, .. } => (
+        Layer::Picture(picture) | Layer::Stretched { picture, .. } => (Source::new(picture, reference), None),
+        Layer::Onion { before, after, .. } => (
             Source::new(after, reference),
             Some(Source::new(before, reference)),
         ),
         Layer::Difference { after, .. } => (Source::new(after, reference), None),
     };
-    let mut out = Vec::with_capacity((placement.width * placement.height * 4) as usize);
-    for y in 0..placement.height {
+    let mut pixels = rows.chunks_exact_mut(4);
+    for y in top..placement.height {
         for x in 0..placement.width {
+            let Some(pixel) = pixels.next() else {
+                return;
+            };
             let footprint = footprint(&placement, x, y);
             let base = surface.backdrop.color(x, y, &surface);
             let rgb = match layer {
-                Layer::Picture(_) => over(sources.0.sample(&footprint), base),
-                Layer::Swipe { split, .. } => {
-                    let source = if x < *split {
-                        sources.1.as_ref().unwrap_or(&sources.0)
-                    } else {
-                        &sources.0
-                    };
-                    over(source.sample(&footprint), base)
-                }
+                Layer::Picture(_) | Layer::Stretched { .. } => over(sources.0.sample(&footprint), base),
                 Layer::Onion { mix, .. } => {
                     let below = sources
                         .1
@@ -188,10 +196,9 @@ pub(crate) fn rasterize(layer: &Layer, placement: Placement, surface: Surface) -
                 },
             };
             let [r, g, b] = rgb.map(|channel| (channel.clamp(0., 1.) * 255.).round() as u8);
-            out.extend([b, g, r, 255]);
+            pixel.copy_from_slice(&[b, g, r, 255]);
         }
     }
-    out
 }
 
 fn footprint(placement: &Placement, x: u32, y: u32) -> Footprint {
@@ -309,15 +316,30 @@ mod tests {
     }
 
     #[test]
-    fn swiping_shows_the_old_picture_left_of_the_line() {
-        let before = picture(2, &[gray(10), gray(10)]);
+    fn a_stretched_picture_fills_the_frame_of_the_other() {
+        let before = picture(1, &[gray(10)]);
         let after = picture(2, &[gray(200), gray(200)]);
-        let layer = Layer::Swipe {
-            before: &before,
-            after: &after,
-            split: 1,
+        let layer = Layer::Stretched {
+            picture: &before,
+            onto: &after,
         };
-        assert_eq!(red_channel(&rasterize(&layer, at(0., 0., 1., 2, 1), PANEL)), [10, 200]);
+        assert_eq!(red_channel(&rasterize(&layer, at(0., 0., 1., 2, 1), PANEL)), [10, 10]);
+    }
+
+    #[test]
+    fn every_row_lands_where_it_belongs() {
+        let clear = picture(1, &[[0, 0, 0, 0]]);
+        let checkerboard = Surface {
+            backdrop: Backdrop::Checkerboard,
+            checker: 1,
+            ..PANEL
+        };
+        let (width, height) = (3, 37);
+        let out = rasterize(&Layer::Picture(&clear), at(0., 0., 1., width, height), checkerboard);
+        let expected: Vec<u8> = (0..height)
+            .flat_map(|y| (0..width).map(move |x| if (x + y) % 2 == 0 { 0x1a } else { 0x26 }))
+            .collect();
+        assert_eq!(red_channel(&out), expected);
     }
 
     #[test]
