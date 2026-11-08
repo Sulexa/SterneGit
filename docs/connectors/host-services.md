@@ -244,8 +244,9 @@ a second Secret Service client beside oo7.
 
 - Account ids are `<connector>:<host>:<user id>`, such as `github:github.com:583231`; the
   numeric id survives renames.
-- Refresh tokens go in a second entry, `<name>#refresh`. Windows caps blobs at 2,560 bytes, which
-  Entra ID access tokens can exceed, so those stay in memory.
+- A token that never expires is kept bare. An expiring one shares its entry with its refresh
+  token, expiry, client id and token address, as one JSON blob written in one call. Windows caps
+  blobs at 2,560 bytes, which Entra ID access tokens can exceed, so those stay in memory.
 - Linux without a Secret Service: by default tokens last the login session, in
   `$XDG_RUNTIME_DIR/sternegit/tokens` (0600 in a 0700 tmpfs, readable by the helper). Opting in to
   "Remember on this computer, unencrypted" writes `$XDG_STATE_HOME/sternegit/tokens` (0600),
@@ -256,9 +257,9 @@ a second Secret Service client beside oo7.
 ## 4. Sign-in
 
 **OAuth App, not GitHub App.** A GitHub App's user tokens see only repositories where the app is
-installed, so every organization would have to install it; they expire every 8 hours, and
-refreshing needs a client secret a desktop app can't keep. OAuth App tokens don't expire (GitHub
-revokes them after a year unused) and see all the user's repositories. Organizations with OAuth
+installed, so every organization would have to install it. OAuth App tokens see all the user's
+repositories. OAuth Apps created since 14 August 2026 get 8-hour access tokens with a 6-month
+refresh token by default; device-flow tokens renew without a client secret. Organizations with OAuth
 app access restrictions need an owner's approval, which the UI explains when their repositories
 are missing. Scopes: `repo read:org write:public_key workflow` (`workflow` lets HTTPS pushes that
 touch `.github/workflows` through). The app needs "Enable Device Flow" ticked.
@@ -290,13 +291,13 @@ touch `.github/workflows` through). The app needs "Enable Device Flow" ticked.
 5. Hold `access_token` (and any `refresh_token`, `expires_in`) in memory, run the connector's
    who-am-I, then store the token and write the account. The approval screen lists these URLs.
 
-**Refresh, for every connector.** Within 2 minutes of an account's `expires_at` (10 before a git
-network command), the host POSTs `grant_type=refresh_token`, `refresh_token` and `client_id`
-(plus `client_secret` if the manifest has one) to `token_url`. One refresh per account is in
-flight at a time, and a rotated refresh token is stored before the new access token is used. A
-401 on an expiring token gets one refresh and one retry; `invalid_grant` becomes `NotSignedIn`.
-Only the main process refreshes, never the helper, which would race it for the rotated token.
-GitHub's OAuth tokens never need this; GitLab's and Entra ID's will.
+**Refresh, for every connector.** Within 2 minutes of the access token's expiry (10 before a git
+network command), the host POSTs `grant_type=refresh_token`, `refresh_token` and `client_id` to
+the token address kept with it. One renewal is in flight at a time per process, and the rotated
+pair is stored in one write before the new access token is used. A 401 on an expiring token gets
+one renewal and one retry. `bad_refresh_token` or `invalid_grant` becomes `NotSignedIn`, unless
+another SterneGit window already stored newer tokens, which are then used. Only the main process
+refreshes, never the helper, which would race it for the rotated token.
 
 **A pasted token** is stored only after who-am-I succeeds with it. For Enterprise Server, the
 server address the user types also yields the allow-list.

@@ -1,30 +1,27 @@
-use std::{sync::Arc, time::Duration};
-
-use serde_json::Value;
-use url::{Url, form_urlencoded};
-
-use super::Token;
-use crate::net::{
-    curl::{Outgoing, Transport},
-    request::Method,
-    services::Cancel,
+use std::{
+    sync::Arc,
+    time::{Duration, SystemTime},
 };
 
+use url::Url;
+
+use super::{
+    Tokens,
+    oauth::{self, Client},
+};
+use crate::net::{curl::Transport, services::Cancel};
+
 const GRANT_TYPE: &str = "urn:ietf:params:oauth:grant-type:device_code";
-const FORM: &str = "application/x-www-form-urlencoded";
-const JSON: &str = "application/json";
 const SLOWER_BY: Duration = Duration::from_secs(5);
 const USUAL_INTERVAL: Duration = Duration::from_secs(5);
 const USUAL_LIFETIME: Duration = Duration::from_secs(15 * 60);
-const ANSWER_WITHIN: Duration = Duration::from_secs(30);
 
 #[derive(Clone)]
 pub(crate) struct DeviceFlow {
     transport: Arc<dyn Transport>,
-    client_id: String,
+    client: Client,
     scopes: Vec<String>,
     code_url: Url,
-    token_url: Url,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -40,7 +37,7 @@ pub(crate) struct DeviceCode {
 pub(crate) enum Polled {
     Waiting,
     SlowDown,
-    Granted(Token),
+    Granted(Tokens),
     Expired,
     Denied,
     Failed(String),
@@ -69,10 +66,12 @@ impl DeviceFlow {
     ) -> Self {
         Self {
             transport,
-            client_id,
+            client: Client {
+                id: client_id,
+                token_url,
+            },
             scopes,
             code_url,
-            token_url,
         }
     }
 
@@ -80,15 +79,20 @@ impl DeviceFlow {
         &self,
         cancel: Cancel,
     ) -> impl Future<Output = Result<DeviceCode, String>> + Send + 'static {
-        let form = form(&[("client_id", &self.client_id), ("scope", &self.scopes.join(" "))]);
-        let sent = self.post(&self.code_url, form, cancel);
+        let scopes = self.scopes.join(" ");
+        let sent = oauth::post(
+            &self.transport,
+            &self.code_url,
+            &[("client_id", &self.client.id), ("scope", &scopes)],
+            cancel,
+        );
         async move {
             let answer = sent.await?;
             let text = |name: &str| answer[name].as_str().map(str::to_owned);
             let seconds = |name: &str| answer[name].as_u64().map(Duration::from_secs);
             let issued = (text("device_code"), text("user_code"), text("verification_uri"));
             let (Some(device_code), Some(user_code), Some(page)) = issued else {
-                return Err(refusal(&answer, "The server gave no code to enter"));
+                return Err(oauth::refusal(&answer, "The server gave no code to enter"));
             };
             let verification_uri = Url::parse(&page)
                 .ok()
@@ -109,20 +113,25 @@ impl DeviceFlow {
         code: &DeviceCode,
         cancel: Cancel,
     ) -> impl Future<Output = Polled> + Send + 'static {
-        let form = form(&[
-            ("client_id", &self.client_id),
-            ("device_code", &code.device_code),
-            ("grant_type", GRANT_TYPE),
-        ]);
-        let sent = self.post(&self.token_url, form, cancel);
+        let sent = oauth::post(
+            &self.transport,
+            &self.client.token_url,
+            &[
+                ("client_id", &self.client.id),
+                ("device_code", &code.device_code),
+                ("grant_type", GRANT_TYPE),
+            ],
+            cancel,
+        );
+        let client = self.client.clone();
         async move {
             let answer = match sent.await {
                 Ok(answer) => answer,
                 Err(problem) => return Polled::Failed(problem),
             };
-            if let Some(token) = answer["access_token"].as_str() {
-                return match Token::new(token) {
-                    Some(token) => Polled::Granted(token),
+            if answer.get("access_token").is_some() {
+                return match client.tokens_in(&answer, SystemTime::now()) {
+                    Some(tokens) => Polled::Granted(tokens),
                     None => Polled::Failed("The server's token can't be used".to_owned()),
                 };
             }
@@ -131,50 +140,10 @@ impl DeviceFlow {
                 Some("slow_down") => Polled::SlowDown,
                 Some("expired_token") => Polled::Expired,
                 Some("access_denied") => Polled::Denied,
-                _ => Polled::Failed(refusal(&answer, "The server answered without a token")),
+                _ => Polled::Failed(oauth::refusal(&answer, "The server answered without a token")),
             }
         }
     }
-
-    fn post(
-        &self,
-        url: &Url,
-        form: String,
-        cancel: Cancel,
-    ) -> impl Future<Output = Result<Value, String>> + Send + 'static {
-        let outgoing = Outgoing {
-            method: Method::Post,
-            url: url.clone(),
-            headers: vec![
-                ("Accept".to_owned(), JSON.to_owned()),
-                ("Content-Type".to_owned(), FORM.to_owned()),
-            ],
-            body: Some(form.into_bytes()),
-            timeout: ANSWER_WITHIN,
-        };
-        let exchange = self.transport.exchange(outgoing, cancel);
-        async move {
-            let response = exchange.await.map_err(|error| error.to_string())?;
-            serde_json::from_slice(&response.body).map_err(|_| match response.status {
-                200..=299 => "The server's answer can't be read".to_owned(),
-                status => format!("The server refused with {status}"),
-            })
-        }
-    }
-}
-
-fn form(pairs: &[(&str, &str)]) -> String {
-    form_urlencoded::Serializer::new(String::new())
-        .extend_pairs(pairs)
-        .finish()
-}
-
-fn refusal(answer: &Value, otherwise: &str) -> String {
-    answer["error_description"]
-        .as_str()
-        .or(answer["error"].as_str())
-        .unwrap_or(otherwise)
-        .to_owned()
 }
 
 #[cfg(test)]
@@ -184,14 +153,14 @@ mod tests {
             Arc,
             atomic::{AtomicUsize, Ordering},
         },
-        time::Duration,
+        time::{Duration, SystemTime},
     };
 
     use url::Url;
 
     use super::{DeviceCode, DeviceFlow, Polled};
     use crate::{
-        accounts::Token,
+        accounts::{Token, Tokens},
         net::{curl::Curl, services::cancel_pair},
         test_server::{Reply, Seen, TestServer},
     };
@@ -260,13 +229,31 @@ mod tests {
         }
         assert_eq!(
             answers,
-            [Polled::Waiting, Polled::SlowDown, Polled::Granted(Token::new("gho_device").unwrap())]
+            [Polled::Waiting, Polled::SlowDown, Polled::Granted(Tokens::lasting(Token::new("gho_device").unwrap()))]
         );
         assert_eq!(Polled::SlowDown.next_interval(Duration::from_secs(5)), Duration::from_secs(10));
         assert_eq!(Polled::Waiting.next_interval(Duration::from_secs(5)), Duration::from_secs(5));
         let form = form_of(&server.seen()[0]);
         assert!(form.contains(&("device_code".into(), "dc-1".into())));
         assert!(form.contains(&("grant_type".into(), "urn:ietf:params:oauth:grant-type:device_code".into())));
+    }
+
+    #[test]
+    fn an_expiring_token_comes_with_its_refresh_token_and_the_address_to_renew_it_at() {
+        let server = TestServer::start(|_| {
+            json(r#"{"access_token":"gho_short","expires_in":28800,"refresh_token":"ghr_long","refresh_token_expires_in":15897600,"token_type":"bearer","scope":"repo"}"#)
+        });
+        let (_keep, cancel) = cancel_pair();
+        let before = SystemTime::now();
+        let Polled::Granted(tokens) = smol::block_on(flow(&server).poll(&code(), cancel)) else {
+            panic!("no token granted");
+        };
+        let refresh = tokens.refresh.unwrap();
+        assert_eq!((tokens.access.reveal(), refresh.token.reveal()), ("gho_short", "ghr_long"));
+        assert!(refresh.access_expires_at >= before + Duration::from_secs(28800));
+        assert!(refresh.access_expires_at <= SystemTime::now() + Duration::from_secs(28800));
+        assert_eq!(refresh.token_url.as_str(), server.url("/login/oauth/access_token"));
+        assert_eq!(refresh.client_id, "Iv1.sternegit");
     }
 
     #[test]

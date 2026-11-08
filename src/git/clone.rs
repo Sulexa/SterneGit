@@ -56,6 +56,7 @@ impl Stop {
 
 pub(crate) fn clone(request: &CloneRequest, mut progress: impl FnMut(Progress) + Send + 'static, stop: &Stop) -> Result<()> {
     let existed = request.folder.exists();
+    request.access.renew_tokens();
     let mut args = request.access.config_args();
     args.push("clone".into());
     args.push("--progress".into());

@@ -3,7 +3,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use super::{Secrets, Token};
+use super::{Secrets, Tokens};
 use crate::accounts::AccountId;
 
 #[cfg(not(windows))]
@@ -42,21 +42,21 @@ impl SessionFiles {
 }
 
 impl Secrets for SessionFiles {
-    fn read(&self, account: &AccountId) -> io::Result<Option<Token>> {
+    fn read(&self, account: &AccountId) -> io::Result<Option<Tokens>> {
         match std::fs::read_to_string(self.file(account)?) {
-            Ok(text) => Ok(Token::new(&text)),
+            Ok(text) => Ok(Tokens::from_blob(&text)),
             Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
             Err(error) => Err(error),
         }
     }
 
-    fn write(&self, account: &AccountId, _login: &str, token: &Token) -> io::Result<()> {
+    fn write(&self, account: &AccountId, _login: &str, tokens: &Tokens) -> io::Result<()> {
         let file = self.file(account)?;
         if let Some(folder) = file.parent() {
             private_folder(folder)?;
         }
         let unfinished = file.with_extension(UNFINISHED);
-        write_private(&unfinished, token.reveal().as_bytes())?;
+        write_private(&unfinished, tokens.to_blob().as_bytes())?;
         std::fs::rename(&unfinished, &file)
     }
 
@@ -96,21 +96,25 @@ fn write_private(path: &Path, bytes: &[u8]) -> io::Result<()> {
 
 #[cfg(test)]
 mod tests {
+    use std::time::{Duration, UNIX_EPOCH};
+
     use super::SessionFiles;
-    use crate::accounts::{AccountId, Secrets as _, Token};
+    use crate::accounts::{AccountId, Secrets as _, secrets::fixtures::renewable};
 
     #[test]
     fn a_token_written_to_the_session_folder_reads_back_until_erased() {
         let folder = std::env::temp_dir().join(format!("sternegit-session-{}", std::process::id()));
         let secrets = SessionFiles::at(folder.clone());
         let account = AccountId::new("github", "github.com:8443", "1").unwrap();
+        let expires_at = UNIX_EPOCH + Duration::from_secs(1_794_000_000);
+        let tokens = renewable("gho_1", "ghr_1", expires_at, "https://github.com/login/oauth/access_token");
         assert_eq!(secrets.read(&account).unwrap(), None);
-        secrets.write(&account, "octo", &Token::new("gho_1").unwrap()).unwrap();
+        secrets.write(&account, "octo", &tokens).unwrap();
         let read = secrets.read(&account).unwrap();
         secrets.erase(&account).unwrap();
         let erased = secrets.read(&account).unwrap();
         let _ = std::fs::remove_dir_all(&folder);
-        assert_eq!(read, Token::new("gho_1"));
+        assert_eq!(read, Some(tokens));
         assert_eq!(erased, None);
     }
 
@@ -119,10 +123,12 @@ mod tests {
     fn only_the_user_can_read_the_token_files() {
         use std::os::unix::fs::PermissionsExt as _;
 
+        use crate::accounts::{Token, Tokens};
+
         let folder = std::env::temp_dir().join(format!("sternegit-private-{}", std::process::id()));
         let secrets = SessionFiles::at(folder.clone());
         let account = AccountId::new("github", "github.com", "1").unwrap();
-        secrets.write(&account, "octo", &Token::new("gho_1").unwrap()).unwrap();
+        secrets.write(&account, "octo", &Tokens::lasting(Token::new("gho_1").unwrap())).unwrap();
         let folder_mode = std::fs::metadata(&folder).unwrap().permissions().mode() & 0o777;
         let file_mode = std::fs::metadata(secrets.file(&account).unwrap())
             .unwrap()

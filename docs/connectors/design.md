@@ -411,7 +411,8 @@ The engine maps the ABI onto it:
   - macOS: a generic password, service `SterneGit`;
   - Linux: an oo7 item with `application=sternegit`.
 - **Code:** written on the bindings GPUI already links. Not GPUI's own credential API, which files entries under Zed's names.
-- **Names:** account ids are `<connector>:<host>:<user id>`, since the numeric id survives renames. Refresh tokens go in `<name>#refresh`.
+- **Names:** account ids are `<connector>:<host>:<user id>`, since the numeric id survives renames.
+- **One entry per account:** a token that never expires is kept bare. An expiring one is kept as one JSON blob: the access token, the refresh token, the access token's expiry, and the client id and token address that renew it. One write stores the rotated pair, so a crash can't separate a refresh token from its access token.
 - **Linux without a Secret Service:** tokens last the login session, in `$XDG_RUNTIME_DIR/sternegit/tokens`. "Remember on this computer, unencrypted" writes `$XDG_STATE_HOME/sternegit/tokens` instead.
 - **When:** nothing is read at start-up. The first read comes with the first network use.
 
@@ -423,15 +424,17 @@ The engine maps the ABI onto it:
   - `slow_down` adds 5 s to the polling interval; `expired_token` offers a new code.
   - The token is stored only after `account.who_am_i` succeeds with it.
 - **OAuth App, not GitHub App:**
-  - App tokens see only the repositories where the app is installed, expire every 8 hours, and refreshing them needs a secret a desktop app can't keep.
+  - App tokens see only the repositories where the app is installed.
   - Scopes: `repo read:org write:public_key workflow`.
   - "Enable Device Flow" must be ticked.
-- **Refresh, for any connector:**
-  - within 2 minutes of expiry, or 10 minutes before a git network command;
-  - one refresh per account at a time, with a rotated refresh token stored first;
-  - a 401 gets one refresh and one retry.
-
-  GitHub's OAuth tokens never expire; GitLab's and Entra ID's will.
+  - Since 14 August 2026, new OAuth Apps get expiring tokens by default, SterneGit's included: 8-hour access tokens and 6-month refresh tokens. Device-flow tokens renew without a client secret. Each renewal rotates both tokens and invalidates the old pair.
+- **Renewal, for any connector** (`accounts::Renewer`):
+  - before a connector call, when the access token expires within 2 minutes;
+  - before a git network command, when it expires within 10 minutes. `git::Access::renew_tokens` runs a hook the app installs at start-up, so `git/` doesn't depend on `accounts/`;
+  - a 401 gets one renewal and one retry;
+  - one renewal at a time per process. If another SterneGit window rotated the refresh token first, its tokens are read back from the store instead of signing out;
+  - `bad_refresh_token` or `invalid_grant` signs the account out;
+  - only the main process renews, never the git credential helper.
 - **Pasted token:** validated by `account.who_am_i`. For Enterprise Server, the typed address also sets the allow-list.
 - **Git Credential Manager's token:**
   - Only after the user clicks "Use the token Git Credential Manager has for github.com".

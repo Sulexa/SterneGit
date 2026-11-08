@@ -8,11 +8,12 @@ use sternegit_protocol::RepoRef;
 use gpui_kit::{App, AppContext as _, BorrowAppContext as _, Global};
 
 use crate::{
-    accounts::{Account, AccountBook, AccountId, Secrets, Token, os_secrets},
+    accounts::{Account, AccountBook, AccountId, Secrets, Tokens, os_secrets, renew_for_git},
     connect::{
         Approvals, CallError, Catalog, Claim, Connector, ConnectorFolders, Forge, Manifest,
         Service, Started,
     },
+    git,
     net::{
         curl::{Curl, Transport},
         gateway::Gateway,
@@ -183,10 +184,10 @@ impl Connectors {
     }
 }
 
-pub(crate) fn keep_account(cx: &mut App, account: Account, token: &Token) -> io::Result<()> {
+pub(crate) fn keep_account(cx: &mut App, account: Account, tokens: &Tokens) -> io::Result<()> {
     cx.update_global::<Connectors, _>(|connectors, _| {
         let running = connectors.running.as_mut().ok_or_else(not_ready)?;
-        running.secrets.write(&account.id, &account.login, token)?;
+        running.secrets.write(&account.id, &account.login, tokens)?;
         running.signed_out.remove(&account.id);
         running.connected.push(account.id.clone());
         connectors.change_book(|book| book.sign_in(account))
@@ -267,6 +268,7 @@ pub(crate) fn note_failure(cx: &mut App, account: &AccountId, error: &CallError)
 }
 
 pub(crate) fn install_connectors(cx: &mut App) {
+    git::renew_tokens_with(renew_for_git);
     cx.set_global(Connectors::default());
 }
 

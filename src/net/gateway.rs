@@ -14,7 +14,9 @@ use super::{
     request::{ApiRequest, ApiResponse, Method, NetError},
     services::{AccountView, Cancel, ConnectorId, HostServices, Level},
 };
-use crate::accounts::{Account, AccountBook, AccountId, Secrets, Token};
+use crate::accounts::{
+    Account, AccountBook, AccountId, BEFORE_A_CALL, Renewer, Secrets, Token, TokenScheme,
+};
 
 const USER_AGENT: (&str, &str) = ("User-Agent", concat!("SterneGit/", env!("CARGO_PKG_VERSION")));
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(30);
@@ -23,12 +25,13 @@ const REDIRECTS_FOLLOWED: usize = 5;
 const LOG_LINES_KEPT: usize = 200;
 const HIDDEN: &str = "•••";
 const SET_COOKIE: &str = "set-cookie";
+const UNAUTHORIZED: u16 = 401;
 
 pub(crate) struct Gateway {
     book: Arc<RwLock<AccountBook>>,
-    secrets: Arc<dyn Secrets>,
+    renewer: Renewer,
     transport: Arc<dyn Transport>,
-    state: Mutex<State>,
+    state: Arc<Mutex<State>>,
 }
 
 #[derive(Default)]
@@ -53,12 +56,52 @@ impl Drop for Lent {
 
 struct Trip {
     allowed: AllowList,
-    token_header: Option<(String, String)>,
+    signed: bool,
     method: Method,
     url: Url,
     headers: Vec<(String, String)>,
     body: Option<Vec<u8>>,
     timeout: Duration,
+}
+
+enum Keys {
+    Lent(Token),
+    Kept { renewer: Renewer, account: Account },
+}
+
+impl Keys {
+    async fn token(&self) -> Result<Token, NetError> {
+        match self {
+            Keys::Lent(token) => Ok(token.clone()),
+            Keys::Kept { renewer, account } => renewer.token(account, BEFORE_A_CALL).await,
+        }
+    }
+
+    async fn renewed_after(&self, refused: &Token) -> Result<Option<Token>, NetError> {
+        match self {
+            Keys::Lent(_) => Ok(None),
+            Keys::Kept { renewer, account } => renewer.after_refusal(account, refused).await,
+        }
+    }
+}
+
+struct Signer {
+    scheme: TokenScheme,
+    keys: Keys,
+    state: Arc<Mutex<State>>,
+}
+
+impl Signer {
+    fn header(&self, token: &Token) -> (String, String) {
+        let header = self.scheme.header(token.reveal());
+        let mut state = lock(&self.state);
+        for secret in [token.reveal(), header.1.as_str()] {
+            if !state.hidden.iter().any(|known| known == secret) {
+                state.hidden.push(secret.to_owned());
+            }
+        }
+        header
+    }
 }
 
 impl Gateway {
@@ -69,9 +112,9 @@ impl Gateway {
     ) -> Self {
         Self {
             book,
-            secrets,
+            renewer: Renewer::new(secrets, Arc::clone(&transport)),
             transport,
-            state: Mutex::default(),
+            state: Arc::default(),
         }
     }
 
@@ -101,10 +144,10 @@ impl Gateway {
     }
 
     fn state(&self) -> MutexGuard<'_, State> {
-        self.state.lock().unwrap_or_else(PoisonError::into_inner)
+        lock(&self.state)
     }
 
-    fn prepare(&self, account: &AccountId, request: ApiRequest) -> Result<Trip, NetError> {
+    fn prepare(&self, account: &AccountId, request: ApiRequest) -> Result<(Trip, Signer), NetError> {
         let (found, lent_token) = self.found(account).ok_or(NetError::NotSignedIn)?;
         if let Some(until) = self.paused_until(account) {
             return Err(NetError::RateLimitedUntil(until));
@@ -116,33 +159,29 @@ impl Gateway {
             .admit(&url)
             .ok_or_else(|| NetError::ServerNotAllowed(url.to_string()))?;
         check_headers(&request.headers, &found.scheme)?;
-        let token_header = match admission {
-            Admission::WithToken => Some(self.token_header(&found, lent_token)?),
-            Admission::WithoutToken => None,
+        let scheme = found.scheme.clone();
+        let keys = match lent_token {
+            Some(token) => Keys::Lent(token),
+            None => Keys::Kept {
+                renewer: self.renewer.clone(),
+                account: found,
+            },
         };
-        Ok(Trip {
+        let trip = Trip {
             allowed,
-            token_header,
+            signed: admission == Admission::WithToken,
             method: request.method,
             url,
             headers: request.headers,
             body: request.body,
             timeout: request.timeout.unwrap_or(DEFAULT_TIMEOUT),
-        })
-    }
-
-    fn token_header(&self, account: &Account, lent: Option<Token>) -> Result<(String, String), NetError> {
-        let token = lent
-            .or_else(|| self.secrets.read(&account.id).ok().flatten())
-            .ok_or(NetError::NotSignedIn)?;
-        let header = account.scheme.header(token.reveal());
-        let mut state = self.state();
-        for secret in [token.reveal(), header.1.as_str()] {
-            if !state.hidden.iter().any(|known| known == secret) {
-                state.hidden.push(secret.to_owned());
-            }
-        }
-        Ok(header)
+        };
+        let signer = Signer {
+            scheme,
+            keys,
+            state: Arc::clone(&self.state),
+        };
+        Ok((trip, signer))
     }
 
     fn paused_until(&self, account: &AccountId) -> Option<SystemTime> {
@@ -162,11 +201,45 @@ impl Gateway {
     }
 }
 
-async fn travel(
+fn lock(state: &Mutex<State>) -> MutexGuard<'_, State> {
+    state.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+async fn signed(
     trip: Trip,
+    signer: Signer,
     transport: Arc<dyn Transport>,
     gate: Arc<Semaphore>,
     cancel: Cancel,
+) -> Result<ApiResponse, NetError> {
+    let mut token = match trip.signed {
+        true => Some(signer.keys.token().await?),
+        false => None,
+    };
+    let mut renewed = false;
+    loop {
+        let header = token.as_ref().map(|token| signer.header(token));
+        let response = travel(&trip, header, &transport, &gate, &cancel).await?;
+        let refused = token.as_ref().filter(|_| response.status == UNAUTHORIZED && !renewed);
+        let Some(refused) = refused else {
+            return Ok(response);
+        };
+        match signer.keys.renewed_after(refused).await? {
+            Some(fresh) => {
+                token = Some(fresh);
+                renewed = true;
+            }
+            None => return Ok(response),
+        }
+    }
+}
+
+async fn travel(
+    trip: &Trip,
+    token_header: Option<(String, String)>,
+    transport: &Arc<dyn Transport>,
+    gate: &Arc<Semaphore>,
+    cancel: &Cancel,
 ) -> Result<ApiResponse, NetError> {
     let _turn = gate.acquire_arc().await;
     let mut url = trip.url.clone();
@@ -178,7 +251,7 @@ async fn travel(
         let mut headers = trip.headers.clone();
         headers.push((USER_AGENT.0.to_owned(), USER_AGENT.1.to_owned()));
         if admission == Admission::WithToken {
-            headers.extend(trip.token_header.clone());
+            headers.extend(token_header.clone());
         }
         let outgoing = Outgoing {
             method: trip.method,
@@ -231,7 +304,9 @@ impl HostServices for Gateway {
         cancel: Cancel,
     ) -> BoxFuture<'static, Result<ApiResponse, NetError>> {
         match self.prepare(account, request) {
-            Ok(trip) => travel(trip, self.transport.clone(), self.gate(account), cancel).boxed(),
+            Ok((trip, signer)) => {
+                signed(trip, signer, self.transport.clone(), self.gate(account), cancel).boxed()
+            }
             Err(error) => futures::future::ready(Err(error)).boxed(),
         }
     }
@@ -267,7 +342,7 @@ mod tests {
 
     use super::Gateway;
     use crate::{
-        accounts::{AccountBook, MemorySecrets, Secrets, Token, fixtures},
+        accounts::{AccountBook, MemorySecrets, Secrets, Token, fixtures, renewable},
         net::{
             curl::{Curl, Outgoing, Transport},
             request::{ApiRequest, ApiResponse, Method, NetError},
@@ -468,6 +543,74 @@ mod tests {
         let (_keep, cancel) = cancel_pair();
         let after = gateway.request(&draft.id, ApiRequest::new(Method::Get, "https://api.github.com/user"), cancel);
         assert_eq!(smol::block_on(after), Err(NetError::NotSignedIn));
+    }
+
+    const TOKEN_URL: &str = "https://github.com/login/oauth/access_token";
+
+    fn renewing(expires_in_seconds: u64, replies: Vec<ApiResponse>) -> (Gateway, Arc<Recorder>, Arc<MemorySecrets>) {
+        let expires_at = SystemTime::now() + Duration::from_secs(expires_in_seconds);
+        let tokens = renewable("gho_old", "ghr_old", expires_at, TOKEN_URL);
+        let secrets = Arc::new(MemorySecrets::keeping(&fixtures::github("1").id, tokens));
+        let recorder = Recorder::answering(replies);
+        let mut book = AccountBook::default();
+        book.put(fixtures::github("1"));
+        let gateway = Gateway::new(Arc::new(RwLock::new(book)), secrets.clone(), recorder.clone());
+        (gateway, recorder, secrets)
+    }
+
+    fn renewed() -> ApiResponse {
+        ApiResponse {
+            status: 200,
+            headers: Vec::new(),
+            body: br#"{"access_token":"gho_new","expires_in":28800,"refresh_token":"ghr_new","token_type":"bearer"}"#.to_vec(),
+        }
+    }
+
+    #[test]
+    fn a_refused_token_is_renewed_and_the_call_made_again_once() {
+        let (gateway, recorder, secrets) = renewing(3600, vec![answer(401, &[]), renewed(), answer(200, &[])]);
+        let response = send(&gateway, ApiRequest::new(Method::Get, "https://api.github.com/user")).unwrap();
+        assert_eq!(response.status, 200);
+        let sent = recorder.sent();
+        assert_eq!(header(&sent[0], "authorization"), Some("Bearer gho_old"));
+        assert_eq!((sent[1].url.as_str(), header(&sent[1], "authorization")), (TOKEN_URL, None));
+        assert_eq!(header(&sent[2], "authorization"), Some("Bearer gho_new"));
+        let kept = secrets.read(&fixtures::github("1").id).unwrap().unwrap();
+        assert_eq!(kept.access.reveal(), "gho_new");
+    }
+
+    #[test]
+    fn a_token_about_to_expire_is_renewed_before_the_call() {
+        let (gateway, recorder, _) = renewing(30, vec![renewed(), answer(200, &[])]);
+        send(&gateway, ApiRequest::new(Method::Get, "https://api.github.com/user")).unwrap();
+        let sent = recorder.sent();
+        assert_eq!(sent.len(), 2);
+        assert_eq!(sent[0].url.as_str(), TOKEN_URL);
+        assert_eq!(header(&sent[1], "authorization"), Some("Bearer gho_new"));
+    }
+
+    #[test]
+    fn a_renewed_token_refused_again_is_handed_to_the_connector() {
+        let (gateway, recorder, _) = renewing(3600, vec![answer(401, &[]), renewed(), answer(401, &[])]);
+        let response = send(&gateway, ApiRequest::new(Method::Get, "https://api.github.com/user")).unwrap();
+        assert_eq!((response.status, recorder.sent().len()), (401, 3));
+    }
+
+    #[test]
+    fn a_refusal_of_a_token_that_cannot_be_renewed_is_handed_to_the_connector() {
+        let recorder = Recorder::answering(vec![answer(401, &[])]);
+        let gateway = signed_in(recorder.clone());
+        let response = send(&gateway, ApiRequest::new(Method::Get, "https://api.github.com/user")).unwrap();
+        assert_eq!((response.status, recorder.sent().len()), (401, 1));
+    }
+
+    #[test]
+    fn a_renewed_token_never_shows_in_the_logs() {
+        let (gateway, _, _) = renewing(30, vec![renewed(), answer(200, &[])]);
+        send(&gateway, ApiRequest::new(Method::Get, "https://api.github.com/user")).unwrap();
+        let connector = ConnectorId("github".into());
+        gateway.log(&connector, Level::Error, "echoed gho_new back");
+        assert_eq!(gateway.log_lines(&connector), ["Error echoed ••• back"]);
     }
 
     #[test]

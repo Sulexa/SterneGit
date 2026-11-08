@@ -2,8 +2,13 @@
 mod credential_manager;
 #[cfg_attr(all(windows, not(test)), expect(dead_code))]
 mod session_files;
+mod tokens;
 
 use std::{fmt, io, sync::Arc};
+
+#[cfg(test)]
+pub(crate) use tokens::fixtures;
+pub(crate) use tokens::{Refresh, Tokens};
 
 use super::AccountId;
 
@@ -29,8 +34,8 @@ impl fmt::Debug for Token {
 }
 
 pub(crate) trait Secrets: Send + Sync {
-    fn read(&self, account: &AccountId) -> io::Result<Option<Token>>;
-    fn write(&self, account: &AccountId, login: &str, token: &Token) -> io::Result<()>;
+    fn read(&self, account: &AccountId) -> io::Result<Option<Tokens>>;
+    fn write(&self, account: &AccountId, login: &str, tokens: &Tokens) -> io::Result<()>;
     fn erase(&self, account: &AccountId) -> io::Result<()>;
 }
 
@@ -48,27 +53,31 @@ pub(crate) fn os_secrets() -> Arc<dyn Secrets> {
 pub(crate) mod memory {
     use std::{collections::HashMap, io, sync::Mutex};
 
-    use super::{Secrets, Token};
+    use super::{Secrets, Token, Tokens};
     use crate::accounts::AccountId;
 
     #[derive(Default)]
-    pub(crate) struct MemorySecrets(Mutex<HashMap<AccountId, Token>>);
+    pub(crate) struct MemorySecrets(Mutex<HashMap<AccountId, Tokens>>);
 
     impl MemorySecrets {
         pub(crate) fn holding(account: &AccountId, token: &str) -> Self {
+            Self::keeping(account, Tokens::lasting(Token::new(token).unwrap()))
+        }
+
+        pub(crate) fn keeping(account: &AccountId, tokens: Tokens) -> Self {
             let secrets = Self::default();
-            secrets.write(account, "login", &Token::new(token).unwrap()).unwrap();
+            secrets.write(account, "login", &tokens).unwrap();
             secrets
         }
     }
 
     impl Secrets for MemorySecrets {
-        fn read(&self, account: &AccountId) -> io::Result<Option<Token>> {
+        fn read(&self, account: &AccountId) -> io::Result<Option<Tokens>> {
             Ok(self.0.lock().unwrap().get(account).cloned())
         }
 
-        fn write(&self, account: &AccountId, _login: &str, token: &Token) -> io::Result<()> {
-            self.0.lock().unwrap().insert(account.clone(), token.clone());
+        fn write(&self, account: &AccountId, _login: &str, tokens: &Tokens) -> io::Result<()> {
+            self.0.lock().unwrap().insert(account.clone(), tokens.clone());
             Ok(())
         }
 

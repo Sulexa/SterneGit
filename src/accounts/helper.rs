@@ -15,7 +15,9 @@ pub(crate) fn answer_git(
     let answer = if operation == GET {
         let book = AccountBook::load();
         let found = AccountId::parse(account).and_then(|id| book.account(&id).cloned());
-        credentials(&request, found.as_ref(), |id| os_secrets().read(id).ok().flatten())
+        credentials(&request, found.as_ref(), |id| {
+            os_secrets().read(id).ok().flatten().map(|tokens| tokens.access)
+        })
     } else {
         CredentialAnswer::Nothing
     };

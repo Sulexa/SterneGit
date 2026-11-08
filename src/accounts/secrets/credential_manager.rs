@@ -11,7 +11,7 @@ use windows::{
     core::{PCWSTR, PWSTR},
 };
 
-use super::{Secrets, Token};
+use super::{Secrets, Tokens};
 use crate::accounts::AccountId;
 
 const TARGET_PREFIX: &str = "SterneGit/";
@@ -19,7 +19,7 @@ const TARGET_PREFIX: &str = "SterneGit/";
 pub(crate) struct CredentialManager;
 
 impl Secrets for CredentialManager {
-    fn read(&self, account: &AccountId) -> io::Result<Option<Token>> {
+    fn read(&self, account: &AccountId) -> io::Result<Option<Tokens>> {
         let target = wide(&target_of(account));
         let mut found: *mut CREDENTIALW = std::ptr::null_mut();
         if let Err(error) =
@@ -40,11 +40,11 @@ impl Secrets for CredentialManager {
             .to_vec()
         };
         unsafe { CredFree(found.cast()) };
-        Ok(String::from_utf8(blob).ok().and_then(|text| Token::new(&text)))
+        Ok(String::from_utf8(blob).ok().and_then(|text| Tokens::from_blob(&text)))
     }
 
-    fn write(&self, account: &AccountId, login: &str, token: &Token) -> io::Result<()> {
-        let mut blob = token.reveal().as_bytes().to_vec();
+    fn write(&self, account: &AccountId, login: &str, tokens: &Tokens) -> io::Result<()> {
+        let mut blob = tokens.to_blob().into_bytes();
         if blob.len() > CRED_MAX_CREDENTIAL_BLOB_SIZE as usize {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
@@ -88,18 +88,21 @@ fn is_not_found(error: &windows::core::Error) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use std::time::{Duration, UNIX_EPOCH};
+
     use super::CredentialManager;
-    use crate::accounts::{AccountId, Secrets as _, Token};
+    use crate::accounts::{AccountId, Secrets as _, secrets::fixtures::renewable};
 
     #[test]
     #[ignore = "writes a SterneGit test entry to this machine's Windows Credential Manager"]
     fn a_token_stored_in_credential_manager_reads_back_until_erased() {
         let account = AccountId::new("sternegit-test", "localhost", "1").unwrap();
-        let token = Token::new("sternegit-test-token").unwrap();
-        CredentialManager.write(&account, "sternegit-test", &token).unwrap();
+        let expires_at = UNIX_EPOCH + Duration::from_secs(1_794_000_000);
+        let tokens = renewable("sternegit-test-token", "sternegit-test-refresh", expires_at, "https://localhost/token");
+        CredentialManager.write(&account, "sternegit-test", &tokens).unwrap();
         let read = CredentialManager.read(&account).unwrap();
         CredentialManager.erase(&account).unwrap();
-        assert_eq!(read, Some(token));
+        assert_eq!(read, Some(tokens));
         assert_eq!(CredentialManager.read(&account).unwrap(), None);
     }
 }

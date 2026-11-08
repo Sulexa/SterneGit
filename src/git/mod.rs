@@ -44,7 +44,7 @@ use anyhow::{Context as _, Result};
 use gix::ThreadSafeRepository;
 use gpui_kit::SharedString;
 
-pub(crate) use access::{Access, Attendance, CredentialScope, GIT_CREDENTIAL_FLAG};
+pub(crate) use access::{Access, Attendance, CredentialScope, GIT_CREDENTIAL_FLAG, renew_tokens_with};
 pub(crate) use branch::{CheckedOut, NameProblem, new_branch_name};
 pub(crate) use clone::{CloneRequest, Progress, Stop, add_remote, clone, init, is_empty_or_missing};
 pub(crate) use command::without_console_window;

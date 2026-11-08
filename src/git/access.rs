@@ -1,10 +1,19 @@
 use std::{
     ffi::OsString,
     path::{Path, PathBuf},
+    sync::OnceLock,
 };
 
 pub(crate) const GIT_CREDENTIAL_FLAG: &str = "--git-credential";
 const NO_CREDENTIAL_WINDOWS: (&str, &str) = ("GCM_INTERACTIVE", "never");
+
+type RenewTokens = fn(&[CredentialScope]);
+
+static RENEW_TOKENS: OnceLock<RenewTokens> = OnceLock::new();
+
+pub(crate) fn renew_tokens_with(renew: RenewTokens) {
+    let _ = RENEW_TOKENS.set(renew);
+}
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) enum Attendance {
@@ -50,6 +59,15 @@ impl Access {
                 ]
             })
             .collect()
+    }
+
+    pub(crate) fn renew_tokens(&self) {
+        if self.scopes.is_empty() {
+            return;
+        }
+        if let Some(renew) = RENEW_TOKENS.get() {
+            renew(&self.scopes);
+        }
     }
 
     pub(crate) fn environment(&self) -> impl Iterator<Item = (&'static str, &'static str)> {

@@ -34,6 +34,7 @@ pub(crate) fn run_with_access<A: AsRef<OsStr>>(
     args: &[A],
     exit: Exit,
 ) -> Result<Vec<u8>> {
+    access.renew_tokens();
     let mut all = access.config_args();
     all.extend(args.iter().map(|arg| arg.as_ref().to_owned()));
     let mut command = git(location, &all);

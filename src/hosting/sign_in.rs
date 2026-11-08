@@ -30,7 +30,7 @@ use super::{
 };
 use crate::{
     accounts::{
-        Account, AccountId, DeviceCode, DeviceFlow, Polled, SignInMethod, Token, token_git_holds,
+        Account, AccountId, DeviceCode, DeviceFlow, Polled, SignInMethod, Token, Tokens, token_git_holds,
     },
     app::connectors::{Connectors, ServiceChoice, keep_account},
     connect::{CallError, Draft, FieldKind, draft, identify},
@@ -200,7 +200,7 @@ impl SignIn {
         cx.notify();
     }
 
-    fn check(&mut self, method: SignInMethod, token: Token, window: &mut Window, cx: &mut Context<Self>) {
+    fn check(&mut self, method: SignInMethod, tokens: Tokens, window: &mut Window, cx: &mut Context<Self>) {
         let Ok(drafted) = self.drafted(method, cx) else {
             return;
         };
@@ -212,15 +212,14 @@ impl SignIn {
             return;
         };
         let label = self.label();
-        let kept = token.clone();
-        let checked = identify(started, gateway, drafted.account, token);
+        let checked = identify(started, gateway, drafted.account, tokens.access.clone());
         self.problem = None;
         self.busy = Some(cx.spawn_in(window, async move |this, cx| {
             let result = cx.background_spawn(checked).await;
             let _ = this.update_in(cx, |this, window, cx| {
                 this.busy = None;
                 match result {
-                    Ok(account) => this.signed_in(account, &kept, &label, window, cx),
+                    Ok(account) => this.signed_in(account, &tokens, &label, window, cx),
                     Err(error) => {
                         this.problem = Some(refusal(&error, &label));
                         cx.notify();
@@ -231,8 +230,8 @@ impl SignIn {
         cx.notify();
     }
 
-    fn signed_in(&mut self, account: Account, token: &Token, label: &str, window: &mut Window, cx: &mut Context<Self>) {
-        if let Err(error) = keep_account(cx, account.clone(), token) {
+    fn signed_in(&mut self, account: Account, tokens: &Tokens, label: &str, window: &mut Window, cx: &mut Context<Self>) {
+        if let Err(error) = keep_account(cx, account.clone(), tokens) {
             self.problem = Some(format!("Couldn't keep the account: {error}").into());
             cx.notify();
             return;
@@ -275,7 +274,7 @@ impl SignIn {
             return;
         };
         match Token::new(&input.read(cx).value()) {
-            Some(token) => self.check(SignInMethod::PastedToken, token, window, cx),
+            Some(token) => self.check(SignInMethod::PastedToken, Tokens::lasting(token), window, cx),
             None => {
                 self.problem = Some(NOT_A_TOKEN.into());
                 cx.notify();
@@ -294,7 +293,7 @@ impl SignIn {
             let _ = this.update_in(cx, |this, window, cx| {
                 this.busy = None;
                 match found {
-                    Some((token, _)) => this.check(SignInMethod::GitCredential, token, window, cx),
+                    Some((token, _)) => this.check(SignInMethod::GitCredential, Tokens::lasting(token), window, cx),
                     None => {
                         let host = drafted.account.server.host_str().unwrap_or_default().to_owned();
                         this.problem = Some(format!("Git Credential Manager has no token for {host}.").into());
@@ -348,9 +347,9 @@ impl SignIn {
                 }
                 match polled {
                     Polled::Waiting | Polled::SlowDown => continue,
-                    Polled::Granted(token) => {
+                    Polled::Granted(tokens) => {
                         let _ = this.update_in(cx, |this, window, cx| {
-                            this.check(SignInMethod::Device, token, window, cx)
+                            this.check(SignInMethod::Device, tokens, window, cx)
                         });
                         return;
                     }
