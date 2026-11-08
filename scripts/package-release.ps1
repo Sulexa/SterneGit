@@ -136,3 +136,4 @@ $latest = [ordered]@{
 Write-Notes (Join-Path $out 'notes.md') $preRelease
 
 Write-Output "Packaged SterneGit $version into $out$(if ($preRelease) { ' as a pre-release' })."
+exit 0
