@@ -4,7 +4,8 @@ mod opening;
 mod saved_tabs;
 mod tab_strip;
 mod tabs;
-mod top_bar;
+pub(crate) mod top_bar;
+pub(crate) mod updates;
 mod window;
 pub(crate) mod zoom;
 
@@ -19,7 +20,7 @@ use gpui_kit::{
 
 use crate::{
     actions::{
-        About, CloneRepository, CloseDiff, CloseTab, CopyHash, Fetch, HISTORY_CONTEXT, NewRepository,
+        About, CheckForUpdates, CloneRepository, CloseDiff, CloseTab, CopyHash, Fetch, HISTORY_CONTEXT, NewRepository,
         NewerCommit, NextChange, NextFile, NextTab, OlderCommit, OpenRepository, OpenSettings,
         PreviousChange, PreviousFile, PreviousTab, ResetZoom,
         LoopChange, MEDIA_CONTEXT, PlayPause, Quit, Refresh, SwitchVersion, WINDOW_CONTEXT, WholeWindow,
@@ -55,6 +56,7 @@ pub(crate) fn run(path: Option<PathBuf>, opening: Opening) {
         };
         connectors::install_connectors(cx);
         zoom::install_zoom(cx);
+        updates::install_updates(cx);
         gpui_kit::open_window(options, cx, |window, cx| {
             cx.new(|cx| SterneGit::new(path, window, cx))
         })
@@ -198,6 +200,9 @@ fn menus() -> Vec<Menu> {
             MenuItem::action("Zoom Out", ZoomOut),
             MenuItem::action("Reset Zoom", ResetZoom),
         ]),
-        Menu::new("About").items([MenuItem::action("About SterneGit", About)]),
+        Menu::new("About").items([
+            MenuItem::action("About SterneGit", About),
+            MenuItem::action("Check for Updates…", CheckForUpdates),
+        ]),
     ]
 }

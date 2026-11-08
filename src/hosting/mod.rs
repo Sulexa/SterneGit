@@ -13,6 +13,7 @@ mod remove;
 mod settings_tab;
 mod sign_in;
 mod ssh_key;
+mod updates_page;
 
 pub(crate) use account_bar::{AccountQuestion, account_bar, account_question};
 pub(crate) use clone_dialog::open_clone_dialog;

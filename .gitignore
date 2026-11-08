@@ -2,3 +2,4 @@
 /build
 /.claude/worktrees/
 /connectors/*/target
+/dist

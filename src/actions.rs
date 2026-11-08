@@ -26,6 +26,7 @@ gpui_kit::actions!(
         ZoomOut,
         ResetZoom,
         About,
+        CheckForUpdates,
         Quit
     ]
 );

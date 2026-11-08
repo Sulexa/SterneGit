@@ -7498,6 +7498,7 @@ dependencies = [
  "base64 0.22.1",
  "cpal",
  "crc32fast",
+ "flate2",
  "futures",
  "gix",
  "gpui-kit",

@@ -27,6 +27,9 @@ const CONNECT_TIMEOUT_SECONDS: u64 = 15;
 const LARGEST_BODY_BYTES: usize = 32 * 1024 * 1024;
 const END_OF_HEADERS: &[u8] = b"\r\n\r\n";
 const NO_REVOCATION_CHECK: &str = "ssl-no-revoke";
+const FETCH_REDIRECTS: usize = 5;
+const SLOWEST_FETCH_BYTES_PER_SECOND: u64 = 1024;
+const SLOW_FETCH_GIVEN_UP_AFTER_SECONDS: u64 = 60;
 #[cfg(windows)]
 const DETACHED_PROCESS: u32 = 0x0000_0008;
 
@@ -69,22 +72,38 @@ impl Curl {
     }
 }
 
-impl Transport for Curl {
-    fn exchange(
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct Fetch {
+    pub(crate) url: Url,
+    pub(crate) into: PathBuf,
+    pub(crate) largest_bytes: u64,
+    pub(crate) headers: Vec<(String, String)>,
+}
+
+impl Curl {
+    pub(crate) fn fetch(&self, fetch: Fetch, cancel: Cancel) -> BoxFuture<'static, Result<(), NetError>> {
+        let url = fetch.url.clone();
+        self.run(url, cancel, move |proxy| Ok(fetch_config(&fetch, proxy)), |_| Ok(()))
+    }
+
+    fn run<T: Send + 'static>(
         &self,
-        outgoing: Outgoing,
+        url: Url,
         cancel: Cancel,
-    ) -> BoxFuture<'static, Result<ApiResponse, NetError>> {
+        config: impl FnOnce(&[String]) -> Result<String, NetError> + Send + 'static,
+        answer: impl FnOnce(Vec<u8>) -> Result<T, NetError> + Send + 'static,
+    ) -> BoxFuture<'static, Result<T, NetError>> {
         let program = self.program.clone();
         let proxies = self.proxies.clone();
         let process = Arc::new(Mutex::new(CurlProcess::default()));
-        let (answer, answered) = smol::channel::bounded(1);
+        let (sender, answered) = smol::channel::bounded(1);
         let worker = Arc::clone(&process);
         let spawned = thread::Builder::new().name(WORKER_NAME.to_owned()).spawn(move || {
-            let proxy = proxies.curl_options(&outgoing.url);
-            let result = config_for(&outgoing, &proxy)
-                .and_then(|config| run_curl(&program, &config, &worker));
-            let _ = answer.send_blocking(result);
+            let proxy = proxies.curl_options(&url);
+            let result = config(&proxy)
+                .and_then(|config| run_curl(&program, &config, &worker))
+                .and_then(answer);
+            let _ = sender.send_blocking(result);
         });
         async move {
             let _stop = StopOnDrop(process);
@@ -96,6 +115,22 @@ impl Transport for Curl {
             }
         }
         .boxed()
+    }
+}
+
+impl Transport for Curl {
+    fn exchange(
+        &self,
+        outgoing: Outgoing,
+        cancel: Cancel,
+    ) -> BoxFuture<'static, Result<ApiResponse, NetError>> {
+        let url = outgoing.url.clone();
+        self.run(
+            url,
+            cancel,
+            move |proxy| config_for(&outgoing, proxy),
+            |printed| parse_response(&printed),
+        )
     }
 }
 
@@ -149,13 +184,40 @@ fn config_for(outgoing: &Outgoing, proxy: &[String]) -> Result<String, NetError>
             .ok_or_else(|| NetError::NoTransport(ONLY_TEXT_BODIES.to_owned()))?;
         lines.push(format!("data-binary = {}", quoted(text)));
     }
+    Ok(finished(lines, proxy))
+}
+
+fn fetch_config(fetch: &Fetch, proxy: &[String]) -> String {
+    let only_this_scheme = quoted(&format!("={}", fetch.url.scheme()));
+    let mut lines = vec![
+        format!("url = {}", quoted(fetch.url.as_str())),
+        format!("output = {}", quoted(&fetch.into.to_string_lossy())),
+        "silent".to_owned(),
+        "show-error".to_owned(),
+        "fail".to_owned(),
+        "location".to_owned(),
+        format!("max-redirs = {FETCH_REDIRECTS}"),
+        format!("proto = {only_this_scheme}"),
+        format!("proto-redir = {only_this_scheme}"),
+        format!("max-filesize = {}", fetch.largest_bytes),
+        format!("connect-timeout = {CONNECT_TIMEOUT_SECONDS}"),
+        format!("speed-limit = {SLOWEST_FETCH_BYTES_PER_SECOND}"),
+        format!("speed-time = {SLOW_FETCH_GIVEN_UP_AFTER_SECONDS}"),
+    ];
+    for (name, value) in &fetch.headers {
+        lines.push(format!("header = {}", quoted(&format!("{name}: {value}"))));
+    }
+    finished(lines, proxy)
+}
+
+fn finished(mut lines: Vec<String>, proxy: &[String]) -> String {
     if cfg!(windows) && !proxy.iter().any(|option| option == NO_REVOCATION_CHECK) {
         lines.push("ssl-revoke-best-effort".to_owned());
     }
     lines.extend(proxy.iter().cloned());
     let mut config = lines.join("\n");
     config.push('\n');
-    Ok(config)
+    config
 }
 
 pub(super) fn quoted(value: &str) -> String {
@@ -175,7 +237,7 @@ pub(super) fn quoted(value: &str) -> String {
     quoted
 }
 
-fn run_curl(program: &Path, config: &str, process: &Mutex<CurlProcess>) -> Result<ApiResponse, NetError> {
+fn run_curl(program: &Path, config: &str, process: &Mutex<CurlProcess>) -> Result<Vec<u8>, NetError> {
     let no_curl = || NetError::NoTransport(NO_CURL.to_owned());
     let mut command = Command::new(program);
     command
@@ -213,7 +275,7 @@ fn run_curl(program: &Path, config: &str, process: &Mutex<CurlProcess>) -> Resul
             written
                 .and(read)
                 .map_err(|error| NetError::Unreachable(error.to_string()))?;
-            parse_response(&printed)
+            Ok(printed)
         }
         Some(code) if !lock(process).stopped => Err(failure(code, &complaints)),
         _ => Err(NetError::Cancelled),

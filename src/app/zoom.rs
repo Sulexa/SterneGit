@@ -1,9 +1,7 @@
 use gpui_kit::{App, BorrowAppContext as _, Global, Pixels, Point, ScrollEvent, Window, px};
 use serde_json::Value;
 
-use crate::settings::{Fields, Folder, JsonFile};
-
-const SETTINGS_FILE: &str = "settings.json";
+use crate::settings::{Fields, settings_file};
 const ZOOM_FIELD: &str = "zoom";
 const LEVELS: [u16; 11] = [50, 67, 75, 80, 90, 100, 110, 125, 150, 175, 200];
 const WHEEL_LINE: f32 = 20.;
@@ -81,10 +79,6 @@ struct WindowZoom {
 }
 
 impl Global for WindowZoom {}
-
-fn settings_file() -> Option<JsonFile> {
-    JsonFile::in_folder(Folder::Config, SETTINGS_FILE)
-}
 
 pub(crate) fn install_zoom(cx: &mut App) {
     let zoom = settings_file().map_or(Zoom::ACTUAL_SIZE, |file| Zoom::read(&file.read()));

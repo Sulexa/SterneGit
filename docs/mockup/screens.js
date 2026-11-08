@@ -833,15 +833,78 @@ const Screens = (() => {
           overlays: C.AlertDialog({ title: 'SterneGit 0.1.0', description: Texts.aboutDescription }),
         }),
     },
+    {
+      id: 'update-ready',
+      title: 'An update is ready',
+      about: "A copy from a SterneGit release looks for a new release when it starts and every six hours. With Update automatically on, it downloads the setup (installed copies) or the portable zip (portable copies) in the background, checks its SHA-256 and says nothing until it is ready. Then Restart to update appears at the right of the top bar: it installs the new version silently, closes every SterneGit window and reopens this one with its tabs. Quitting installs it too, once the last SterneGit window closes. What's new opens the release page on GitHub.",
+      source: 'src/app/top_bar.rs',
+      render: () =>
+        C.SterneGit({
+          topBar: topBar({ update: { state: 'ready', version: '0.2.0' } }),
+          tabStrip: tabStrip(),
+          body: commitSelected(),
+        }),
+    },
+    {
+      id: 'update-available',
+      title: 'A release is out, Update automatically off',
+      about: 'With Update automatically off in Settings → Updates, SterneGit downloads nothing on its own: the top bar offers Update to 0.2.0 instead. Clicking it downloads the release (the button spins meanwhile), then Restart to update replaces it. A portable copy in a folder it cannot write to shows SterneGit 0.2.0 is out, which opens the release page.',
+      source: 'src/app/top_bar.rs',
+      render: () =>
+        C.SterneGit({
+          topBar: topBar({ update: { state: 'available', version: '0.2.0' } }),
+          tabStrip: tabStrip(),
+          body: commitSelected(),
+        }),
+    },
+    {
+      id: 'about-menu',
+      title: 'About menu',
+      about: 'About → Check for Updates… looks for a new release at once and says what it found in a notification. In a copy built on this computer it says the copy never updates itself.',
+      source: 'src/app/mod.rs',
+      render: () =>
+        C.SterneGit({
+          topBar: topBar({ openMenu: 'About' }),
+          tabStrip: tabStrip(),
+          body: commitSelected(),
+          overlays: C.Menu({ items: Menus.About, left: 158, top: 32, hot: 'Check for Updates…' }),
+        }),
+    },
+    {
+      id: 'check-up-to-date',
+      title: 'Check for Updates: up to date',
+      about: 'When the running version is the latest release.',
+      source: 'src/app/window.rs',
+      render: () =>
+        C.SterneGit({
+          topBar: topBar(),
+          tabStrip: tabStrip(),
+          body: commitSelected(),
+          overlays: `<div class="toasts">${C.Notification({ kind: 'success', message: HostTexts.upToDateToast('0.1.0') })}</div>`,
+        }),
+    },
+    {
+      id: 'check-found',
+      title: 'Check for Updates: a release is out',
+      about: "With Update automatically on, the release starts downloading and the notification says Restart to update will appear. With it off, the notification has an Update button instead. When the check fails, an error notification gives curl's reason.",
+      source: 'src/app/window.rs',
+      render: () =>
+        C.SterneGit({
+          topBar: topBar(),
+          tabStrip: tabStrip(),
+          body: commitSelected(),
+          overlays: `<div class="toasts">${C.Notification({ kind: 'info', title: HostTexts.foundTitle('0.2.0'), message: HostTexts.foundDownloading })}${C.Notification({ kind: 'info', title: HostTexts.foundTitle('0.2.0'), message: HostTexts.foundManual, action: C.Button({ label: HostTexts.update, icon: 'download', size: 'sm', variant: 'update' }) })}</div>`,
+        }),
+    },
     ...(() => {
       const { accounts, serverKeys, connectors, gitlabUpdate, owners, repositories } = Sample.hosting;
       const [personal, work, enterprise] = accounts;
       const settingsTabs = [...tabs, { name: HostTexts.settings, icon: 'settings' }];
-      const settings = (page, content, overlays = '', zoom = 100) =>
+      const settings = (page, content, overlays = '', zoom = 100, update) =>
         C.SterneGit({
-          topBar: C.TopBar(),
+          topBar: C.TopBar(update ? { update: { state: 'ready', version: update } } : {}),
           tabStrip: C.TabStrip({ tabs: settingsTabs, active: settingsTabs.length - 1 }),
-          body: C.SettingsTab({ page, content, nav: { accounts: accounts.length, waiting: 1, zoom } }),
+          body: C.SettingsTab({ page, content, nav: { accounts: accounts.length, waiting: 1, zoom, update } }),
           overlays,
           zoom,
         });
@@ -966,6 +1029,34 @@ const Screens = (() => {
           about: 'The same page at 125 %: everything is a quarter bigger, so less fits in the window. Beside Interface, the nav shows the zoom whenever it is not 100 %.',
           source: 'src/hosting/interface_page.rs',
           render: () => settings('interface', C.InterfacePage({ zoom: 125 }), '', 125),
+        },
+        {
+          id: 'settings-updates',
+          title: 'Settings — updates',
+          about: "Updates is the fourth page of Settings. It names the running version and how this copy was installed: by the setup (for this Windows user, in %LOCALAPPDATA%\\Programs\\SterneGit) or portable, from a zip unpacked anywhere. Check for updates looks at once. Update automatically is saved in %APPDATA%\\SterneGit\\settings.json and is on unless switched off.",
+          source: 'src/hosting/updates_page.rs',
+          render: () => settings('updates', C.UpdatesPage()),
+        },
+        {
+          id: 'settings-updates-ready',
+          title: 'Settings — updates, a release is ready',
+          about: 'Once the new release is downloaded and checked, the page and the nav name it, and the top bar shows Restart to update.',
+          source: 'src/hosting/updates_page.rs',
+          render: () => settings('updates', C.UpdatesPage({ status: 'ready' }), '', 100, '0.2.0'),
+        },
+        {
+          id: 'settings-updates-portable',
+          title: 'Settings — updates, portable in a read-only folder',
+          about: "A portable copy updates by unpacking the new zip and swapping its own sternegit.exe and connectors folder when it restarts or quits; the files it replaces are deleted at the next launch. When its folder can't be written to, it only points at the release page.",
+          source: 'src/hosting/updates_page.rs',
+          render: () => settings('updates', C.UpdatesPage({ installation: 'portable', folder: 'D:\\Tools\\SterneGit', status: 'read-only' })),
+        },
+        {
+          id: 'settings-updates-built',
+          title: 'Settings — updates, built on this computer',
+          about: 'Only exes built by the release workflow know where to look for releases. One built with cargo, like build\\sternegit.exe, never updates itself, wherever it sits.',
+          source: 'src/hosting/updates_page.rs',
+          render: () => settings('updates', C.UpdatesPage({ installation: 'built' })),
         },
         {
           id: 'wheel-zoom',

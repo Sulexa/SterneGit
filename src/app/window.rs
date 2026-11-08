@@ -27,13 +27,14 @@ use super::{
     saved_tabs::SavedTabs,
     tab_strip::{TabLabel, TabState, TabStrip},
     tabs::Tabs,
-    top_bar::TopBar,
+    top_bar::{TopBar, update_variant},
+    updates::{self, Status, UPDATE, UPDATE_THEN_RESTART, Updates, release_out},
     zoom::{apply_zoom, reset_zoom, zoom_by_wheel, zoom_in, zoom_out},
 };
 use crate::{
     actions::{
-        About, CloneRepository, CloseTab, CopyHash, Fetch, NewRepository, NextTab, OpenRepository,
-        OpenSettings, PreviousTab, Quit, Refresh, ResetZoom, WINDOW_CONTEXT, ZoomIn, ZoomOut,
+        About, CheckForUpdates, CloneRepository, CloseTab, CopyHash, Fetch, NewRepository, NextTab,
+        OpenRepository, OpenSettings, PreviousTab, Quit, Refresh, ResetZoom, WINDOW_CONTEXT, ZoomIn, ZoomOut,
     },
     git,
     hosting::{
@@ -57,6 +58,11 @@ const REVIEW: &str = "Review…";
 const WELCOME_TITLE: &str = "Open a Git repository";
 const WELCOME_ABOUT: &str =
     "SterneGit reads history straight from the repository on disk. Each repository opens in its own tab.";
+const BUILT_HERE: &str = "This copy was built on this computer and doesn't update itself.";
+const DOWNLOADING_NOW: &str = "It's downloading now. Restart to update appears at the top right when it's ready.";
+const READY_NOW: &str = "It's ready: Restart to update at the top right installs it.";
+const READ_ONLY_FOLDER: &str = "This folder can't be written to, so download it from its release page.";
+const CHECK_FAILED: &str = "Couldn't check for updates";
 
 struct RepoTab {
     view: Entity<RepoView>,
@@ -87,9 +93,11 @@ pub(crate) struct SterneGit {
     tabs: Tabs<Tab>,
     menu_bar: Option<Entity<AppMenuBar>>,
     announced: BTreeSet<ConnectorId>,
+    asked_check: Option<usize>,
     _poll: Task<()>,
     _activation: Subscription,
     _connectors: Subscription,
+    _updates: Subscription,
 }
 
 impl SterneGit {
@@ -129,13 +137,19 @@ impl SterneGit {
             this.announce_waiting_connectors(window, cx);
             cx.notify();
         });
+        let updates = cx.observe_global_in::<Updates>(window, |this, window, cx| {
+            this.report_asked_check(window, cx);
+            cx.notify();
+        });
         let mut this = Self {
             tabs: Tabs::default(),
             menu_bar,
             announced: BTreeSet::new(),
+            asked_check: None,
             _poll: poll,
             _activation: activation,
             _connectors: connectors,
+            _updates: updates,
         };
         this.restore(SavedTabs::load().still_on_disk(), window, cx);
         match path {
@@ -169,6 +183,9 @@ impl SterneGit {
     }
 
     fn poll(&mut self, network_came_back: bool, cx: &mut Context<Self>) {
+        if network_came_back {
+            updates::retry_after_network_failure(cx);
+        }
         let active = self.tabs.active_index();
         for (ix, tab) in self.tabs.iter().enumerate() {
             let Some(repository) = tab.repository() else {
@@ -457,6 +474,62 @@ impl SterneGit {
         });
     }
 
+    fn check_for_updates(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let updates = Updates::of(cx);
+        if updates.installation().feed().is_none() {
+            window.push_notification(Notification::info(BUILT_HERE), cx);
+            return;
+        }
+        match updates.status() {
+            Status::Downloading { release, .. } => {
+                let notification = Notification::info(DOWNLOADING_NOW).title(release_out(release));
+                window.push_notification(notification, cx);
+            }
+            Status::Installing => {}
+            _ => {
+                self.asked_check = Some(updates.finished_checks());
+                updates::check(cx);
+            }
+        }
+    }
+
+    fn report_asked_check(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(asked_at) = self.asked_check else {
+            return;
+        };
+        let updates = Updates::of(cx);
+        if updates.finished_checks() <= asked_at {
+            return;
+        }
+        self.asked_check = None;
+        let notification = match updates.status() {
+            Status::UpToDate => Notification::success(format!("SterneGit {} is up to date.", env!("CARGO_PKG_VERSION"))),
+            Status::Downloading { release, .. } => Notification::info(DOWNLOADING_NOW).title(release_out(release)),
+            Status::Ready { release, .. } => Notification::info(READY_NOW).title(release_out(release)),
+            Status::ReadOnly(release) => Notification::warning(READ_ONLY_FOLDER).title(release_out(release)),
+            Status::Out(release) => {
+                let variant = update_variant(cx);
+                Notification::info(UPDATE_THEN_RESTART)
+                    .title(release_out(release))
+                    .action(move |_, _, cx| {
+                        let toast = cx.entity().downgrade();
+                        Button::new("update-from-notification")
+                            .custom(variant)
+                            .small()
+                            .icon(IconName::Download)
+                            .label(UPDATE)
+                            .on_click(move |_, window, cx| {
+                                let _ = toast.update(cx, |toast, cx| toast.dismiss(window, cx));
+                                updates::download(cx);
+                            })
+                    })
+            }
+            Status::Failed(error) => Notification::error(error.to_string()).title(CHECK_FAILED),
+            Status::NotChecked | Status::Checking | Status::Installing => return,
+        };
+        window.push_notification(notification, cx);
+    }
+
     fn top_bar(&self, cx: &App) -> TopBar {
         let active = self.tabs.active().and_then(Tab::repository).map(|tab| tab.read(cx));
         let linked = active
@@ -472,6 +545,7 @@ impl SterneGit {
         TopBar::new(self.menu_bar.clone())
             .repository(name, active.and_then(|repository| repository.head_label()))
             .worktree(worktree)
+            .update(Updates::of(cx).status())
     }
 
     fn tab_strip(&self, cx: &mut Context<Self>) -> TabStrip {
@@ -587,6 +661,7 @@ impl Render for SterneGit {
             .on_action(|_: &ZoomOut, window, cx| zoom_out(window, cx))
             .on_action(|_: &ResetZoom, window, cx| reset_zoom(window, cx))
             .on_action(|_: &About, window, cx| Self::show_about(window, cx))
+            .on_action(cx.listener(|this, _: &CheckForUpdates, window, cx| this.check_for_updates(window, cx)))
             .on_action(|_: &Quit, _, cx| cx.quit())
             .child(self.top_bar(cx))
             .when(!self.tabs.is_empty(), |this| this.child(self.tab_strip(cx)))

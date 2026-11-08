@@ -1,16 +1,29 @@
 use gpui_kit::{
-    App, Entity, IntoElement, ParentElement as _, RenderOnce, SharedString, Styled as _, Window,
+    AnyElement, App, Entity, IntoElement, ParentElement as _, RenderOnce, SharedString, Styled as _, Window,
     assets::IconName,
     component::{
-        ActiveTheme as _, Icon, Sizable as _, StyledExt as _, TitleBar, h_flex, menu::AppMenuBar,
+        ActiveTheme as _, Disableable as _, Icon, Sizable as _, StyledExt as _, TitleBar,
+        button::{Button, ButtonCustomVariant, ButtonVariants as _},
+        h_flex,
+        menu::AppMenuBar,
     },
     div,
     prelude::FluentBuilder as _,
     px,
 };
 
-use super::logo::logo;
-use crate::ui::Look as _;
+use super::{
+    logo::logo,
+    updates::{
+        DOWNLOADING, OPEN_RELEASE_PAGE, RESTART_TO_UPDATE, Status, UPDATE_THEN_RESTART, WHATS_NEW, download,
+        downloading, ready_tip, release_out, restart_to_update, update_to,
+    },
+};
+use crate::{update::Release, ui::Look as _};
+
+const TINT: f32 = 0.16;
+const TINT_HOVERED: f32 = 0.24;
+const TINT_PRESSED: f32 = 0.30;
 
 #[derive(IntoElement)]
 pub(crate) struct TopBar {
@@ -18,6 +31,7 @@ pub(crate) struct TopBar {
     repository: Option<SharedString>,
     worktree: Option<SharedString>,
     head: Option<SharedString>,
+    update: Option<Status>,
 }
 
 impl TopBar {
@@ -27,7 +41,13 @@ impl TopBar {
             repository: None,
             worktree: None,
             head: None,
+            update: None,
         }
+    }
+
+    pub(crate) fn update(mut self, status: &Status) -> Self {
+        self.update = Some(status.clone());
+        self
     }
 
     pub(crate) fn worktree(mut self, worktree: Option<SharedString>) -> Self {
@@ -52,6 +72,7 @@ impl RenderOnce for TopBar {
         let (muted, border) = (theme.muted_foreground, theme.border);
         let head = self.head;
         let worktree = self.worktree;
+        let update = self.update.and_then(|status| update_button(&status, cx));
         let pill = move |icon: IconName, text: SharedString| {
             h_flex()
                 .min_w_0()
@@ -88,7 +109,77 @@ impl RenderOnce for TopBar {
                             })
                             .when_some(head, |this, head| this.child(pill(IconName::GitBranch, head))),
                     )
-                }),
+                })
+                .when_some(update, |this, update| this.child(update)),
         )
     }
+}
+
+pub(crate) fn update_variant(cx: &App) -> ButtonCustomVariant {
+    let green = cx.theme().green;
+    ButtonCustomVariant::new(cx)
+        .color(green.opacity(TINT))
+        .foreground(green)
+        .hover(green.opacity(TINT_HOVERED))
+        .active(green.opacity(TINT_PRESSED))
+}
+
+pub(crate) fn whats_new(id: &'static str, release: &Release) -> Button {
+    let notes = release.notes.to_string();
+    Button::new(id)
+        .ghost()
+        .label(WHATS_NEW)
+        .on_click(move |_, _, cx| cx.open_url(&notes))
+}
+
+fn update_button(status: &Status, cx: &App) -> Option<AnyElement> {
+    let buttons: Vec<AnyElement> = match status {
+        Status::Ready { release, .. } => vec![
+            Button::new("restart-to-update")
+                .custom(update_variant(cx))
+                .xsmall()
+                .icon(IconName::RefreshCw)
+                .label(RESTART_TO_UPDATE)
+                .tooltip(ready_tip(release))
+                .on_click(|_, _, cx| restart_to_update(cx))
+                .into_any_element(),
+            whats_new("top-bar-whats-new", release).xsmall().into_any_element(),
+        ],
+        Status::Out(release) => vec![
+            Button::new("update-to")
+                .custom(update_variant(cx))
+                .xsmall()
+                .icon(IconName::Download)
+                .label(update_to(release))
+                .tooltip(UPDATE_THEN_RESTART)
+                .on_click(|_, _, cx| download(cx))
+                .into_any_element(),
+            whats_new("top-bar-whats-new", release).xsmall().into_any_element(),
+        ],
+        Status::Downloading { release, asked: true } => vec![
+            Button::new("downloading-update")
+                .custom(update_variant(cx))
+                .xsmall()
+                .loading(true)
+                .disabled(true)
+                .label(DOWNLOADING)
+                .tooltip(downloading(release))
+                .into_any_element(),
+        ],
+        Status::ReadOnly(release) => {
+            let notes = release.notes.to_string();
+            vec![
+                Button::new("release-is-out")
+                    .ghost()
+                    .xsmall()
+                    .icon(IconName::ExternalLink)
+                    .label(release_out(release))
+                    .tooltip(OPEN_RELEASE_PAGE)
+                    .on_click(move |_, _, cx| cx.open_url(&notes))
+                    .into_any_element(),
+            ]
+        }
+        _ => return None,
+    };
+    Some(h_flex().flex_none().gap_1().children(buttons).into_any_element())
 }

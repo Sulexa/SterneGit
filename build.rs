@@ -5,6 +5,9 @@ use std::{env, fs, path::PathBuf};
 
 const ICON_SIZES: [u32; 4] = [16, 32, 48, 256];
 const WINDOW_ICON_ID: u16 = 1;
+const INSTALLER_ICON: &str = "sternegit.ico";
+const ICON_DIRECTORY_SIZE: u32 = 6;
+const ICON_DIRECTORY_ENTRY_SIZE: u32 = 16;
 
 const RT_ICON: u16 = 3;
 const RT_GROUP_ICON: u16 = 14;
@@ -29,8 +32,10 @@ fn main() {
     if !links_with_msvc_on_windows() {
         return;
     }
-    let resources = PathBuf::from(env::var_os("OUT_DIR").expect("cargo sets OUT_DIR")).join("icon.res");
+    let out = PathBuf::from(env::var_os("OUT_DIR").expect("cargo sets OUT_DIR"));
+    let resources = out.join("icon.res");
     fs::write(&resources, icon_resources()).expect("the build output folder is writable");
+    fs::write(out.join(INSTALLER_ICON), icon_file()).expect("the build output folder is writable");
     println!("cargo:rustc-link-arg-bins={}", resources.display());
 }
 
@@ -51,6 +56,26 @@ fn icon_resources() -> Vec<u8> {
         file.extend(resource(RT_ICON, id, MOVEABLE_DISCARDABLE, &picture));
     }
     file.extend(resource(RT_GROUP_ICON, WINDOW_ICON_ID, MOVEABLE_PURE_DISCARDABLE, &group));
+    file
+}
+
+fn icon_file() -> Vec<u8> {
+    let pictures = ICON_SIZES.map(png);
+    let mut file = [0, ICON_TYPE, ICON_SIZES.len() as u16]
+        .into_iter()
+        .flat_map(u16::to_le_bytes)
+        .collect::<Vec<_>>();
+    let mut offset = ICON_DIRECTORY_SIZE + ICON_DIRECTORY_ENTRY_SIZE * ICON_SIZES.len() as u32;
+    for (size, picture) in ICON_SIZES.into_iter().zip(&pictures) {
+        let mut entry = group_entry(size, picture.len(), 0);
+        entry.truncate(entry.len() - size_of::<u16>());
+        entry.extend(offset.to_le_bytes());
+        file.extend(entry);
+        offset += picture.len() as u32;
+    }
+    for picture in pictures {
+        file.extend(picture);
+    }
     file
 }
 

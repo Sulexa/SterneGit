@@ -141,6 +141,16 @@
 .btn.danger { background: color-mix(in srgb, var(--danger) 18%, transparent); color: var(--danger); }
 .btn.danger:hover { background: color-mix(in srgb, var(--danger) 26%, transparent); }
 .btn.disabled { opacity: 0.5; }
+.btn.update { background: color-mix(in srgb, var(--green) 16%, transparent); color: var(--green); }
+.btn.update:hover { background: color-mix(in srgb, var(--green) 24%, transparent); }
+.update-button { flex: none; gap: 4px; }
+.update-status { gap: 6px; margin-top: 4px; color: var(--foreground); }
+.update-ready { flex: none; color: var(--green); }
+.switch { flex: none; position: relative; width: 28px; height: 16px; border-radius: 8px; background: var(--input); }
+.switch > .knob { position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 6px; background: var(--foreground); }
+.switch.on { background: var(--primary); }
+.switch.on > .knob { left: 14px; background: var(--background); }
+.switch.disabled { opacity: 0.5; }
 
 .window-controls {
   display: flex;

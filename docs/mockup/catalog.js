@@ -103,6 +103,17 @@ const Catalog = (() => {
           ],
         },
         {
+          name: 'Switch',
+          code: 'gpui_kit::switch::Switch',
+          source: 'src/hosting/updates_page.rs',
+          about: 'The kit’s switch at its small size: a 28 × 16 px track, filled with the primary color while on.',
+          variants: [
+            ['Off', () => C.Switch()],
+            ['On', () => C.Switch({ checked: true })],
+            ['Disabled', () => C.Switch({ disabled: true })],
+          ],
+        },
+        {
           name: 'Input',
           code: 'gpui_kit::input::Input',
           source: 'src/repo/commit_form.rs',
@@ -422,6 +433,19 @@ const Catalog = (() => {
             ['Windows / Linux, nothing open', () => C.TopBar(), { w: 1000 }],
             ['Detached HEAD', () => C.TopBar({ repository: 'sternegit', head: '3f9c2e1' }), { w: 1000 }],
             ['macOS', () => C.TopBar({ platform: 'mac', repository: 'sternegit', head: 'main' }), { w: 1000 }],
+            ['An update is ready', () => C.TopBar({ repository: 'sternegit', head: 'main', update: { state: 'ready', version: '0.2.0' } }), { w: 1000 }],
+          ],
+        },
+        {
+          name: 'UpdateButton',
+          code: 'app::top_bar::update_button',
+          source: 'src/app/top_bar.rs',
+          about: "The top bar's end once a newer release is known: green while it can be installed, a link when it can't.",
+          variants: [
+            ['Ready', () => C.UpdateButton({ state: 'ready' })],
+            ['Out, Update automatically off', () => C.UpdateButton({ state: 'available' })],
+            ['Downloading after Update', () => C.UpdateButton({ state: 'downloading' })],
+            ['Portable in a read-only folder', () => C.UpdateButton({ state: 'read-only' })],
           ],
         },
         {
@@ -1130,6 +1154,7 @@ const Catalog = (() => {
             ['A connector waiting', () => C.SettingsNav({ page: 'accounts', accounts: 3, waiting: 1 }), { w: 224 }],
             ['Nothing waiting', () => C.SettingsNav({ page: 'connectors', accounts: 3 }), { w: 224 }],
             ['Zoomed to 125 %', () => C.SettingsNav({ page: 'interface', accounts: 3, zoom: 125 }), { w: 224 }],
+            ['An update is ready', () => C.SettingsNav({ page: 'updates', accounts: 3, update: '0.2.0' }), { w: 224 }],
           ],
         },
         {
@@ -1140,6 +1165,22 @@ const Catalog = (() => {
           variants: [
             ['100 %', () => C.InterfacePage({ zoom: 100 }), { w: 816 }],
             ['125 %', () => C.InterfacePage({ zoom: 125 }), { w: 816 }],
+          ],
+        },
+        {
+          name: 'UpdatesPage',
+          code: 'hosting::updates_page::SettingsTab::updates_page',
+          source: 'src/hosting/updates_page.rs',
+          about: 'The running version, how this copy was installed, what the last check found, and the Update automatically switch.',
+          variants: [
+            ['Up to date', () => C.UpdatesPage(), { w: 816 }],
+            ['Looking', () => C.UpdatesPage({ status: 'checking' }), { w: 816 }],
+            ['Downloading', () => C.UpdatesPage({ status: 'downloading' }), { w: 816 }],
+            ['Ready', () => C.UpdatesPage({ status: 'ready' }), { w: 816 }],
+            ['Out, Update automatically off', () => C.UpdatesPage({ status: 'available', automatic: false }), { w: 816 }],
+            ['Check failed', () => C.UpdatesPage({ status: 'failed', why: 'The server took too long to answer' }), { w: 816 }],
+            ['Portable, read-only folder', () => C.UpdatesPage({ installation: 'portable', folder: 'D:\\Tools\\SterneGit', status: 'read-only' }), { w: 816 }],
+            ['Built on this computer', () => C.UpdatesPage({ installation: 'built' }), { w: 816 }],
           ],
         },
         {

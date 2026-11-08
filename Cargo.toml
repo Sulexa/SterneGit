@@ -11,6 +11,7 @@ image = { version = "0.25.10", default-features = false }
 symphonia = { version = "0.6.1", default-features = false, features = ["wav", "pcm", "ogg", "vorbis", "flac", "mp3", "aiff", "isomp4", "aac"] }
 cpal = "0.18.2"
 base64 = "0.22.1"
+flate2 = { version = "1.1.10", default-features = false, features = ["rust_backend"] }
 futures = "0.3.34"
 serde = "1.0.229"
 serde_json = { version = "1.0.154", features = ["preserve_order"] }
@@ -22,7 +23,7 @@ sternegit-protocol = { path = "connectors/protocol" }
 wasmi = { version = "~2.0.0", default-features = false, features = ["std", "validate", "auto-dispatch"] }
 
 [target.'cfg(windows)'.dependencies]
-windows = { version = "0.62.2", features = ["Win32_Foundation", "Win32_Security_Credentials", "Win32_NetworkManagement_IpHelper", "Win32_NetworkManagement_Ndis", "Win32_Networking_WinSock"] }
+windows = { version = "0.62.2", features = ["Win32_Foundation", "Win32_Security_Credentials", "Win32_NetworkManagement_IpHelper", "Win32_NetworkManagement_Ndis", "Win32_Networking_WinSock", "Win32_System_ProcessStatus", "Win32_System_Threading"] }
 
 [target.'cfg(not(windows))'.dependencies]
 libc = "0.2.191"
@@ -32,6 +33,7 @@ crc32fast = "1.5.4"
 miniz_oxide = "0.8.9"
 
 [dev-dependencies]
+crc32fast = "1.5.4"
 wat = { version = "1.228.0", default-features = false }
 
 # Dependencies are optimized even in dev builds: gix walks history and GPUI renders

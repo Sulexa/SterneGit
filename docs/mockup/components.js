@@ -230,7 +230,7 @@ const Menus = {
     ['Zoom Out', 'Ctrl+-'],
     ['Reset Zoom', 'Ctrl+0'],
   ],
-  About: [['About SterneGit', '']],
+  About: [['About SterneGit', ''], ['Check for Updates…', '']],
 };
 
 const PullModes = [
@@ -483,6 +483,36 @@ const HostTexts = {
   zoomIn: 'Zoom in  Ctrl+=',
   resetZoom: 'Reset',
   resetZoomTip: 'Back to 100 %  Ctrl+0',
+  updates: 'Updates',
+  updatesAbout: 'SterneGit looks for a new release on GitHub when it starts and every six hours.',
+  installedAt: (folder) => `Installed for you in ${folder}`,
+  portableAt: (folder) => `Portable, in ${folder}`,
+  builtHere: 'Built on this computer from source',
+  upToDate: (ago) => `Up to date · checked ${ago}`,
+  checking: 'Looking for a new release…',
+  downloading: (version) => `Downloading SterneGit ${version}…`,
+  readyStatus: (version) => `SterneGit ${version} is ready. It installs when you restart, or when you quit.`,
+  availableStatus: (version) => `SterneGit ${version} is out.`,
+  readOnlyStatus: (version) => `SterneGit ${version} is out, but this folder can't be written to, so download it from its release page.`,
+  checkFailed: (why) => `Couldn't check: ${why}`,
+  builtStatus: 'This copy never updates itself. Install SterneGit from a release to get updates.',
+  checkNow: 'Check for updates',
+  whatsNew: "What's new",
+  restartToUpdate: 'Restart to update',
+  updateTo: (version) => `Update to ${version}`,
+  update: 'Update',
+  downloadingShort: 'Downloading…',
+  releaseOut: (version) => `SterneGit ${version} is out`,
+  openReleasePage: 'Open the release page',
+  automatic: 'Update automatically',
+  automaticAbout: 'Downloads each new release in the background and installs it when you restart or quit SterneGit. When off, SterneGit only tells you a release is out.',
+  readyTip: (version) => `SterneGit ${version} is downloaded. Restart to install it now; quitting installs it too.`,
+  upToDateToast: (version) => `SterneGit ${version} is up to date.`,
+  foundTitle: (version) => `SterneGit ${version} is out`,
+  foundDownloading: "It's downloading now. Restart to update appears at the top right when it's ready.",
+  foundManual: 'Update downloads it, then Restart to update installs it.',
+  checkFailedTitle: "Couldn't check for updates",
+  builtToast: "This copy was built on this computer and doesn't update itself.",
   accountsAbout: "SterneGit signs in to hosting services to clone, create and publish repositories. It keeps their tokens in Windows Credential Manager under its own names, apart from the credentials Git uses in a terminal.",
   addAccount: 'Add account…',
   noAccounts: 'No accounts yet',
@@ -1433,7 +1463,7 @@ const C = {
     return `<img data-c="AppLogo" class="app-logo" src="logo.svg" width="${size}" height="${size}" alt="SterneGit">`;
   },
 
-  TopBar({ platform = 'windows', repository, head, openMenu, worktree } = {}) {
+  TopBar({ platform = 'windows', repository, head, openMenu, worktree, update } = {}) {
     const mac = platform === 'mac';
     const lights = mac
       ? '<div class="traffic-lights"><span style="background:#ff5f57"></span><span style="background:#febc2e"></span><span style="background:#28c840"></span></div>'
@@ -1445,7 +1475,7 @@ const C = {
     const repo = repository
       ? `<div class="h" style="gap:8px"><div class="sm medium ellipsis">${esc(repository)}</div>${tree}${pill}</div>`
       : '';
-    return `<div data-c="TopBar" data-base="TitleBar" class="top-bar${mac ? ' mac' : ''}">${lights}<div class="content">${C.AppLogo()}${mac ? '' : C.AppMenuBar({ open: openMenu })}<div class="fill"></div>${repo}</div>${mac ? '' : C.WindowControls()}</div>`;
+    return `<div data-c="TopBar" data-base="TitleBar" class="top-bar${mac ? ' mac' : ''}">${lights}<div class="content">${C.AppLogo()}${mac ? '' : C.AppMenuBar({ open: openMenu })}<div class="fill"></div>${repo}${update ? C.UpdateButton(update) : ''}</div>${mac ? '' : C.WindowControls()}</div>`;
   },
 
   Tab({ name, state = 'ready', active = false, icon: glyph }) {
@@ -2658,17 +2688,66 @@ const C = {
     return `<div data-c="PageHeader" class="page-head">${crumbs}<div class="h top">${media}<div class="v fill" style="gap:2px"><div class="lg semibold">${esc(title)}</div>${subtitle}${text}</div>${actions ? `<div class="h actions">${actions}</div>` : ''}</div></div>`;
   },
 
-  SettingsNav({ page = 'accounts', accounts = 0, waiting = 0, zoom = 100 }) {
+  SettingsNav({ page = 'accounts', accounts = 0, waiting = 0, zoom = 100, update }) {
     const row = (key, label, glyph, extra) =>
       C.ListRow({ content: `<div class="h fill" style="gap:8px">${icon(glyph, 'sm', 'var(--muted)')}<span class="fill sm">${esc(label)}</span>${extra}</div>`, selected: key === page });
     const count = accounts ? `<span class="xs muted">${thousands(accounts)}</span>` : '';
     const badge = waiting ? `<span class="count-badge" title="${esc(counted(waiting, 'connector waits', 'connectors wait'))} for your approval">${thousands(waiting)}</span>` : '';
     const zoomed = zoom === 100 ? '' : `<span class="xs muted">${thousands(zoom)} %</span>`;
-    return `<div data-c="SettingsNav" class="settings-nav">${C.SectionHeader({ title: HostTexts.settings })}${row('accounts', HostTexts.accounts, 'user', count)}${row('connectors', HostTexts.connectors, 'plug', badge)}${row('interface', HostTexts.interface, 'monitor', zoomed)}</div>`;
+    const ready = update ? `<span class="xs update-ready" title="${esc(HostTexts.readyTip(update))}">${esc(update)}</span>` : '';
+    return `<div data-c="SettingsNav" class="settings-nav">${C.SectionHeader({ title: HostTexts.settings })}${row('accounts', HostTexts.accounts, 'user', count)}${row('connectors', HostTexts.connectors, 'plug', badge)}${row('interface', HostTexts.interface, 'monitor', zoomed)}${row('updates', HostTexts.updates, 'download', ready)}</div>`;
   },
 
   SettingsTab({ page, content, nav = {} }) {
     return `<div data-c="SettingsTab" class="settings">${C.SettingsNav({ page, ...nav })}<div class="settings-page"><div class="page-body">${content}</div></div></div>`;
+  },
+
+  Switch({ checked = false, disabled = false, tooltip } = {}) {
+    const title = tooltip ? ` title="${esc(tooltip)}"` : '';
+    return `<span data-c="Switch" class="switch${checked ? ' on' : ''}${disabled ? ' disabled' : ''}"${title}><span class="knob"></span></span>`;
+  },
+
+  UpdateButton({ state = 'ready', version = '0.2.0' } = {}) {
+    const news = () => C.Button({ label: HostTexts.whatsNew, variant: 'ghost' });
+    const shown = {
+      ready: () => C.Button({ label: HostTexts.restartToUpdate, icon: 'refresh-cw', variant: 'update', tooltip: HostTexts.readyTip(version) }) + news(),
+      available: () => C.Button({ label: HostTexts.updateTo(version), icon: 'download', variant: 'update', tooltip: HostTexts.foundManual }) + news(),
+      downloading: () => C.Button({ label: HostTexts.downloadingShort, variant: 'update', loading: true, disabled: true, tooltip: HostTexts.downloading(version) }),
+      'read-only': () => C.Button({ label: HostTexts.releaseOut(version), icon: 'external-link', variant: 'ghost', tooltip: HostTexts.openReleasePage }),
+    };
+    return `<div data-c="UpdateButton" class="h update-button">${shown[state]()}</div>`;
+  },
+
+  UpdatesPage({ installation = 'installed', folder = 'C:\\Users\\alex\\AppData\\Local\\Programs\\SterneGit', running = '0.1.0', status = 'up-to-date', version = '0.2.0', ago = '4 minutes ago', why = '', automatic = true } = {}) {
+    const built = installation === 'built';
+    const shown = built ? 'built' : status;
+    const where = built ? HostTexts.builtHere : installation === 'portable' ? HostTexts.portableAt(folder) : HostTexts.installedAt(folder);
+    const spinning = icon('loader', 'xs').replace('class="icon"', 'class="icon spinner"');
+    const [glyph, line] = {
+      'up-to-date': [icon('circle-check', 'xs', 'var(--green)'), HostTexts.upToDate(ago)],
+      checking: [spinning, HostTexts.checking],
+      downloading: [spinning, HostTexts.downloading(version)],
+      ready: [icon('circle-check', 'xs', 'var(--green)'), HostTexts.readyStatus(version)],
+      available: [icon('info', 'xs', 'var(--blue)'), HostTexts.availableStatus(version)],
+      'read-only': [icon('triangle-alert', 'xs', 'var(--yellow)'), HostTexts.readOnlyStatus(version)],
+      failed: [icon('circle-alert', 'xs', 'var(--red)'), HostTexts.checkFailed(why)],
+      built: [icon('info', 'xs', 'var(--muted)'), HostTexts.builtStatus],
+    }[shown];
+    const check = (disabled) => C.Button({ label: HostTexts.checkNow, icon: 'refresh-cw', size: 'sm', disabled });
+    const news = C.Button({ label: HostTexts.whatsNew, size: 'sm', variant: 'ghost' });
+    const actions = {
+      'up-to-date': () => check(false),
+      failed: () => check(false),
+      checking: () => check(true),
+      downloading: () => check(true),
+      built: () => check(true),
+      ready: () => news + C.Button({ label: HostTexts.restartToUpdate, icon: 'refresh-cw', size: 'sm', variant: 'update' }),
+      available: () => news + C.Button({ label: HostTexts.update, icon: 'download', size: 'sm', variant: 'update' }),
+      'read-only': () => C.Button({ label: HostTexts.openReleasePage, icon: 'external-link', size: 'sm' }),
+    }[shown]();
+    const versionRow = `<div class="row"><div class="v fill" style="gap:2px"><span class="sm medium">SterneGit ${esc(running)}</span><span class="xs muted">${esc(where)}</span><span class="h xs update-status">${glyph}<span>${esc(line)}</span></span></div><div class="h none" style="gap:8px">${actions}</div></div>`;
+    const automaticRow = `<div class="row"><div class="v fill" style="gap:2px"><span class="sm medium">${esc(HostTexts.automatic)}</span><span class="xs muted">${esc(HostTexts.automaticAbout)}</span></div>${C.Switch({ checked: automatic && !built, disabled: built })}</div>`;
+    return `<div data-c="UpdatesPage" class="v page">${C.PageHeader({ title: HostTexts.updates, about: HostTexts.updatesAbout })}${C.GroupBox({ rows: [versionRow, automaticRow] })}</div>`;
   },
 
   ZoomStepper({ percent = 100 }) {

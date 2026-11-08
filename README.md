@@ -7,11 +7,21 @@ and [gitoxide](https://github.com/GitoxideLabs/gitoxide).
 This is an early prototype: it browses history and stages uncommitted changes. It
 doesn't commit or push yet.
 
-## Run
+## Install
 
-```sh
-cargo run --release -- path/to/repository
-```
+On Windows, download `SterneGit-Setup-X.Y.Z.exe` from the
+[latest release](https://github.com/Sulexa/SterneGit/releases/latest). It installs for
+you alone, without asking for administrator rights, in
+`%LOCALAPPDATA%\Programs\SterneGit`, and can add **Open in SterneGit** to folders in
+Explorer and the install folder to your `PATH`. The release also has a portable zip:
+unpack it anywhere and run `sternegit.exe`. Neither is signed yet, so Windows warns
+the first time; choose **More info → Run anyway**.
+
+Both look for a new release when they start and every six hours, download it in the
+background and install it when you restart or quit SterneGit. Settings → Updates
+turns that off. Copies you build yourself never update.
+
+## Run
 
 SterneGit brings back the tabs that were open last time, and a path given on the
 command line opens in one more tab. With no tabs to bring back it offers **Open
@@ -34,6 +44,24 @@ the build hasn't changed.
 
 On Linux, building needs the same system packages Zed needs (Wayland or X11,
 xkbcommon, Vulkan, fontconfig).
+
+## Releasing
+
+Set the new version in `Cargo.toml`, commit it, then push a tag naming it:
+
+```sh
+git tag v0.2.0
+git push origin v0.2.0
+```
+
+The Release workflow runs only for such tags. On Windows it runs the tests, builds
+the exe with the address of the update feed, packs the setup with Inno Setup and the
+portable zip, and publishes them with `latest.json` (version, download addresses and
+SHA-256) and the subjects of the commits since the previous tag. It stops if the tag
+and `Cargo.toml` disagree. A tag with a label, like `v0.3.0-rc.1`, becomes a
+pre-release that installed copies never update to. `scripts/package-release.ps1 -Tag
+v0.2.0` does the same packaging locally when Inno Setup 6 is installed. Rust is
+pinned in `rust-toolchain.toml`, so CI builds with the same compiler.
 
 ## Using it
 

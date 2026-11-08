@@ -9,11 +9,12 @@ use gpui_kit::{
     px,
 };
 
-use super::{failure::Trouble, interface_page::zoom_label};
+use super::{failure::Trouble, interface_page::zoom_label, updates_page::ready_version};
 use crate::{
     accounts::AccountId,
     app::{
         connectors::{Connectors, mark_seen, note_failure},
+        updates::Updates,
         zoom::{Zoom, current_zoom},
     },
     connect::Standing,
@@ -26,6 +27,7 @@ const SETTINGS: &str = "Settings";
 const ACCOUNTS: &str = "Accounts";
 const CONNECTORS: &str = "Connectors";
 const INTERFACE: &str = "Interface";
+const UPDATES: &str = "Updates";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum Page {
@@ -34,6 +36,7 @@ pub(crate) enum Page {
     Connectors,
     Connector(ConnectorId),
     Interface,
+    Updates,
 }
 
 pub(crate) enum ServerKeys {
@@ -48,6 +51,7 @@ pub(crate) struct SettingsTab {
     pub(super) note: Option<SharedString>,
     focus: FocusHandle,
     _connectors: Subscription,
+    _updates: Subscription,
 }
 
 impl SettingsTab {
@@ -56,12 +60,14 @@ impl SettingsTab {
             this.settle_page(cx);
             cx.notify();
         });
+        let updates = cx.observe_global::<Updates>(|_, cx| cx.notify());
         let mut this = Self {
             page: Page::Accounts,
             server_keys: None,
             note: None,
             focus: cx.focus_handle(),
             _connectors: connectors,
+            _updates: updates,
         };
         this.show(page, cx);
         this
@@ -125,7 +131,7 @@ impl SettingsTab {
         let gone = match &self.page {
             Page::Account(id) => connectors.is_ready() && connectors.account(id).is_none(),
             Page::Connector(id) => connectors.is_ready() && connectors.connector(id).is_none(),
-            Page::Accounts | Page::Connectors | Page::Interface => false,
+            Page::Accounts | Page::Connectors | Page::Interface | Page::Updates => false,
         };
         if gone {
             self.page = match self.page {
@@ -143,7 +149,8 @@ impl SettingsTab {
         let on_connectors = matches!(self.page, Page::Connectors | Page::Connector(_));
         let zoom = current_zoom(cx);
         let theme = cx.theme();
-        let (muted, yellow, sidebar, border) = (theme.muted_foreground, theme.yellow, theme.sidebar, theme.border);
+        let (muted, yellow, green, sidebar, border) =
+            (theme.muted_foreground, theme.yellow, theme.green, theme.sidebar, theme.border);
         let nav_row = |id: &'static str, icon: IconName, label: &'static str, selected: bool, trailing: AnyElement| {
             list_row(id, selected).px_3().child(
                 h_flex()
@@ -158,6 +165,10 @@ impl SettingsTab {
         let zoomed = match zoom == Zoom::ACTUAL_SIZE {
             true => div().into_any_element(),
             false => div().xs_text().text_color(muted).child(zoom_label(zoom)).into_any_element(),
+        };
+        let ready = match ready_version(cx) {
+            Some(version) => div().xs_text().text_color(green).child(version).into_any_element(),
+            None => div().into_any_element(),
         };
         let badge = match waiting {
             0 => div().into_any_element(),
@@ -195,6 +206,10 @@ impl SettingsTab {
                 nav_row("settings-interface", IconName::Monitor, INTERFACE, self.page == Page::Interface, zoomed)
                     .on_click(cx.listener(|this, _, _, cx| this.show(Page::Interface, cx))),
             )
+            .child(
+                nav_row("settings-updates", IconName::Download, UPDATES, self.page == Page::Updates, ready)
+                    .on_click(cx.listener(|this, _, _, cx| this.show(Page::Updates, cx))),
+            )
     }
 }
 
@@ -212,6 +227,7 @@ impl Render for SettingsTab {
             Page::Connectors => self.connectors_page(cx),
             Page::Connector(id) => self.connector_page(&id, cx),
             Page::Interface => self.interface_page(cx),
+            Page::Updates => self.updates_page(cx),
         };
         h_flex()
             .size_full()

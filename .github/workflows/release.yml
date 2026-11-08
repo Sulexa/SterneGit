@@ -1,0 +1,45 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Install the pinned Rust
+        run: rustup toolchain install
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Let the tests make commits
+        run: |
+          git config --global user.name "SterneGit CI"
+          git config --global user.email "ci@sternegit.invalid"
+
+      - name: Test
+        run: cargo test --release --locked
+
+      - name: Package
+        run: ./scripts/package-release.ps1 -Tag "${{ github.ref_name }}" -Repository "${{ github.repository }}"
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          $version = $env:TAG.Substring(1)
+          $flags = @()
+          if ($env:TAG.Contains('-')) { $flags += '--prerelease' } else { $flags += '--latest' }
+          gh release create $env:TAG --title "SterneGit $version" --notes-file dist/notes.md @flags `
+            "dist/SterneGit-Setup-$version.exe" "dist/SterneGit-$version-portable.zip" dist/latest.json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
