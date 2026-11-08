@@ -578,7 +578,7 @@ const Catalog = (() => {
           name: 'RefsList',
           code: 'repo::refs_list::RefsList',
           source: 'src/repo/refs_list.rs',
-          about: 'Branches, remotes, stashes and tags, each section only when it has something. Names are split at each slash into folders, in the order Git lists them; under Remotes the first folder is the remote. Stashes are listed newest first, without folders. Sections and folders fold with a click. A local branch apart from its upstream ends its row with an AheadBehind. Clicking a ref or a stash selects its commit; double-clicking a branch checks it out; right-clicking a branch opens its BranchMenu, and right-clicking a stash its StashMenu.',
+          about: 'Branches, remotes, stashes and tags, each section only when it has something. Names are split at each slash into folders, in the order Git lists them; under Remotes the first folder is the remote. Stashes are listed newest first, without folders. Sections and folders fold with a click. Every section and folder starts folded the first time a repository opens; the ones opened since are remembered for that repository across launches. A local branch apart from its upstream ends its row with an AheadBehind. Clicking a ref or a stash selects its commit; double-clicking a branch checks it out; right-clicking a branch opens its BranchMenu, and right-clicking a stash its StashMenu.',
           variants: [
             ['Branches apart from their upstream', () => C.RefsList({ refs: tracked.refs, collapsed: ['remote', 'tag'] }), { w: 224, h: 200 }],
             ['With stashes, one selected', () => C.RefsList({ refs: stashed.history.refs, stashes: stashed.history.stashes, selectedRow: 3, collapsed: ['local', 'remote'] }), { w: 224, h: 200 }],
@@ -1503,7 +1503,7 @@ const Catalog = (() => {
           name: 'PullsSection',
           code: 'repo::pulls::PullsSection',
           source: 'src/repo/pulls/section.rs',
-          about: 'The first section of the RefsList, when a started connector claims the remote. It folds like the others; its header counts the rows read and ends with the filter button. Rows come from pulls.list, a hundred at a time.',
+          about: 'The first section of the RefsList, when a started connector claims the remote. It folds like the others, starts folded too and is remembered with them; its header counts the rows read and ends with the filter button. Rows come from pulls.list, a hundred at a time.',
           variants: [
             ['Open', () => C.PullsSection({ pulls: list.open, selected: 12 }), { w: 224 }],
             ['Closed, more to read', () => C.PullsSection({ pulls: list.closed, filter: 'closed', more: true }), { w: 224 }],

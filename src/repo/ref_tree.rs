@@ -13,7 +13,7 @@ pub(crate) enum Section {
 }
 
 impl Section {
-    const IN_ORDER: [Section; 5] = [
+    pub(super) const IN_ORDER: [Section; 5] = [
         Section::Refs(RefKind::LocalBranch),
         Section::Worktrees,
         Section::Refs(RefKind::RemoteBranch),

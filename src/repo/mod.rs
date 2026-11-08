@@ -24,6 +24,7 @@ mod pulls;
 mod ref_tree;
 mod refs_list;
 mod repository;
+mod saved_folds;
 mod stash_menu;
 mod status_bar;
 mod tag_dialog;
@@ -102,6 +103,7 @@ use refs_list::{RefsList, WorktreeSection};
 pub(crate) use repository::{Repository, RepositoryEvent};
 use message_editor::{NOT_SAVED, message_saved};
 use repository::Reworded;
+use saved_folds::LeftPaneFolds;
 use status_bar::RepoStatusBar;
 use toolbar::{RepoToolbar, ToolbarState, notification};
 use worktree_bar::worktree_bar;
@@ -154,7 +156,7 @@ struct Elsewhere {
 pub(crate) struct RepoView {
     repository: Entity<Repository>,
     target: Target,
-    folded_refs: Folded<RefGroup>,
+    left_pane: LeftPaneFolds,
     here: Working,
     elsewhere: Option<Elsewhere>,
     commit_panel: Entity<CommitPanel>,
@@ -175,7 +177,6 @@ pub(crate) struct RepoView {
     reading_remotes: Option<Task<()>>,
     pulls: Entity<Pulls>,
     pull_pane: Option<PullPane>,
-    pulls_folded: bool,
     _subscriptions: [Subscription; 7],
 }
 
@@ -183,6 +184,7 @@ impl EventEmitter<RepoViewEvent> for RepoView {}
 
 impl RepoView {
     pub(crate) fn new(path: PathBuf, window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let left_pane = LeftPaneFolds::load(&path);
         let repository = cx.new(|_| Repository::new(path));
         let commit_panel = cx.new(|_| CommitPanel::new(repository.clone()));
         let commit_form = cx.new(|cx| CommitForm::new(repository.clone(), window, cx));
@@ -251,7 +253,7 @@ impl RepoView {
         Self {
             repository: repository.clone(),
             target: Target::Nothing,
-            folded_refs: Folded::default(),
+            left_pane,
             here: Working::new(repository.clone(), commit_form),
             elsewhere: None,
             commit_panel,
@@ -272,7 +274,6 @@ impl RepoView {
             reading_remotes: None,
             pulls,
             pull_pane: None,
-            pulls_folded: false,
             _subscriptions: subscriptions,
         }
     }
@@ -888,15 +889,15 @@ impl RepoView {
         Some(PullsSection {
             state,
             filter: pulls.filter(),
-            open: !self.pulls_folded,
+            open: self.left_pane.pulls_open,
             selected: self.target.pull(),
             needs_an_account: matches!(reach, Reach::NoAccount { .. }),
             on_select: Some(ui::handler(cx.listener(|this, number: &u64, window, cx| {
                 this.select_pull(*number, window, cx)
             }))),
             on_toggle: Some(ui::handler(cx.listener(|this, _: &(), _, cx| {
-                this.pulls_folded = !this.pulls_folded;
-                cx.notify();
+                this.left_pane.pulls_open = !this.left_pane.pulls_open;
+                this.save_left_pane(cx);
             }))),
             on_filter: Some(ui::handler(cx.listener(|this, filter: &StateFilter, _, cx| {
                 this.pulls.update(cx, |pulls, cx| pulls.choose_filter(*filter, cx))
@@ -1336,7 +1337,12 @@ impl RepoView {
     }
 
     fn toggle_ref_fold(&mut self, group: RefGroup, cx: &mut Context<Self>) {
-        self.folded_refs.toggle(group);
+        self.left_pane.refs.toggle(group);
+        self.save_left_pane(cx);
+    }
+
+    fn save_left_pane(&mut self, cx: &mut Context<Self>) {
+        self.left_pane.save(self.repository.read(cx).path());
         cx.notify();
     }
 
@@ -1649,7 +1655,7 @@ impl RepoView {
         let marks = self.pull_marks(&history, cx);
         let section = self.pulls_section(cx);
         let worktrees = self.worktree_section(&history, cx);
-        RefsList::new(history, &self.folded_refs, self.refs_scroll.clone())
+        RefsList::new(history, &self.left_pane.refs, self.refs_scroll.clone())
             .pulls(section, marks)
             .worktrees(worktrees)
             .selected(self.target.commit())
