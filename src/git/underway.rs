@@ -15,6 +15,7 @@ const CHERRY_PICK_HEAD: &str = "CHERRY_PICK_HEAD";
 const REVERT_HEAD: &str = "REVERT_HEAD";
 const BRANCHES: &str = "refs/heads/";
 const QUOTE: char = '\'';
+const SUBJECT_MARK_OF_NEWER_GITS: &str = "# ";
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) enum Underway {
@@ -234,9 +235,13 @@ fn last_replayed(done: &str) -> Option<Replaying> {
     let id = ObjectId::from_hex(id.as_bytes())
         .map(short_id)
         .map_or_else(|_| id.to_owned(), |short| short.to_string());
+    let subject = words.next().unwrap_or_default();
     Some(Replaying {
         id,
-        subject: words.next().unwrap_or_default().to_owned(),
+        subject: subject
+            .strip_prefix(SUBJECT_MARK_OF_NEWER_GITS)
+            .unwrap_or(subject)
+            .to_owned(),
     })
 }
 
@@ -419,5 +424,16 @@ mod tests {
             Some("origin/main".into())
         );
         assert_eq!(quoted_name("Squashed"), None);
+    }
+
+    #[test]
+    fn newer_gits_mark_the_replayed_subject_with_a_hash_that_is_not_shown() {
+        assert_eq!(
+            last_replayed("pick 2205c5f # Fix it\npick 687e7ab # Change it on topic\n"),
+            Some(Replaying {
+                id: "687e7ab".into(),
+                subject: "Change it on topic".into(),
+            })
+        );
     }
 }
