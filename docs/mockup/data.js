@@ -719,7 +719,491 @@ const Sample = (() => {
     },
   };
 
-  const stoppedAt = { id: '3f2a91c', subject: 'Show conflicted files in the changes list' };
+  const unityWork = {
+    staged: [{ kind: 'M', path: 'Assets/Scripts/Enemies/SlimeController.cs' }],
+    unstaged: [
+      { kind: 'M', path: 'Assets/Prefabs/Enemies/Slime.prefab' },
+      { kind: 'M', path: 'Assets/Scenes/Level1.unity' },
+      { kind: 'M', path: 'Assets/Materials/SlimeGlow.mat' },
+      { kind: 'M', path: 'Assets/Animations/Slime/SlimeJump.anim' },
+      { kind: 'M', path: 'Assets/Animations/Slime/Slime.controller' },
+      { kind: 'M', path: 'Assets/Graphs/SlimeBrain.asset' },
+      { kind: 'M', path: 'Assets/Art/Characters/slime.png', meta: true },
+      { kind: 'M', path: 'Assets/Audio/Sfx/slime-hit.wav.meta' },
+    ],
+  };
+
+  const v = (...axes) => ({ vec: axes });
+  const rgba = (hex, alpha = 1, hdr) => ({ color: hex, alpha, hdr });
+  const ref = (name, type, glyph = 'circle-dot') => ({ ref: name, type, glyph });
+  const none = (type) => ({ none: type });
+  const on = { bool: true };
+  const off = { bool: false };
+  const tex = (name, art, palette) => ({ texture: name, art, palette });
+
+  const noiseArt = {
+    palette: { a: '#1f2937', b: '#4b5563', c: '#9ca3af', d: '#e5e7eb' },
+    rows: ['abcbdcba', 'bcdcbabc', 'cdcbabcd', 'bcbabcdc', 'dbabcdcb', 'cabcdcba', 'babcdcbd', 'abcdcbdc'],
+  };
+
+  const mask = (rows, keep) => rows.map((row, y) => [...row].map((cell, x) => (cell !== '.' && keep(cell, x, y) ? cell : '.')).join(''));
+  const isCrown = (cell) => 'yor'.includes(cell);
+  const isShadow = (cell) => cell === 's';
+  const isEye = (cell, x, y) => 'wp'.includes(cell) && y >= 13 && y <= 15;
+  const isBody = (cell, x, y) => !isCrown(cell) && !isShadow(cell) && !isEye(cell, x, y);
+  const sparks = [[2, 16], [4, 18], [1, 19], [3, 21], [5, 20], [0, 17]];
+  const particleRows = slime.after.map((row, y) => [...row].map((cell, x) => (sparks.some(([sx, sy]) => sx === x && sy === y) ? 'h' : '.')).join(''));
+  const partOf = (keep, scale = 12) => ({ palette: slime.palette, rows: mask(slime.after, keep), old: mask(slime.before, keep), scale });
+
+  const prefabDiff = {
+    kind: 'objects',
+    unity: 'Prefab',
+    change: unityWork.unstaged[0],
+    side: 'unstaged',
+    sources: onDisk,
+    facts: 'Prefab · 4 objects changed',
+    hidden: 3,
+    tree: [
+      { name: 'Slime', depth: 0, state: 'changed', open: true, prefab: true },
+      { name: 'Body', depth: 1, open: true },
+      { name: 'Highlight', depth: 2 },
+      { name: 'Eyes', depth: 1 },
+      { name: 'Crown', depth: 1, state: 'added' },
+      { name: 'Shadow', depth: 1, state: 'changed' },
+      { name: 'SquishParticles', depth: 1, state: 'removed' },
+    ],
+    selected: 'Slime',
+    layout: {
+      unit: 192,
+      grid: 0.25,
+      origin: [-2.45, 1.3],
+      view: 'Prefab mode, seen from the front · 5 changes without a place are in Inspector',
+      gizmos: [{ name: 'Circle Collider 2D', at: [-0.03, -0.22], before: 0.45, after: 0.5, note: 'Radius 0.45 → 0.5' }],
+      items: [
+        { name: 'Shadow', art: 'shadow', from: [0, 0], at: [0, 0], state: 'changed', note: 'Scale 1 × 0.3 → 0.9 × 0.25' },
+        { name: 'Body', art: 'body', at: [0, 0], silent: true },
+        { name: 'Eyes', art: 'eyes', at: [0, 0], silent: true },
+        { name: 'Crown', art: 'crown', at: [0, 0], state: 'added', label: 'right', note: 'Sprite crown-icon' },
+        { name: 'SquishParticles', art: 'particles', from: [0, 0], state: 'removed', label: 'left' },
+      ],
+      picked: 'Shadow',
+    },
+    sprites: {
+      shadow: partOf(isShadow),
+      body: partOf(isBody),
+      eyes: partOf(isEye),
+      crown: partOf(isCrown),
+      particles: { palette: slime.palette, rows: particleRows, scale: 12 },
+    },
+    objects: [
+      {
+        name: 'Slime',
+        state: 'changed',
+        prefab: 'Root of Slime.prefab',
+        components: [
+          { name: 'Rigidbody 2D', props: [['Mass', '1', '1.4']] },
+          {
+            name: 'Slime Controller',
+            script: 'SlimeController.cs',
+            props: [
+              ['Move Speed', '2.5', '3'],
+              ['Jump Force', '6', '7.5'],
+              ['Crown', none('Transform'), ref('Crown', 'Transform', 'box')],
+              ['Drops', '2 items', '3 items', [['Element 2', undefined, ref('CrownGem', 'Item Data', 'file-box')]]],
+            ],
+          },
+          { name: 'Circle Collider 2D', props: [['Radius', '0.45', '0.5']] },
+        ],
+      },
+      {
+        name: 'Crown',
+        parent: 'Slime',
+        state: 'added',
+        components: [
+          { name: 'Transform', props: [['Position', undefined, v(0, 0.62, 0)], ['Scale', undefined, v(0.8, 0.8, 1)]] },
+          { name: 'Sprite Renderer', props: [['Sprite', undefined, ref('crown-icon', 'Sprite', 'image')], ['Order in Layer', undefined, '3']] },
+        ],
+      },
+      {
+        name: 'Shadow',
+        parent: 'Slime',
+        state: 'changed',
+        components: [{ name: 'Transform', props: [['Scale', v(1, 0.3, 1), v(0.9, 0.25, 1)]] }],
+      },
+      {
+        name: 'SquishParticles',
+        parent: 'Slime',
+        state: 'removed',
+        folded: true,
+        components: [{ name: 'Transform', props: [] }, { name: 'Particle System', props: [] }],
+      },
+    ],
+  };
+
+  const prefabYaml = {
+    ...prefabDiff,
+    kind: 'text',
+    lines: 412,
+    hints: [
+      ['fileID: 3381795302254875041', 'Slime'],
+      ['guid: 4f1d0c7a2b9e4e3f8a6b5c4d3e2f1a09', 'SlimeController.cs'],
+      ['fileID: 4823015530731772630', 'Crown (Transform)'],
+      ['fileID: 2290457312861453377', 'Crown (Sprite Renderer)'],
+      ['guid: 0c2b7e4d9a1f4b8e9d3c2a1b0f9e8d7c', 'Coin.asset'],
+      ['guid: 7e6d5c4b3a291807f6e5d4c3b2a19087', 'Heart.asset'],
+      ['guid: c3a1e9f07b2d4c5e8f6a9b0c1d2e3f4a', 'CrownGem.asset'],
+    ],
+    hunks: [
+      hunk(212, 212, 'Slime › Rigidbody 2D', [
+        [' ', 'Rigidbody2D:'],
+        [' ', '  m_GameObject: {fileID: 3381795302254875041}'],
+        [' ', '  m_BodyType: 0'],
+        [' ', '  m_UseAutoMass: 0'],
+        ['-', '  m_Mass: 1'],
+        ['+', '  m_Mass: 1.4'],
+        [' ', '  m_LinearDamping: 0'],
+        [' ', '  m_GravityScale: 3'],
+      ]),
+      hunk(247, 247, 'Slime › Slime Controller', [
+        [' ', 'MonoBehaviour:'],
+        [' ', '  m_GameObject: {fileID: 3381795302254875041}'],
+        [' ', '  m_Script: {fileID: 11500000, guid: 4f1d0c7a2b9e4e3f8a6b5c4d3e2f1a09, type: 3}'],
+        ['-', '  moveSpeed: 2.5'],
+        ['-', '  jumpForce: 6'],
+        ['-', '  crown: {fileID: 0}'],
+        ['+', '  moveSpeed: 3'],
+        ['+', '  jumpForce: 7.5'],
+        ['+', '  crown: {fileID: 4823015530731772630}'],
+        [' ', '  drops:'],
+        [' ', '  - {fileID: 11400000, guid: 0c2b7e4d9a1f4b8e9d3c2a1b0f9e8d7c, type: 2}'],
+        [' ', '  - {fileID: 11400000, guid: 7e6d5c4b3a291807f6e5d4c3b2a19087, type: 2}'],
+        ['+', '  - {fileID: 11400000, guid: c3a1e9f07b2d4c5e8f6a9b0c1d2e3f4a, type: 2}'],
+      ]),
+      hunk(301, 302, 'Slime › Circle Collider 2D', [
+        [' ', '  m_Offset: {x: 0, y: 0.1}'],
+        ['-', '  m_Radius: 0.45'],
+        ['+', '  m_Radius: 0.5'],
+      ]),
+      hunk(330, 331, 'Crown', [
+        ['+', '--- !u!1 &6106237841907316552'],
+        ['+', 'GameObject:'],
+        ['+', '  m_Component:'],
+        ['+', '  - component: {fileID: 4823015530731772630}'],
+        ['+', '  - component: {fileID: 2290457312861453377}'],
+        ['+', '  m_Name: Crown'],
+      ]),
+    ],
+  };
+  Object.assign(prefabYaml, counts(prefabYaml.hunks));
+
+  const levelDiff = {
+    kind: 'objects',
+    unity: 'Scene',
+    change: unityWork.unstaged[1],
+    side: 'unstaged',
+    sources: onDisk,
+    facts: 'Scene · 5 objects changed',
+    hidden: 5,
+    tree: [
+      { name: 'Main Camera', depth: 0, state: 'changed' },
+      { name: 'Global Light 2D', depth: 0, state: 'changed' },
+      { name: 'Grid', depth: 0, open: false },
+      { name: 'Player', depth: 0, prefab: true },
+      { name: 'Enemies', depth: 0, open: true },
+      { name: 'Slime (1)', depth: 1, prefab: true },
+      { name: 'Slime (2)', depth: 1, prefab: true, state: 'changed' },
+      { name: 'Slime (3)', depth: 1, prefab: true, state: 'added' },
+      { name: 'Bat (1)', depth: 1, prefab: true, state: 'removed' },
+      { name: 'UI', depth: 0, open: false },
+    ],
+    selected: 'Main Camera',
+    objects: [
+      {
+        name: 'Main Camera',
+        state: 'changed',
+        components: [{ name: 'Camera', props: [['Size', '5', '5.5'], ['Background', rgba('#0f172a'), rgba('#1e1b4b')]] }],
+      },
+      {
+        name: 'Global Light 2D',
+        state: 'changed',
+        components: [{ name: 'Light 2D', props: [['Intensity', '1', '0.85'], ['Color', rgba('#ffffff'), rgba('#fde68a')]] }],
+      },
+      {
+        name: 'Slime (2)',
+        parent: 'Enemies',
+        state: 'changed',
+        prefab: 'Slime.prefab',
+        components: [{ name: 'Transform', overrides: true, props: [['Position', v(4, -1.5, 0), v(7, -1.5, 0)]] }],
+      },
+      {
+        name: 'Slime (3)',
+        parent: 'Enemies',
+        state: 'added',
+        prefab: 'Slime.prefab',
+        components: [
+          { name: 'Transform', overrides: true, props: [['Position', undefined, v(9, -1.5, 0)]] },
+          { name: 'Slime Controller', overrides: true, script: 'SlimeController.cs', props: [['Move Speed', undefined, '3.5']] },
+        ],
+      },
+      {
+        name: 'Bat (1)',
+        parent: 'Enemies',
+        state: 'removed',
+        prefab: 'Bat.prefab',
+        folded: true,
+        components: [{ name: 'Transform', props: [] }],
+      },
+    ],
+    layout: {
+      unit: 40,
+      origin: [-5.75, 6.6],
+      camera: { at: [6, 0.5], aspect: 16 / 9, before: 5, after: 5.5 },
+      ground: { top: -2, bottom: -6, from: -6, to: 18 },
+      items: [
+        { name: 'Player', at: [-1, -1.5], art: 'player' },
+        { name: 'Slime (1)', at: [1.5, -1.5], art: 'slime' },
+        { name: 'Slime (2)', from: [4, -1.5], at: [7, -1.5], art: 'slime', state: 'changed', note: 'X 4 → 7' },
+        { name: 'Slime (3)', at: [11, -1.5], art: 'slime', state: 'added' },
+        { name: 'Bat (1)', from: [9.5, 2.5], art: 'bat', state: 'removed' },
+        { name: 'Global Light 2D', at: [1, 3.6], art: 'light', state: 'changed', note: 'Intensity 1 → 0.85' },
+        { name: 'Main Camera', at: [6, 0.5], art: 'camera', state: 'changed', note: 'Size 5 → 5.5' },
+      ],
+      picked: 'Slime (2)',
+      view: 'Seen from the front, X and Y',
+    },
+    sprites: {
+      slime: { palette: slime.palette, rows: slime.after, old: slime.before, scale: 1.5 },
+      player: {
+        scale: 3,
+        palette: { w: '#e2e8f0', b: '#1e3a8a', c: '#60a5fa', o: '#f97316', g: '#64748b' },
+        rows: ['...wwww...', '..wwwwww..', '..wbbbbw..', '..wbccbw..', '..wwwwww..', '.wwwwwwww.', '.wwowwoww.', '.wwwwwwww.', '..ww..ww..', '..ww..ww..', '.ggg..ggg.'],
+      },
+      bat: {
+        scale: 3,
+        palette: { k: '#7c3aed', r: '#fde047' },
+        rows: ['k..........k', 'kk...kk...kk', 'kkk.kkkk.kkk', 'kkkkkrrkkkkk', '.kkkkkkkkkk.', '..kk.kk.kk..'],
+      },
+    },
+  };
+
+  const materialDiff = {
+    kind: 'objects',
+    unity: 'Material',
+    change: unityWork.unstaged[2],
+    side: 'unstaged',
+    sources: onDisk,
+    facts: 'Material · Shader Graphs/SlimeGlow',
+    hidden: 1,
+    objects: [
+      {
+        name: 'SlimeGlow',
+        state: 'changed',
+        type: 'Material',
+        shader: 'Shader Graphs/SlimeGlow',
+        components: [
+          {
+            name: 'Surface Inputs',
+            props: [
+              ['Base Color', rgba('#4ade80'), rgba('#22c55e')],
+              ['Emission Color', rgba('#bbf7d0', 1, 0), rgba('#bbf7d0', 1, 1.5)],
+              ['Noise Map', none('Texture'), ref('noise-soft', 'Texture', 'image')],
+              ['Pulse Speed', '1', '2.5'],
+              ['Rim Width', '0.2', '0.35'],
+            ],
+          },
+          { name: 'Keywords', props: [['_EMISSION', undefined, 'On']] },
+          { name: 'Advanced Options', props: [['Enable GPU Instancing', off, on]] },
+        ],
+      },
+    ],
+  };
+
+  const jumpDiff = {
+    kind: 'curves',
+    unity: 'Animation clip',
+    change: unityWork.unstaged[3],
+    side: 'unstaged',
+    sources: onDisk,
+    facts: 'Animation clip · 0:30 → 0:35',
+    fps: 60,
+    sprite: { palette: slime.palette, rows: slime.after, old: slime.before },
+    length: { before: 30, after: 35 },
+    at: 17,
+    current: 0,
+    tracks: [
+      { group: 'Slime : Transform', name: 'Position.y', state: 'changed', range: [-0.1, 1.2], before: [[0, 0], [15, 0.8], [30, 0]], after: [[0, 0], [17, 1.1], [35, 0]] },
+      { group: 'Slime : Transform', name: 'Scale.x', state: 'changed', range: [0.6, 1.45], before: [[0, 1], [4, 1.2], [15, 0.9], [28, 1.25], [30, 1]], after: [[0, 1], [4, 1.3], [17, 0.85], [32, 1.35], [35, 1]] },
+      { group: 'Slime : Transform', name: 'Scale.y', state: 'changed', range: [0.55, 1.25], before: [[0, 1], [4, 0.8], [15, 1.1], [28, 0.75], [30, 1]], after: [[0, 1], [4, 0.7], [17, 1.15], [32, 0.65], [35, 1]] },
+      { group: 'Slime : Sprite Renderer', name: 'Sprite', state: 'changed', sprites: { before: [[0, 1], [12, 1.12], [26, 0.78]], after: [[0, 1], [14, 1.12], [30, 0.72], [33, 0.6]] } },
+      { group: 'Slime : Sprite Renderer', name: 'Color.a', state: 'added', range: [0, 1.15], after: [[0, 1], [30, 1], [33, 0.6], [35, 1]] },
+      { group: 'Slime : Transform', name: 'Rotation.z', state: 'removed', range: [-12, 12], before: [[0, 0], [10, -8], [20, 8], [30, 0]] },
+    ],
+    events: { before: [[28, 'OnLand']], after: [[32, 'OnLand'], [33, 'PlaySquish']] },
+    details: {
+      columns: ['Length', 'Sample rate', 'Loop time', 'Curves', 'Events'],
+      before: ['0:30 · 0.50 s', '60', 'Off', '5', '1'],
+      after: ['0:35 · 0.58 s', '60', 'Off', '5', '2'],
+      deltas: { 0: '+5 frames' },
+    },
+  };
+
+  const animatorDiff = {
+    kind: 'animator',
+    unity: 'Animator controller',
+    change: unityWork.unstaged[4],
+    side: 'unstaged',
+    sources: onDisk,
+    facts: 'Animator controller · Base Layer',
+    current: 2,
+    states: [
+      { id: 'entry', name: 'Entry', role: 'entry', at: [20, 150] },
+      { id: 'any', name: 'Any State', role: 'any', at: [20, 380] },
+      { id: 'idle', name: 'Idle', role: 'default', at: [176, 150] },
+      { id: 'hop', name: 'Hop', at: [326, 64] },
+      { id: 'fall', name: 'Fall', at: [470, 150] },
+      { id: 'land', name: 'Land', at: [470, 290] },
+      { id: 'squish', name: 'Squish', state: 'added', at: [326, 370] },
+      { id: 'stunned', name: 'Stunned', state: 'removed', at: [176, 460] },
+    ],
+    transitions: [
+      ['entry', 'idle'],
+      ['idle', 'hop', 'changed'],
+      ['hop', 'fall'],
+      ['fall', 'land'],
+      ['land', 'idle', 'removed'],
+      ['land', 'squish', 'added'],
+      ['squish', 'idle', 'added'],
+      ['any', 'stunned', 'removed'],
+      ['stunned', 'idle', 'removed'],
+    ],
+    parameters: [['Jump', 'Trigger'], ['Speed', 'Float'], ['IsGrounded', 'Bool'], ['IsCrowned', 'Bool', 'added']],
+    changes: [
+      ['added', 'State', 'Squish', 'SlimeSquish.anim'],
+      ['removed', 'State', 'Stunned', 'SlimeStunned.anim'],
+      ['changed', 'Transition', 'Idle → Hop', '3 settings'],
+      ['added', 'Transition', 'Land → Squish', 'Exit time 0.9'],
+      ['added', 'Transition', 'Squish → Idle', 'Exit time 1'],
+      ['removed', 'Transition', 'Land → Idle', ''],
+      ['removed', 'Transition', 'Any State → Stunned', 'Hurt'],
+      ['added', 'Parameter', 'IsCrowned', 'Bool'],
+    ],
+    picked: {
+      name: 'Idle → Hop',
+      type: 'Transition',
+      components: [
+        {
+          name: 'Transition',
+          props: [
+            ['Conditions', 'Jump', 'Jump, IsGrounded is true'],
+            ['Has Exit Time', on, off],
+            ['Transition Duration', '0.25', '0.1'],
+          ],
+        },
+      ],
+    },
+  };
+
+  const slimeMetaDiff = {
+    ...slimeDiff,
+    change: unityWork.unstaged[6],
+    facts: '24 × 24 PNG · import settings changed',
+    imports: {
+      file: 'slime.png.meta',
+      columns: ['Pixels Per Unit', 'Filter Mode', 'Compression', 'Max Size'],
+      before: ['16', 'Bilinear', 'Normal Quality', '2048'],
+      after: ['24', 'Point (no filter)', 'None', '256'],
+      same: 21,
+    },
+  };
+
+  const guidDiff = {
+    kind: 'objects',
+    unity: 'Meta',
+    change: unityWork.unstaged[7],
+    side: 'unstaged',
+    sources: onDisk,
+    facts: 'Import settings of slime-hit.wav',
+    guid: {
+      asset: 'slime-hit.wav',
+      users: [
+        ['Assets/Prefabs/Enemies/Slime.prefab', 'Slime › Slime Controller › Hit Sound'],
+        ['Assets/Scenes/Level1.unity', 'Audio Manager › Sound Effects › Element 4'],
+        ['Assets/Data/Enemies/SlimeStats.asset', 'Hurt Sound'],
+      ],
+    },
+    objects: [
+      {
+        name: 'slime-hit.wav',
+        state: 'changed',
+        type: 'Audio Importer',
+        components: [
+          { name: 'Asset', props: [['GUID', { mono: '9a3c51e07d2b4f6c8e1a0b2c3d4e5f60' }, { mono: '51e0c4a1b9f84d2e97c3a6b5d4e3f201' }]] },
+          {
+            name: 'Default settings',
+            props: [
+              ['Load Type', 'Decompress On Load', 'Compressed In Memory'],
+              ['Preload Audio Data', off, on],
+              ['Quality', '70', '100'],
+            ],
+          },
+        ],
+      },
+    ],
+  };
+
+  const brainDiff = {
+    kind: 'scriptgraph',
+    unity: 'Script graph',
+    change: unityWork.unstaged[5],
+    side: 'unstaged',
+    sources: onDisk,
+    facts: 'Script graph · Visual Scripting',
+    graph: 'SlimeBrain',
+    current: 4,
+    nodes: [
+      { id: 'update', title: 'On Update', kind: 'event', icon: 'zap', at: [16, 56], width: 112, rows: [[null, { flow: true }]] },
+      { id: 'if', title: 'If', kind: 'flow', icon: 'git-branch', at: [150, 56], width: 118, rows: [[{ flow: true }, { label: 'True', flow: true }], [{ label: 'Condition', type: 'bool' }, { label: 'False', flow: true }]] },
+      { id: 'grounded', title: 'Get Variable', kind: 'variable', icon: 'box', at: [16, 166], width: 118, rows: [[{ label: 'IsGrounded', field: true }, { type: 'bool' }]] },
+      { id: 'cooldown', title: 'Cooldown', kind: 'flow', icon: 'clock', state: 'changed', at: [292, 56], width: 150, rows: [[{ flow: true }, { label: 'Ready', flow: true }], [{ label: 'Duration', type: 'float', value: '0.6', was: '0.8' }, { label: 'Not Ready', flow: true }]] },
+      { id: 'force', title: 'Add Force', kind: 'flow', icon: 'arrow-up', at: [458, 196], width: 128, rows: [[{ flow: true }, { flow: true }], [{ label: 'Target', type: 'object', value: 'This' }, null], [{ label: 'Force', type: 'vector' }, null], [{ label: 'Mode', type: 'object', value: 'Impulse' }, null]] },
+      { id: 'log', title: 'Debug: Log', kind: 'flow', icon: 'message-square', state: 'removed', at: [458, 352], width: 128, rows: [[{ flow: true }, { flow: true }], [{ label: 'Message', type: 'object', value: '"jump"' }, null]] },
+      { id: 'vector', title: 'Create Vector 2', kind: 'value', icon: 'move-horizontal', state: 'changed', at: [284, 262], width: 150, rows: [[{ label: 'X', type: 'float', value: '0' }, { type: 'vector' }], [{ label: 'Y', type: 'float' }, null]] },
+      { id: 'multiply', title: 'Multiply', kind: 'value', icon: 'close', state: 'added', at: [146, 346], width: 116, rows: [[{ label: 'A', type: 'float', value: '7.5' }, { type: 'float' }], [{ label: 'B', type: 'float' }, null]] },
+      { id: 'bonus', title: 'Get Variable', kind: 'variable', icon: 'box', state: 'added', at: [16, 440], width: 128, rows: [[{ label: 'CrownBonus', field: true }, { type: 'float' }]] },
+    ],
+    wires: [
+      ['update', 0, 'if', 0],
+      ['grounded', 0, 'if', 1],
+      ['if', 0, 'cooldown', 0],
+      ['cooldown', 0, 'force', 0],
+      ['vector', 0, 'force', 2],
+      ['force', 0, 'log', 0, 'removed'],
+      ['multiply', 0, 'vector', 1, 'added'],
+      ['bonus', 0, 'multiply', 1, 'added'],
+    ],
+    variables: [['Speed', 'Float 3'], ['IsGrounded', 'Boolean'], ['CrownBonus', 'Float 1.25', 'added']],
+    changes: [
+      ['added', 'Node', 'Multiply', 'A 7.5'],
+      ['added', 'Node', 'Get Variable', 'CrownBonus'],
+      ['removed', 'Node', 'Debug: Log', '"jump"'],
+      ['changed', 'Node', 'Cooldown', 'Duration'],
+      ['changed', 'Node', 'Create Vector 2', 'Y'],
+      ['added', 'Connection', 'Multiply → Y', 'Float'],
+      ['added', 'Connection', 'CrownBonus → B', 'Float'],
+      ['removed', 'Connection', 'Add Force → Log', 'Flow'],
+      ['added', 'Variable', 'CrownBonus', 'Float'],
+    ],
+    picked: {
+      id: 'vector',
+      name: 'Create Vector 2',
+      type: 'Node',
+      components: [{ name: 'Inputs', props: [['Y', '6', ref('Multiply', 'Result', 'spline')]] }],
+    },
+  };
+
+  const unity = { work: unityWork, prefabDiff, prefabYaml, levelDiff, materialDiff, jumpDiff, animatorDiff, brainDiff, slimeMetaDiff, guidDiff };
+
+  const stoppedAt ={ id: '3f2a91c', subject: 'Show conflicted files in the changes list' };
 
   const rebasedCommits = [
     { id: '9c4e1d2', subject: 'Read conflicted files from git status', author: 'Alex Martin', date: '2026-11-05 09:40', graph: [0, 2, 'O0'], head: true, refs: [] },
@@ -1057,6 +1541,7 @@ const Sample = (() => {
   return {
     history, tracked, stashed, collapsed, changes, partlyStaged, draft, commitDetails, commitFileDiff, fileHistory, fileDiff, stagedHunkDiff, partlyStagedDiff, selectedLines, tabs,
     starfall, assets, slimeDiff, crownIcon, introDiff, themeDiff, modelDiff,
+    unity,
     rebasing, rebase, merge, starfallMerge, rebaseChanges, rebaseOneLeft, rebaseResolved, statusConflicts, statusMerged, slimeConflict, starfallConflicts,
     hosting,
     pulls,

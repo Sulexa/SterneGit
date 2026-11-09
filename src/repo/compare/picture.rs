@@ -197,6 +197,7 @@ struct Painted {
 
 pub(crate) struct PictureCompare {
     pictures: Pictures,
+    imports: Option<crate::unity::ImportChanges>,
     shows_details: bool,
     generation: u64,
     sources: [SharedString; 2],
@@ -217,6 +218,7 @@ impl PictureCompare {
     pub(crate) fn new(pictures: Pictures, sources: [SharedString; 2]) -> Self {
         Self {
             pictures,
+            imports: None,
             shows_details: true,
             generation: 0,
             sources,
@@ -237,6 +239,10 @@ impl PictureCompare {
     pub(crate) fn without_details(mut self) -> Self {
         self.shows_details = false;
         self
+    }
+
+    pub(crate) fn set_imports(&mut self, imports: Option<crate::unity::ImportChanges>) {
+        self.imports = imports;
     }
 
     pub(crate) fn replace(&mut self, pictures: Pictures, sources: [SharedString; 2], cx: &mut Context<Self>) {
@@ -1095,6 +1101,9 @@ impl Render for PictureCompare {
                     .child(ctrl_wheel_area(cx.entity().downgrade(), Self::zoom_by_wheel)),
             )
             .when(self.shows_details, |this| this.child(self.details()))
+            .when_some(self.imports.as_ref().filter(|_| self.shows_details), |this, imports| {
+                this.child(super::details::import_table(imports, &self.sources))
+            })
     }
 }
 

@@ -45,6 +45,20 @@ pub(crate) fn file_row(
     trailing: impl IntoElement,
     cx: &App,
 ) -> ListItem {
+    file_row_tagged(id, kind, path, place, selected, None, trailing, cx)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn file_row_tagged(
+    id: impl Into<ElementId>,
+    kind: ChangeKind,
+    path: &str,
+    place: FilePlace,
+    selected: bool,
+    tag: Option<AnyElement>,
+    trailing: impl IntoElement,
+    cx: &App,
+) -> ListItem {
     let (name, folder) = match path.rsplit_once('/') {
         Some((folder, name)) => (name, Some(folder)),
         None => (path, None),
@@ -55,9 +69,11 @@ pub(crate) fn file_row(
             .min_w_0()
             .gap_2()
             .child(change_badge(kind, cx))
-            .child(name_and_folder(name, folder, cx)),
+            .child(name_and_folder(name, folder, tag, cx)),
         FilePlace::InTree { depth } => {
-            tree_line(depth, None, change_badge(kind, cx), name, false, cx).flex_1()
+            tree_line(depth, None, change_badge(kind, cx), name, false, cx)
+                .flex_1()
+                .children(tag)
         }
     };
     list_row(id, selected).pl_3().pr_1().child(
@@ -70,7 +86,7 @@ pub(crate) fn file_row(
     )
 }
 
-fn name_and_folder(name: &str, folder: Option<&str>, cx: &App) -> Div {
+fn name_and_folder(name: &str, folder: Option<&str>, tag: Option<AnyElement>, cx: &App) -> Div {
     h_flex()
         .flex_1()
         .min_w_0()
@@ -84,6 +100,7 @@ fn name_and_folder(name: &str, folder: Option<&str>, cx: &App) -> Div {
                 .sm_text()
                 .child(name.to_owned()),
         )
+        .children(tag)
         .when_some(folder, |this, folder| {
             this.child(
                 div()

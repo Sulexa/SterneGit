@@ -83,6 +83,18 @@ const IconPaths = {
   eye: '<path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/>',
   'message-square': '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
   'arrow-right': '<path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>',
+  box: '<path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/>',
+  'file-code': '<path d="M10 12.5 8 15l2 2.5"/><path d="m14 12.5 2 2.5-2 2.5"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z"/>',
+  'circle-dot': '<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="1"/>',
+  'file-box': '<path d="M14.5 22H18a2 2 0 0 0 2-2V7l-5-5H6a2 2 0 0 0-2 2v4"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M3 13.1a2 2 0 0 0-1 1.76v3.24a2 2 0 0 0 .97 1.78L6 21.7a2 2 0 0 0 2.03.01L11 19.9a2 2 0 0 0 1-1.76V14.9a2 2 0 0 0-.97-1.78L8 11.3a2 2 0 0 0-2.03-.01Z"/><path d="M7 17v5"/><path d="M11.7 14.2 7 17l-4.7-2.8"/>',
+  map: '<path d="M14.106 5.553a2 2 0 0 0 1.788 0l3.659-1.83A1 1 0 0 1 21 4.619v12.764a1 1 0 0 1-.553.894l-4.553 2.277a2 2 0 0 1-1.788 0l-4.212-2.106a2 2 0 0 0-1.788 0l-3.659 1.83A1 1 0 0 1 3 19.381V6.618a1 1 0 0 1 .553-.894l4.553-2.277a2 2 0 0 1 1.788 0z"/><path d="M15 5.764v15"/><path d="M9 3.236v15"/>',
+  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/>',
+  video: '<path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.87a.5.5 0 0 0-.752-.432L16 10.5"/><rect x="2" y="6" width="14" height="12" rx="2"/>',
+  workflow: '<rect width="8" height="8" x="3" y="3" rx="2"/><path d="M7 11v4a2 2 0 0 0 2 2h4"/><rect width="8" height="8" x="13" y="13" rx="2"/>',
+  spline: '<circle cx="19" cy="5" r="2"/><circle cx="5" cy="19" r="2"/><path d="M5 17A12 12 0 0 1 17 5"/>',
+  braces: '<path d="M8 3H7a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2 2 2 0 0 1 2 2v5c0 1.1.9 2 2 2h1"/><path d="M16 21h1a2 2 0 0 0 2-2v-5c0-1.1.9-2 2-2a2 2 0 0 1-2-2V5a2 2 0 0 0-2-2h-1"/>',
+  zap: '<path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/>',
+  'eye-off': '<path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"/><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"/><path d="m2 2 20 20"/>',
 };
 
 const IconSizes = { xs: 12, sm: 14, md: 16, lg: 24 };
@@ -274,7 +286,40 @@ const CompareModes = {
     { key: 'split', label: 'Split', icon: 'audio-lines', tooltip: 'Show both waveforms on one time scale' },
     { key: 'difference', label: 'Difference', icon: 'diff', tooltip: 'Show only what sounds different' },
   ],
+  objects: [
+    { key: 'inspector', label: 'Inspector', icon: 'list-tree', tooltip: 'Compare objects, components and properties' },
+    { key: 'yaml', label: 'YAML', icon: 'braces', tooltip: 'Compare the text Unity saved' },
+  ],
+  scene: [
+    { key: 'inspector', label: 'Inspector', icon: 'list-tree', tooltip: 'Compare objects, components and properties' },
+    { key: 'scene', label: 'Scene', icon: 'map', tooltip: 'See what moved, appeared or went away' },
+    { key: 'yaml', label: 'YAML', icon: 'braces', tooltip: 'Compare the text Unity saved' },
+  ],
+  curves: [
+    { key: 'curves', label: 'Curves', icon: 'spline', tooltip: 'Draw both versions of every animated property' },
+    { key: 'yaml', label: 'YAML', icon: 'braces', tooltip: 'Compare the text Unity saved' },
+  ],
+  animator: [
+    { key: 'graph', label: 'Graph', icon: 'workflow', tooltip: 'Compare the state machine' },
+    { key: 'yaml', label: 'YAML', icon: 'braces', tooltip: 'Compare the text Unity saved' },
+  ],
+  scriptgraph: [
+    { key: 'graph', label: 'Graph', icon: 'workflow', tooltip: 'Compare the nodes and their connections' },
+    { key: 'json', label: 'JSON', icon: 'braces', tooltip: 'Compare the graph data, one value per line' },
+  ],
 };
+
+const UnityModes = { Prefab: 'scene', Scene: 'scene', 'Script graph': 'scriptgraph', Material: 'objects', Meta: 'objects', 'Animation clip': 'curves', 'Animator controller': 'animator' };
+
+const UnityOptions = [
+  { key: 'unchanged', label: 'Show unchanged properties', about: 'Lists every property of a changed component' },
+  { key: 'noise', label: 'Hide what Unity changes on its own', about: 'Float rounding, reordered overrides, version bumps' },
+  { key: 'ids', label: 'Show file IDs', about: 'Names each object and component by its fileID too' },
+];
+
+const UnityStates = { added: 'A', changed: 'M', removed: 'D' };
+
+const GraphTypes = { float: '#60a5fa', bool: '#f472b6', vector: '#fb923c', object: '#a3a3a3' };
 
 const VersionLabels = { before: 'Before', after: 'After' };
 
@@ -449,6 +494,12 @@ const Texts = {
   expandLines: (n) => `Expand ${counted(n, 'unchanged line', 'unchanged lines')}`,
   cannotShow: (type) => `SterneGit can’t draw ${type} files`,
   cannotShowDescription: 'Open each version in the app that made it, or hand both to the diff tool set in Git’s diff.tool.',
+  metaWith: (file) => `${file}.meta changed too: it is staged, unstaged and discarded with ${file}`,
+  unityHidden: (n) => `${counted(n, 'change', 'changes')} Unity made on its own hidden`,
+  guidTitle: (n, asset) => `The GUID changed: ${counted(n, 'file loses', 'files lose')} ${asset}`,
+  guidAbout: 'Unity finds assets by GUID, not by path. These files still use the old GUID, so Unity shows the asset as Missing in them:',
+  keepOldGuid: 'Keep the old GUID',
+  moveToNewGuid: (n) => `Point the ${counted(n, 'file', 'files')} to the new GUID`,
   fileHistory: 'File history',
   openFile: 'Open file',
   showInFolder: 'Show in folder',
@@ -1218,6 +1269,50 @@ function fileTreeRows(nodes, render, depth = 0) {
     .join('');
 }
 
+function unityValue(value, other) {
+  if (value === undefined) return '';
+  const differs = (a, b) => b !== undefined && JSON.stringify(a) !== JSON.stringify(b);
+  if (typeof value !== 'object') return `<span class="val${differs(value, other) && typeof other !== 'object' ? ' inline' : ''}">${esc(value)}</span>`;
+  if (value.vec) {
+    const names = ['X', 'Y', 'Z', 'W'];
+    const axes = value.vec.map((n, ix) => `<span class="axis${other?.vec && other.vec[ix] !== n ? ' inline' : ''}"><b>${names[ix]}</b>${esc(n)}</span>`);
+    return `<span class="vec">${axes.join('')}</span>`;
+  }
+  if (value.color) {
+    const hex = `<span class="mono${other?.color && other.color !== value.color ? ' inline' : ''}">${esc(value.color.toUpperCase())}</span>`;
+    const hdr = value.hdr === undefined ? '' : `<span class="${other && other.hdr !== value.hdr ? 'inline' : 'muted'}">Intensity ${esc(value.hdr)}</span>`;
+    return `<span class="color-value"><span class="color-swatch" style="background:${value.color}"></span>${hex}${hdr}</span>`;
+  }
+  if (value.ref) return `<span class="ref-chip">${icon(value.glyph, 'xs')}<span>${esc(value.ref)}</span><span class="muted">(${esc(value.type)})</span></span>`;
+  if (value.none) return `<span class="muted">None (${esc(value.none)})</span>`;
+  if ('bool' in value) return `<span class="bool-value"><span class="tick${value.bool ? ' on' : ''}">${value.bool ? icon('check', 'xs') : ''}</span>${value.bool ? 'On' : 'Off'}</span>`;
+  if (value.texture) return `<span class="texture-value"><span class="thumb checker">${pixelArt(value.art, value.palette, 4)}</span><span>${esc(value.texture)}</span></span>`;
+  if (value.mono) return `<span class="val mono${differs(value, other) ? ' inline' : ''}">${esc(value.mono)}</span>`;
+  return esc(String(value));
+}
+
+function unityChangeCount(objects) {
+  return objects.reduce((sum, object) => sum + (object.state === 'changed' ? object.components.reduce((n, component) => n + component.props.length, 0) : 1), 0);
+}
+
+function artBounds(rows) {
+  const filled = rows.flatMap((row, y) => [...row].map((cell, x) => (cell === '.' ? null : [x, y])).filter(Boolean));
+  const xs = filled.map(([x]) => x);
+  const ys = filled.map(([, y]) => y);
+  return [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)];
+}
+
+function easedCurve(keys, x, y) {
+  return keys
+    .map(([frame, value], ix) => {
+      if (!ix) return `M${x(frame)} ${y(value)}`;
+      const [lastFrame, lastValue] = keys[ix - 1];
+      const third = (x(frame) - x(lastFrame)) / 3;
+      return `C${x(lastFrame) + third} ${y(lastValue)} ${x(frame) - third} ${y(value)} ${x(frame)} ${y(value)}`;
+    })
+    .join(' ');
+}
+
 function twisty(open) {
   return `<span class="twisty">${open === null ? '' : icon(open ? 'chevron-down' : 'chevron-right', 'xs')}</span>`;
 }
@@ -1786,7 +1881,9 @@ const C = {
           : side === 'new'
             ? `<span class="number">${newNo ?? ''}</span>`
             : `<span class="number">${oldNo ?? ''}</span><span class="number">${newNo ?? ''}</span>`;
-      return `<div class="${classes}">${numbers}${marker(sign)}<span class="text">${highlight(text, marks.words.get(entry))}</span>${anchored ? menu : ''}</div>`;
+      const names = (look.hints || []).filter(([needle]) => text.includes(needle)).map(([, label]) => label);
+      const hints = names.length ? `<span class="ref-hint">  # ${esc(names.join(', '))}</span>` : '';
+      return `<div class="${classes}">${numbers}${marker(sign)}<span class="text">${highlight(text, marks.words.get(entry))}${hints}</span>${anchored ? menu : ''}</div>`;
     };
     const hunk = (h, hx, marks, own) => {
       const selected = own && selection && selection.hunk === hx ? selectionSize(selection) : 0;
@@ -1941,13 +2038,13 @@ const C = {
     );
   },
 
-  FileRow({ kind, path, depth, selected = false, trailing = '', name = 'FileRow' }) {
+  FileRow({ kind, path, depth, selected = false, trailing = '', name = 'FileRow', tag = '' }) {
     const [file, folder] = splitPath(path);
     const place =
       depth === undefined
         ? C.ChangeBadge({ kind }) +
-          `<div class="path"><div class="none ellipsis sm" style="max-width:100%">${esc(file)}</div>${folder ? `<div class="ellipsis xs muted">${esc(folder)}</div>` : ''}</div>`
-        : `<div class="h fill tree-row" style="padding-left:${depth * TreeIndent}px">${twisty(null)}${C.ChangeBadge({ kind })}<div class="fill ellipsis sm">${esc(file)}</div></div>`;
+          `<div class="path"><div class="none ellipsis sm" style="max-width:100%">${esc(file)}</div>${tag}${folder ? `<div class="ellipsis xs muted">${esc(folder)}</div>` : ''}</div>`
+        : `<div class="h fill tree-row" style="padding-left:${depth * TreeIndent}px">${twisty(null)}${C.ChangeBadge({ kind })}<div class="${tag ? 'none' : 'fill'} ellipsis sm">${esc(file)}</div>${tag}</div>`;
     return C.ListRow({ content: place + trailing, selected, extraClass: 'file-row', name, base: name === 'FileRow' ? 'ListRow' : 'FileRow' });
   },
 
@@ -1976,7 +2073,10 @@ const C = {
     const labels = SideLabels[side];
     const move = labels.fileTooltip ? C.Button({ icon: labels.icon, variant: 'ghost', disabled: writing, tooltip: labels.fileTooltip }) : '';
     const trailing = move + menu;
-    return C.FileRow({ kind: change.kind, path: change.path, depth, selected, trailing, name: 'ChangeRow' });
+    const file = splitPath(change.path)[0];
+    const meta = change.meta ? `<span class="meta-chip" title="${esc(Texts.metaWith(file))}">meta</span>` : '';
+    const warning = change.warning ? `<span class="row-warn" title="${esc(change.warning)}">${icon('triangle-alert', 'xs')}</span>` : '';
+    return C.FileRow({ kind: change.kind, path: change.path, depth, selected, trailing, name: 'ChangeRow', tag: meta + warning });
   },
 
   CommitForm({ message = '', description = '', focus, staged = 0, committing = false, writing = false, failure }) {
@@ -2221,26 +2321,28 @@ const C = {
     return `<span data-c="BackdropButton" data-base="Button" class="${classes}" title="${esc(Texts.backdrop)}"><span class="swatch checker"></span></span>`;
   },
 
-  ViewOptionsMenu({ checked = ['words', 'whole'], hot, right = 8, top = 30 }) {
-    const rows = ViewOptions.map(
+  ViewOptionsMenu({ checked = ['words', 'whole'], hot, right = 8, top = 30, items = ViewOptions, heading = 'Every text comparison' }) {
+    const rows = items.map(
       (item) =>
         `<div class="item${item.key === hot ? ' hot' : ''}"><span class="check">${checked.includes(item.key) ? icon('check', 'sm') : ''}</span><span class="v label"><span>${esc(item.label)}</span><span class="about">${esc(item.about)}</span></span></div>`,
     ).join('');
-    return `<div data-c="ViewOptionsMenu" data-base="PopupMenu" class="menu choices sm" style="right:${right}px;top:${top}px"><div class="heading">Every text comparison</div>${rows}</div>`;
+    return `<div data-c="ViewOptionsMenu" data-base="PopupMenu" class="menu choices sm" style="right:${right}px;top:${top}px"><div class="heading">${esc(heading)}</div>${rows}</div>`;
   },
 
-  ViewBar({ kind = 'text', mode, changes, zoom, menuOpen = false, hot }) {
-    const modes = CompareModes[kind]
+  ViewBar({ kind = 'text', modes: modeSet = kind, mode, changes, zoom, menuOpen = false, hot, hidden = 0 }) {
+    const modes = CompareModes[modeSet]
       .map((item) => C.Button({ label: item.label, icon: item.icon, variant: 'ghost', selected: item.key === mode, tooltip: item.tooltip }))
       .join('');
     const stepper = changes ? C.ChangeStepper(changes) : '';
     const separator = '<div class="separator"></div>';
+    const unity = kind === 'objects' && mode !== 'scene';
     const tools =
-      kind === 'text' || kind === 'conflict'
+      kind === 'text' || kind === 'conflict' || unity
         ? C.Button({ icon: 'ellipsis', variant: 'ghost', selected: menuOpen, tooltip: Texts.viewOptions })
         : C.ZoomControl(zoom || {}) + (kind === 'image' ? C.BackdropButton() : '');
-    const menu = menuOpen ? C.ViewOptionsMenu({ hot }) : '';
-    return `<div data-c="ViewBar" class="view-bar"><div class="modes">${modes}</div><div class="fill"></div>${stepper}${stepper ? separator : ''}${tools}${menu}</div>`;
+    const menu = !menuOpen ? '' : unity ? C.ViewOptionsMenu({ hot, items: UnityOptions, heading: 'Every Unity comparison', checked: ['noise'] }) : C.ViewOptionsMenu({ hot });
+    const note = hidden ? `<span class="hidden-note xs muted" title="Hide what Unity changes on its own, in ⋯">${icon('eye-off', 'xs')}${esc(Texts.unityHidden(hidden))}</span>` : '';
+    return `<div data-c="ViewBar" class="view-bar"><div class="modes">${modes}</div><div class="fill"></div>${note}${note ? separator : ''}${stepper}${stepper ? separator : ''}${tools}${menu}</div>`;
   },
 
   ChangeRuler({ hunks, lines, shown: [top, bottom] = [] }) {
@@ -2260,10 +2362,11 @@ const C = {
     return `<div data-c="VersionTag" class="version-tag${align === 'right' ? ' right' : ''}"><span class="version-dot ${side}"></span><span>${esc(label)}</span>${from ? `<span class="source">${esc(from)}</span>` : ''}${ear}</div>`;
   },
 
-  MediaDetails({ details, sources, sides = ['before', 'after'], open = true, labels = VersionLabels }) {
+  MediaDetails({ details, sources, sides = ['before', 'after'], open = true, labels = VersionLabels, title = 'Details', note = '' }) {
     const { columns, before, after, deltas = {} } = details;
     const values = { before, after };
-    const head = `<tr><th class="who"><span class="h" style="gap:6px">${twisty(open)}Details</span></th>${columns.map((name) => `<th>${esc(name)}</th>`).join('')}</tr>`;
+    const extra = note ? `<span class="xs muted" style="font-weight:400">${esc(note)}</span>` : '';
+    const head = `<tr><th class="who"><span class="h" style="gap:6px">${twisty(open)}${esc(title)}${extra}</span></th>${columns.map((name) => `<th>${esc(name)}</th>`).join('')}</tr>`;
     const row = (side) => {
       const cells = values[side].map((value, ix) => {
         const changed = side === 'after' && sides.length === 2 && value !== before[ix];
@@ -2314,7 +2417,8 @@ const C = {
         : '';
       canvas = `<div class="compare-canvas">${picture(`<div class="layer dim">${art('after')}</div><div class="layer">${marks}</div>${boxes}${pointer}`)}${legend}</div>`;
     }
-    return `<div data-c="ImageCompare" class="media-compare">${canvas}${C.MediaDetails({ details: diff.details, sources, sides, labels })}</div>`;
+    const imports = diff.imports ? C.MediaDetails({ details: diff.imports, sources, sides, labels, title: 'Import settings', note: `${diff.imports.file} · ${diff.imports.same} unchanged` }) : '';
+    return `<div data-c="ImageCompare" class="media-compare">${canvas}${C.MediaDetails({ details: diff.details, sources, sides, labels })}${imports}</div>`;
   },
 
   MediaTimeline({ duration, at, changes, current = 0, step = 10 }) {
@@ -2408,8 +2512,339 @@ const C = {
     );
   },
 
+  HierarchyTree({ tree, selected }) {
+    const rows = tree.map((node) => {
+      const spacer = `<span class="none" style="width:${node.depth * 16}px"></span>`;
+      const fold = twisty(node.open === undefined ? null : node.open);
+      const glyph = icon('box', 'sm', node.prefab ? 'var(--blue)' : 'var(--muted)');
+      const badge = node.state ? C.ChangeBadge({ kind: UnityStates[node.state] }) : '';
+      const content = `${spacer}${fold}${glyph}<span class="fill ellipsis sm name">${esc(node.name)}</span>${badge}`;
+      return C.ListRow({ content, selected: node.name === selected, extraClass: `hierarchy-row ${node.state || 'same'}`, name: 'HierarchyRow', base: 'ListRow' });
+    });
+    const tally = ['added', 'removed', 'changed']
+      .map((state) => [state, tree.filter((node) => node.state === state).length])
+      .filter(([, n]) => n)
+      .map(([state, n]) => `${n} ${state}`)
+      .join(' · ');
+    const head = `<div class="pane-head"><span class="sm medium fill">Hierarchy</span>${C.Button({ label: 'Changed only', icon: 'list-filter', variant: 'ghost', tooltip: 'Hide the objects that did not change' })}</div>`;
+    return `<div data-c="HierarchyTree" class="hierarchy">${head}<div class="fill">${rows.join('')}</div><div class="pane-foot xs muted">${tally}</div></div>`;
+  },
+
+  InspectorCard({ component, compact = false }) {
+    const { name, script, overrides, props } = component;
+    const cell = (side, value, other) =>
+      value === undefined ? '<div class="cell missing"></div>' : `<div class="cell ${side}">${unityValue(value, other)}</div>`;
+    const row = ([label, before, after, children = []], depth = 0) => {
+      const state = before === undefined ? 'added' : after === undefined ? 'removed' : 'changed';
+      const own = `<div class="prop-row ${state}"><div class="prop" style="padding-left:${(compact ? 12 : 28) + depth * 16}px">${esc(label)}</div>${cell('before', before, after)}${cell('after', after, before)}</div>`;
+      return own + children.map((child) => row(child, depth + 1)).join('');
+    };
+    const glyph = script ? icon('file-code', 'sm', 'var(--muted)') : '';
+    const kind = script ? `<span class="xs muted">(Script)</span>` : '';
+    const override = overrides ? `<span class="override-chip" title="Set on this instance, not in the prefab">Override</span>` : '';
+    const head = `<div class="card-head${overrides ? ' overridden' : ''}">${glyph}<span class="sm medium">${esc(name)}</span>${kind}${override}</div>`;
+    return `<div data-c="InspectorCard" class="inspector-card${compact ? ' compact' : ''}">${head}${props.map((prop) => row(prop)).join('')}</div>`;
+  },
+
+  ObjectSection({ object }) {
+    const { name, parent, state, prefab, components, folded = false, type, shader } = object;
+    const glyph = icon(type ? (type === 'Material' ? 'circle-dot' : 'file-box') : 'box', 'sm', prefab ? 'var(--blue)' : 'var(--muted)');
+    const where = parent ? `<span class="xs muted">in ${esc(parent)}</span>` : '';
+    const what = prefab ? (prefab.startsWith('Root') ? prefab : `Instance of ${prefab}`) : type ? [type, shader].filter(Boolean).join(' · ') : '';
+    const changed = components.filter((component) => component.props.length).length;
+    const summary = folded
+      ? `${counted(components.length, 'component', 'components')}: ${components.map((component) => component.name).join(', ')}`
+      : type
+        ? ''
+        : state === 'changed'
+        ? counted(changed, 'component changed', 'components changed')
+          : counted(components.length, 'component', 'components');
+    const head =
+      `<div class="object-head">${twisty(!folded)}${C.ChangeBadge({ kind: UnityStates[state] })}${glyph}<span class="sm medium name">${esc(name)}</span>${where}` +
+      `${what ? `<span class="xs muted">${esc(what)}</span>` : ''}<span class="fill"></span><span class="xs muted">${esc(summary)}</span></div>`;
+    const cards = folded ? '' : components.map((component) => C.InspectorCard({ component })).join('');
+    return `<div data-c="ObjectSection" class="object-section ${state}">${head}${cards}</div>`;
+  },
+
+  InspectorSides({ sources }) {
+    return `<div data-c="InspectorSides" class="inspector-sides"><div class="prop xs muted">Property</div><div>${C.VersionTag({ side: 'before', from: sources[0] })}</div><div>${C.VersionTag({ side: 'after', from: sources[1] })}</div></div>`;
+  },
+
+  GuidWarning({ guid }) {
+    const glyphOf = (file) => (file.endsWith('.unity') ? 'map' : file.endsWith('.prefab') ? 'box' : 'file-box');
+    const users = guid.users
+      .map(([path, where]) => {
+        const [file, folder] = splitPath(path);
+        return `<div class="guid-user" title="${esc(path)}">${icon(glyphOf(file), 'xs', 'var(--muted)')}<span class="sm">${esc(file)}</span><span class="xs muted">${esc(folder)}</span><span class="xs where ellipsis">${esc(where)}</span></div>`;
+      })
+      .join('');
+    const actions =
+      C.Button({ label: Texts.keepOldGuid, variant: 'primary', size: 'sm', tooltip: 'Write the old GUID back into the .meta file' }) +
+      C.Button({ label: Texts.moveToNewGuid(guid.users.length), size: 'sm', tooltip: 'Replace the old GUID with the new one in those files' });
+    return (
+      `<div data-c="GuidWarning" class="guid-warning">` +
+      `<div class="title">${icon('triangle-alert', 'sm')}<span class="sm medium">${esc(Texts.guidTitle(guid.users.length, guid.asset))}</span></div>` +
+      `<div class="xs muted">${esc(Texts.guidAbout)}</div><div class="users">${users}</div><div class="actions">${actions}</div></div>`
+    );
+  },
+
+  ObjectCompare({ diff }) {
+    const tree = diff.tree ? C.HierarchyTree({ tree: diff.tree, selected: diff.selected }) : '';
+    const warning = diff.guid ? C.GuidWarning({ guid: diff.guid }) : '';
+    const sections = diff.objects.map((object) => C.ObjectSection({ object })).join('');
+    return `<div data-c="ObjectCompare" class="object-compare">${tree}<div class="inspector">${warning}${C.InspectorSides({ sources: diff.sources })}<div class="inspector-scroll">${sections}</div></div></div>`;
+  },
+
+  SceneLayout({ diff, width = 940, height = 500 }) {
+    const { layout, sprites, objects } = diff;
+    const { unit, origin, camera, ground, gizmos = [], grid = 1 } = layout;
+    const px = ([x, y]) => [(x - origin[0]) * unit, (origin[1] - y) * unit];
+    const major = grid < 1 ? 1 : 5;
+    const kindOf = (value) => (Math.abs(value) < 1e-6 ? 'axis' : Math.abs(value / major - Math.round(value / major)) < 1e-6 ? 'major' : 'minor');
+    const lines = [];
+    for (let x = Math.ceil(origin[0] / grid) * grid; x <= origin[0] + width / unit; x += grid) {
+      const [left] = px([x, 0]);
+      lines.push(`<line x1="${left}" y1="0" x2="${left}" y2="${height}" class="${kindOf(x)}"/>`);
+    }
+    for (let y = Math.floor(origin[1] / grid) * grid; y >= origin[1] - height / unit; y -= grid) {
+      const [, top] = px([0, y]);
+      lines.push(`<line x1="0" y1="${top}" x2="${width}" y2="${top}" class="${kindOf(y)}"/>`);
+    }
+    const floor = (() => {
+      if (!ground) return '';
+      const [left, top] = px([ground.from, ground.top]);
+      const [right, bottom] = px([ground.to, ground.bottom]);
+      const tiles = [];
+      for (let x = ground.from; x < ground.to; x++) tiles.push(`<line x1="${px([x, 0])[0]}" y1="${top}" x2="${px([x, 0])[0]}" y2="${top + unit}"/>`);
+      return `<rect x="${left}" y="${top}" width="${right - left}" height="${bottom - top}" class="ground"/><g class="tiles">${tiles.join('')}</g><line x1="${left}" y1="${top}" x2="${right}" y2="${top}" class="ground-edge"/>`;
+    })();
+    const frame = (size, side) => {
+      const [left, top] = px([camera.at[0] - size * camera.aspect, camera.at[1] + size]);
+      return `<rect x="${left}" y="${top}" width="${size * camera.aspect * 2 * unit}" height="${size * 2 * unit}" class="camera ${side}"/>`;
+    };
+    const frames = camera ? frame(camera.before, 'before') + frame(camera.after, 'after') : '';
+    const drawn = (item, old) => {
+      const [cx, cy] = px(old ? item.from : item.at);
+      if (item.art === 'light') {
+        return { svg: `<g transform="translate(${cx - 15} ${cy - 15})"${old ? ' class="ghost"' : ''}><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#fde68a" stroke-width="2" stroke-linecap="round">${IconPaths.sun}</svg></g>`, box: [cx - 15, cy - 15, 30, 30] };
+      }
+      const sprite = sprites[item.art];
+      const rows = old && sprite.old ? sprite.old : sprite.rows;
+      const { scale } = sprite;
+      const left = cx - (rows[0].length * scale) / 2;
+      const top = cy - (rows.length * scale) / 2;
+      const [x0, y0, x1, y1] = artBounds(rows);
+      return {
+        svg: `<g transform="translate(${left} ${top})"${old ? ' class="ghost"' : ''}>${pixelArt(rows, sprite.palette, scale)}</g>`,
+        box: [left + x0 * scale, top + y0 * scale, (x1 - x0 + 1) * scale, (y1 - y0 + 1) * scale],
+      };
+    };
+    const ring = ([x, y, w, h], kind, pad = 5) => `<rect x="${x - pad}" y="${y - pad}" width="${w + pad * 2}" height="${h + pad * 2}" rx="${pad - 1}" class="ring ${kind}"/>`;
+    const center = ([x, y, w, h]) => [x + w / 2, y + h / 2];
+    const art = [];
+    const marks = [];
+    const labels = [];
+    const tag = (item) => `${item.state ? C.ChangeBadge({ kind: UnityStates[item.state] }) : ''}<span>${esc(item.name)}</span>${item.note ? `<span class="muted">${esc(item.note)}</span>` : ''}`;
+    const label = (item, [x, y, w, h]) => {
+      const side = item.label || 'below';
+      const place = side === 'right' ? `left:${x + w + 14}px;top:${y + h / 2 - 11}px` : side === 'left' ? `left:${x - 14}px;top:${y + h / 2 - 11}px` : `left:${x + w / 2}px;top:${y + h + 10}px`;
+      labels.push(`<div class="scene-label ${side}${item.state ? '' : ' quiet'}" style="${place}">${tag(item)}</div>`);
+    };
+    layout.items.forEach((item) => {
+      if (item.art === 'camera') {
+        const [left, top] = px([camera.at[0] - camera.after * camera.aspect, camera.at[1] + camera.after]);
+        labels.push(`<div class="scene-label corner" style="left:${left + 8}px;top:${top + 8}px">${C.ChangeBadge({ kind: 'M' })}${icon('video', 'xs')}<span>${esc(item.name)}</span><span class="muted">${esc(item.note)}</span></div>`);
+        return;
+      }
+      const then = item.from && drawn(item, true);
+      const now = item.at && drawn(item, false);
+      if (then) {
+        art.push(then.svg);
+        marks.push(ring(then.box, 'before'));
+        const moved = now && (item.from[0] !== item.at[0] || item.from[1] !== item.at[1]);
+        if (moved) {
+          const [x1, y1] = center(then.box);
+          const [x2, y2] = center(now.box);
+          const length = Math.hypot(x2 - x1, y2 - y1);
+          const [ux, uy] = [(x2 - x1) / length, (y2 - y1) / length];
+          const start = Math.max(then.box[2], then.box[3]) / 2 + 8;
+          const end = Math.max(now.box[2], now.box[3]) / 2 + 12;
+          marks.push(`<line x1="${x1 + ux * start}" y1="${y1 + uy * start}" x2="${x2 - ux * end}" y2="${y2 - uy * end}" class="moved" marker-end="url(#scene-arrow)"/>`);
+        }
+        if (!now) {
+          const [cx, cy] = center(then.box);
+          marks.push(`<path d="M${cx - 6} ${cy - 6} L${cx + 6} ${cy + 6} M${cx + 6} ${cy - 6} L${cx - 6} ${cy + 6}" class="cross"/>`);
+          label(item, then.box);
+        }
+      }
+      if (now) {
+        art.push(now.svg);
+        if (item.state) marks.push(ring(now.box, item.state));
+        if (item.name === layout.picked) marks.push(ring(now.box, 'picked', 9));
+        if (!item.silent) label(item, now.box);
+      }
+    });
+    gizmos.forEach((gizmo) => {
+      const [cx, cy] = px(gizmo.at);
+      const r = gizmo.after * unit;
+      marks.push(`<circle cx="${cx}" cy="${cy}" r="${gizmo.before * unit}" class="gizmo before"/><circle cx="${cx}" cy="${cy}" r="${r}" class="gizmo after"/>`);
+      labels.push(`<div class="scene-label right" style="left:${cx + r + 12}px;top:${cy - 11}px">${C.ChangeBadge({ kind: 'M' })}<span>${esc(gizmo.name)}</span><span class="muted">${esc(gizmo.note)}</span></div>`);
+    });
+    const defs = `<defs><marker id="scene-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="var(--yellow)"/></marker></defs>`;
+    const svg = `<svg width="${width}" height="${height}" class="scene-svg">${defs}<g class="grid">${lines.join('')}</g>${floor}${frames}${art.join('')}${marks.join('')}</svg>`;
+    const legend = `<div class="scene-legend">${C.VersionTag({ side: 'before', from: 'HEAD · dashed' })}${C.VersionTag({ side: 'after', from: 'Working copy' })}<span class="xs muted">${esc(layout.view)}</span></div>`;
+    const picked = objects.find((object) => object.name === layout.picked);
+    const pick = picked ? `<div class="scene-pick">${C.InspectorSides({ sources: diff.sources })}${C.ObjectSection({ object: picked })}</div>` : '';
+    return `<div data-c="SceneLayout" class="media-compare"><div class="compare-canvas scene-canvas"><div class="scene-stage" style="width:${width}px;height:${height}px">${svg}${labels.join('')}</div>${legend}</div>${pick}</div>`;
+  },
+
+  CurveCompare({ diff, plot = 704 }) {
+    const { tracks, events, length, at, sources } = diff;
+    const frames = 40;
+    const x = (frame) => (frame / frames) * plot;
+    const time = (frame) => `0:${String(frame).padStart(2, '0')}`;
+    const ticks = [];
+    for (let frame = 0; frame <= frames; frame += 5) ticks.push(`<span class="tick${frame % 10 ? '' : ' major'}" style="left:${x(frame)}px">${frame % 10 ? '' : time(frame)}</span>`);
+    const ends = ['before', 'after'].map((side) => `<span class="end ${side}" style="left:${x(length[side])}px" title="${VersionLabels[side]} ends at ${time(length[side])}"></span>`).join('');
+    const ruler = `<div class="curve-row ruler"><div class="lane-name xs muted">${esc(diff.fps)} samples a second</div><div class="lane-plot" style="width:${plot}px">${ticks.join('')}${ends}</div></div>`;
+    const diamond = (cx, cy, kind) => `<rect x="${cx - 4}" y="${cy - 4}" width="8" height="8" transform="rotate(45 ${cx} ${cy})" class="key ${kind}"/>`;
+    const name = (track) => `<div class="lane-name">${C.ChangeBadge({ kind: UnityStates[track.state] })}<div class="v"><span class="xs muted ellipsis">${esc(track.group)}</span><span class="sm${track.state === 'removed' ? ' struck' : ''}">${esc(track.name)}</span></div></div>`;
+    const curveLane = (track) => {
+      const height = track.name === 'Position.y' ? 96 : 68;
+      const [lo, hi] = track.range;
+      const y = (value) => 8 + (1 - (value - lo) / (hi - lo)) * (height - 16);
+      const sameKeys = new Set((track.before || []).filter(([f, val]) => (track.after || []).some(([g, w]) => g === f && w === val)).map(([f, val]) => `${f}:${val}`));
+      const side = (kind) => {
+        const keys = track[kind];
+        if (!keys) return '';
+        return `<path d="${easedCurve(keys, x, y)}" class="curve ${kind}"/>` + keys.map(([f, val]) => diamond(x(f), y(val), sameKeys.has(`${f}:${val}`) ? 'same' : kind)).join('');
+      };
+      const scale = `<text x="4" y="12" class="scale">${esc(hi)}</text><text x="4" y="${height - 4}" class="scale">${esc(lo)}</text>`;
+      return `<div class="curve-row ${track.state}">${name(track)}<div class="lane-plot" style="width:${plot}px"><svg width="${plot}" height="${height}">${scale}${side('before')}${side('after')}</svg></div></div>`;
+    };
+    const spriteLane = (track) => {
+      const art = (kind, stretch) => `<span class="sprite-key"><span class="sprite" style="transform:scaleY(${stretch})">${pixelArt(kind === 'before' ? diff.sprite.old : diff.sprite.rows, diff.sprite.palette, 1)}</span></span>`;
+      const row = (kind) => `<div class="sprite-track ${kind}">${track.sprites[kind].map(([f, stretch]) => `<span class="sprite-at" style="left:${x(f)}px">${art(kind, stretch)}</span>`).join('')}</div>`;
+      return `<div class="curve-row ${track.state}">${name(track)}<div class="lane-plot sprites" style="width:${plot}px">${row('before')}${row('after')}</div></div>`;
+    };
+    const lanes = tracks.map((track) => (track.sprites ? spriteLane(track) : curveLane(track))).join('');
+    const pins = (kind) => events[kind].map(([f, label], ix) => `<span class="event-pin ${kind}" style="left:${x(f)}px;--row:${ix}"><span class="flag"></span><span class="xs">${esc(label)}</span></span>`).join('');
+    const eventLane = `<div class="curve-row changed"><div class="lane-name">${C.ChangeBadge({ kind: 'M' })}<div class="v"><span class="xs muted">Animation events</span><span class="sm">Events</span></div></div><div class="lane-plot events" style="width:${plot}px"><div class="event-track before">${pins('before')}</div><div class="event-track after">${pins('after')}</div></div></div>`;
+    const sides = `<div class="curve-sides">${C.VersionTag({ side: 'before', from: `${sources[0]} · dashed` })}${C.VersionTag({ side: 'after', from: sources[1] })}<span class="xs muted">A diamond is a key: white when both versions have it</span></div>`;
+    return (
+      `<div data-c="CurveCompare" class="media-compare">` +
+      `<div class="curve-area">${sides}<div class="curve-lanes">${ruler}${lanes}${eventLane}</div></div>` +
+      C.MediaDetails({ details: diff.details, sources }) +
+      `</div>`
+    );
+  },
+
+  GraphParameters({ title, rows, corner = 'left' }) {
+    const lines = rows
+      .map(([name, type, state]) => `<div class="param${state ? ` ${state}` : ''}">${state ? C.ChangeBadge({ kind: UnityStates[state] }) : '<span class="badge-space"></span>'}<span class="fill">${esc(name)}</span><span class="muted">${esc(type)}</span></div>`)
+      .join('');
+    return `<div data-c="GraphParameters" class="graph-params ${corner}"><div class="xs medium">${esc(title)}</div>${lines}</div>`;
+  },
+
+  GraphChanges({ diff }) {
+    const rows = diff.changes
+      .map(([state, kind, name, detail], ix) =>
+        C.ListRow({
+          content: `${C.ChangeBadge({ kind: UnityStates[state] })}<span class="xs muted kind">${esc(kind)}</span><span class="sm fill ellipsis">${esc(name)}</span><span class="xs muted">${esc(detail)}</span>`,
+          selected: ix === diff.current,
+          extraClass: 'graph-change',
+          name: 'GraphChangeRow',
+          base: 'ListRow',
+        }),
+      )
+      .join('');
+    const card = diff.picked.components.map((component) => C.InspectorCard({ component, compact: true })).join('');
+    return (
+      `<div data-c="GraphChanges" class="graph-side"><div class="pane-head"><span class="sm medium fill">Changes</span><span class="xs muted">${diff.changes.length}</span></div><div class="graph-changes">${rows}</div>` +
+      `<div class="pane-head"><span class="sm medium fill">${esc(diff.picked.name)}</span><span class="xs muted">${esc(diff.picked.type)}</span></div>${C.InspectorSides({ sources: diff.sources })}${card}</div>`
+    );
+  },
+
+  AnimatorCompare({ diff, width = 600 }) {
+    const nodeWidth = 112;
+    const nodeHeight = 34;
+    const states = Object.fromEntries(diff.states.map((state) => [state.id, state]));
+    const center = (state) => [state.at[0] + nodeWidth / 2, state.at[1] + nodeHeight / 2];
+    const picked = diff.picked.name;
+    const nameOf = (id) => states[id].name;
+    const arrows = diff.transitions
+      .map(([from, to, state = '']) => {
+        const [x1, y1] = center(states[from]);
+        const [x2, y2] = center(states[to]);
+        const angle = (Math.atan2(y2 - y1, x2 - x1) * 180) / Math.PI;
+        const [mx, my] = [(x1 + x2) / 2, (y1 + y2) / 2];
+        const hot = `${nameOf(from)} → ${nameOf(to)}` === picked ? ' picked' : '';
+        return `<g class="transition ${state}${hot}"><line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"/><path d="M-6 -5 L6 0 L-6 5 z" transform="translate(${mx} ${my}) rotate(${angle})"/></g>`;
+      })
+      .join('');
+    const nodes = diff.states
+      .map((state) => {
+        const badge = state.state ? C.ChangeBadge({ kind: UnityStates[state.state] }) : '';
+        return `<div class="state-node ${state.role || 'plain'} ${state.state || ''}" style="left:${state.at[0]}px;top:${state.at[1]}px;width:${nodeWidth}px;height:${nodeHeight}px">${badge}<span class="sm">${esc(state.name)}</span></div>`;
+      })
+      .join('');
+    const canvas =
+      `<div class="graph-canvas" style="width:${width}px">` +
+      `<svg class="graph-lines" width="${width}" height="560">${arrows}</svg>${nodes}` +
+      `<div class="graph-layer">${C.Select({ value: 'Base Layer', lead: icon('workflow', 'sm', 'var(--muted)') })}</div>` +
+      C.GraphParameters({ title: 'Parameters', rows: diff.parameters }) +
+      `</div>`;
+    return `<div data-c="AnimatorCompare" class="animator-compare">${canvas}${C.GraphChanges({ diff })}</div>`;
+  },
+
+  ScriptGraphCompare({ diff, width = 600 }) {
+    const header = 26;
+    const row = 20;
+    const nodes = Object.fromEntries(diff.nodes.map((node) => [node.id, node]));
+    const portY = (node, ix) => node.at[1] + header + ix * row + row / 2;
+    const wires = diff.wires
+      .map(([from, out, to, input, state = '']) => {
+        const a = nodes[from];
+        const b = nodes[to];
+        const port = a.rows[out][1];
+        const [x1, y1, x2, y2] = [a.at[0] + a.width, portY(a, out), b.at[0], portY(b, input)];
+        const bend = x2 > x1 ? Math.max(30, (x2 - x1) / 2) : 26;
+        const color = port.flow ? '#e5e5e5' : GraphTypes[port.type];
+        return `<path d="M${x1} ${y1} C${x1 + bend} ${y1} ${x2 - bend} ${y2} ${x2} ${y2}" class="wire ${port.flow ? 'flow' : 'value'} ${state}" style="--c:${color}"/>`;
+      })
+      .join('');
+    const fed = new Set(diff.wires.filter((wire) => wire[4] !== 'removed').map(([, , to, input]) => `${to}:${input}`));
+    const port = (spec, side, node, ix) => {
+      if (!spec) return '<span class="slot"></span>';
+      const glyph = spec.field ? '' : spec.flow ? `<span class="port flow ${side}"></span>` : `<span class="port value ${side}" style="--c:${GraphTypes[spec.type]}"></span>`;
+      const changed = spec.was !== undefined;
+      const literal =
+        side === 'in' && spec.value !== undefined && !fed.has(`${node.id}:${ix}`)
+          ? `<span class="literal${changed ? ' changed' : ''}"${changed ? ` title="Before: ${esc(spec.was)}"` : ''}>${esc(spec.value)}</span>`
+          : '';
+      const name = spec.label ? `<span class="${spec.field ? 'field' : 'muted'}">${esc(spec.label)}</span>` : '';
+      return `<span class="slot ${side}">${side === 'in' ? glyph + name + literal : name + glyph}</span>`;
+    };
+    const units = diff.nodes
+      .map((node) => {
+        const badge = node.state ? C.ChangeBadge({ kind: UnityStates[node.state] }) : '';
+        const rows = node.rows.map(([input, output], ix) => `<div class="unit-row">${port(input, 'in', node, ix)}${port(output, 'out', node, ix)}</div>`).join('');
+        const classes = ['unit', node.kind, node.state, node.id === diff.picked.id && 'picked'].filter(Boolean).join(' ');
+        return `<div class="${classes}" style="left:${node.at[0]}px;top:${node.at[1]}px;width:${node.width}px"><div class="unit-head">${icon(node.icon, 'xs')}<span class="xs medium fill ellipsis">${esc(node.title)}</span>${badge}</div>${rows}</div>`;
+      })
+      .join('');
+    const canvas =
+      `<div class="graph-canvas script" style="width:${width}px">` +
+      `<svg class="graph-lines" width="${width}" height="640">${wires}</svg>${units}` +
+      `<div class="graph-layer">${C.Select({ value: diff.graph, lead: icon('workflow', 'sm', 'var(--muted)') })}</div>` +
+      C.GraphParameters({ title: 'Graph variables', rows: diff.variables, corner: 'right' }) +
+      `</div>`;
+    return `<div data-c="ScriptGraphCompare" class="animator-compare">${canvas}${C.GraphChanges({ diff })}</div>`;
+  },
+
   FileDiffPanel({ diff, mode = 'split', state = 'ready', writing = false, reason = '', selection, pointed, expanded = false, filePosition, menuOpen = false, hot, view = {}, look = {} }) {
     const kind = diff.kind || 'text';
+    const modes = diff.unity ? UnityModes[diff.unity] : kind;
     const labels = diff.commit ? null : SideLabels[diff.side];
     const ready = state === 'ready';
     const total =
@@ -2417,24 +2852,29 @@ const C = {
         ? changeGroups(diff.hunks).length
         : kind === 'conflict'
           ? diff.parts.filter((part) => part.conflict).length
-          : (diff.changes || diff.image?.areas || []).length;
+          : kind === 'objects'
+            ? unityChangeCount(diff.objects)
+            : kind === 'curves'
+              ? diff.tracks.length + 1
+              : (diff.changes || diff.image?.areas || []).length;
     const noun = kind === 'conflict' ? 'Conflict' : 'Change';
-    const zoom = kind === 'image' ? { percent: (mode === 'split' && !view.sides ? 12 : 18) * 100 } : kind === 'video' ? { percent: 36 } : {};
+    const zoom = kind === 'image' ? { percent: (mode === 'split' && !view.sides ? 12 : 18) * 100 } : kind === 'video' ? { percent: 36 } : ['curves', 'animator', 'scriptgraph'].includes(kind) || mode === 'scene' ? { percent: 100 } : {};
+    const hidden = kind === 'objects' ? diff.hidden || 0 : 0;
     const viewBar =
       kind === 'binary'
         ? ''
-        : C.ViewBar({ kind, mode, changes: ready ? { current: (diff.current || 0) + 1, total, noun } : null, zoom, menuOpen, hot });
+        : C.ViewBar({ kind, modes, mode, changes: ready ? { current: (diff.current || 0) + 1, total, noun } : null, zoom, menuOpen, hot, hidden });
     const conflict = () => C.MergeEditor({ merge: diff });
     const text = () => {
       const diffView = C.DiffView({
         files: [{ path: diff.change.path, additions: diff.additions, deletions: diff.deletions, hunks: diff.hunks, lines: diff.lines, unchanged: diff.unchanged }],
-        mode,
+        mode: mode === 'yaml' ? 'split' : mode,
         header: false,
         actions: labels && diff.change.kind === 'M' ? { side: diff.side, writing } : undefined,
         selection,
         pointed,
         menu: pointed && labels ? C.LineMenu({ side: diff.side, selected: pointed.selected, changed: pointed.changed, left: pointed.left, top: pointed.top, hot: pointed.hot }) : '',
-        look: { gaps: 'scope', marks: 'bars', sides: textSides(diff), scroll: true, whole: true, ...look },
+        look: { gaps: 'scope', marks: 'bars', sides: textSides(diff), scroll: true, whole: true, hints: diff.hints, ...look },
       });
       const whole = look.whole !== false && diff.unchanged && diff.hunks.length;
       const top = whole ? wholeFileTop(diff.hunks) : undefined;
@@ -2448,6 +2888,10 @@ const C = {
       video: () => C.VideoCompare({ diff, mode }),
       audio: () => C.AudioCompare({ diff, mode }),
       binary: () => C.BinaryFacts({ diff }),
+      objects: () => (mode === 'scene' ? C.SceneLayout({ diff }) : C.ObjectCompare({ diff })),
+      curves: () => C.CurveCompare({ diff }),
+      animator: () => C.AnimatorCompare({ diff }),
+      scriptgraph: () => C.ScriptGraphCompare({ diff }),
     };
     const content =
       state === 'loading'
@@ -2457,7 +2901,7 @@ const C = {
           : state === 'empty'
             ? C.Hint({ message: Texts.fileEmpty })
             : bodies[kind]();
-    const bars = kind === 'text' ? C.FileBar({ diff, state, writing, expanded, filePosition, tools: viewBar }) : C.FileBar({ diff, state, writing, expanded, filePosition }) + viewBar;
+    const bars = kind === 'text' && !diff.unity ? C.FileBar({ diff, state, writing, expanded, filePosition, tools: viewBar }) : C.FileBar({ diff, state, writing, expanded, filePosition }) + viewBar;
     return `<div data-c="FileDiffPanel" class="file-diff">${bars}<div class="fill v">${content}</div></div>`;
   },
 

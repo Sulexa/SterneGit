@@ -26,14 +26,18 @@ impl Repo {
     pub(crate) fn stage(&self, scope: &Scope) -> Result<()> {
         let names = scope
             .files()
-            .map(|files| nul_separated(files.iter().map(FileChange::name_as_git_wrote_it)));
+            .map(|files| {
+                nul_separated(files.iter().flat_map(FileChange::together).map(FileChange::name_as_git_wrote_it))
+            });
         self.update_index(&["add", "--all"], names, None)
     }
 
     pub(crate) fn unstage(&self, scope: &Scope) -> Result<()> {
         let names = scope
             .files()
-            .map(|files| nul_separated(files.iter().flat_map(FileChange::names_as_git_wrote_them)));
+            .map(|files| {
+                nul_separated(files.iter().flat_map(FileChange::together).flat_map(FileChange::names_as_git_wrote_them))
+            });
         if self.local().head_id().is_ok() {
             self.update_index(&["reset", "--quiet"], names, None)
         } else {
@@ -44,6 +48,7 @@ impl Repo {
     pub(crate) fn discard(&self, changes: &[FileChange]) -> Result<()> {
         let (untracked, tracked): (Vec<_>, Vec<_>) = changes
             .iter()
+            .flat_map(FileChange::together)
             .partition(|change| change.kind == ChangeKind::Untracked);
         for change in untracked {
             std::fs::remove_file(self.location.join(change.exact_path()))?;

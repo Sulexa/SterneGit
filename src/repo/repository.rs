@@ -414,6 +414,19 @@ impl Repository {
         self.write_to(move |repo| repo.apply_part(action, &patch), cx);
     }
 
+    pub(crate) fn rewrite_guid(&mut self, change: crate::unity::GuidChange, keep_old: bool, cx: &mut Context<Self>) {
+        self.write_to(
+            move |repo| {
+                if keep_old {
+                    crate::unity::keep_old_guid(repo, &change)
+                } else {
+                    crate::unity::point_users_to_new_guid(repo, &change)
+                }
+            },
+            cx,
+        );
+    }
+
     pub(crate) fn discard(&mut self, changes: Vec<FileChange>, cx: &mut Context<Self>) {
         self.write_to(move |repo| repo.discard(&changes), cx);
     }

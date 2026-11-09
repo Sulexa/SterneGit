@@ -102,6 +102,21 @@ const Screens = (() => {
       }),
     });
 
+  const { unity } = Sample;
+  const unityFiles = [...unity.work.staged, ...unity.work.unstaged];
+
+  const unityComparison = (diff, mode, { menuOpen = false, hot } = {}) =>
+    C.SterneGit({
+      topBar: C.TopBar({ repository: starfall.name, head: starfall.head }),
+      tabStrip: C.TabStrip({ tabs: gameTabs, active: gameTabs.length - 1 }),
+      body: C.RepoView({
+        left: false,
+        middle: C.FileDiffPanel({ diff, mode, menuOpen, hot, filePosition: [unityFiles.indexOf(diff.change) + 1, unityFiles.length] }),
+        right: C.ChangesList({ changes: unity.work, open: { side: diff.side, path: diff.change.path } }),
+        status: C.RepoStatusBar({ summary: historySummary(starfall) }),
+      }),
+    });
+
   return [
     {
       id: 'welcome',
@@ -596,6 +611,90 @@ const Screens = (() => {
       about: 'A file SterneGit can’t draw, such as a 3D model, still says what changed: its type, its size and when it last changed. Open Before gives a copy of the old version to its default app, Open After the file on disk, and Compare in difftool hands both to the tool set in Git’s diff.tool; it only shows when one is set.',
       source: 'src/repo/file_diff_panel.rs',
       render: () => assetComparison(modelDiff),
+    },
+    {
+      id: 'unity-prefab',
+      title: 'Unity — prefab, Inspector',
+      about: "A file Unity saved as text (its first lines are %YAML 1.1 and %TAG !u! tag:unity3d.com,2011:) opens like the Inspector instead of as YAML: prefabs, scenes, materials, animation clips, Animator controllers, ScriptableObject assets, project settings and .meta files. On the left, the Hierarchy of both versions merged: A for an object added, D for one removed (struck through), M for one with changed properties; unchanged objects are grey, and Changed only hides them. On the right, every changed object in Hierarchy order, each component as a card, each changed property as a row: the name, the value before on a red tint, the value after on a green tint, the part that changed in a stronger tint, like changed words in code. A property that only one side has leaves a hatched cell, like a missing line. References read as Unity shows them, never as a fileID or a GUID: an object of the same file by its name and type, an asset by its name through the GUID in its .meta file, a script by its class. Lists show the elements that changed. A removed object folds to one line. ↑ and ↓ move through the changes; a click in the Hierarchy scrolls to the object. Stage acts on the whole file: parts of it can be staged in YAML only.",
+      source: 'src/repo/compare/unity/inspector.rs',
+      render: () => unityComparison(unity.prefabDiff, 'inspector'),
+    },
+    {
+      id: 'unity-options',
+      title: 'Unity — view options',
+      about: "The ⋯ of a Unity comparison holds its own options, for every Unity file in every tab. Hide what Unity changes on its own is on by default: Unity rewrites values on save that nobody changed, such as floats that round differently (0.99999994 for 1), prefab overrides in another order, a serializedVersion bump or editor-only fields; the view bar says how many such changes are hidden. Show unchanged properties lists the whole component, not only its changed rows. Show file IDs adds the fileID of each object and component, for when YAML has to be read next to it.",
+      source: 'src/repo/compare/unity/options.rs',
+      render: () => unityComparison(unity.prefabDiff, 'inspector', { menuOpen: true, hot: 'noise' }),
+    },
+    {
+      id: 'unity-prefab-yaml',
+      title: 'Unity — prefab, YAML',
+      about: "YAML shows the text Unity saved, as a text comparison with only the changed parts. The grey row above each part names the object and the component it belongs to (Slime › Slime Controller) instead of a YAML header, and every fileID and GUID has its name after the line, as a # comment: the object, the script or the asset it points to. The names are only shown, never written into the file. This is where parts of the file can be staged or discarded with Stage hunk and Discard hunk, as in any text file.",
+      source: 'src/unity/hints.rs',
+      render: () => unityComparison(unity.prefabYaml, 'yaml'),
+    },
+    {
+      id: 'unity-prefab-scene',
+      title: 'Unity — prefab, Scene',
+      about: "A prefab has the Scene view too, the way Unity opens it in prefab mode: the prefab alone, zoomed to fit, each child drawn with its own sprite. A child added is outlined in green (the crown), one removed is drawn faded at its place with a dashed red outline and a cross (the particles), and one whose position, rotation or scale changed shows its old shape dashed in red under the new one, outlined in yellow (the shadow, now smaller). Colliders are drawn as Unity draws their gizmos, the old size dashed in red and the new one in green. Changes that have no place, such as Mass or Move Speed, are not drawn here: Inspector lists them, and so does the panel underneath for the picked object. A click picks an object, outlined in blue, and its changes show underneath.",
+      source: 'src/repo/compare/unity/scene.rs',
+      render: () => unityComparison(unity.prefabDiff, 'scene'),
+    },
+    {
+      id: 'unity-scene',
+      title: 'Unity — scene, Inspector',
+      about: "A scene compares like a prefab. A prefab instance has a blue cube and says which prefab it comes from; only its overrides are listed, each card marked Override with a blue edge as in Unity. Here the camera size and background, the light and one slime changed, a slime was added and a bat removed. Five changes Unity made on its own are hidden.",
+      source: 'src/repo/compare/unity/inspector.rs',
+      render: () => unityComparison(unity.levelDiff, 'inspector'),
+    },
+    {
+      id: 'unity-scene-view',
+      title: 'Unity — scene, Scene',
+      about: "Scene draws where things are, from the front for a 2D scene (X and Y) and from above for a 3D one (X and Z): every object with a sprite is drawn with it, the others with their icon. What is gone or moved away is drawn faded with a dashed red outline at its old place, an object that moved has a yellow arrow to its new place, an added one a green outline. The camera's view is a dashed red frame before and a green frame after, so a new size or position shows at once. A click on an object picks it, outlined in blue, and its changes show underneath. SterneGit draws sprites and positions only: no lighting, meshes or shaders.",
+      source: 'src/repo/compare/unity/scene.rs',
+      render: () => unityComparison(unity.levelDiff, 'scene'),
+    },
+    {
+      id: 'unity-material',
+      title: 'Unity — material',
+      about: "A file that holds one thing, such as a material, a ScriptableObject asset or project settings, has no Hierarchy: the Inspector takes the whole width. A material says its shader, then compares its properties grouped as Textures, Numbers, Colors, Keywords and Settings: colors as swatches with their hex value and HDR intensity, textures by name, numbers and keywords as text. The shader is not run, so there is no preview sphere.",
+      source: 'src/repo/compare/unity/inspector.rs',
+      render: () => unityComparison(unity.materialDiff, 'inspector'),
+    },
+    {
+      id: 'unity-animation',
+      title: 'Unity — animation clip',
+      about: "An animation clip draws one lane per animated property, both versions on the same time scale: Before as a dashed red curve, After as a solid green one. A diamond is a key, white when both versions have it at the same time and value. Sprite properties show the sprite of each key, events show their flags. The ruler marks where each version ends. A property only one version animates has an A or D badge. Under it, the clip settings in one table.",
+      source: 'src/repo/compare/unity/curves.rs',
+      render: () => unityComparison(unity.jumpDiff, 'curves'),
+    },
+    {
+      id: 'unity-animator',
+      title: 'Unity — Animator controller',
+      about: "An Animator controller draws its state machine as Unity lays it out, one layer at a time: states added have a green outline, states removed are faded with a dashed red outline, transitions are green when added, dashed red when removed and yellow when their settings changed. The list on the right counts every change, parameters included; a click on one, or on a state or a transition, shows its settings before and after underneath.",
+      source: 'src/repo/compare/unity/graph.rs',
+      render: () => unityComparison(unity.animatorDiff, 'graph'),
+    },
+    {
+      id: 'unity-script-graph',
+      title: 'Unity — Script Graph',
+      about: "A Visual Scripting Script Graph asset is drawn as its graph, nodes where the graph editor puts them. Nodes added have a green outline, nodes removed are faded with a dashed red outline, nodes with a changed setting a yellow one, with the changed value filled in yellow in the node; the old value is in the settings on the right. Connections are green when added and dashed red when removed; the others keep the color of what they carry: white for flow, then one color per type, as in the graph editor. A value that used to be typed in and is now connected shows in the node's settings on the right: Y was 6, it now comes from Multiply. The list on the right counts every node, connection and graph variable that changed. The selector at the top left moves into subgraphs; a State Graph asset is drawn like an Animator controller. Unity keeps the whole graph as JSON on a single line, so the second mode is JSON, laid out one value per line, rather than YAML.",
+      source: 'src/repo/compare/unity/graph.rs',
+      render: () => unityComparison(unity.brainDiff, 'graph'),
+    },
+    {
+      id: 'unity-texture-meta',
+      title: 'Unity — an asset and its .meta',
+      about: "In a Unity project a .meta file moves with its asset: the changes list shows slime.png once, with a meta tag, and staging, unstaging or discarding it does the same to slime.png.meta. The comparison is the asset's own, here the picture, with the import settings that changed in the .meta under its details: here the sprite was made crisper and smaller. A .meta that changed alone is listed on its own.",
+      source: 'src/repo/changes_list.rs',
+      render: () => unityComparison(unity.slimeMetaDiff, 'split'),
+    },
+    {
+      id: 'unity-guid',
+      title: 'Unity — a GUID that changed',
+      about: "A .meta whose GUID changed is the usual way a Unity project loses references: the asset was deleted and imported again, or its .meta was never committed. Its comparison starts with what breaks: SterneGit searches the repository for the old GUID (git grep) and lists every file and property still using it. Keep the old GUID writes it back into the .meta, so nothing breaks; Point the files to the new GUID changes them instead. Either way the changes list reads the files again, and the warning goes once nothing uses the old GUID. The import settings, reset to Unity's defaults by the new import, are compared underneath.",
+      source: 'src/repo/compare/unity/guid.rs',
+      render: () => unityComparison(unity.guidDiff, 'inspector'),
     },
     {
       id: 'pulling',

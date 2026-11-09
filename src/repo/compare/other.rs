@@ -53,6 +53,7 @@ impl OtherFile {
 #[derive(IntoElement)]
 pub(crate) struct OtherFileView {
     file: Arc<OtherFile>,
+    imports: Option<crate::unity::ImportChanges>,
     sources: [SharedString; 2],
     on_open: Handler<Version>,
     on_difftool: Handler<()>,
@@ -67,10 +68,16 @@ impl OtherFileView {
     ) -> Self {
         Self {
             file,
+            imports: None,
             sources,
             on_open,
             on_difftool,
         }
+    }
+
+    pub(crate) fn imports(mut self, imports: Option<crate::unity::ImportChanges>) -> Self {
+        self.imports = imports;
+        self
     }
 
     fn details(&self) -> MediaDetails {
@@ -168,5 +175,6 @@ impl RenderOnce for OtherFileView {
                     ),
             )
             .child(self.details())
+            .when_some(self.imports.as_ref(), |this, imports| this.child(super::details::import_table(imports, &self.sources)))
     }
 }

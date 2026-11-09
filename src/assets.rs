@@ -52,7 +52,15 @@ gpui_kit::assets::icon_assets!(
         CircleMinus,
         MessageSquare,
         FolderGit,
-        Monitor
+        Monitor,
+        Box,
+        FileCode,
+        CircleDot,
+        FileBox,
+        Video,
+        Workflow,
+        Spline,
+        Braces
     ]
 );
 

@@ -2,8 +2,8 @@ const Catalog = (() => {
   const { history, tracked, stashed, collapsed, changes, partlyStaged, commitDetails, commitFileDiff, fileHistory, fileDiff, stagedHunkDiff, selectedLines, tabs } = Sample;
   const { slimeDiff, crownIcon, introDiff, themeDiff, modelDiff } = Sample;
   const { rebase, merge, rebaseChanges, rebaseOneLeft, rebaseResolved, statusConflicts, slimeConflict } = Sample;
-  const { statusMerged } = Sample;
-  const pane = { w: 736, h: 600 };
+  const { statusMerged, unity } = Sample;
+  const pane ={ w: 736, h: 600 };
   const textLook = { gaps: 'scope', marks: 'bars', sides: ['HEAD', 'Working copy'], scroll: true };
   const barFrame = (bar, width = 736) => `<div class="v" style="width:${width}px;position:relative;height:${bar.includes('ViewOptionsMenu') ? 300 : 40}px">${bar}</div>`;
   const commit = (ix) => history.commits[ix];
@@ -1154,6 +1154,120 @@ const Catalog = (() => {
           source: 'src/repo/file_diff_panel.rs',
           about: 'For a file SterneGit can’t draw: what it is, buttons that open each version with its default app or both with git difftool, and the MediaDetails.',
           variants: [['3D model', () => C.BinaryFacts({ diff: modelDiff }), { w: 736, h: 420 }]],
+        },
+      ],
+    },
+    {
+      key: 'unity',
+      title: 'Unity files',
+      about: 'A file Unity saved as text is read as objects, components and properties, with every fileID and GUID turned into a name, and compared the way the Unity editor shows it: an Inspector for prefabs, scenes, materials, assets and .meta files, a Scene view of positions for scenes and prefabs, curves for animation clips, and graphs for Animator controllers and Visual Scripting Script Graphs. YAML stays one click away.',
+      items: [
+        {
+          name: 'ObjectCompare',
+          code: 'repo::compare::unity::inspector::render',
+          source: 'src/repo/compare/unity/inspector.rs',
+          about: 'The Inspector view: a HierarchyTree when the file holds several objects, then InspectorSides over one ObjectSection per object that changed, in Hierarchy order. A GuidWarning comes first when a .meta lost its GUID.',
+          variants: [
+            ['Prefab', () => C.ObjectCompare({ diff: unity.prefabDiff }), pane],
+            ['Material', () => C.ObjectCompare({ diff: unity.materialDiff }), { w: 736, h: 360 }],
+            ['.meta with a new GUID', () => C.ObjectCompare({ diff: unity.guidDiff }), pane],
+          ],
+        },
+        {
+          name: 'HierarchyTree',
+          code: 'repo::compare::unity::inspector::hierarchy',
+          source: 'src/repo/compare/unity/inspector.rs',
+          about: 'Both versions of the Hierarchy merged into one tree, with the change badges of the file list: A added, D removed and struck through, M changed. Unchanged objects are grey; a blue cube is a prefab or a prefab instance. Changed only hides the rest; the footer counts the changes.',
+          variants: [
+            ['Prefab', () => C.HierarchyTree({ tree: unity.prefabDiff.tree, selected: 'Slime' }), { w: 232, h: 300 }],
+            ['Scene', () => C.HierarchyTree({ tree: unity.levelDiff.tree, selected: 'Main Camera' }), { w: 232, h: 360 }],
+          ],
+        },
+        {
+          name: 'ObjectSection',
+          code: 'repo::compare::unity::inspector::object_head',
+          source: 'src/repo/compare/unity/inspector.rs',
+          about: 'One object: its change badge, name, parent and what it is (a prefab instance, a material and its shader), then an InspectorCard per component that changed. A removed object folds to one line that lists its components.',
+          variants: [
+            ['Changed', () => C.ObjectSection({ object: unity.prefabDiff.objects[2] }), { w: 736 }],
+            ['Added', () => C.ObjectSection({ object: unity.prefabDiff.objects[1] }), { w: 736 }],
+            ['Removed, folded', () => C.ObjectSection({ object: unity.prefabDiff.objects[3] }), { w: 736 }],
+            ['Prefab instance with overrides', () => C.ObjectSection({ object: unity.levelDiff.objects[3] }), { w: 736 }],
+          ],
+        },
+        {
+          name: 'InspectorCard',
+          code: 'repo::compare::unity::inspector::{part_head, property_row}',
+          source: 'src/repo/compare/unity/inspector.rs',
+          about: 'A component and its changed properties, one row each: name, value before on red, value after on green, the changed part in a stronger tint. A side without the property is hatched. Values look as in Unity: vectors by axis, colors as swatches with their HDR intensity, references as the object or asset name and its type, textures as thumbnails, booleans as check boxes. Override marks a prefab override, with a blue edge.',
+          variants: [
+            ['Script with references and a list', () => C.InspectorCard({ component: unity.prefabDiff.objects[0].components[1] }), { w: 736 }],
+            ['Material properties', () => C.InspectorCard({ component: unity.materialDiff.objects[0].components[0] }), { w: 736 }],
+            ['Override', () => C.InspectorCard({ component: unity.levelDiff.objects[2].components[0] }), { w: 736 }],
+            ['Compact, in a side panel', () => C.InspectorCard({ component: unity.animatorDiff.picked.components[0], compact: true }), { w: 318 }],
+          ],
+        },
+        {
+          name: 'InspectorSides',
+          code: 'repo::compare::unity::inspector::sides_row',
+          source: 'src/repo/compare/unity/inspector.rs',
+          about: 'The row that names the columns of every InspectorCard under it: Property, Before and where it comes from, After and where it comes from.',
+          variants: [['Working file', () => `<div class="inspector" style="width:736px">${C.InspectorSides({ sources: ['HEAD', 'Working copy'] })}</div>`]],
+        },
+        {
+          name: 'GuidWarning',
+          code: 'repo::compare::unity::guid::warning',
+          source: 'src/repo/compare/unity/guid.rs',
+          about: 'Over the comparison of a .meta whose GUID changed: the files and properties that still use the old GUID, found with git grep, and the two ways out.',
+          variants: [['Three files', () => C.GuidWarning({ guid: unity.guidDiff.guid }), { w: 736 }]],
+        },
+        {
+          name: 'SceneLayout',
+          code: 'repo::compare::unity::scene::render',
+          source: 'src/repo/compare/unity/scene.rs',
+          about: 'The Scene view: positions only, from the front for 2D and from above for 3D, with sprites where there are some. Old places faded with a dashed red outline, moves as yellow arrows, additions outlined in green, the camera frame before and after. The picked object, outlined in blue, shows its changes underneath.',
+          variants: [
+            ['Scene', () => C.SceneLayout({ diff: unity.levelDiff, width: 736, height: 440 }), { w: 736, h: 600 }],
+            ['Prefab, with a collider gizmo', () => C.SceneLayout({ diff: unity.prefabDiff, width: 736, height: 440 }), { w: 736, h: 600 }],
+          ],
+        },
+        {
+          name: 'CurveCompare',
+          code: 'repo::compare::unity::curves::render',
+          source: 'src/repo/compare/unity/curves.rs',
+          about: 'An animation clip, one lane per animated property on one time scale: Before dashed red, After solid green, keys as diamonds, white when both versions have them. Sprite lanes show each key’s sprite, the events lane its flags; a property animated by one version only has an A or D badge. The clip settings are in the MediaDetails underneath.',
+          variants: [['Jump', () => C.CurveCompare({ diff: unity.jumpDiff, plot: 520 }), { w: 760, h: 620 }]],
+        },
+        {
+          name: 'AnimatorCompare',
+          code: 'repo::compare::unity::graph::render',
+          source: 'src/repo/compare/unity/graph.rs',
+          about: 'An Animator controller layer drawn as in Unity, with the states and transitions that changed in the colors of the change badges, its GraphParameters in a corner, and GraphChanges on the right.',
+          variants: [['Base Layer', () => C.AnimatorCompare({ diff: unity.animatorDiff }), { w: 920, h: 600 }]],
+        },
+        {
+          name: 'ScriptGraphCompare',
+          code: 'repo::compare::unity::graph::render',
+          source: 'src/repo/compare/unity/graph.rs',
+          about: 'A Visual Scripting Script Graph: nodes with their ports and typed-in values where the graph editor puts them, connections colored by what they carry, and what changed in the colors of the change badges, a changed value filled in yellow. GraphParameters lists the graph variables, GraphChanges every change.',
+          variants: [['SlimeBrain', () => C.ScriptGraphCompare({ diff: unity.brainDiff }), { w: 920, h: 640 }]],
+        },
+        {
+          name: 'GraphChanges',
+          code: 'repo::compare::unity::graph::side_panel',
+          source: 'src/repo/compare/unity/graph.rs',
+          about: 'The side panel of every graph comparison: each change with its badge, what it is and a short detail, then the settings of the picked one, before and after, in a compact InspectorCard.',
+          variants: [['Script graph', () => `<div style="width:340px;height:560px;display:flex">${C.GraphChanges({ diff: unity.brainDiff })}</div>`]],
+        },
+        {
+          name: 'GraphParameters',
+          code: 'repo::compare::unity::graph::parameters',
+          source: 'src/repo/compare/unity/graph.rs',
+          about: 'A corner of a graph that lists its parameters or variables, an added or removed one with its badge.',
+          variants: [
+            ['Animator parameters', () => `<div style="position:relative;width:240px;height:140px">${C.GraphParameters({ title: 'Parameters', rows: unity.animatorDiff.parameters })}</div>`],
+            ['Graph variables', () => `<div style="position:relative;width:240px;height:110px">${C.GraphParameters({ title: 'Graph variables', rows: unity.brainDiff.variables })}</div>`],
+          ],
         },
       ],
     },

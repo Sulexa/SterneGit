@@ -6,13 +6,15 @@ mod picture;
 mod ruler;
 mod sound;
 mod transport;
+mod unity;
 mod video;
 
 pub(crate) use bars::{ChangeStepper, Direction, FileBar, FilePlace, Position, ViewBar};
-pub(crate) use details::{Version, VersionTag};
+pub(crate) use details::{DetailsRow, MediaDetails, Version, VersionTag};
 pub(crate) use other::{FileFacts, OtherFile, OtherFileView};
 pub(crate) use options::{TextOptions, text_options_menu};
 pub(crate) use picture::{PictureCompare, PictureMode, Pictures};
 pub(crate) use ruler::ChangeRuler;
 pub(crate) use sound::{SoundCompare, SoundMode, Sounds};
+pub(crate) use unity::{UnityCompare, UnityEvent, UnityMode, modes_for, unity_options_menu};
 pub(crate) use video::{TemporaryCopy, VideoCompare, VideoSide, Videos};

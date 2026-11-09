@@ -15,6 +15,7 @@ mod settings;
 #[cfg(test)]
 mod test_server;
 mod ui;
+mod unity;
 mod update;
 
 use cli::Invocation;

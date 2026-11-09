@@ -1,4 +1,5 @@
 use std::{
+    collections::HashSet,
     ffi::{OsStr, OsString},
     path::{Path, PathBuf},
     sync::Arc,
@@ -31,8 +32,8 @@ use super::{
     compare::{
         ChangeRuler, ChangeStepper, Direction, FileBar, FileFacts, FilePlace, OtherFile,
         OtherFileView, PictureCompare, PictureMode, Pictures, Position, SoundCompare, SoundMode,
-        Sounds, TemporaryCopy, TextOptions, Version, VersionTag, VideoCompare, VideoSide, Videos,
-        ViewBar, text_options_menu,
+        Sounds, TemporaryCopy, TextOptions, UnityCompare, UnityEvent, UnityMode, Version, VersionTag,
+        VideoCompare, VideoSide, Videos, ViewBar, modes_for, text_options_menu, unity_options_menu,
     },
     hunk_actions::{HunkActions, Offers, Pressed, line_at, line_span},
     merge_editor::MergeEditor,
@@ -52,6 +53,7 @@ use crate::{
         soundtrack, thumbnails, visible_changes,
     },
     ui::{self, Job, Load, Look as _, SideUi as _, handler, run_in_background},
+    unity::{self, NotUnityText, Shape as UnityShape, Source as UnitySource, UnityFiles, UnityKind},
 };
 
 const TEXTS: PatchTexts = PatchTexts {
@@ -61,6 +63,7 @@ const TEXTS: PatchTexts = PatchTexts {
 };
 
 const ROWS_ABOVE_A_CHANGE: usize = 8;
+const UNITY_CONTEXT_LINES: usize = 3;
 const SIDES_HEIGHT: f32 = 32.;
 
 pub(crate) enum FileDiffEvent {
@@ -107,6 +110,7 @@ enum Media {
     Pictures(Entity<PictureCompare>),
     Sounds(Entity<SoundCompare>),
     Videos(Entity<VideoCompare>),
+    Unity(Entity<UnityCompare>),
     Other(Arc<OtherFile>),
 }
 
@@ -115,6 +119,7 @@ enum MediaView {
     Pictures,
     Sounds,
     Videos,
+    Unity,
     Other,
 }
 
@@ -138,6 +143,7 @@ struct MediaRequest {
     extension: Option<String>,
     difftool: Option<DifftoolTarget>,
     path: OsString,
+    meta: Option<Sides>,
 }
 
 pub(crate) struct FileDiffPanel {
@@ -160,6 +166,11 @@ pub(crate) struct FileDiffPanel {
     merging: Option<Merging>,
     merge_read: Job,
     merge_observer: Option<Subscription>,
+    unity_mode: UnityMode,
+    unity_text: Option<Arc<UnityFiles>>,
+    not_unity: HashSet<SharedString>,
+    unity_events: Vec<Subscription>,
+    imports: Option<unity::ImportChanges>,
     _subscriptions: [Subscription; 2],
 }
 
@@ -198,6 +209,11 @@ impl FileDiffPanel {
             merging: None,
             merge_read: Job::default(),
             merge_observer: None,
+            unity_mode: UnityMode::Main,
+            unity_text: None,
+            not_unity: HashSet::new(),
+            unity_events: Vec::new(),
+            imports: None,
             _subscriptions: subscriptions,
         }
     }
@@ -236,31 +252,101 @@ impl FileDiffPanel {
             return;
         }
         self.leave_merge();
+        if self.routes_to_unity(&change.path) {
+            let request = working_request(MediaView::Unity, &change, side, staged_too);
+            if self.unity_mode == UnityMode::Text {
+                self.open_working_text(repo, change, side, staged_too, Some(request), reload, cx);
+            } else {
+                self.unity_text = None;
+                self.compared = Some(Compared::WorkingFile(file));
+                self.open_media(repo, request, reload, cx);
+            }
+            return;
+        }
         if let Some(view) = media_view(&change.path) {
             let request = working_request(view, &change, side, staged_too);
             self.compared = Some(Compared::WorkingFile(file));
             self.open_media(repo, request, reload, cx);
             return;
         }
+        self.open_working_text(repo, change, side, staged_too, None, reload, cx);
+    }
+
+    fn routes_to_unity(&self, path: &SharedString) -> bool {
+        UnityKind::of(path).is_some() && !self.not_unity.contains(path)
+    }
+
+    fn context_lines(&self, options: TextOptions) -> Option<usize> {
+        if self.unity_text.is_some() {
+            Some(UNITY_CONTEXT_LINES)
+        } else {
+            options.context_lines()
+        }
+    }
+
+    fn sync_context_lines(&mut self, cx: &mut Context<Self>) {
+        let lines = self.context_lines(TextOptions::current(cx));
+        self.diff.update(cx, |state, cx| state.set_context_lines(lines, cx));
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn open_working_text(
+        &mut self,
+        repo: &Repo,
+        change: FileChange,
+        side: Side,
+        staged_too: bool,
+        unity: Option<MediaRequest>,
+        reload: bool,
+        cx: &mut Context<Self>,
+    ) {
+        let file = OpenFile {
+            side,
+            path: change.path.clone(),
+        };
         self.leave_media(cx);
+        if unity.is_none() {
+            self.unity_text = None;
+            self.sync_context_lines(cx);
+        }
         let binary = working_request(MediaView::Other, &change, side, staged_too);
         let repo_for_binary = repo.clone();
         let repo = repo.clone();
         let whitespace = TextOptions::current(cx).whitespace();
+        let shown_path = change.path.clone();
         let task = run_in_background(
             cx,
-            move || {
-                let patch = repo.file_patch_with(&change, side, whitespace)?;
-                working_patch(spread_working(&repo, patch, &change, side))
+            move || -> anyhow::Result<(WorkingPatch, Option<Arc<UnityFiles>>)> {
+                match &unity {
+                    Some(request) => {
+                        let files = Arc::new(read_unity(&repo, request)?);
+                        let patch = repo.file_patch_with(&change, side, whitespace)?;
+                        let patch = unity_patch(&repo, &files, patch)?;
+                        Ok((working_patch(patch)?, Some(files)))
+                    }
+                    None => {
+                        let patch = repo.file_patch_with(&change, side, whitespace)?;
+                        Ok((working_patch(spread_working(&repo, patch, &change, side))?, None))
+                    }
+                }
             },
-            move |this, result: anyhow::Result<WorkingPatch>, cx| {
-                if let Ok(patch) = &result
+            move |this, result: anyhow::Result<(WorkingPatch, Option<Arc<UnityFiles>>)>, cx| {
+                if let Err(error) = &result
+                    && error.downcast_ref::<NotUnityText>().is_some()
+                {
+                    this.not_unity.insert(shown_path.clone());
+                    this.reopen(cx);
+                    return;
+                }
+                if let Ok((patch, _)) = &result
                     && patch.files.first().is_some_and(DiffFile::is_binary)
                 {
                     this.open_media(&repo_for_binary, binary, false, cx);
                     return;
                 }
-                let stats = result.map(|patch| {
+                let stats = result.map(|(patch, files)| {
+                    this.unity_text = files;
+                    this.sync_context_lines(cx);
                     let stats = PatchStats::of(&patch.files);
                     this.parts = patch.hunks.map(|hunks| WorkingParts {
                         side,
@@ -351,6 +437,148 @@ impl FileDiffPanel {
         );
         self.merge_read.run(task);
         cx.notify();
+    }
+
+    fn reopen(&mut self, cx: &mut Context<Self>) {
+        match &self.compared {
+            Some(Compared::WorkingFile(open)) => {
+                let open = open.clone();
+                let repository = self.repository.read(cx);
+                let change = repository
+                    .changes()
+                    .and_then(|changes| changes.find(open.side, &open.path))
+                    .cloned();
+                if let (Some(repo), Some(change)) = (repository.repo().cloned(), change) {
+                    self.open_working_file(&repo, change, open.side, cx);
+                }
+            }
+            Some(Compared::CommitFile { id, baseline, short_id, file }) => {
+                let (id, baseline, short_id, file) = (*id, *baseline, short_id.clone(), file.clone());
+                self.open_commit_file(id, baseline, short_id, file, cx);
+            }
+            None => {}
+        }
+    }
+
+    fn choose_unity_mode(&mut self, mode: UnityMode, cx: &mut Context<Self>) {
+        self.unity_mode = mode;
+        if let (Some(Media::Unity(view)), UnityMode::Main | UnityMode::Scene) = (self.media.value(), mode) {
+            let view = view.clone();
+            view.update(cx, |view, cx| view.set_mode(mode, cx));
+            return;
+        }
+        self.reopen(cx);
+    }
+
+    fn on_unity_event(&mut self, event: &UnityEvent, cx: &mut Context<Self>) {
+        let (change, keep_old) = match event {
+            UnityEvent::KeepOldGuid(change) => (change.clone(), true),
+            UnityEvent::PointToNewGuid(change) => (change.clone(), false),
+        };
+        self.repository.update(cx, |repository, cx| repository.rewrite_guid(change, keep_old, cx));
+    }
+
+    fn unity_modes(&self, mut bar: ViewBar, shape: UnityShape, kind: UnityKind, current: UnityMode, cx: &mut Context<Self>) -> ViewBar {
+        for look in modes_for(shape, kind) {
+            let mode = look.mode;
+            bar = bar.mode(
+                mode.id(),
+                look.label,
+                look.icon,
+                look.tooltip,
+                mode == current,
+                cx.listener(move |this, _: &ClickEvent, _, cx| this.choose_unity_mode(mode, cx)),
+            );
+        }
+        bar
+    }
+
+    fn unity_bar(&self, view: &Entity<UnityCompare>, cx: &mut Context<Self>) -> ViewBar {
+        let unity = view.read(cx);
+        let (shape, kind, current) = (unity.files().shape, unity.files().kind, unity.mode());
+        let position = unity.change_position();
+        let hidden = unity.hidden();
+        let zoom = unity.has_zoom().then(|| (unity.zoom_percent(), unity.fits()));
+        let muted = cx.theme().muted_foreground;
+        let mut bar = self.unity_modes(ViewBar::new(), shape, kind, current, cx);
+        if hidden > 0 {
+            bar = bar.note(
+                h_flex()
+                    .gap_1p5()
+                    .xs_text()
+                    .text_color(muted)
+                    .child(gpui_kit::component::Icon::new(IconName::EyeOff).xsmall())
+                    .child(format!("{} Unity made on its own hidden", ui::counted(hidden, "change", "changes"))),
+            );
+        }
+        let stepping = view.clone();
+        bar = bar.stepper(ChangeStepper::new(
+            position,
+            handler(move |direction: &Direction, _, cx| stepping.update(cx, |view, cx| view.step_change(*direction, cx))),
+        ));
+        if let Some((percent, fits)) = zoom {
+            let (zoom_out, zoom_in, fit) = (view.clone(), view.clone(), view.clone());
+            bar = bar
+                .tool(
+                    Button::new("unity-zoom-out")
+                        .ghost()
+                        .xsmall()
+                        .icon(IconName::Minus)
+                        .tooltip("Zoom out")
+                        .on_click(move |_, _, cx| zoom_out.update(cx, |view, cx| view.zoom(-1., cx))),
+                )
+                .tool(
+                    div()
+                        .min_w(px(ZOOM_TEXT_WIDTH))
+                        .text_center()
+                        .xs_text()
+                        .text_color(muted)
+                        .child(percent.map(|percent| format!("{} %", ui::thousands(percent.round().max(0.) as usize))).unwrap_or_default()),
+                )
+                .tool(
+                    Button::new("unity-zoom-in")
+                        .ghost()
+                        .xsmall()
+                        .icon(IconName::Plus)
+                        .tooltip("Zoom in, or hold Ctrl and turn the wheel")
+                        .on_click(move |_, _, cx| zoom_in.update(cx, |view, cx| view.zoom(1., cx))),
+                )
+                .tool(
+                    Button::new("unity-zoom-fit")
+                        .ghost()
+                        .xsmall()
+                        .label("Fit")
+                        .selected(fits)
+                        .tooltip("Show everything")
+                        .on_click(move |_, _, cx| fit.update(cx, |view, cx| view.fit(cx))),
+                );
+        }
+        bar.tool(
+            Button::new("unity-options")
+                .ghost()
+                .xsmall()
+                .icon(IconName::Ellipsis)
+                .tooltip("View options")
+                .dropdown_menu_with_anchor(Anchor::TopRight, |menu, _, cx| unity_options_menu(menu, cx)),
+        )
+    }
+
+    fn unity_text_bar(&self, files: &UnityFiles, cx: &mut Context<Self>) -> ViewBar {
+        let state = self.diff.read(cx);
+        let position = self.change_position(&state.change_marks(), state.top_row(), state.visible_rows());
+        self.unity_modes(ViewBar::new(), files.shape, files.kind, UnityMode::Text, cx)
+            .stepper(ChangeStepper::new(
+                position,
+                handler(cx.listener(|this, direction: &Direction, window, cx| this.step_change(*direction, window, cx))),
+            ))
+            .tool(
+                Button::new("text-options")
+                    .ghost()
+                    .xsmall()
+                    .icon(IconName::Ellipsis)
+                    .tooltip("View options")
+                    .dropdown_menu_with_anchor(Anchor::TopRight, |menu, _, cx| text_options_menu(menu, cx)),
+            )
     }
 
     fn leave_merge(&mut self) {
@@ -504,6 +732,28 @@ impl FileDiffPanel {
         cx: &mut Context<Self>,
     ) {
         self.leave_merge();
+        if self.routes_to_unity(file.path()) {
+            let reload = self.shows_commit_file(id, file.path());
+            let request = commit_request(MediaView::Unity, &file, id, baseline.commit(), &short_id);
+            self.compared = Some(Compared::CommitFile { id, baseline, short_id, file });
+            if self.unity_mode == UnityMode::Text {
+                self.leave_media(cx);
+                self.parts = None;
+                if !reload {
+                    self.stepped = None;
+                    self.patch.clear();
+                    self.diff.update(cx, |state, cx| state.set_files([], cx));
+                }
+                self.reread_commit_file(!reload, cx);
+            } else if let Some(repo) = self.repository.read(cx).repo().cloned() {
+                self.unity_text = None;
+                self.open_media(&repo, request, reload, cx);
+            }
+            cx.notify();
+            return;
+        }
+        self.unity_text = None;
+        self.sync_context_lines(cx);
         let view = media_view(file.path()).or_else(|| file.is_binary().then_some(MediaView::Other));
         if let Some(view) = view {
             let reload = self.shows_commit_file(id, file.path());
@@ -539,6 +789,7 @@ impl FileDiffPanel {
         if self.compared.take().is_some() {
             self.leave_media(cx);
             self.leave_merge();
+            self.unity_text = None;
             self.parts = None;
             self.pressed = None;
             self.stepped = None;
@@ -567,6 +818,11 @@ impl FileDiffPanel {
                 return;
             }
             Some(Media::Videos(view)) => {
+                let view = view.clone();
+                view.update(cx, |view, cx| view.step_change(direction, cx));
+                return;
+            }
+            Some(Media::Unity(view)) => {
                 let view = view.clone();
                 view.update(cx, |view, cx| view.step_change(direction, cx));
                 return;
@@ -602,6 +858,9 @@ impl FileDiffPanel {
         self.media_view = Some(request.view);
         self.opened = Some(request.clone());
         let repo = repo.clone();
+        let unity_request = request.clone();
+        let meta = request.meta.clone();
+        let shown_path = SharedString::from(request.path.to_string_lossy().into_owned());
         let MediaRequest {
             view,
             sides,
@@ -611,14 +870,54 @@ impl FileDiffPanel {
         } = request;
         let task = run_in_background(
             cx,
-            move || match view {
-                MediaView::Pictures => read_pictures(&repo, sides, extension.as_deref()).map(Read::Pictures),
-                MediaView::Sounds => read_sounds(&repo, sides, extension.as_deref()).map(Read::Sounds),
-                MediaView::Videos => read_videos(&repo, sides, extension.as_deref()).map(Read::Videos),
-                MediaView::Other => read_other(&repo, sides, extension.as_deref(), note).map(Read::Other),
+            move || -> anyhow::Result<(Read, Option<unity::ImportChanges>)> {
+                let read = match view {
+                    MediaView::Pictures => read_pictures(&repo, sides, extension.as_deref()).map(Read::Pictures),
+                    MediaView::Sounds => read_sounds(&repo, sides, extension.as_deref()).map(Read::Sounds),
+                    MediaView::Videos => read_videos(&repo, sides, extension.as_deref()).map(Read::Videos),
+                    MediaView::Other => read_other(&repo, sides, extension.as_deref(), note).map(Read::Other),
+                    MediaView::Unity => read_unity(&repo, &unity_request).map(|files| Read::Unity(Arc::new(files))),
+                }?;
+                Ok((read, meta.and_then(|sides| read_imports(&repo, sides))))
             },
             move |this, result, cx| {
+                let mut imports = None;
+                let result = result.map(|(read, found)| {
+                    imports = found;
+                    read
+                });
+                this.imports = imports.clone();
                 match result {
+                    Err(error) if error.downcast_ref::<NotUnityText>().is_some() => {
+                        this.not_unity.insert(shown_path.clone());
+                        this.media.clear();
+                        this.media_view = None;
+                        this.reopen(cx);
+                    }
+                    Ok(Read::Unity(files)) => {
+                        this.stored_with_lfs = false;
+                        let kept = match this.media.value() {
+                            Some(Media::Unity(view)) if reload => Some(view.clone()),
+                            _ => None,
+                        };
+                        let view = match kept {
+                            Some(view) => {
+                                view.update(cx, |view, cx| view.replace(files, sources, cx));
+                                view
+                            }
+                            None => {
+                                this.forget_media(cx);
+                                let mode = this.unity_mode;
+                                let view = cx.new(|cx| UnityCompare::new(files, sources, mode, cx));
+                                this.unity_events = vec![
+                                    cx.subscribe(&view, |this, _, event: &UnityEvent, cx| this.on_unity_event(event, cx)),
+                                    cx.observe(&view, |_, _, cx| cx.notify()),
+                                ];
+                                view
+                            }
+                        };
+                        this.media.finish(Ok(Media::Unity(view)));
+                    }
                     Ok(Read::Sounds((sounds, stored_with_lfs))) => {
                         this.stored_with_lfs = stored_with_lfs;
                         this.forget_media(cx);
@@ -659,6 +958,17 @@ impl FileDiffPanel {
                         this.media.finish(Err(error));
                     }
                 }
+                match this.media.value() {
+                    Some(Media::Pictures(view)) => {
+                        let view = view.clone();
+                        view.update(cx, |view, _| view.set_imports(imports));
+                    }
+                    Some(Media::Sounds(view)) => {
+                        let view = view.clone();
+                        view.update(cx, |view, _| view.set_imports(imports));
+                    }
+                    _ => {}
+                }
                 cx.notify();
             },
         );
@@ -673,9 +983,16 @@ impl FileDiffPanel {
     }
 
     fn forget_media(&mut self, cx: &mut Context<Self>) {
-        if let Some(Media::Pictures(view)) = self.media.value() {
-            let view = view.clone();
-            view.update(cx, |view, cx| view.forget_images(cx));
+        match self.media.value() {
+            Some(Media::Pictures(view)) => {
+                let view = view.clone();
+                view.update(cx, |view, cx| view.forget_images(cx));
+            }
+            Some(Media::Unity(view)) => {
+                let view = view.clone();
+                view.update(cx, |view, cx| view.forget_images(cx));
+            }
+            _ => {}
         }
     }
 
@@ -902,6 +1219,10 @@ impl FileDiffPanel {
             Load::Loading { .. } if view == Some(MediaView::Pictures) => ui::loading("Reading pictures…"),
             Load::Loading { .. } if view == Some(MediaView::Sounds) => ui::loading("Decoding both versions…"),
             Load::Loading { .. } if view == Some(MediaView::Videos) => ui::loading("Reading both videos with FFmpeg…"),
+            Load::Loading { .. } if view == Some(MediaView::Unity) => ui::loading("Reading both versions of the Unity file…"),
+            Load::Failed(failure) if view == Some(MediaView::Unity) => {
+                ui::failure("Couldn't compare this Unity file", failure.message(), cx)
+            }
             Load::Failed(failure) if view == Some(MediaView::Videos) => {
                 ui::failure("Couldn't compare these videos", failure.message(), cx)
             }
@@ -917,6 +1238,7 @@ impl FileDiffPanel {
                 Media::Pictures(view) => view.clone().into_any_element(),
                 Media::Sounds(view) => view.clone().into_any_element(),
                 Media::Videos(view) => view.clone().into_any_element(),
+                Media::Unity(view) => view.clone().into_any_element(),
                 Media::Other(file) => {
                     let sources = self
                         .opened
@@ -931,6 +1253,7 @@ impl FileDiffPanel {
                         })),
                         handler(cx.listener(|this, _: &(), _, cx| this.run_difftool(cx))),
                     )
+                    .imports(self.imports.clone())
                     .into_any_element()
                 }
             },
@@ -953,31 +1276,60 @@ impl FileDiffPanel {
         let original = renamed_from(file).cloned();
         let kind = change_kind(file);
         let whitespace = TextOptions::current(cx).whitespace();
+        let unity_request = match &self.compared {
+            Some(Compared::CommitFile { short_id, file, .. }) if self.unity_mode == UnityMode::Text && self.routes_to_unity(file.path()) => {
+                Some(commit_request(MediaView::Unity, file, id, baseline.commit(), short_id))
+            }
+            _ => None,
+        };
         let task = run_in_background(
             cx,
-            move || -> anyhow::Result<Option<DiffFile>> {
+            move || -> anyhow::Result<(Option<DiffFile>, Option<Arc<UnityFiles>>)> {
                 let paths: Vec<&OsStr> = std::iter::once(&path)
                     .chain(&original)
                     .map(|path| OsStr::new(path.as_ref()))
                     .collect();
                 let mut text = repo.commit_file_patch(id, baseline, &paths, whitespace)?;
-                if spreads(kind) {
+                let mut files = None;
+                if let Some(request) = &unity_request {
+                    let read = Arc::new(read_unity(&repo, request)?);
+                    text = match unity_patch(&repo, &read, FilePatch::Diff { text, hunks: None })? {
+                        FilePatch::Diff { text, .. } => text,
+                        FilePatch::Conflicted { contents, .. } => contents,
+                    };
+                    files = Some(read);
+                } else if spreads(kind) {
                     text = repo.with_whole_file(text, Revision::Commit(id), OsStr::new(path.as_ref()));
                 }
-                Ok(parse_patch(&text)?
-                    .into_iter()
-                    .find(|file| *file.path() == path))
+                let parsed = parse_patch(&text)?;
+                let found = parsed.iter().find(|file| *file.path() == path).cloned().or_else(|| files.as_ref().and(parsed.into_iter().next()));
+                Ok((found, files))
             },
             move |this, result, cx| {
                 this.rereading.finish();
-                let Ok(reread) = result else {
+                if let Err(error) = &result
+                    && error.downcast_ref::<NotUnityText>().is_some()
+                    && let Some(Compared::CommitFile { file, .. }) = &this.compared
+                {
+                    this.not_unity.insert(file.path().clone());
+                    this.reopen(cx);
+                    return;
+                }
+                let Ok((reread, unity_files)) = result else {
                     return;
                 };
+                let entered_unity = unity_files.is_some() != this.unity_text.is_some();
+                this.unity_text = unity_files;
+                if entered_unity {
+                    this.sync_context_lines(cx);
+                }
                 let Some(Compared::CommitFile { file: shown, .. }) = &mut this.compared else {
                     return;
                 };
                 let files: Vec<DiffFile> = reread.iter().cloned().collect();
-                if let Some(reread) = reread {
+                if let Some(reread) = reread
+                    && this.unity_text.is_none()
+                {
                     *shown = reread;
                 }
                 this.patch = Load::Ready(PatchStats::of(&files));
@@ -1001,9 +1353,10 @@ impl FileDiffPanel {
 
     fn apply_options(&mut self, cx: &mut Context<Self>) {
         let options = TextOptions::current(cx);
+        let lines = self.context_lines(options);
         self.diff.update(cx, |state, cx| {
             state.set_inline_unit(options.inline_unit(), cx);
-            state.set_context_lines(options.context_lines(), cx);
+            state.set_context_lines(lines, cx);
         });
         if options.whitespace() != self.whitespace {
             self.reread(cx);
@@ -1267,6 +1620,12 @@ impl FileDiffPanel {
                     .child(view.read(cx).facts())
                     .into_any_element(),
             ),
+            (_, Some(Media::Unity(view))) => Some(
+                div()
+                    .text_color(cx.theme().muted_foreground)
+                    .child(view.read(cx).facts())
+                    .into_any_element(),
+            ),
             (_, Some(Media::Other(file))) => Some(
                 div()
                     .text_color(cx.theme().muted_foreground)
@@ -1389,7 +1748,29 @@ impl Render for FileDiffPanel {
             Some(Media::Videos(view)) => Some(view.clone()),
             _ => None,
         };
+        let shown_unity = match self.media.value() {
+            Some(Media::Unity(view)) => Some(view.clone()),
+            _ => None,
+        };
         let (view_bar, content) = match (self.media_view, shown_pictures, shown_sounds) {
+            (_, _, _) if shown_unity.is_some() => {
+                let view = shown_unity.clone().unwrap_or_else(|| unreachable!());
+                (Some(self.unity_bar(&view, cx)), self.media_content(cx))
+            }
+            (Some(MediaView::Unity), None, None) => (Some(ViewBar::new()), self.media_content(cx)),
+            (None, _, _) if self.unity_text.is_some() => {
+                let files = self.unity_text.clone().unwrap_or_else(|| unreachable!());
+                let bar = self.unity_text_bar(&files, cx);
+                let text_view = self.patch.value().is_some().then(|| self.text_view(cx));
+                let content = patch_content(
+                    &self.patch,
+                    |stats| *stats,
+                    &TEXTS,
+                    |_| text_view.unwrap_or_else(|| div().into_any_element()),
+                    cx,
+                );
+                (Some(bar), content)
+            }
             (_, Some(view), _) => (Some(self.picture_bar(&view, cx)), self.media_content(cx)),
             (_, _, Some(view)) => (Some(self.sound_bar(&view, cx)), self.media_content(cx)),
             (Some(MediaView::Videos), None, None) => match shown_videos {
@@ -1432,7 +1813,49 @@ enum Read {
     Pictures((Pictures, bool)),
     Sounds((Sounds, bool)),
     Videos((Videos, bool)),
+    Unity(Arc<UnityFiles>),
     Other((OtherFile, bool)),
+}
+
+fn unity_source(source: Option<VersionSource>) -> Option<UnitySource> {
+    source.map(|source| UnitySource {
+        revision: source.revision,
+        path: source.path,
+    })
+}
+
+fn read_unity(repo: &Repo, request: &MediaRequest) -> anyhow::Result<UnityFiles> {
+    let path = request.path.to_string_lossy().into_owned();
+    unity::read(
+        repo,
+        &path,
+        unity_source(request.sides.before.clone()),
+        unity_source(request.sides.after.clone()),
+    )
+}
+
+fn unity_patch(repo: &Repo, files: &UnityFiles, patch: FilePatch) -> anyhow::Result<FilePatch> {
+    let FilePatch::Diff { text, hunks } = patch else {
+        return Ok(patch);
+    };
+    if files.shape != UnityShape::Graph {
+        return Ok(FilePatch::Diff {
+            text: files.annotate(&text),
+            hunks,
+        });
+    }
+    let pretty = |version: Option<&unity::UnityVersion>| {
+        version
+            .and_then(|version| version.graph.as_ref())
+            .and_then(|graph| serde_json::to_string_pretty(graph).ok())
+            .map(|text| text + "\n")
+            .unwrap_or_default()
+    };
+    let name = Path::new(&files.path)
+        .file_name()
+        .map_or_else(|| "graph.json".to_owned(), |name| format!("{}.json", name.to_string_lossy()));
+    let text = repo.texts_patch(&pretty(files.before.as_ref()), &pretty(files.after.as_ref()), &name)?;
+    Ok(FilePatch::Diff { text, hunks: None })
 }
 
 fn media_view(path: &str) -> Option<MediaView> {
@@ -1455,7 +1878,23 @@ fn working_request(view: MediaView, change: &FileChange, side: Side, staged_too:
             Side::Staged => DifftoolTarget::Staged,
         }),
         path: change.exact_path().to_owned(),
+        meta: change.meta().map(|meta| working_sides(meta, side, staged_too).0),
     }
+}
+
+fn read_imports(repo: &Repo, sides: Sides) -> Option<unity::ImportChanges> {
+    let name = sides
+        .after
+        .as_ref()
+        .or(sides.before.as_ref())
+        .and_then(|source| Path::new(&source.path).file_name().map(|name| name.to_string_lossy().into_owned()))
+        .unwrap_or_default();
+    let text = |source: Option<VersionSource>| {
+        source
+            .and_then(|source| repo.file_version(source.revision, &source.path).ok())
+            .map(|version| String::from_utf8_lossy(&version.bytes).into_owned())
+    };
+    unity::import_changes(text(sides.before).as_deref(), text(sides.after).as_deref(), &name)
 }
 
 fn commit_request(
@@ -1473,6 +1912,7 @@ fn commit_request(
         extension: extension(file.path()),
         difftool: parent.map(|parent| DifftoolTarget::Commit { parent, id }),
         path: OsString::from(file.path().as_ref()),
+        meta: None,
     }
 }
 
@@ -1774,6 +2214,7 @@ fn conflict_request(change: &FileChange, current: bool, incoming: bool) -> Media
         extension: extension(&change.path),
         difftool: None,
         path: change.exact_path().to_owned(),
+        meta: None,
     }
 }
 

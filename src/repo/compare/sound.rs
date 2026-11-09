@@ -7,7 +7,9 @@ use gpui_kit::{
     assets::IconName,
     canvas,
     component::{ActiveTheme as _, h_flex, v_flex},
-    div, fill, point, px, size,
+    div, fill, point,
+    prelude::FluentBuilder as _,
+    px, size,
 };
 
 use super::{
@@ -136,6 +138,7 @@ struct Lane {
 
 pub(crate) struct SoundCompare {
     sounds: Sounds,
+    imports: Option<crate::unity::ImportChanges>,
     sources: [SharedString; 2],
     mode: SoundMode,
     player: Player,
@@ -149,11 +152,16 @@ pub(crate) struct SoundCompare {
 }
 
 impl SoundCompare {
+    pub(crate) fn set_imports(&mut self, imports: Option<crate::unity::ImportChanges>) {
+        self.imports = imports;
+    }
+
     pub(crate) fn new(sounds: Sounds, sources: [SharedString; 2], cx: &mut Context<Self>) -> Self {
         let player = Player::new(sounds.before.clone(), sounds.after.clone());
         let longest = sounds.longest();
         Self {
             sounds,
+            imports: None,
             sources,
             mode: SoundMode::Split,
             player,
@@ -729,6 +737,7 @@ impl Render for SoundCompare {
             )
             .child(transport)
             .child(self.details())
+            .when_some(self.imports.as_ref(), |this, imports| this.child(super::details::import_table(imports, &self.sources)))
     }
 }
 

@@ -60,6 +60,7 @@ pub(crate) struct FileChange {
     pub(crate) kind: ChangeKind,
     path_as_git_wrote_it: Arc<[u8]>,
     original_path_as_git_wrote_it: Option<Arc<[u8]>>,
+    meta: Option<Arc<FileChange>>,
 }
 
 impl FileChange {
@@ -70,7 +71,16 @@ impl FileChange {
             kind,
             path_as_git_wrote_it: path.into(),
             original_path_as_git_wrote_it: original_path.map(Into::into),
+            meta: None,
         }
+    }
+
+    pub(crate) fn meta(&self) -> Option<&FileChange> {
+        self.meta.as_deref()
+    }
+
+    pub(crate) fn together(&self) -> impl Iterator<Item = &FileChange> {
+        std::iter::once(self).chain(self.meta())
     }
 
     pub(crate) fn name_as_git_wrote_it(&self) -> &[u8] {
@@ -127,7 +137,7 @@ impl StatusDigest {
         head.hash(&mut hasher);
         changes.underway.hash(&mut hasher);
         hash_size_and_modified_time(index, &mut hasher);
-        for change in changes.conflicted.iter().chain(&changes.unstaged) {
+        for change in changes.conflicted.iter().chain(&changes.unstaged).flat_map(FileChange::together) {
             hash_size_and_modified_time(&work_tree.join(change.exact_path()), &mut hasher);
         }
         Self(hasher.finish())
@@ -260,9 +270,32 @@ fn parse_status(output: &[u8]) -> WorkingChanges {
     }
     let by_path = |a: &FileChange, b: &FileChange| a.path.as_str().cmp(b.path.as_str());
     changes.conflicted.sort_by(by_path);
+    changes.unstaged = with_metas_beside_their_assets(std::mem::take(&mut changes.unstaged));
+    changes.staged = with_metas_beside_their_assets(std::mem::take(&mut changes.staged));
     changes.unstaged.sort_by(by_path);
     changes.staged.sort_by(by_path);
     changes
+}
+
+const META: &str = ".meta";
+
+fn with_metas_beside_their_assets(changes: Vec<FileChange>) -> Vec<FileChange> {
+    let assets: HashSet<&str> = changes.iter().map(|change| change.path.as_str()).collect();
+    let paired = |change: &FileChange| {
+        change
+            .path
+            .strip_suffix(META)
+            .is_some_and(|asset| assets.contains(asset))
+    };
+    let (metas, mut rest): (Vec<FileChange>, Vec<FileChange>) =
+        changes.iter().cloned().partition(|change| paired(change));
+    for meta in metas {
+        let asset = meta.path.strip_suffix(META).unwrap_or_default().to_owned();
+        if let Some(owner) = rest.iter_mut().find(|change| change.path == asset) {
+            owner.meta = Some(Arc::new(meta));
+        }
+    }
+    rest
 }
 
 #[cfg(test)]
@@ -271,6 +304,17 @@ mod tests {
 
     use super::{ChangeKind, FileChange, parse_status};
     use crate::git::{FilePatch, PartAction, Side, scratch::ScratchRepo};
+
+    #[test]
+    fn a_meta_file_moves_with_its_asset_on_the_same_side_only() {
+        let status = parse_status(b" M slime.png\0 M slime.png.meta\0M  hit.wav.meta\0 M Folder.meta\0");
+        let listed: Vec<&str> = status.unstaged.iter().map(|change| change.path.as_str()).collect();
+        assert_eq!(listed, vec!["Folder.meta", "slime.png"]);
+        let slime = &status.unstaged[1];
+        assert_eq!(slime.meta().map(|meta| meta.path.as_str()), Some("slime.png.meta"));
+        assert_eq!(slime.together().count(), 2);
+        assert_eq!(status.staged[0].path.as_str(), "hit.wav.meta");
+    }
 
     #[test]
     fn a_file_in_both_lists_counts_once() {

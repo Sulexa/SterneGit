@@ -302,6 +302,7 @@ fn separator(color: gpui_kit::Hsla) -> AnyElement {
 #[derive(IntoElement)]
 pub(crate) struct ViewBar {
     modes: Vec<Button>,
+    note: Option<AnyElement>,
     stepper: Option<ChangeStepper>,
     tools: Vec<AnyElement>,
     inline: bool,
@@ -311,6 +312,7 @@ impl ViewBar {
     pub(crate) fn new() -> Self {
         Self {
             modes: Vec::new(),
+            note: None,
             stepper: None,
             tools: Vec::new(),
             inline: false,
@@ -341,6 +343,11 @@ impl ViewBar {
                 .tooltip(tooltip)
                 .on_click(on_choose),
         );
+        self
+    }
+
+    pub(crate) fn note(mut self, note: impl IntoElement) -> Self {
+        self.note = Some(note.into_any_element());
         self
     }
 
@@ -377,6 +384,7 @@ impl RenderOnce for ViewBar {
             })
             .child(h_flex().flex_none().gap_0p5().children(self.modes))
             .when(!self.inline, |this| this.child(div().flex_1()))
+            .when_some(self.note, |this, note| this.child(note).child(separator(border)))
             .children(self.stepper)
             .when(separated, |this| this.child(separator(border)))
             .child(h_flex().flex_none().gap_0p5().children(self.tools))

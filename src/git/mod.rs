@@ -8,6 +8,7 @@ mod credential;
 mod facts;
 mod file_history;
 mod graph;
+mod grep;
 mod history;
 mod hunks;
 mod index;

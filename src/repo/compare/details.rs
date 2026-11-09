@@ -90,6 +90,22 @@ impl RenderOnce for VersionTag {
     }
 }
 
+pub(crate) fn import_table(changes: &crate::unity::ImportChanges, sources: &[SharedString; 2]) -> MediaDetails {
+    let note = format!("{} · {} unchanged", changes.file, crate::ui::thousands(changes.same));
+    let mut table = MediaDetails::named("Import settings", changes.columns.iter().cloned().map(SharedString::from).collect()).note(note);
+    for (version, values, source) in [
+        (Version::Before, &changes.before, &sources[0]),
+        (Version::After, &changes.after, &sources[1]),
+    ] {
+        table = table.row(DetailsRow {
+            version,
+            source: source.clone(),
+            values: values.iter().cloned().map(SharedString::from).collect(),
+        });
+    }
+    table
+}
+
 pub(crate) struct DetailsRow {
     pub(crate) version: Version,
     pub(crate) source: SharedString,
@@ -98,18 +114,31 @@ pub(crate) struct DetailsRow {
 
 #[derive(IntoElement)]
 pub(crate) struct MediaDetails {
-    columns: Vec<&'static str>,
+    title: SharedString,
+    note: Option<SharedString>,
+    columns: Vec<SharedString>,
     rows: Vec<DetailsRow>,
     deltas: Vec<Option<SharedString>>,
 }
 
 impl MediaDetails {
     pub(crate) fn new(columns: Vec<&'static str>) -> Self {
+        Self::named("Details", columns.into_iter().map(SharedString::from).collect())
+    }
+
+    pub(crate) fn named(title: impl Into<SharedString>, columns: Vec<SharedString>) -> Self {
         Self {
+            title: title.into(),
+            note: None,
             columns,
             rows: Vec::new(),
             deltas: Vec::new(),
         }
+    }
+
+    pub(crate) fn note(mut self, note: impl Into<SharedString>) -> Self {
+        self.note = Some(note.into());
+        self
     }
 
     pub(crate) fn row(mut self, row: DetailsRow) -> Self {
@@ -150,7 +179,10 @@ impl RenderOnce for MediaDetails {
                     .text_color(muted)
                     .font_weight(gpui_kit::FontWeight::MEDIUM)
                     .child(Icon::new(IconName::ChevronDown).xsmall())
-                    .child("Details"),
+                    .child(self.title.clone())
+                    .children(self.note.clone().map(|note| {
+                        div().font_weight(gpui_kit::FontWeight::NORMAL).child(note)
+                    })),
             )
             .children(self.rows.iter().map(|row| {
                 h_flex()
@@ -163,7 +195,7 @@ impl RenderOnce for MediaDetails {
         let columns = self.columns.iter().enumerate().map(|(ix, name)| {
             v_flex()
                 .flex_none()
-                .child(heading(SharedString::from(*name)))
+                .child(heading(name.clone()))
                 .children(self.rows.iter().map(|row| {
                     let value = row.values.get(ix).cloned().unwrap_or_default();
                     let changed = compared && row.version == Version::After && before.get(ix) != Some(&value);

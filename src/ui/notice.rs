@@ -19,7 +19,7 @@ pub(crate) fn loading(message: &'static str) -> AnyElement {
         .into_any_element()
 }
 
-pub(crate) fn hint(message: &'static str, cx: &App) -> AnyElement {
+pub(crate) fn hint(message: impl Into<SharedString>, cx: &App) -> AnyElement {
     div()
         .size_full()
         .flex()
@@ -28,7 +28,7 @@ pub(crate) fn hint(message: &'static str, cx: &App) -> AnyElement {
         .p_6()
         .sm_text()
         .text_color(cx.theme().muted_foreground)
-        .child(message)
+        .child(message.into())
         .into_any_element()
 }
 

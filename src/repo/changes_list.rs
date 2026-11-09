@@ -13,7 +13,7 @@ use gpui_kit::{
     },
     div,
     prelude::FluentBuilder as _,
-    relative, uniform_list,
+    px, relative, uniform_list,
 };
 
 use super::{
@@ -25,7 +25,7 @@ use crate::{
     git::{ChangeKind, FileChange, Scope, Side, WorkingChanges},
     ui::{
         self, BySide, FilePlace, FileView, FileViewToggle, Folded, Handler, Look as _, Pick,
-        Picked, SectionHeader, SideUi as _, counted, file_row, folder_row, handler, thousands,
+        Picked, SectionHeader, SideUi as _, counted, file_row, file_row_tagged, folder_row, handler, thousands,
     },
 };
 
@@ -704,12 +704,36 @@ fn change_row(
                 on_move(&moved, window, cx)
             })
         });
-    file_row(
+    let meta = change.meta().map(|meta| {
+        let theme = cx.theme();
+        div()
+            .id(SharedString::from(format!("meta/{id}")))
+            .flex_none()
+            .px_1()
+            .rounded(px(3.))
+            .border_1()
+            .border_color(theme.border)
+            .text_size(px(10.))
+            .line_height(px(14.))
+            .font_weight(gpui_kit::FontWeight::SEMIBOLD)
+            .text_color(theme.muted_foreground)
+            .child("meta")
+            .tooltip({
+                let text = SharedString::from(format!(
+                    "{} changed too: it is staged, unstaged and discarded with this file",
+                    meta.path.rsplit('/').next().unwrap_or(&meta.path)
+                ));
+                move |window, cx| gpui_kit::component::tooltip::Tooltip::new(text.clone()).build(window, cx)
+            })
+            .into_any_element()
+    });
+    file_row_tagged(
         SharedString::from(id),
         change.kind,
         &change.path,
         place,
         selected,
+        meta,
         move_button,
         cx,
     )

@@ -120,6 +120,34 @@ impl Repo {
         self.file_patch_with(change, side, Whitespace::Compared)
     }
 
+    pub(crate) fn texts_patch(&self, before: &str, after: &str, name: &str) -> Result<String> {
+        static TURNS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        let turn = TURNS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let folder = std::env::temp_dir()
+            .join("sternegit")
+            .join(format!("texts-{}-{turn}", std::process::id()));
+        for (side, text) in [("a", before), ("b", after)] {
+            std::fs::create_dir_all(folder.join(side))?;
+            std::fs::write(folder.join(side).join(name), text)?;
+        }
+        let output = run(
+            &folder,
+            &[
+                READ_ONLY,
+                "diff",
+                "--no-index",
+                "--no-color",
+                "--",
+                &format!("a/{name}"),
+                &format!("b/{name}"),
+            ],
+            Exit::SuccessOrDifference,
+        );
+        let _ = std::fs::remove_dir_all(&folder);
+        let _ = self;
+        Ok(String::from_utf8_lossy(&output?).into_owned())
+    }
+
     pub(crate) fn file_patch_with(
         &self,
         change: &FileChange,

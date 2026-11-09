@@ -30,7 +30,7 @@ pub(crate) use notice::{Notice, failure, hint, loading};
 pub(crate) use palette::Palette;
 pub(crate) use picked::{Pick, Picked, PickedFor};
 pub(crate) use rows::{
-    FilePlace, ROW_HEIGHT, SectionHeader, file_row, folder_row, list_row, tree_line,
+    FilePlace, ROW_HEIGHT, SectionHeader, file_row, file_row_tagged, folder_row, list_row, tree_line,
 };
 pub(crate) use side::{BySide, SideUi};
 pub(crate) use text::{commit_subject, counted, thousands};
