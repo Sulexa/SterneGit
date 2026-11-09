@@ -21,6 +21,7 @@ mod operation;
 mod operation_bar;
 mod patch_view;
 mod pulls;
+mod ref_menus;
 mod ref_tree;
 mod refs_list;
 mod repository;
@@ -28,6 +29,7 @@ mod saved_folds;
 mod stash_menu;
 mod status_bar;
 mod tag_dialog;
+mod tag_menu;
 mod toolbar;
 mod worktree_bar;
 mod worktree_dialog;
@@ -81,6 +83,10 @@ use behind_dialog::open_behind_dialog;
 use branch_dialog::{open_branch_dialog, open_branch_dialog_at};
 use commit_menu::{CommitAction, CommitMenu, confirm_reset_hard, copy_commit_message};
 use tag_dialog::open_tag_dialog;
+use tag_menu::{
+    TagAction, TagMenu, confirm_delete as confirm_delete_tag,
+    confirm_delete_there as confirm_delete_tag_there, copy_tag_name,
+};
 use stash_menu::{StashAction, StashMenu};
 use branch_menu::{BranchAction, BranchMenu, PullOffers, confirm_delete};
 use changes_list::{ChangesList, SideFolds, SideScrolls, discard_question};
@@ -1538,6 +1544,43 @@ impl RepoView {
         }
     }
 
+    fn tag_menu(&self, cx: &mut Context<Self>) -> TagMenu {
+        let repository = self.repository.read(cx);
+        TagMenu::new(
+            repository.push_remote().map(SharedString::from),
+            repository.is_writing(),
+            repository.underway().is_some(),
+        )
+        .on_action(cx.listener(|this, (label, action): &(RefLabel, TagAction), window, cx| {
+            this.act_on_tag(label.clone(), *action, window, cx)
+        }))
+    }
+
+    fn act_on_tag(
+        &mut self,
+        label: RefLabel,
+        action: TagAction,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let repository = self.repository.clone();
+        let remote = repository.read(cx).push_remote();
+        match (action, remote) {
+            (TagAction::CheckOut, _) => {
+                repository.update(cx, |repository, cx| repository.check_out_tag(label, cx))
+            }
+            (TagAction::Push, Some(remote)) => repository
+                .update(cx, |repository, cx| repository.push_tag(label, remote, cx)),
+            (TagAction::BranchHere, _) => open_branch_dialog(repository, Some(label), window, cx),
+            (TagAction::CopyName, _) => copy_tag_name(&label, window, cx),
+            (TagAction::Delete, _) => confirm_delete_tag(repository, label, window, cx),
+            (TagAction::DeleteThere, Some(remote)) => {
+                confirm_delete_tag_there(repository, label, remote, window, cx)
+            }
+            (TagAction::Push | TagAction::DeleteThere, None) => {}
+        }
+    }
+
     fn operation_bar(&self, cx: &mut Context<Self>) -> Option<OperationBar> {
         let repository = self.repository.read(cx);
         let underway = repository.underway()?.clone();
@@ -1656,6 +1699,7 @@ impl RepoView {
 
     fn refs_list(&self, history: Arc<History>, cx: &mut Context<Self>) -> RefsList {
         let branch_menu = self.branch_menu(&history, cx);
+        let tag_menu = self.tag_menu(cx);
         let stash_menu = self.stash_menu(cx);
         let marks = self.pull_marks(&history, cx);
         let section = self.pulls_section(cx);
@@ -1665,6 +1709,7 @@ impl RepoView {
             .worktrees(worktrees)
             .selected(self.target.commit())
             .branch_menu(branch_menu)
+            .tag_menu(tag_menu)
             .stash_menu(stash_menu)
             .on_reveal(cx.listener(|this, ix: &usize, window, cx| this.reveal_ref(*ix, window, cx)))
             .on_reveal_stash(cx.listener(|this, id: &ObjectId, _, cx| this.reveal_stash(*id, cx)))
@@ -1681,6 +1726,7 @@ impl RepoView {
     fn history_list(&self, history: Arc<History>, cx: &mut Context<Self>) -> HistoryList {
         let changes = self.repository.read(cx).changes().cloned();
         let branch_menu = self.branch_menu(&history, cx);
+        let tag_menu = self.tag_menu(cx);
         let stash_menu = self.stash_menu(cx);
         let commit_menu = self.commit_menu(&history, cx);
         let marks = self.pull_marks(&history, cx);
@@ -1703,6 +1749,7 @@ impl RepoView {
             self.history_scroll.clone(),
         )
         .branch_menu(branch_menu)
+        .tag_menu(tag_menu)
         .stash_menu(stash_menu)
         .commit_menu(commit_menu)
         .marks(marks)

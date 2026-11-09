@@ -716,8 +716,61 @@ impl Repository {
                 repo.create_tag(&name, id, message.as_deref())?;
                 let pushed = push_to
                     .as_deref()
-                    .map(|remote| (remote, repo.push_tag(remote, &name)));
+                    .map(|remote| (remote, repo.push_tag(remote, &name).map(drop)));
                 Ok(operation::tag_created(&name, &short, pushed))
+            },
+            cx,
+        );
+    }
+
+    pub(crate) fn push_remote(&self) -> Option<String> {
+        self.repo().and_then(|repo| repo.push_remote())
+    }
+
+    pub(crate) fn check_out_tag(&mut self, label: RefLabel, cx: &mut Context<Self>) {
+        self.write_and_report(
+            None,
+            operation::check_out_failed(&label.name),
+            move |repo| {
+                let carried = repo.check_out_commit(label.target)?;
+                let done = operation::checked_out_commit(&label.name);
+                Ok(operation::switched(done, &label.name, carried))
+            },
+            cx,
+        );
+    }
+
+    pub(crate) fn push_tag(&mut self, label: RefLabel, remote: String, cx: &mut Context<Self>) {
+        self.write_and_report(
+            Some(Operation::Push),
+            operation::tag_push_failed(&label.name),
+            move |repo| {
+                repo.push_tag(&remote, &label.name)
+                    .map(|pushed| operation::tag_pushed(&label.name, &remote, pushed))
+            },
+            cx,
+        );
+    }
+
+    pub(crate) fn delete_tag(&mut self, label: RefLabel, cx: &mut Context<Self>) {
+        self.write_and_report(
+            None,
+            operation::delete_failed(&label),
+            move |repo| {
+                repo.delete_tag(&label.name)?;
+                Ok(operation::tag_deleted(&label.name))
+            },
+            cx,
+        );
+    }
+
+    pub(crate) fn delete_tag_there(&mut self, label: RefLabel, remote: String, cx: &mut Context<Self>) {
+        self.write_and_report(
+            None,
+            operation::tag_delete_there_failed(&label.name, &remote),
+            move |repo| {
+                repo.delete_remote_tag(&remote, &label.name)?;
+                Ok(operation::tag_deleted_there(&label.name, &remote))
             },
             cx,
         );

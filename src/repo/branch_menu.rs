@@ -209,7 +209,7 @@ pub(crate) fn delete_question(label: &RefLabel, history: &History) -> DeleteQues
     }
 }
 
-fn what_deleting_loses(branch: &str, commits_only_on_it: Option<usize>) -> String {
+pub(super) fn what_deleting_loses(branch: &str, commits_only_on_it: Option<usize>) -> String {
     match commits_only_on_it {
         Some(0) => {
             format!("Every commit of {branch} is on another branch or tag too, so nothing is lost.")

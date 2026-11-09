@@ -26,6 +26,7 @@ pub(crate) enum Refusal {
     StashKept,
     StashNotApplied,
     StashGone,
+    TagTakenThere { tag: String, remote: String },
 }
 
 impl fmt::Display for Refusal {
@@ -71,6 +72,10 @@ impl fmt::Display for Refusal {
             Refusal::StashGone => write!(
                 f,
                 "That stash isn't there anymore: it was popped or deleted outside SterneGit."
+            ),
+            Refusal::TagTakenThere { tag, remote } => write!(
+                f,
+                "{remote} already has a different {tag}. Delete {tag} from {remote} first, then push it again."
             ),
         }
     }

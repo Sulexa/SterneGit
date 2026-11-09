@@ -17,8 +17,10 @@ use gpui_kit::{
 use super::{
     branch_menu::BranchMenu,
     pulls::{PullMarks, PullsSection},
+    ref_menus::RefMenus,
     ref_tree::{Listed, RefGroup, RefTreeRow, Section, last_segment, ref_tree},
     stash_menu::StashMenu,
+    tag_menu::TagMenu,
     worktree_menu::WorktreeMenu,
 };
 use crate::{
@@ -51,7 +53,7 @@ pub(crate) struct RefsList {
     on_reveal_stash: Option<Handler<ObjectId>>,
     on_check_out: Option<Handler<RefLabel>>,
     on_toggle: Option<Handler<RefGroup>>,
-    branch_menu: Option<BranchMenu>,
+    menus: RefMenus,
     stash_menu: Option<StashMenu>,
     pulls: Option<PullsSection>,
     worktrees: Option<WorktreeSection>,
@@ -80,7 +82,7 @@ impl RefsList {
             on_reveal_stash: None,
             on_check_out: None,
             on_toggle: None,
-            branch_menu: None,
+            menus: RefMenus::default(),
             stash_menu: None,
             pulls: None,
             worktrees: None,
@@ -100,7 +102,12 @@ impl RefsList {
     }
 
     pub(crate) fn branch_menu(mut self, menu: BranchMenu) -> Self {
-        self.branch_menu = Some(menu);
+        self.menus.branch = Some(menu);
+        self
+    }
+
+    pub(crate) fn tag_menu(mut self, menu: TagMenu) -> Self {
+        self.menus.tag = Some(menu);
         self
     }
 
@@ -158,7 +165,7 @@ impl RenderOnce for RefsList {
             on_reveal_stash,
             on_check_out,
             on_toggle,
-            branch_menu,
+            menus,
             stash_menu,
             pulls,
             worktrees,
@@ -170,7 +177,7 @@ impl RenderOnce for RefsList {
             on_reveal_stash,
             on_check_out,
             on_toggle,
-            branch_menu,
+            menus,
             stash_menu,
             worktrees,
         };
@@ -203,7 +210,7 @@ struct RowHandlers {
     on_reveal_stash: Option<Handler<ObjectId>>,
     on_check_out: Option<Handler<RefLabel>>,
     on_toggle: Option<Handler<RefGroup>>,
-    branch_menu: Option<BranchMenu>,
+    menus: RefMenus,
     stash_menu: Option<StashMenu>,
     worktrees: Option<WorktreeSection>,
 }
@@ -221,7 +228,7 @@ fn ref_tree_row(
         on_reveal_stash,
         on_check_out,
         on_toggle,
-        branch_menu,
+        menus,
         stash_menu,
         worktrees,
     } = handlers;
@@ -253,7 +260,7 @@ fn ref_tree_row(
                 on_reveal: on_reveal.clone(),
                 on_check_out: on_check_out.clone(),
             },
-            branch_menu.clone(),
+            menus,
             cx,
         ),
         &RefTreeRow::Stash { ix } => stash_row(
@@ -349,7 +356,7 @@ fn ref_row(
     selected: Option<ObjectId>,
     mark: Option<PullMark>,
     clicks: RefClicks,
-    branch_menu: Option<BranchMenu>,
+    menus: &RefMenus,
     cx: &App,
 ) -> AnyElement {
     let RefClicks {
@@ -394,14 +401,7 @@ fn ref_row(
             on_check_out(&double_clicked, window, cx)
         }
     });
-    match branch_menu.filter(|_| label.is_branch()) {
-        Some(branch_menu) => {
-            let right_clicked = label.clone();
-            row.context_menu(move |menu, _, _| branch_menu.build(menu, &right_clicked))
-                .into_any_element()
-        }
-        None => row.into_any_element(),
-    }
+    menus.attach(row, label)
 }
 
 fn ahead_behind(label: &RefLabel, cx: &App) -> Option<impl IntoElement> {

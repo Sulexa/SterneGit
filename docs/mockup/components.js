@@ -415,6 +415,16 @@ const Texts = {
   deleteUncounted: (name) => `${name} points to a commit older than the newest ${thousands(Texts.historyLimit)} shown, so SterneGit can't tell whether deleting it loses any commits.`,
   deleteRemoteTitle: (name, remote) => `Delete ${name} from ${remote}?`,
   deleteRemoteDescription: (name, remote) => `The branch is removed from ${remote} for everyone who uses it. A local ${name}, if you have one, stays.`,
+  pushTagTo: (name, remote) => `Push ${name} to ${remote}`,
+  tagPushedTo: (name, remote) => `Pushed ${name} to ${remote}`,
+  tagAlreadyThere: (name, remote) => `${remote} already has ${name}`,
+  tagTakenThere: (name, remote) => `${remote} already has a different ${name}. Delete ${name} from ${remote} first, then push it again.`,
+  tagFetchedBack: (name, remote) => `If ${remote} has ${name} too, the next fetch brings it back; Delete ${name} from ${remote}… removes it there.`,
+  deleteRemoteTagDescription: (name, remote) => `The tag is removed from ${remote} for everyone who uses it. ${name} stays here, so a push would send it back.`,
+  tagDeleted: (name) => `Deleted tag ${name}`,
+  copyName: 'Copy name',
+  nameCopied: 'Tag name copied',
+  remoteTagDeleted: (name, remote) => `Deleted ${name} from ${remote}`,
   branchPlaceholder: 'Branch name',
   branchExists: (name) => `There is already a branch named ${name}.`,
   aheadBehind: (ahead, behind, upstream) => {
@@ -1329,6 +1339,17 @@ function branchMenuItems({ label, current, mode = 'merge', pull }) {
     !checkedOut && !elsewhere && [item(remote ? Texts.deleteRemoteBranch(remote.branch, remote.remote) : Texts.deleteBranch(label.name))],
   ].filter(Boolean);
   return groups.flatMap((group, ix) => (ix ? ['-', ...group] : group));
+}
+
+function tagMenuItems({ label, remote }) {
+  const item = (text) => [text, ''];
+  return menuGroups([
+    [item(Texts.checkOut(label.name))],
+    [remote && item(Texts.pushTagTo(label.name, remote))],
+    [item(Texts.branchHere)],
+    [item(Texts.copyName)],
+    [item(Texts.deleteBranch(label.name)), remote && item(Texts.deleteRemoteBranch(label.name, remote))],
+  ]);
 }
 
 function changedCount(tree) {
@@ -2617,6 +2638,17 @@ const C = {
       C.Button({ label: WorktreeTexts.removeSelected(picked.length), icon: 'trash-2', variant: 'danger', size: 'md', disabled: !picked.length });
     const body = `${tools}<div class="v worktree-list">${rows}</div>${warn}`;
     return dialogShell({ name: 'WorktreesDialog', title: WorktreeTexts.manageTitle(repository), description: WorktreeTexts.manageAbout, body, buttons, size: 'worktrees' });
+  },
+
+  TagMenu({ label, remote, left = 0, top = 0, hot }) {
+    return C.Menu({ items: tagMenuItems({ label, remote }), left, top, hot, name: 'TagMenu' });
+  },
+
+  DeleteTagDialog({ label, remote, only = 0, there = false }) {
+    if (there) return C.AlertDialog({ title: Texts.deleteRemoteTitle(label.name, remote), description: Texts.deleteRemoteTagDescription(label.name, remote), confirm: 'Delete', name: 'DeleteTagDialog' });
+    const lost = only === null ? Texts.deleteUncounted(label.name) : only ? Texts.deleteUnmerged(label.name, only) : Texts.deleteMerged(label.name);
+    const description = [lost, remote && Texts.tagFetchedBack(label.name, remote)].filter(Boolean).join(' ');
+    return C.AlertDialog({ title: Texts.deleteBranchTitle(label.name), description, confirm: 'Delete', name: 'DeleteTagDialog' });
   },
 
   StashMenu({ stash, left = 0, top = 0, hot }) {

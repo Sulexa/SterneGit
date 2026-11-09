@@ -72,7 +72,7 @@ pub(crate) use reset::ResetMode;
 pub(crate) use reword::RewordScope;
 pub(crate) use stash::{Carried, Stash};
 pub(crate) use status::{ChangeKind, FileChange, Side, WorkingChanges};
-pub(crate) use tag::new_tag_name;
+pub(crate) use tag::{TagPushed, new_tag_name};
 pub(crate) use underway::{Continued, Picking, Rebasing, Underway};
 #[cfg(test)]
 pub(crate) use underway::{Merging, Replaying};

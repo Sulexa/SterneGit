@@ -153,7 +153,7 @@ pub(crate) fn open_tag_dialog(
         let Some(history) = repository.history().cloned() else {
             return;
         };
-        (history, repository.repo().and_then(|repo| repo.push_remote()))
+        (history, repository.push_remote())
     };
     let description = description(&history, id);
     let form = cx.new(|cx| TagForm::new(history, remote, window, cx));

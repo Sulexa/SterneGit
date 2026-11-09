@@ -3,7 +3,7 @@ use gpui_kit::SharedString;
 use crate::{
     git::{
         Behind, Carried, CaughtUp, CheckedOut, Continued, FolderLeft, Merged, Picked, Pulled,
-        Pushed, Rebased, RefLabel, Refusal, RemoteBranch, ResetMode, Tracking, Underway,
+        Pushed, Rebased, RefLabel, Refusal, RemoteBranch, ResetMode, TagPushed, Tracking, Underway,
     },
     ui::{Failure, thousands},
 };
@@ -408,6 +408,30 @@ pub(crate) fn rebase_failed(branch: &str, onto: &str) -> SharedString {
 
 pub(crate) fn delete_failed(label: &RefLabel) -> SharedString {
     format!("Couldn't delete {}", label.name).into()
+}
+
+pub(crate) fn tag_pushed(name: &str, remote: &str, pushed: TagPushed) -> SharedString {
+    match pushed {
+        TagPushed::Sent => format!("Pushed {name} to {remote}"),
+        TagPushed::AlreadyThere => format!("{remote} already has {name}"),
+    }
+    .into()
+}
+
+pub(crate) fn tag_push_failed(name: &str) -> SharedString {
+    format!("Couldn't push {name}").into()
+}
+
+pub(crate) fn tag_deleted(name: &str) -> SharedString {
+    format!("Deleted tag {name}").into()
+}
+
+pub(crate) fn tag_deleted_there(name: &str, remote: &str) -> SharedString {
+    format!("Deleted {name} from {remote}").into()
+}
+
+pub(crate) fn tag_delete_there_failed(name: &str, remote: &str) -> SharedString {
+    format!("Couldn't delete {name} from {remote}").into()
 }
 
 pub(crate) fn failure(error: &anyhow::Error) -> Failure {

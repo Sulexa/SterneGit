@@ -580,7 +580,7 @@ const Catalog = (() => {
           name: 'RefsList',
           code: 'repo::refs_list::RefsList',
           source: 'src/repo/refs_list.rs',
-          about: 'Branches, remotes, stashes and tags, each section only when it has something. Names are split at each slash into folders, in the order Git lists them; under Remotes the first folder is the remote. Stashes are listed newest first, without folders. Sections and folders fold with a click. Every section and folder starts folded the first time a repository opens; the ones opened since are remembered for that repository across launches. A local branch apart from its upstream ends its row with an AheadBehind. Clicking a ref or a stash selects its commit; double-clicking a branch checks it out; right-clicking a branch opens its BranchMenu, and right-clicking a stash its StashMenu.',
+          about: 'Branches, remotes, stashes and tags, each section only when it has something. Names are split at each slash into folders, in the order Git lists them; under Remotes the first folder is the remote. Stashes are listed newest first, without folders. Sections and folders fold with a click. Every section and folder starts folded the first time a repository opens; the ones opened since are remembered for that repository across launches. A local branch apart from its upstream ends its row with an AheadBehind. Clicking a ref or a stash selects its commit; double-clicking a branch checks it out; right-clicking a branch opens its BranchMenu, a tag its TagMenu, and a stash its StashMenu.',
           variants: [
             ['Branches apart from their upstream', () => C.RefsList({ refs: tracked.refs, collapsed: ['remote', 'tag'] }), { w: 224, h: 200 }],
             ['With stashes, one selected', () => C.RefsList({ refs: stashed.history.refs, stashes: stashed.history.stashes, selectedRow: 3, collapsed: ['local', 'remote'] }), { w: 224, h: 200 }],
@@ -666,6 +666,27 @@ const Catalog = (() => {
           ],
         },
         {
+          name: 'TagMenu',
+          code: 'repo::tag_menu::TagMenu',
+          source: 'src/repo/tag_menu.rs',
+          about: 'The right-click menu of a tag, in the RefsList or on its badge in a CommitRow, in groups: Check out; Push to the push remote; Create branch here…; Copy name; Delete… and Delete from the remote…. Without a remote, Push and Delete from the remote are left out. Check out runs git switch --detach at the tag, Push git push with refs/tags/<name>, Delete git tag --delete, Delete from the remote git push --delete. Every item but Copy name is disabled while Git writes; Check out and Create branch here… also while a rebase, a merge, a cherry-pick or a revert waits. Push spins the header\'s Push button while it runs.',
+          variants: [
+            ['With a remote', () => menuFrame(C.TagMenu({ label: ref('v0.2.0'), remote: 'origin' }), 260)],
+            ['No remote', () => menuFrame(C.TagMenu({ label: ref('v0.2.0') }), 260)],
+          ],
+        },
+        {
+          name: 'DeleteTagDialog',
+          code: 'repo::tag_menu::confirm_delete',
+          source: 'src/repo/tag_menu.rs',
+          about: 'An AlertDialog opened by Delete… or Delete from the remote… in a TagMenu. Here, it counts the commits no branch or other tag holds and says they are lost, or that nothing is lost; with a remote it adds that a fetch brings the tag back while the remote has it. On the remote, it says the tag goes for everyone. Cancel or Esc does nothing.',
+          variants: [
+            ['Nothing lost, with a remote', () => dialogFrame(C.DeleteTagDialog({ label: ref('v0.2.0'), remote: 'origin' }))],
+            ['Commits only it holds, no remote', () => dialogFrame(C.DeleteTagDialog({ label: ref('v0.2.0'), only: 2 }))],
+            ['On the remote', () => dialogFrame(C.DeleteTagDialog({ label: ref('v0.2.0'), remote: 'origin', there: true }))],
+          ],
+        },
+        {
           name: 'StashMenu',
           code: 'repo::stash_menu::StashMenu',
           source: 'src/repo/stash_menu.rs',
@@ -732,7 +753,7 @@ const Catalog = (() => {
           name: 'CommitRow',
           code: 'repo::history_list::commit_row',
           source: 'src/repo/history_list.rs',
-          about: 'The same 12 px left padding as every row, then the graph, up to three ref badges (then +n), subject, author 120 px with its AuthorAvatar in front, date 104 px, short id 56 px. A click selects the commit; a double-click on a branch badge that is not the checked-out branch checks that branch out, and a right-click on a branch badge opens its BranchMenu, both for the local branch when the badge holds its upstream too. A right-click anywhere else on the row opens its CommitMenu, or its StashMenu for a stash.',
+          about: 'The same 12 px left padding as every row, then the graph, up to three ref badges (then +n), subject, author 120 px with its AuthorAvatar in front, date 104 px, short id 56 px. A click selects the commit; a double-click on a branch badge that is not the checked-out branch checks that branch out, and a right-click on a branch badge opens its BranchMenu, both for the local branch when the badge holds its upstream too, and a right-click on a tag badge opens its TagMenu. A right-click anywhere else on the row opens its CommitMenu, or its StashMenu for a stash.',
           variants: [
             ['HEAD with refs', () => C.CommitRow({ commit: commit(0), width }), { w: row }],
             ['Selected', () => C.CommitRow({ commit: commit(2), width, selected: true }), { w: row }],

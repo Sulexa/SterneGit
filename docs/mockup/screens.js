@@ -685,7 +685,7 @@ const Screens = (() => {
     {
       id: 'branch-menu',
       title: 'Right-click on a branch',
-      about: "A right-click on a branch, in the left list or on its badge in the graph, opens its menu where the pointer is, without selecting its commit. Here feature/blame is not checked out, so it offers Check out, Pull, Push, Merge it into main or Rebase main onto it, Create branch here…, New worktree for feature/blame… and Delete…. Pull is fast-forward only, because Git can't merge into or rebase a branch that isn't checked out. The checked-out branch offers Pull with the header's pull mode, Push, Create branch here… and New worktree from main…. A remote branch offers Check out, Merge, Rebase, Create branch here…, New worktree for … and Delete from its remote. With a detached HEAD there is no Merge or Rebase. Tags and folders have no menu; a badge that holds a branch and its upstream opens the menu of the local branch. Each action runs like the header buttons: one Git write at a time, then a notification; Pull and Push spin the header's button while they run. A double-click on a branch, in the left list or on its badge in the graph, checks it out straight away; it does nothing on the checked-out branch, on a tag, or while Git writes.",
+      about: "A right-click on a branch, in the left list or on its badge in the graph, opens its menu where the pointer is, without selecting its commit. Here feature/blame is not checked out, so it offers Check out, Pull, Push, Merge it into main or Rebase main onto it, Create branch here…, New worktree for feature/blame… and Delete…. Pull is fast-forward only, because Git can't merge into or rebase a branch that isn't checked out. The checked-out branch offers Pull with the header's pull mode, Push, Create branch here… and New worktree from main…. A remote branch offers Check out, Merge, Rebase, Create branch here…, New worktree for … and Delete from its remote. With a detached HEAD there is no Merge or Rebase. Folders have no menu, and a tag has its own; a badge that holds a branch and its upstream opens the menu of the local branch. Each action runs like the header buttons: one Git write at a time, then a notification; Pull and Push spin the header's button while they run. A double-click on a branch, in the left list or on its badge in the graph, checks it out straight away; it does nothing on the checked-out branch, on a tag, or while Git writes.",
       source: 'src/repo/branch_menu.rs',
       render: () =>
         C.SterneGit({
@@ -719,6 +719,71 @@ const Screens = (() => {
           tabStrip: tabStrip(),
           body: commitSelected(),
           overlays: C.DeleteBranchDialog({ label: ref('feature/blame'), only: 1 }),
+        }),
+    },
+    {
+      id: 'tag-menu',
+      title: 'Right-click on a tag',
+      about: "A right-click on a tag in the left list opens its menu where the pointer is, without selecting its commit. Check out v0.2.0 checks out the tag's commit with HEAD detached, as Check out this commit does. Push v0.2.0 to origin sends the tag to the push remote, since the header's Push sends branches only. Create branch here… starts a branch at the tag. Copy name copies the tag's name, with a notification. Delete v0.2.0… deletes the tag here, and Delete v0.2.0 from origin… deletes it on origin; both ask first. Without a remote, Push and Delete from origin are left out. Every item but Copy name is disabled while Git writes, and Check out and Create branch here… also while a rebase, a merge, a cherry-pick or a revert waits. A double-click on a tag does nothing.",
+      source: 'src/repo/tag_menu.rs',
+      render: () =>
+        C.SterneGit({
+          topBar: topBar(),
+          tabStrip: tabStrip(),
+          body: commitSelected(),
+          overlays: C.TagMenu({ label: ref('v0.2.0'), remote: 'origin', left: 70, top: 612, hot: Texts.pushTagTo('v0.2.0', 'origin') }),
+        }),
+    },
+    {
+      id: 'tag-menu-badge',
+      title: 'Right-click on a tag badge',
+      about: "The same menu opens from the tag's badge in the graph; a right-click elsewhere on the row still opens the commit's menu. A tag hidden behind +n has no badge to right-click; its row in the left list has the menu.",
+      source: 'src/repo/history_list.rs',
+      render: () =>
+        C.SterneGit({
+          topBar: topBar(),
+          tabStrip: tabStrip(),
+          body: commitSelected(),
+          overlays: C.TagMenu({ label: ref('v0.2.0'), remote: 'origin', left: 450, top: 335, hot: Texts.pushTagTo('v0.2.0', 'origin') }),
+        }),
+    },
+    {
+      id: 'tag-pushed',
+      title: 'Tag pushed',
+      about: "Push spins the header's Push button while it runs, then says what happened: Pushed v0.2.0 to origin, or origin already has v0.2.0 when it was there already. When origin has a different v0.2.0, Git refuses to replace it and the error says to delete it from origin first.",
+      source: 'src/repo/operation.rs',
+      render: () =>
+        C.SterneGit({
+          topBar: topBar(),
+          tabStrip: tabStrip(),
+          body: commitSelected(),
+          overlays: `<div class="toasts">${C.Notification({ kind: 'success', message: Texts.tagPushedTo('v0.2.0', 'origin') })}</div>`,
+        }),
+    },
+    {
+      id: 'delete-tag',
+      title: 'Delete a tag',
+      about: "Delete v0.2.0… asks first, like a branch: it counts the commits that no branch or other tag holds and says they are lost, or that nothing is lost. Fetching brings back the tags a remote has, so when the repository has a remote the question says so and points to Delete from origin. Delete then runs git tag --delete and says Deleted tag v0.2.0.",
+      source: 'src/repo/tag_menu.rs',
+      render: () =>
+        C.SterneGit({
+          topBar: topBar(),
+          tabStrip: tabStrip(),
+          body: commitSelected(),
+          overlays: C.DeleteTagDialog({ label: ref('v0.2.0'), remote: 'origin' }),
+        }),
+    },
+    {
+      id: 'delete-tag-remote',
+      title: 'Delete a tag from its remote',
+      about: "Delete v0.2.0 from origin… asks first, since everyone who uses origin loses the tag. Delete then runs git push origin --delete refs/tags/v0.2.0 and says Deleted v0.2.0 from origin. The tag stays here, so a later Push v0.2.0 to origin sends it back.",
+      source: 'src/repo/tag_menu.rs',
+      render: () =>
+        C.SterneGit({
+          topBar: topBar(),
+          tabStrip: tabStrip(),
+          body: commitSelected(),
+          overlays: C.DeleteTagDialog({ label: ref('v0.2.0'), remote: 'origin', there: true }),
         }),
     },
     {

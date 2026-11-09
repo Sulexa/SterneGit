@@ -12,8 +12,8 @@ use gpui_kit::{
 };
 
 use super::{
-    branch_menu::BranchMenu, commit_menu::CommitMenu, pulls::PullMarks, stash_menu::StashMenu,
-    worktree_menu::WorktreeMenu,
+    branch_menu::BranchMenu, commit_menu::CommitMenu, pulls::PullMarks, ref_menus::RefMenus,
+    stash_menu::StashMenu, tag_menu::TagMenu, worktree_menu::WorktreeMenu,
 };
 use crate::{
     actions::HISTORY_CONTEXT,
@@ -43,7 +43,7 @@ pub(crate) struct HistoryList {
     on_select_uncommitted: Option<Handler<()>>,
     on_check_out: Option<Handler<RefLabel>>,
     on_select_worktree: Option<Handler<Arc<Path>>>,
-    branch_menu: Option<BranchMenu>,
+    menus: RefMenus,
     stash_menu: Option<StashMenu>,
     commit_menu: Option<CommitMenu>,
     worktree_menu: Option<WorktreeMenu>,
@@ -56,7 +56,7 @@ struct RowActions {
     on_select: Option<Handler<ObjectId>>,
     on_check_out: Option<Handler<RefLabel>>,
     on_select_worktree: Option<Handler<Arc<Path>>>,
-    branch_menu: Option<BranchMenu>,
+    menus: RefMenus,
     stash_menu: Option<StashMenu>,
     commit_menu: Option<CommitMenu>,
     worktree_menu: Option<WorktreeMenu>,
@@ -80,7 +80,7 @@ impl HistoryList {
             on_select_uncommitted: None,
             on_check_out: None,
             on_select_worktree: None,
-            branch_menu: None,
+            menus: RefMenus::default(),
             stash_menu: None,
             commit_menu: None,
             worktree_menu: None,
@@ -117,7 +117,12 @@ impl HistoryList {
     }
 
     pub(crate) fn branch_menu(mut self, menu: BranchMenu) -> Self {
-        self.branch_menu = Some(menu);
+        self.menus.branch = Some(menu);
+        self
+    }
+
+    pub(crate) fn tag_menu(mut self, menu: TagMenu) -> Self {
+        self.menus.tag = Some(menu);
         self
     }
 
@@ -184,7 +189,7 @@ impl RenderOnce for HistoryList {
             on_select_uncommitted,
             on_check_out,
             on_select_worktree,
-            branch_menu,
+            menus,
             stash_menu,
             commit_menu,
             worktree_menu,
@@ -195,7 +200,7 @@ impl RenderOnce for HistoryList {
             on_select: on_select_commit,
             on_check_out,
             on_select_worktree,
-            branch_menu,
+            menus,
             stash_menu,
             commit_menu,
             worktree_menu,
@@ -376,12 +381,7 @@ fn branch_badge(shown: ShownRef, color: Hsla, actions: &RowActions, cx: &App) ->
             }
         })
     });
-    match actions.branch_menu.clone().filter(|_| label.is_branch()) {
-        Some(branch_menu) => badge
-            .context_menu(move |menu, _, _| branch_menu.build(menu, &label))
-            .into_any_element(),
-        None => badge.into_any_element(),
-    }
+    actions.menus.attach(badge, &label)
 }
 
 fn worktree_tag(worktree: &Worktree, color: Hsla, actions: &RowActions, cx: &App) -> AnyElement {
