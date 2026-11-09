@@ -79,6 +79,24 @@ impl Area {
         area
     }
 
+    pub(crate) fn grown(self, margin: f64) -> Area {
+        Area {
+            left: self.left - margin,
+            top: self.top - margin,
+            right: self.right + margin,
+            bottom: self.bottom + margin,
+        }
+    }
+
+    pub(crate) fn joined(self, other: Area) -> Area {
+        Area {
+            left: self.left.min(other.left),
+            top: self.top.min(other.top),
+            right: self.right.max(other.right),
+            bottom: self.bottom.max(other.bottom),
+        }
+    }
+
     fn width(&self) -> f64 {
         (self.right - self.left).max(1e-6)
     }
@@ -109,6 +127,13 @@ impl Mapping {
         let dy = (y - self.center.1) * self.scale;
         let sy = if self.y_up { self.size.1 / 2. - dy } else { self.size.1 / 2. + dy };
         (sx, sy)
+    }
+
+    pub(crate) fn shows(&self, area: Area) -> bool {
+        let (left, top) = self.screen((area.left, area.top));
+        let (right, bottom) = self.screen((area.right, area.bottom));
+        let inside = |a: f64, b: f64, limit: f64| a.min(b) >= 0. && a.max(b) <= limit;
+        inside(left, right, self.size.0) && inside(top, bottom, self.size.1)
     }
 
     pub(crate) fn world(&self, (sx, sy): (f64, f64)) -> (f64, f64) {
@@ -153,20 +178,34 @@ impl Viewport {
         self.center = None;
     }
 
-    pub(crate) fn zoom_by(&mut self, mapping: &Mapping, steps: f64, at: Option<(f64, f64)>) {
+    pub(crate) fn zoom_by(&mut self, mapping: &Mapping, steps: f64, at: Option<(f64, f64)>) -> Mapping {
         let scale = (mapping.scale * ZOOM_STEP.powf(steps)).clamp(LEAST_ZOOM, MOST_ZOOM);
         let anchor = at.unwrap_or((mapping.size.0 / 2., mapping.size.1 / 2.));
         let under = mapping.world(anchor);
         let zoomed = Mapping { scale, ..*mapping };
         let landed = zoomed.world(anchor);
+        let center = (mapping.center.0 + under.0 - landed.0, mapping.center.1 + under.1 - landed.1);
         self.zoom = Some(scale);
-        self.center = Some((mapping.center.0 + under.0 - landed.0, mapping.center.1 + under.1 - landed.1));
+        self.center = Some(center);
+        Mapping { scale, center, ..*mapping }
     }
 
-    pub(crate) fn pan_by(&mut self, mapping: &Mapping, dx: f64, dy: f64) {
+    pub(crate) fn pan_by(&mut self, mapping: &Mapping, dx: f64, dy: f64) -> Mapping {
         let shift_y = if self.y_up { -dy } else { dy };
+        let center = (mapping.center.0 - dx / mapping.scale, mapping.center.1 - shift_y / mapping.scale);
         self.zoom = Some(mapping.scale);
-        self.center = Some((mapping.center.0 - dx / mapping.scale, mapping.center.1 - shift_y / mapping.scale));
+        self.center = Some(center);
+        Mapping { center, ..*mapping }
+    }
+
+    pub(crate) fn focus(&mut self, mapping: &Mapping, target: Area, readable: f64) -> Mapping {
+        let usable = (mapping.size.0 * (1. - 2. * FIT_MARGIN), mapping.size.1 * (1. - 2. * FIT_MARGIN));
+        let fits_target = (usable.0 / target.width()).min(usable.1 / target.height());
+        let scale = mapping.scale.max(readable).min(fits_target).clamp(LEAST_ZOOM, MOST_ZOOM);
+        let center = ((target.left + target.right) / 2., (target.top + target.bottom) / 2.);
+        self.zoom = Some(scale);
+        self.center = Some(center);
+        Mapping { scale, center, ..*mapping }
     }
 
     pub(crate) fn percent(&self, mapping: &Mapping, unit: f64) -> f64 {

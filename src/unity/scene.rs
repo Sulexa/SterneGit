@@ -237,7 +237,7 @@ fn name_of(body: &Node) -> String {
 }
 
 fn file_id(node: Option<&Node>) -> Option<i64> {
-    node?.get("fileID")?.number().map(|id| id as i64).filter(|&id| id != 0)
+    node?.get("fileID")?.integer().filter(|&id| id != 0)
 }
 
 fn owner_id(body: &Node) -> Option<i64> {
@@ -818,7 +818,7 @@ fn material_parts(body: &Node, lookup: &Lookup) -> (Vec<Part>, Option<String>) {
 }
 
 fn shader_name(reference: &Node, lookup: &Lookup) -> String {
-    let file_id = reference.get("fileID").and_then(Node::number).unwrap_or(0.) as i64;
+    let file_id = reference.get("fileID").and_then(Node::integer).unwrap_or(0);
     match (file_id, reference.get("guid").and_then(Node::text)) {
         (46, _) => "Standard".to_owned(),
         (45, _) => "Standard (Specular setup)".to_owned(),
@@ -888,6 +888,18 @@ Transform:
         lookup.assets.insert("4f1d0c7a2b9e4e3f8a6b5c4d3e2f1a09".to_owned(), "Assets/Scripts/SlimeController.cs".to_owned());
         lookup.objects = object_names(&docs, &lookup.assets);
         lookup
+    }
+
+    #[test]
+    fn file_ids_beyond_float_precision_still_find_their_objects() {
+        let text = PREFAB.replace("410", "1633666572594267926").replace("400", "4336690671088430637").replace("110", "488688405476195148");
+        let docs = documents(&text);
+        let mut lookup = Lookup::default();
+        lookup.objects = object_names(&docs, &lookup.assets);
+        let model = Model::from_documents(UnityKind::Prefab, &docs, "Assets/Slime.prefab", &lookup);
+        assert_eq!(model.children.get(&100), Some(&vec![488688405476195148]));
+        let crown = model.items.iter().find(|item| item.name == "Crown").map(|item| item.parts.len());
+        assert_eq!(crown, Some(2));
     }
 
     #[test]

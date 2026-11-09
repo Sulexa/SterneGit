@@ -2329,7 +2329,18 @@ const C = {
     return `<div data-c="ViewOptionsMenu" data-base="PopupMenu" class="menu choices sm" style="right:${right}px;top:${top}px"><div class="heading">${esc(heading)}</div>${rows}</div>`;
   },
 
-  ViewBar({ kind = 'text', modes: modeSet = kind, mode, changes, zoom, menuOpen = false, hot, hidden = 0 }) {
+  VersionPicker({ shown = 'both' } = {}) {
+    const choice = (key, label, dot, tooltip) => C.Button({ label, dot, variant: 'ghost', selected: shown === key, tooltip });
+    return (
+      `<span data-c="VersionPicker" class="version-picker"><span class="xs muted">Show</span>` +
+      choice('before', 'Before', 'before', 'Draw the graph as it was before the change') +
+      choice('both', 'Both', undefined, 'Draw both versions over each other') +
+      choice('after', 'After', 'after', 'Draw the graph as it is after the change') +
+      `</span>`
+    );
+  },
+
+  ViewBar({ kind = 'text', modes: modeSet = kind, mode, changes, zoom, menuOpen = false, hot, hidden = 0, shown }) {
     const modes = CompareModes[modeSet]
       .map((item) => C.Button({ label: item.label, icon: item.icon, variant: 'ghost', selected: item.key === mode, tooltip: item.tooltip }))
       .join('');
@@ -2342,7 +2353,8 @@ const C = {
         : C.ZoomControl(zoom || {}) + (kind === 'image' ? C.BackdropButton() : '');
     const menu = !menuOpen ? '' : unity ? C.ViewOptionsMenu({ hot, items: UnityOptions, heading: 'Every Unity comparison', checked: ['noise'] }) : C.ViewOptionsMenu({ hot });
     const note = hidden ? `<span class="hidden-note xs muted" title="Hide what Unity changes on its own, in ⋯">${icon('eye-off', 'xs')}${esc(Texts.unityHidden(hidden))}</span>` : '';
-    return `<div data-c="ViewBar" class="view-bar"><div class="modes">${modes}</div><div class="fill"></div>${note}${note ? separator : ''}${stepper}${stepper ? separator : ''}${tools}${menu}</div>`;
+    const picker = shown ? `${separator}${C.VersionPicker({ shown })}` : '';
+    return `<div data-c="ViewBar" class="view-bar"><div class="modes">${modes}</div>${picker}<div class="fill"></div>${note}${note ? separator : ''}${stepper}${stepper ? separator : ''}${tools}${menu}</div>`;
   },
 
   ChangeRuler({ hunks, lines, shown: [top, bottom] = [] }) {
@@ -2698,6 +2710,80 @@ const C = {
     return `<div data-c="SceneLayout" class="media-compare"><div class="compare-canvas scene-canvas"><div class="scene-stage" style="width:${width}px;height:${height}px">${svg}${labels.join('')}</div>${legend}</div>${pick}</div>`;
   },
 
+  CanvasLayout({ diff, width = 940, height = 500 }) {
+    const { layout, objects } = diff;
+    const { canvas } = layout;
+    const [canvasWidth, canvasHeight] = canvas.size;
+    const scale = Math.min((width - 80) / canvasWidth, (height - 70) / canvasHeight);
+    const left = (width - canvasWidth * scale) / 2;
+    const top = 40;
+    const px = ([x, y]) => [left + x * scale, top + (canvasHeight - y) * scale];
+    const box = ([x, y, w, h]) => {
+      const [bx, by] = px([x, y + h]);
+      return [bx, by, w * scale, h * scale];
+    };
+    const lines = [];
+    for (let x = -400; x <= canvasWidth + 400; x += 100) {
+      const [at] = px([x, 0]);
+      if (at >= 0 && at <= width) lines.push(`<line x1="${at}" y1="0" x2="${at}" y2="${height}" class="${x === 0 ? 'axis' : x % 500 ? 'minor' : 'major'}"/>`);
+    }
+    for (let y = -400; y <= canvasHeight + 400; y += 100) {
+      const [, at] = px([0, y]);
+      if (at >= 0 && at <= height) lines.push(`<line x1="0" y1="${at}" x2="${width}" y2="${at}" class="${y === 0 ? 'axis' : y % 500 ? 'minor' : 'major'}"/>`);
+    }
+    const graphic = (item, rect, old) => {
+      const [x, y, w, h] = box(rect);
+      const fill = item.fill ? `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${(item.radius || 0) * scale}" fill="${item.fill}"/>` : '';
+      const text = item.text
+        ? (() => {
+            const size = (old && item.text.oldSize ? item.text.oldSize : item.text.size) * scale;
+            const align = item.text.align || 'middle';
+            const tx = align === 'start' ? x + 4 : align === 'end' ? x + w - 4 : x + w / 2;
+            return `<text x="${tx}" y="${y + h / 2}" font-size="${size}" fill="${item.text.color}" text-anchor="${align}" dominant-baseline="central" font-weight="${item.text.bold ? 700 : 500}">${esc(old && item.text.old ? item.text.old : item.text.value)}</text>`;
+          })()
+        : '';
+      return `<g${old ? ' class="ghost"' : ''}>${fill}${text}</g>`;
+    };
+    const ring = ([x, y, w, h], kind, pad = 4) => `<rect x="${x - pad}" y="${y - pad}" width="${w + pad * 2}" height="${h + pad * 2}" rx="${pad - 1}" class="ring ${kind}"/>`;
+    const art = [];
+    const marks = [];
+    const labels = [];
+    const tag = (item) => `${C.ChangeBadge({ kind: UnityStates[item.state] })}<span>${esc(item.name)}</span>${item.note ? `<span class="muted">${esc(item.note)}</span>` : ''}`;
+    const label = (item, [x, y, w, h]) => {
+      const side = item.label || 'below';
+      const place =
+        side === 'right' ? `left:${x + w + 12}px;top:${y + h / 2 - 11}px` : side === 'left' ? `left:${x - 12}px;top:${y + h / 2 - 11}px` : side === 'above' ? `left:${x + w / 2}px;top:${y - 32}px` : `left:${x + w / 2}px;top:${y + h + 10}px`;
+      labels.push(`<div class="scene-label ${side === 'above' ? 'below' : side}" style="${place}">${tag(item)}</div>`);
+    };
+    layout.items.forEach((item) => {
+      const changed = item.state && item.state !== 'added';
+      if (item.from && changed && item.from.join() !== (item.rect || []).join()) {
+        art.push(graphic(item, item.from, true));
+        marks.push(ring(box(item.from), 'before'));
+      }
+      if (item.rect) art.push(graphic(item, item.rect, false));
+      if (!item.state) return;
+      if (item.rect) {
+        marks.push(ring(box(item.rect), item.state));
+        if (item.name === layout.picked) marks.push(ring(box(item.rect), 'picked', 8));
+        label(item, box(item.rect));
+      } else {
+        const [x, y, w, h] = box(item.from);
+        const [cx, cy] = [x + w / 2, y + h / 2];
+        marks.push(`<path d="M${cx - 6} ${cy - 6} L${cx + 6} ${cy + 6} M${cx + 6} ${cy - 6} L${cx - 6} ${cy + 6}" class="cross"/>`);
+        label(item, box(item.from));
+      }
+    });
+    const [frameX, frameY] = px([0, canvasHeight]);
+    const frame = `<rect x="${frameX}" y="${frameY}" width="${canvasWidth * scale}" height="${canvasHeight * scale}" class="canvas-frame"/>`;
+    const name = `<div class="canvas-name xs" style="left:${frameX}px;top:${frameY - 20}px">${icon('box', 'xs')}<span>${esc(canvas.name)}</span><span class="muted">${esc(canvas.note)}</span></div>`;
+    const svg = `<svg width="${width}" height="${height}" class="scene-svg"><g class="grid">${lines.join('')}</g>${art.join('')}${frame}${marks.join('')}</svg>`;
+    const legend = `<div class="scene-legend">${C.VersionTag({ side: 'before', from: 'HEAD · dashed' })}${C.VersionTag({ side: 'after', from: 'Working copy' })}<span class="xs muted">${esc(layout.view)}</span></div>`;
+    const picked = objects.find((object) => object.name === layout.picked);
+    const pick = picked ? `<div class="scene-pick">${C.InspectorSides({ sources: diff.sources })}${C.ObjectSection({ object: picked })}</div>` : '';
+    return `<div data-c="CanvasLayout" class="media-compare"><div class="compare-canvas scene-canvas"><div class="scene-stage" style="width:${width}px;height:${height}px">${svg}${name}${labels.join('')}</div>${legend}</div>${pick}</div>`;
+  },
+
   CurveCompare({ diff, plot = 704 }) {
     const { tracks, events, length, at, sources } = diff;
     const frames = 40;
@@ -2746,13 +2832,13 @@ const C = {
     return `<div data-c="GraphParameters" class="graph-params ${corner}"><div class="xs medium">${esc(title)}</div>${lines}</div>`;
   },
 
-  GraphChanges({ diff }) {
+  GraphChanges({ diff, hidden = null }) {
     const rows = diff.changes
       .map(([state, kind, name, detail], ix) =>
         C.ListRow({
           content: `${C.ChangeBadge({ kind: UnityStates[state] })}<span class="xs muted kind">${esc(kind)}</span><span class="sm fill ellipsis">${esc(name)}</span><span class="xs muted">${esc(detail)}</span>`,
           selected: ix === diff.current,
-          extraClass: 'graph-change',
+          extraClass: `graph-change${state === hidden ? ' elsewhere' : ''}`,
           name: 'GraphChangeRow',
           base: 'ListRow',
         }),
@@ -2765,14 +2851,16 @@ const C = {
     );
   },
 
-  AnimatorCompare({ diff, width = 600 }) {
+  AnimatorCompare({ diff, width = 600, shown = 'both' }) {
     const nodeWidth = 112;
     const nodeHeight = 34;
+    const hidden = shown === 'before' ? 'added' : shown === 'after' ? 'removed' : null;
     const states = Object.fromEntries(diff.states.map((state) => [state.id, state]));
     const center = (state) => [state.at[0] + nodeWidth / 2, state.at[1] + nodeHeight / 2];
     const picked = diff.picked.name;
     const nameOf = (id) => states[id].name;
     const arrows = diff.transitions
+      .filter(([from, to, state]) => state !== hidden && states[from].state !== hidden && states[to].state !== hidden)
       .map(([from, to, state = '']) => {
         const [x1, y1] = center(states[from]);
         const [x2, y2] = center(states[to]);
@@ -2783,26 +2871,29 @@ const C = {
       })
       .join('');
     const nodes = diff.states
+      .filter((state) => state.state !== hidden)
       .map((state) => {
         const badge = state.state ? C.ChangeBadge({ kind: UnityStates[state.state] }) : '';
         return `<div class="state-node ${state.role || 'plain'} ${state.state || ''}" style="left:${state.at[0]}px;top:${state.at[1]}px;width:${nodeWidth}px;height:${nodeHeight}px">${badge}<span class="sm">${esc(state.name)}</span></div>`;
       })
       .join('');
     const canvas =
-      `<div class="graph-canvas" style="width:${width}px">` +
+      `<div class="graph-canvas${hidden ? ' solo' : ''}" style="width:${width}px">` +
       `<svg class="graph-lines" width="${width}" height="560">${arrows}</svg>${nodes}` +
       `<div class="graph-layer">${C.Select({ value: 'Base Layer', lead: icon('workflow', 'sm', 'var(--muted)') })}</div>` +
-      C.GraphParameters({ title: 'Parameters', rows: diff.parameters }) +
+      C.GraphParameters({ title: 'Parameters', rows: diff.parameters.filter(([, , state]) => state !== hidden) }) +
       `</div>`;
-    return `<div data-c="AnimatorCompare" class="animator-compare">${canvas}${C.GraphChanges({ diff })}</div>`;
+    return `<div data-c="AnimatorCompare" class="animator-compare">${canvas}${C.GraphChanges({ diff, hidden })}</div>`;
   },
 
-  ScriptGraphCompare({ diff, width = 600 }) {
+  ScriptGraphCompare({ diff, width = 600, shown = 'both' }) {
     const header = 26;
     const row = 20;
+    const hidden = shown === 'before' ? 'added' : shown === 'after' ? 'removed' : null;
     const nodes = Object.fromEntries(diff.nodes.map((node) => [node.id, node]));
     const portY = (node, ix) => node.at[1] + header + ix * row + row / 2;
-    const wires = diff.wires
+    const shownWires = diff.wires.filter(([from, , to, , state]) => state !== hidden && nodes[from].state !== hidden && nodes[to].state !== hidden);
+    const wires = shownWires
       .map(([from, out, to, input, state = '']) => {
         const a = nodes[from];
         const b = nodes[to];
@@ -2813,19 +2904,21 @@ const C = {
         return `<path d="M${x1} ${y1} C${x1 + bend} ${y1} ${x2 - bend} ${y2} ${x2} ${y2}" class="wire ${port.flow ? 'flow' : 'value'} ${state}" style="--c:${color}"/>`;
       })
       .join('');
-    const fed = new Set(diff.wires.filter((wire) => wire[4] !== 'removed').map(([, , to, input]) => `${to}:${input}`));
+    const fed = new Set(shownWires.filter((wire) => hidden || wire[4] !== 'removed').map(([, , to, input]) => `${to}:${input}`));
     const port = (spec, side, node, ix) => {
       if (!spec) return '<span class="slot"></span>';
       const glyph = spec.field ? '' : spec.flow ? `<span class="port flow ${side}"></span>` : `<span class="port value ${side}" style="--c:${GraphTypes[spec.type]}"></span>`;
       const changed = spec.was !== undefined;
+      const value = shown === 'before' && changed ? spec.was : spec.value;
       const literal =
-        side === 'in' && spec.value !== undefined && !fed.has(`${node.id}:${ix}`)
-          ? `<span class="literal${changed ? ' changed' : ''}"${changed ? ` title="Before: ${esc(spec.was)}"` : ''}>${esc(spec.value)}</span>`
+        side === 'in' && value !== undefined && !fed.has(`${node.id}:${ix}`)
+          ? `<span class="literal${changed ? ' changed' : ''}"${changed && shown === 'both' ? ` title="Before: ${esc(spec.was)}"` : ''}>${esc(value)}</span>`
           : '';
       const name = spec.label ? `<span class="${spec.field ? 'field' : 'muted'}">${esc(spec.label)}</span>` : '';
       return `<span class="slot ${side}">${side === 'in' ? glyph + name + literal : name + glyph}</span>`;
     };
     const units = diff.nodes
+      .filter((node) => node.state !== hidden)
       .map((node) => {
         const badge = node.state ? C.ChangeBadge({ kind: UnityStates[node.state] }) : '';
         const rows = node.rows.map(([input, output], ix) => `<div class="unit-row">${port(input, 'in', node, ix)}${port(output, 'out', node, ix)}</div>`).join('');
@@ -2834,12 +2927,12 @@ const C = {
       })
       .join('');
     const canvas =
-      `<div class="graph-canvas script" style="width:${width}px">` +
+      `<div class="graph-canvas script${hidden ? ' solo' : ''}" style="width:${width}px">` +
       `<svg class="graph-lines" width="${width}" height="640">${wires}</svg>${units}` +
       `<div class="graph-layer">${C.Select({ value: diff.graph, lead: icon('workflow', 'sm', 'var(--muted)') })}</div>` +
-      C.GraphParameters({ title: 'Graph variables', rows: diff.variables, corner: 'right' }) +
+      C.GraphParameters({ title: 'Graph variables', rows: diff.variables.filter(([, , state]) => state !== hidden), corner: 'right' }) +
       `</div>`;
-    return `<div data-c="ScriptGraphCompare" class="animator-compare">${canvas}${C.GraphChanges({ diff })}</div>`;
+    return `<div data-c="ScriptGraphCompare" class="animator-compare">${canvas}${C.GraphChanges({ diff, hidden })}</div>`;
   },
 
   FileDiffPanel({ diff, mode = 'split', state = 'ready', writing = false, reason = '', selection, pointed, expanded = false, filePosition, menuOpen = false, hot, view = {}, look = {} }) {
@@ -2863,7 +2956,7 @@ const C = {
     const viewBar =
       kind === 'binary'
         ? ''
-        : C.ViewBar({ kind, modes, mode, changes: ready ? { current: (diff.current || 0) + 1, total, noun } : null, zoom, menuOpen, hot, hidden });
+        : C.ViewBar({ kind, modes, mode, changes: ready ? { current: (diff.current || 0) + 1, total, noun } : null, zoom, menuOpen, hot, hidden, shown: ['animator', 'scriptgraph'].includes(kind) ? view.shown || 'both' : undefined });
     const conflict = () => C.MergeEditor({ merge: diff });
     const text = () => {
       const diffView = C.DiffView({
@@ -2888,10 +2981,10 @@ const C = {
       video: () => C.VideoCompare({ diff, mode }),
       audio: () => C.AudioCompare({ diff, mode }),
       binary: () => C.BinaryFacts({ diff }),
-      objects: () => (mode === 'scene' ? C.SceneLayout({ diff }) : C.ObjectCompare({ diff })),
+      objects: () => (mode !== 'scene' ? C.ObjectCompare({ diff }) : diff.layout.canvas ? C.CanvasLayout({ diff }) : C.SceneLayout({ diff })),
       curves: () => C.CurveCompare({ diff }),
-      animator: () => C.AnimatorCompare({ diff }),
-      scriptgraph: () => C.ScriptGraphCompare({ diff }),
+      animator: () => C.AnimatorCompare({ diff, shown: view.shown }),
+      scriptgraph: () => C.ScriptGraphCompare({ diff, shown: view.shown }),
     };
     const content =
       state === 'loading'

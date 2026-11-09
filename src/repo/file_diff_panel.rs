@@ -34,6 +34,7 @@ use super::{
         OtherFileView, PictureCompare, PictureMode, Pictures, Position, SoundCompare, SoundMode,
         Sounds, TemporaryCopy, TextOptions, UnityCompare, UnityEvent, UnityMode, Version, VersionTag,
         VideoCompare, VideoSide, Videos, ViewBar, modes_for, text_options_menu, unity_options_menu,
+        version_picker,
     },
     hunk_actions::{HunkActions, Offers, Pressed, line_at, line_span},
     merge_editor::MergeEditor,
@@ -499,8 +500,12 @@ impl FileDiffPanel {
         let position = unity.change_position();
         let hidden = unity.hidden();
         let zoom = unity.has_zoom().then(|| (unity.zoom_percent(), unity.fits()));
+        let shown = unity.shown();
         let muted = cx.theme().muted_foreground;
         let mut bar = self.unity_modes(ViewBar::new(), shape, kind, current, cx);
+        if let Some(shown) = shown {
+            bar = bar.picker(version_picker(view, shown, cx));
+        }
         if hidden > 0 {
             bar = bar.note(
                 h_flex()

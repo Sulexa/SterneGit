@@ -302,6 +302,7 @@ fn separator(color: gpui_kit::Hsla) -> AnyElement {
 #[derive(IntoElement)]
 pub(crate) struct ViewBar {
     modes: Vec<Button>,
+    picker: Option<AnyElement>,
     note: Option<AnyElement>,
     stepper: Option<ChangeStepper>,
     tools: Vec<AnyElement>,
@@ -312,6 +313,7 @@ impl ViewBar {
     pub(crate) fn new() -> Self {
         Self {
             modes: Vec::new(),
+            picker: None,
             note: None,
             stepper: None,
             tools: Vec::new(),
@@ -351,6 +353,11 @@ impl ViewBar {
         self
     }
 
+    pub(crate) fn picker(mut self, picker: impl IntoElement) -> Self {
+        self.picker = Some(picker.into_any_element());
+        self
+    }
+
     pub(crate) fn without_stepper(mut self) -> Self {
         self.stepper = None;
         self
@@ -383,6 +390,7 @@ impl RenderOnce for ViewBar {
                     .border_color(border)
             })
             .child(h_flex().flex_none().gap_0p5().children(self.modes))
+            .when_some(self.picker, |this, picker| this.child(separator(border)).child(picker))
             .when(!self.inline, |this| this.child(div().flex_1()))
             .when_some(self.note, |this, note| this.child(note).child(separator(border)))
             .children(self.stepper)

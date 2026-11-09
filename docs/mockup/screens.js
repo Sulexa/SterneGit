@@ -105,13 +105,13 @@ const Screens = (() => {
   const { unity } = Sample;
   const unityFiles = [...unity.work.staged, ...unity.work.unstaged];
 
-  const unityComparison = (diff, mode, { menuOpen = false, hot } = {}) =>
+  const unityComparison = (diff, mode, { menuOpen = false, hot, view = {} } = {}) =>
     C.SterneGit({
       topBar: C.TopBar({ repository: starfall.name, head: starfall.head }),
       tabStrip: C.TabStrip({ tabs: gameTabs, active: gameTabs.length - 1 }),
       body: C.RepoView({
         left: false,
-        middle: C.FileDiffPanel({ diff, mode, menuOpen, hot, filePosition: [unityFiles.indexOf(diff.change) + 1, unityFiles.length] }),
+        middle: C.FileDiffPanel({ diff, mode, menuOpen, hot, view, filePosition: [unityFiles.indexOf(diff.change) + 1, unityFiles.length] }),
         right: C.ChangesList({ changes: unity.work, open: { side: diff.side, path: diff.change.path } }),
         status: C.RepoStatusBar({ summary: historySummary(starfall) }),
       }),
@@ -641,6 +641,13 @@ const Screens = (() => {
       render: () => unityComparison(unity.prefabDiff, 'scene'),
     },
     {
+      id: 'unity-ui-scene',
+      title: 'Unity — UI prefab, Scene',
+      about: "A canvas is drawn the way Unity's Scene view draws it. A Screen Space canvas is a frame of the size its Canvas Scaler aims for, or 1920 × 1080 without one, one unit per pixel with its bottom-left corner at the origin, since the size Unity saves for it is only the last Game view's. Each object inside sits where its anchors, pivot, position and size put it, and children of a Horizontal, Vertical or Grid Layout Group where the group puts them, because Unity saves those as zero in a prefab. An Image is drawn with its sprite stretched or nine-sliced to its rect and tinted with its color, or as a rectangle of its color when it has no sprite; a Raw Image with its texture; a Text or TextMeshPro text with its words at its size and color. An Image with only a material is drawn faint, since its shader is not run; shaders, masks and effects are not drawn. Objects that are not active, or under a Canvas Group at alpha 0, are not drawn, as in Unity, but their outline still shows when they changed. Changed objects are named under their outline, moved down a row when names would cover each other. Changes are marked as for sprites: Logo is larger, its old size dashed in red; Characters_Button was added, which moved Options and Quit down, and they are not marked because nothing in them changed; Instagram_Button was removed. A text change outlines the text, and the panel underneath says what it was. In a scene with sprites as well, the canvas is just as large next to them, as in Unity: Fit shows both, and zooming in on the sprites works as before.",
+      source: 'src/repo/compare/unity/scene.rs',
+      render: () => unityComparison(unity.menuDiff, 'scene'),
+    },
+    {
       id: 'unity-scene',
       title: 'Unity — scene, Inspector',
       about: "A scene compares like a prefab. A prefab instance has a blue cube and says which prefab it comes from; only its overrides are listed, each card marked Override with a blue edge as in Unity. Here the camera size and background, the light and one slime changed, a slime was added and a bat removed. Five changes Unity made on its own are hidden.",
@@ -671,16 +678,30 @@ const Screens = (() => {
     {
       id: 'unity-animator',
       title: 'Unity — Animator controller',
-      about: "An Animator controller draws its state machine as Unity lays it out, one layer at a time: states added have a green outline, states removed are faded with a dashed red outline, transitions are green when added, dashed red when removed and yellow when their settings changed. The list on the right counts every change, parameters included; a click on one, or on a state or a transition, shows its settings before and after underneath.",
+      about: "An Animator controller draws its state machine as Unity lays it out, one layer at a time: states added have a green outline, states removed are faded with a dashed red outline, transitions are green when added, dashed red when removed and yellow when their settings changed. The list on the right counts every change, parameters included; a click on one, or on a state, shows its settings before and after underneath. A large state machine opens on its first change at a readable zoom instead of fitting everything: ↑ and ↓ bring each change to the middle and keep it selected in the list, Fit shows the whole layer, dragging moves the view and Ctrl+wheel zooms.",
       source: 'src/repo/compare/unity/graph.rs',
       render: () => unityComparison(unity.animatorDiff, 'graph'),
     },
     {
       id: 'unity-script-graph',
       title: 'Unity — Script Graph',
-      about: "A Visual Scripting Script Graph asset is drawn as its graph, nodes where the graph editor puts them. Nodes added have a green outline, nodes removed are faded with a dashed red outline, nodes with a changed setting a yellow one, with the changed value filled in yellow in the node; the old value is in the settings on the right. Connections are green when added and dashed red when removed; the others keep the color of what they carry: white for flow, then one color per type, as in the graph editor. A value that used to be typed in and is now connected shows in the node's settings on the right: Y was 6, it now comes from Multiply. The list on the right counts every node, connection and graph variable that changed. The selector at the top left moves into subgraphs; a State Graph asset is drawn like an Animator controller. Unity keeps the whole graph as JSON on a single line, so the second mode is JSON, laid out one value per line, rather than YAML.",
+      about: "A Visual Scripting Script Graph asset is drawn as its graph, nodes where the graph editor puts them. Nodes added have a green outline, nodes removed are faded with a dashed red outline, nodes with a changed setting a yellow one, with the changed value filled in yellow in the node; the old value is in the settings on the right. Connections are green when added and dashed red when removed; the others keep the color of what they carry: white for flow, then one color per type, as in the graph editor. A value that used to be typed in and is now connected shows in the node's settings on the right: Y was 6, it now comes from Multiply. The list on the right counts every node, connection and graph variable that changed. A graph too large to read whole opens on its first change at a readable zoom: ↑ and ↓ bring each change to the middle, Fit shows everything, dragging moves the view and Ctrl+wheel zooms. Text shrinks with the boxes and hides when too small to read, and a node that went away is drawn under the one that replaced it. The selector at the top left moves into subgraphs; a State Graph asset is drawn like an Animator controller. Unity keeps the whole graph as JSON on a single line, so the second mode is JSON, laid out one value per line, rather than YAML.",
       source: 'src/repo/compare/unity/graph.rs',
       render: () => unityComparison(unity.brainDiff, 'graph'),
+    },
+    {
+      id: 'unity-script-graph-before',
+      title: 'Unity — Script Graph, only the version before',
+      about: "Show in the view bar picks what the graph draws: Both, the default and the view above, lays the two versions over each other; Before draws the graph as it was, After as it is now. With one version, what the other version added or removed is not drawn at all, so nothing overlaps: here the Multiply and CrownBonus nodes and their connections are gone, Debug: Log is back in full, Cooldown reads 0.8 and Create Vector 2 has Y typed in as 6. What changed keeps its color, so Cooldown and Create Vector 2 are still outlined in yellow and Debug: Log in red. Changes that can't be seen in this version stay in the list, dimmed; ↑ and ↓ still step through all of them. Each file opens on Both again. An Animator controller has the same choice.",
+      source: 'src/repo/compare/unity/graph.rs',
+      render: () => unityComparison(unity.brainDiff, 'graph', { view: { shown: 'before' } }),
+    },
+    {
+      id: 'unity-animator-after',
+      title: 'Unity — Animator controller, only the version after',
+      about: "After draws the state machine as it is now: the Stunned state and the transitions that went away are not drawn, Squish and its transitions are there in full, and the changed transition Idle → Hop keeps its yellow. The changes that only the version before shows stay in the list, dimmed.",
+      source: 'src/repo/compare/unity/graph.rs',
+      render: () => unityComparison(unity.animatorDiff, 'graph', { view: { shown: 'after' } }),
     },
     {
       id: 'unity-texture-meta',

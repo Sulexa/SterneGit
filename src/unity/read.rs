@@ -275,6 +275,7 @@ fn wanted_sprites(versions: [Option<&UnityVersion>; 2]) -> Vec<(String, i64)> {
         if let Some(layout) = &version.layout {
             for spot in &layout.spots {
                 wanted.extend(spot.sprites.iter().map(|sprite| (sprite.guid.clone(), sprite.file_id)));
+                wanted.extend(spot.graphics.iter().filter_map(|graphic| graphic.paint.sprite()));
             }
         }
         if let Some(clip) = &version.clip {

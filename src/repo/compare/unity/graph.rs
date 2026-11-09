@@ -1,14 +1,14 @@
 use std::sync::Arc;
 
 use gpui_kit::{
-    Anchor, AnyElement, App, Bounds, Context, Corners, Hsla, InteractiveElement as _, IntoElement, MouseButton,
+    Anchor, AnyElement, App, Bounds, Context, Corners, Entity, Hsla, InteractiveElement as _, IntoElement, MouseButton,
     MouseDownEvent, MouseMoveEvent, ParentElement as _, Pixels, RenderImage, ScrollEvent, SharedString,
     StatefulInteractiveElement as _, Styled as _, Window,
     assets::IconName,
     canvas,
     component::{
-        ActiveTheme as _, Icon, Sizable as _,
-        button::Button,
+        ActiveTheme as _, Icon, Selectable as _, Sizable as _,
+        button::{Button, ButtonVariants as _},
         h_flex,
         menu::{DropdownMenu as _, PopupMenuItem},
         v_flex,
@@ -19,6 +19,7 @@ use gpui_kit::{
 };
 
 use super::{
+    super::{Version, details::version_dot},
     UnityCompare,
     cells::state_badge,
     inspector::{property_row, sides_row},
@@ -27,7 +28,7 @@ use super::{
 use crate::{
     media::{Sketch, Stroke},
     ui::{Look as _, ctrl_wheel_area, list_row},
-    unity::{ChangeTarget, GraphEdge, GraphNode, NodeKind, Port, PortType, State},
+    unity::{ChangeTarget, GraphEdge, GraphNode, NodeKind, Port, PortType, Shown, State},
 };
 
 const BACKGROUND: [u8; 3] = [0x16, 0x16, 0x16];
@@ -43,6 +44,12 @@ const GRID_STEP: f64 = 20.;
 const HEADER: f64 = 26.;
 const PORT_ROW: f64 = 20.;
 const LINE_HEIGHT_FOR_WHEEL: f32 = 20.;
+const READABLE: f64 = 0.85;
+const FOCUS_MARGIN: f64 = 40.;
+const UNIT_TEXT: f32 = 11.;
+const SMALLEST_TEXT: f32 = 5.5;
+const PORTS_FROM: f32 = 0.5;
+const ELSEWHERE: f32 = 0.45;
 
 #[derive(Default)]
 pub(crate) struct GraphState {
@@ -52,6 +59,7 @@ pub(crate) struct GraphState {
     mapping: Option<Mapping>,
     dragging: Option<(f64, f64)>,
     generation: u64,
+    focused: Option<usize>,
 }
 
 impl GraphState {
@@ -74,7 +82,8 @@ impl GraphState {
 
     pub(crate) fn zoom(&mut self, steps: f64) {
         if let Some(mapping) = self.mapping {
-            self.viewport().zoom_by(&mapping, steps, None);
+            let zoomed = self.viewport().zoom_by(&mapping, steps, None);
+            self.mapping = Some(zoomed);
         }
     }
 
@@ -100,7 +109,36 @@ fn hsla_of(color: [u8; 4]) -> Hsla {
 }
 
 fn content(compare: &UnityCompare) -> Option<Area> {
-    Area::around(compare.graph.nodes.iter().flat_map(|node| [node.at, (node.at.0 + node.size.0, node.at.1 + node.size.1)]))
+    Area::around(
+        compare
+            .drawn
+            .nodes
+            .iter()
+            .filter(|node| !compare.shown.hides(node.state))
+            .flat_map(|node| [node.at, (node.at.0 + node.size.0, node.at.1 + node.size.1)]),
+    )
+}
+
+fn node_area(node: &GraphNode) -> Area {
+    Area {
+        left: node.at.0,
+        top: node.at.1,
+        right: node.at.0 + node.size.0,
+        bottom: node.at.1 + node.size.1,
+    }
+}
+
+fn change_area(compare: &UnityCompare) -> Option<Area> {
+    let find = |id: &str| compare.drawn.nodes.iter().find(|node| node.id == id).map(node_area);
+    let area = match picked_target(compare)? {
+        ChangeTarget::Node(ix) => compare.drawn.nodes.get(ix).map(node_area)?,
+        ChangeTarget::Edge(ix) => {
+            let edge = compare.drawn.edges.get(ix)?;
+            find(&edge.from)?.joined(find(&edge.to)?)
+        }
+        ChangeTarget::Parameter => return None,
+    };
+    Some(area.grown(FOCUS_MARGIN))
 }
 
 fn picked_target(compare: &UnityCompare) -> Option<ChangeTarget> {
@@ -111,10 +149,11 @@ fn node_center(node: &GraphNode) -> (f64, f64) {
     (node.at.0 + node.size.0 / 2., node.at.1 + node.size.1 / 2.)
 }
 
-fn edge_stroke(edge: &GraphEdge, picked: bool, device: f64) -> Stroke {
+fn edge_stroke(edge: &GraphEdge, picked: bool, solo: bool, device: f64) -> Stroke {
     let width = if picked { 3. } else if edge.kind == PortType::Flow { 2. } else { 1.6 } * device as f32;
     match edge.state {
         State::Added => Stroke::solid(width, GREEN),
+        State::Removed if solo => Stroke::solid(width, RED),
         State::Removed => Stroke::dashed(width, RED, (5. * device) as f32, (4. * device) as f32),
         State::Changed => Stroke::solid(width, YELLOW),
         State::Same if picked => Stroke::solid(width, BLUE),
@@ -139,14 +178,18 @@ fn draw(compare: &UnityCompare, sketch: &mut Sketch, mapping: &Mapping, device: 
         y += step;
     }
     let picked = picked_target(compare);
-    let nodes = &compare.graph.nodes;
-    let find = |id: &str| nodes.iter().find(|node| node.id == id);
+    let shown = compare.shown;
+    let nodes = &compare.drawn.nodes;
+    let find = |id: &str| nodes.iter().find(|node| node.id == id).filter(|node| !shown.hides(node.state));
     let device_point = |(x, y): (f64, f64)| ((x * device) as f32, (y * device) as f32);
-    for (ix, edge) in compare.graph.edges.iter().enumerate() {
+    for (ix, edge) in compare.drawn.edges.iter().enumerate() {
+        if shown.hides(edge.state) {
+            continue;
+        }
         let (Some(from), Some(to)) = (find(&edge.from), find(&edge.to)) else {
             continue;
         };
-        let stroke = edge_stroke(edge, picked == Some(ChangeTarget::Edge(ix)), device);
+        let stroke = edge_stroke(edge, picked == Some(ChangeTarget::Edge(ix)), shown != Shown::Both, device);
         if compare.graph.has_ports {
             let start = mapping.screen((from.at.0 + from.size.0, from.output_y(edge.from_port.as_deref().unwrap_or_default())));
             let finish = mapping.screen((to.at.0, to.input_y(edge.to_port.as_deref().unwrap_or_default())));
@@ -166,7 +209,11 @@ fn draw(compare: &UnityCompare, sketch: &mut Sketch, mapping: &Mapping, device: 
         let (a, b) = (mapping.screen(node_center(from)), mapping.screen(node_center(to)));
         let length = ((b.0 - a.0).powi(2) + (b.1 - a.1).powi(2)).sqrt().max(1e-6);
         let unit = ((b.0 - a.0) / length, (b.1 - a.1) / length);
-        let both_ways = compare.graph.edges.iter().any(|other| other.from == edge.to && other.to == edge.from);
+        let both_ways = compare
+            .drawn
+            .edges
+            .iter()
+            .any(|other| other.from == edge.to && other.to == edge.from && !shown.hides(other.state));
         let shift = if both_ways { 5. } else { 0. };
         let normal = (-unit.1 * shift, unit.0 * shift);
         let (a, b) = ((a.0 + normal.0, a.1 + normal.1), (b.0 + normal.0, b.1 + normal.1));
@@ -185,7 +232,15 @@ fn draw(compare: &UnityCompare, sketch: &mut Sketch, mapping: &Mapping, device: 
 fn prepare(compare: &mut UnityCompare, bounds: Bounds<Pixels>, window: &mut Window, cx: &mut Context<UnityCompare>) -> Option<(Bounds<Pixels>, Arc<RenderImage>)> {
     let size = (f64::from(f32::from(bounds.size.width)), f64::from(f32::from(bounds.size.height)));
     let area = content(compare);
-    let mapping = compare.graph_view.viewport().mapping(area, size);
+    let mut mapping = compare.graph_view.viewport().mapping(area, size);
+    if compare.graph_view.focused != Some(compare.current) {
+        compare.graph_view.focused = Some(compare.current);
+        if let Some(target) = change_area(compare)
+            && (mapping.scale < READABLE || !mapping.shows(target))
+        {
+            mapping = compare.graph_view.viewport().focus(&mapping, target, READABLE);
+        }
+    }
     let changed = compare.graph_view.mapping != Some(mapping) || compare.graph_view.bounds != Some(bounds);
     compare.graph_view.mapping = Some(mapping);
     compare.graph_view.bounds = Some(bounds);
@@ -275,14 +330,14 @@ fn nodes(compare: &UnityCompare, cx: &mut Context<UnityCompare>) -> Vec<AnyEleme
     };
     let theme = cx.theme();
     let scale = mapping.scale as f32;
-    let smallest = if compare.graph.has_ports { 8. } else { 10. };
-    let text = (11. * scale).clamp(smallest, 18.);
+    let text = UNIT_TEXT * scale;
+    let titled = text >= SMALLEST_TEXT;
     let picked = picked_target(compare);
-    compare
-        .graph
-        .nodes
-        .iter()
-        .enumerate()
+    let solo = compare.shown != Shown::Both;
+    let mut order: Vec<(usize, &GraphNode)> = compare.drawn.nodes.iter().enumerate().filter(|(_, node)| !compare.shown.hides(node.state)).collect();
+    order.sort_by_key(|(_, node)| node.state != State::Removed);
+    order
+        .into_iter()
         .map(|(ix, node)| {
             let (left, top) = mapping.screen(node.at);
             let width = (node.size.0 * mapping.scale) as f32;
@@ -304,7 +359,7 @@ fn nodes(compare: &UnityCompare, cx: &mut Context<UnityCompare>) -> Vec<AnyEleme
                 .rounded(px(6. * scale.min(1.)))
                 .border_1()
                 .border_color(if node.state == State::Removed { theme.red } else { gpui_kit::white().opacity(0.18) })
-                .when(node.state == State::Removed, |this| this.opacity(0.6))
+                .when(node.state == State::Removed && !solo, |this| this.opacity(0.6))
                 .when_some(ring, |this, color| this.border_2().border_color(color))
                 .when(picked == Some(ChangeTarget::Node(ix)), |this| this.shadow_md().border_2().border_color(theme.blue))
                 .text_size(px(text))
@@ -313,14 +368,16 @@ fn nodes(compare: &UnityCompare, cx: &mut Context<UnityCompare>) -> Vec<AnyEleme
             let title = h_flex()
                 .gap(px(5. * scale))
                 .min_w_0()
-                .children(state_badge(node.state, cx).filter(|_| scale > 0.45))
-                .child(
-                    div()
-                        .ellipsis()
-                        .font_weight(gpui_kit::FontWeight::MEDIUM)
-                        .when(node.state == State::Removed, |this| this.line_through())
-                        .child(node.title.clone()),
-                );
+                .children(state_badge(node.state, cx).filter(|_| scale > 0.8))
+                .when(titled, |this| {
+                    this.child(
+                        div()
+                            .ellipsis()
+                            .font_weight(gpui_kit::FontWeight::MEDIUM)
+                            .when(node.state == State::Removed && !solo, |this| this.line_through())
+                            .child(node.title.clone()),
+                    )
+                });
             if !is_unit {
                 return base
                     .bg(rgb(node_fill(node.kind)))
@@ -340,14 +397,15 @@ fn nodes(compare: &UnityCompare, cx: &mut Context<UnityCompare>) -> Vec<AnyEleme
                         .bg(rgb(node_fill(node.kind)))
                         .child(title),
                 )
-                .when(scale > 0.35, |this| this.children(rows))
+                .when(scale >= PORTS_FROM, |this| this.children(rows))
                 .into_any_element()
         })
         .collect()
 }
 
 fn parameters(compare: &UnityCompare, cx: &App) -> Option<AnyElement> {
-    if compare.graph.parameters.is_empty() {
+    let shown: Vec<&(String, String, State)> = compare.drawn.parameters.iter().filter(|(_, _, state)| !compare.shown.hides(*state)).collect();
+    if shown.is_empty() {
         return None;
     }
     let theme = cx.theme();
@@ -367,7 +425,7 @@ fn parameters(compare: &UnityCompare, cx: &App) -> Option<AnyElement> {
             .border_color(theme.border)
             .bg(theme.popover.opacity(0.92))
             .child(div().xs_text().font_weight(gpui_kit::FontWeight::MEDIUM).child(compare.graph.parameters_title))
-            .children(compare.graph.parameters.iter().map(|(name, kind, state)| {
+            .children(shown.into_iter().map(|(name, kind, state)| {
                 h_flex()
                     .gap_1p5()
                     .xs_text()
@@ -422,6 +480,7 @@ fn side_panel(compare: &UnityCompare, cx: &mut Context<UnityCompare>) -> AnyElem
         .map(|(ix, change)| {
             list_row(("unity-graph-change", ix), ix == compare.current)
                 .px_3()
+                .when(compare.shown.hides(change.state), |this| this.opacity(ELSEWHERE))
                 .child(
                     h_flex()
                         .w_full()
@@ -450,21 +509,29 @@ fn side_panel(compare: &UnityCompare, cx: &mut Context<UnityCompare>) -> AnyElem
     };
     let settings = picked.map(|change| {
         v_flex()
-            .flex_none()
+            .flex_1()
+            .min_h_0()
             .child(head(change.name.clone().into(), change.kind.into()))
             .when(!change.rows.is_empty(), |this| {
-                this.child(sides_row(&compare.sources, SIDE_PROPERTY, cx))
-                    .children(change.rows.iter().map(|row| property_row(row, SIDE_PROPERTY, 12., false, cx)))
+                this.child(sides_row(&[SharedString::default(), SharedString::default()], SIDE_PROPERTY, cx)).child(
+                    div()
+                        .id("unity-graph-settings")
+                        .flex_1()
+                        .min_h_0()
+                        .overflow_y_scroll()
+                        .children(change.rows.iter().map(|row| property_row(row, SIDE_PROPERTY, 12., false, cx))),
+                )
             })
     });
     v_flex()
         .flex_none()
         .w(px(SIDE_WIDTH))
         .h_full()
+        .overflow_hidden()
         .border_l_1()
         .border_color(theme.border)
         .child(head("Changes".into(), compare.graph.changes.len().to_string().into()))
-        .child(div().id("unity-graph-changes").min_h_0().max_h(gpui_kit::relative(0.5)).overflow_y_scroll().children(rows))
+        .child(div().id("unity-graph-changes").min_h_0().max_h(gpui_kit::relative(0.5)).overflow_y_scroll().track_scroll(&compare.changes_scroll).children(rows))
         .children(settings)
         .into_any_element()
 }
@@ -488,7 +555,8 @@ fn drag(compare: &mut UnityCompare, event: &MouseMoveEvent, cx: &mut Context<Uni
     }
     let x = f64::from(f32::from(event.position.x - bounds.origin.x));
     let y = f64::from(f32::from(event.position.y - bounds.origin.y));
-    compare.graph_view.viewport().pan_by(&mapping, x - from_x, y - from_y);
+    let moved = compare.graph_view.viewport().pan_by(&mapping, x - from_x, y - from_y);
+    compare.graph_view.mapping = Some(moved);
     compare.graph_view.dragging = Some((x, y));
     cx.notify();
 }
@@ -502,9 +570,36 @@ fn wheel_zoom(compare: &mut UnityCompare, event: &ScrollEvent, cx: &mut Context<
         f64::from(f32::from(event.position.x - bounds.origin.x)),
         f64::from(f32::from(event.position.y - bounds.origin.y)),
     );
-    compare.graph_view.viewport().zoom_by(&mapping, if f32::from(delta.y) > 0. { 1. } else { -1. }, Some(at));
+    let zoomed = compare.graph_view.viewport().zoom_by(&mapping, if f32::from(delta.y) > 0. { 1. } else { -1. }, Some(at));
+    compare.graph_view.mapping = Some(zoomed);
     cx.notify();
     true
+}
+
+pub(crate) fn version_picker(view: &Entity<UnityCompare>, shown: Shown, cx: &App) -> AnyElement {
+    let choice = |id: &'static str, choice: Shown, version: Option<Version>, tooltip: &'static str| {
+        let view = view.clone();
+        Button::new(id)
+            .ghost()
+            .xsmall()
+            .selected(shown == choice)
+            .child(
+                h_flex()
+                    .gap_1p5()
+                    .children(version.map(|version| version_dot(version, cx)))
+                    .child(version.map_or("Both", Version::label)),
+            )
+            .tooltip(tooltip)
+            .on_click(move |_, _, cx| view.update(cx, |view, cx| view.show(choice, cx)))
+    };
+    h_flex()
+        .flex_none()
+        .gap_0p5()
+        .child(div().mr_1p5().xs_text().text_color(cx.theme().muted_foreground).child("Show"))
+        .child(choice("graph-show-before", Shown::Before, Some(Version::Before), "Draw the graph as it was before the change"))
+        .child(choice("graph-show-both", Shown::Both, None, "Draw both versions over each other"))
+        .child(choice("graph-show-after", Shown::After, Some(Version::After), "Draw the graph as it is after the change"))
+        .into_any_element()
 }
 
 pub(super) fn render(compare: &mut UnityCompare, _: &mut Window, cx: &mut Context<UnityCompare>) -> AnyElement {

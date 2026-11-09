@@ -84,6 +84,7 @@ pub(crate) struct GraphNode {
     pub(crate) state: State,
     pub(crate) inputs: Vec<Port>,
     pub(crate) outputs: Vec<Port>,
+    pub(crate) was_at: Option<(f64, f64)>,
 }
 
 impl GraphNode {
@@ -140,6 +141,40 @@ pub(crate) struct GraphComparison {
     pub(crate) layers: Vec<String>,
     pub(crate) has_ports: bool,
     pub(crate) hidden: usize,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) enum Shown {
+    Before,
+    #[default]
+    Both,
+    After,
+}
+
+impl Shown {
+    pub(crate) fn hides(self, state: State) -> bool {
+        matches!((self, state), (Shown::Before, State::Added) | (Shown::After, State::Removed))
+    }
+}
+
+impl GraphComparison {
+    pub(crate) fn as_shown(&self, shown: Shown) -> GraphComparison {
+        let mut drawn = self.clone();
+        if shown != Shown::Before {
+            return drawn;
+        }
+        for node in &mut drawn.nodes {
+            if let Some(at) = node.was_at {
+                node.at = at;
+            }
+            for port in &mut node.inputs {
+                if let Some(was) = &port.was {
+                    port.literal = (!was.is_empty()).then(|| was.clone());
+                }
+            }
+        }
+        drawn
+    }
 }
 
 pub(crate) fn graph_json(documents: &[Document]) -> Option<Json> {
@@ -440,6 +475,7 @@ fn read_side(json: &Json) -> Side {
                 state: State::Same,
                 inputs,
                 outputs,
+                was_at: None,
             },
         ));
     }
@@ -557,6 +593,9 @@ pub(crate) fn compare_script_graphs(before: Option<&Json>, after: Option<&Json>,
             Some(_) => State::Same,
         };
         if let Some(previous) = previous {
+            if previous.at != node.at {
+                shown.was_at = Some(previous.at);
+            }
             for port in &mut shown.inputs {
                 let was = previous.inputs.iter().find(|old| old.key == port.key).and_then(|old| old.literal.clone());
                 if was != port.literal {
@@ -696,7 +735,7 @@ fn edge_change(edge: &GraphEdge, name: String, at: usize) -> GraphChange {
 
 #[cfg(test)]
 mod tests {
-    use super::{NodeKind, PortType, compare_script_graphs};
+    use super::{NodeKind, PortType, Shown, compare_script_graphs};
     use crate::unity::compare::{Options, State};
     use serde_json::json;
 
@@ -753,6 +792,21 @@ mod tests {
         let y = vector.and_then(|rows| rows.iter().find(|row| row.label == "Y"));
         assert_eq!(y.and_then(|row| row.before.as_ref()).map(|value| value.text()), Some("6".to_owned()));
         assert_eq!(y.and_then(|row| row.after.as_ref()).map(|value| value.text()), Some("← Multiply (Product)".to_owned()));
+    }
+
+    #[test]
+    fn the_version_before_reads_old_values_and_hides_what_was_added() {
+        let comparison = compare_script_graphs(Some(&graph(0.8, false, true)), Some(&graph(0.6, true, false)), Options::default());
+        let before = comparison.as_shown(Shown::Before);
+        let cooldown = before.nodes.iter().find(|node| node.title == "Cooldown");
+        let duration = cooldown.and_then(|node| node.inputs.iter().find(|port| port.key == "duration"));
+        assert_eq!(duration.and_then(|port| port.literal.clone()), Some("0.8".to_owned()));
+        let shown: Vec<&str> = before.nodes.iter().filter(|node| !Shown::Before.hides(node.state)).map(|node| node.title.as_str()).collect();
+        assert!(shown.contains(&"Debug: Log"));
+        assert!(!shown.contains(&"Multiply"));
+        let after: Vec<&str> = comparison.nodes.iter().filter(|node| !Shown::After.hides(node.state)).map(|node| node.title.as_str()).collect();
+        assert!(after.contains(&"Multiply"));
+        assert!(!after.contains(&"Debug: Log"));
     }
 
     #[test]

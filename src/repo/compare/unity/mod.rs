@@ -14,6 +14,7 @@ use gpui_kit::{
     Subscription, Window, assets::IconName,
 };
 
+pub(crate) use graph::version_picker;
 pub(crate) use options::{UnityOptions, unity_options_menu};
 
 use self::{
@@ -23,7 +24,7 @@ use self::{
 };
 use super::{Direction, Position};
 use crate::unity::{
-    ClipComparison, Comparison, GraphComparison, GuidChange, Shape, State, UnityFiles, UnityKind, clock,
+    ClipComparison, Comparison, GraphComparison, GuidChange, Shape, Shown, State, UnityFiles, UnityKind, clock,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -115,6 +116,8 @@ pub(crate) struct UnityCompare {
     comparison: Comparison,
     clip: ClipComparison,
     graph: GraphComparison,
+    drawn: GraphComparison,
+    shown: Shown,
     layer: usize,
     current: usize,
     unfolded: HashSet<i64>,
@@ -122,6 +125,7 @@ pub(crate) struct UnityCompare {
     changed_only: bool,
     picked: Option<i64>,
     scroll: ScrollHandle,
+    changes_scroll: ScrollHandle,
     scene: SceneState,
     curves: Sheet,
     curves_bounds: Option<Bounds<Pixels>>,
@@ -149,6 +153,8 @@ impl UnityCompare {
             comparison: Comparison::default(),
             clip: ClipComparison::default(),
             graph: GraphComparison::default(),
+            drawn: GraphComparison::default(),
+            shown: Shown::Both,
             layer: 0,
             current: 0,
             unfolded: HashSet::new(),
@@ -156,6 +162,7 @@ impl UnityCompare {
             changed_only: false,
             picked: None,
             scroll: ScrollHandle::new(),
+            changes_scroll: ScrollHandle::new(),
             curves: Sheet::default(),
             curves_bounds: None,
             graph_view: GraphState::default(),
@@ -171,7 +178,10 @@ impl UnityCompare {
         match self.files.shape {
             Shape::Objects => self.comparison = self.files.compare(options),
             Shape::Clip => self.clip = self.files.clip(options),
-            Shape::Controller | Shape::Graph => self.graph = self.files.graph(self.layer, options),
+            Shape::Controller | Shape::Graph => {
+                self.graph = self.files.graph(self.layer, options);
+                self.drawn = self.graph.as_shown(self.shown);
+            }
         }
         self.current = self.current.min(self.count().saturating_sub(1));
         self.scene.forget();
@@ -204,6 +214,19 @@ impl UnityCompare {
     pub(crate) fn set_mode(&mut self, mode: UnityMode, cx: &mut Context<Self>) {
         if mode != UnityMode::Text && self.mode != mode {
             self.mode = mode;
+            cx.notify();
+        }
+    }
+
+    pub(crate) fn shown(&self) -> Option<Shown> {
+        (self.mode == UnityMode::Main && matches!(self.files.shape, Shape::Controller | Shape::Graph)).then_some(self.shown)
+    }
+
+    pub(crate) fn show(&mut self, shown: Shown, cx: &mut Context<Self>) {
+        if self.shown != shown {
+            self.shown = shown;
+            self.drawn = self.graph.as_shown(shown);
+            self.graph_view.forget();
             cx.notify();
         }
     }
@@ -246,6 +269,10 @@ impl UnityCompare {
     }
 
     fn show_current(&mut self) {
+        if matches!(self.files.shape, Shape::Controller | Shape::Graph) {
+            self.changes_scroll.scroll_to_item(self.current);
+            return;
+        }
         if self.files.shape != Shape::Objects {
             return;
         }

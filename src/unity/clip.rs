@@ -237,7 +237,7 @@ fn object_tracks(curves: &[Node], lookup: &Lookup) -> Vec<Track> {
                     let reference = key.get("value");
                     let sprite = reference.and_then(|reference| {
                         let guid = reference.get("guid")?.text()?.to_owned();
-                        let file_id = reference.get("fileID")?.number()? as i64;
+                        let file_id = reference.get("fileID")?.integer()?;
                         Some((guid, file_id))
                     });
                     ObjectKey {

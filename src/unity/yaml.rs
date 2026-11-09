@@ -34,6 +34,10 @@ impl Node {
         self.text()?.trim_matches(BLANKS).parse().ok()
     }
 
+    pub(crate) fn integer(&self) -> Option<i64> {
+        self.text()?.trim_matches(BLANKS).parse().ok()
+    }
+
     pub(crate) fn entries(&self) -> &[(String, Node)] {
         match self {
             Node::Map(entries) => entries,

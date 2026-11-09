@@ -101,7 +101,16 @@ pub(super) fn sides_row(sources: &[SharedString; 2], property: f32, cx: &App) ->
 pub(super) fn property_row(row: &Row, property: f32, indent: f32, current: bool, cx: &App) -> Div {
     let theme = cx.theme();
     let cell = |value: Option<&crate::unity::Value>, other: Option<&crate::unity::Value>, version: Version| {
-        let base = h_flex().flex_1().min_w_0().px_2().py_1().border_l_1().border_color(theme.border);
+        let base = v_flex()
+            .flex_1()
+            .min_w_0()
+            .justify_center()
+            .items_start()
+            .overflow_hidden()
+            .px_2()
+            .py_1()
+            .border_l_1()
+            .border_color(theme.border);
         match value {
             None => base.bg(hatched(cx)),
             Some(value) => {

@@ -1229,6 +1229,7 @@ const Catalog = (() => {
           variants: [
             ['Scene', () => C.SceneLayout({ diff: unity.levelDiff, width: 736, height: 440 }), { w: 736, h: 600 }],
             ['Prefab, with a collider gizmo', () => C.SceneLayout({ diff: unity.prefabDiff, width: 736, height: 440 }), { w: 736, h: 600 }],
+            ['UI canvas', () => C.CanvasLayout({ diff: unity.menuDiff, width: 736, height: 440 }), { w: 736, h: 600 }],
           ],
         },
         {
@@ -1250,7 +1251,20 @@ const Catalog = (() => {
           code: 'repo::compare::unity::graph::render',
           source: 'src/repo/compare/unity/graph.rs',
           about: 'A Visual Scripting Script Graph: nodes with their ports and typed-in values where the graph editor puts them, connections colored by what they carry, and what changed in the colors of the change badges, a changed value filled in yellow. GraphParameters lists the graph variables, GraphChanges every change.',
-          variants: [['SlimeBrain', () => C.ScriptGraphCompare({ diff: unity.brainDiff }), { w: 920, h: 640 }]],
+          variants: [
+            ['SlimeBrain', () => C.ScriptGraphCompare({ diff: unity.brainDiff }), { w: 920, h: 640 }],
+            ['Only before', () => C.ScriptGraphCompare({ diff: unity.brainDiff, shown: 'before' }), { w: 920, h: 640 }],
+          ],
+        },
+        {
+          name: 'VersionPicker',
+          code: 'repo::compare::unity::graph::version_picker',
+          source: 'src/repo/compare/unity/graph.rs',
+          about: 'In the view bar of a graph: Show Before, Both or After. Both, the default, draws the two versions over each other; Before or After draws one version only.',
+          variants: [
+            ['Both', () => C.VersionPicker({ shown: 'both' }), { w: 320 }],
+            ['Only before', () => C.VersionPicker({ shown: 'before' }), { w: 320 }],
+          ],
         },
         {
           name: 'GraphChanges',

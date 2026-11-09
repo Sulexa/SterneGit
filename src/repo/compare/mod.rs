@@ -16,5 +16,5 @@ pub(crate) use options::{TextOptions, text_options_menu};
 pub(crate) use picture::{PictureCompare, PictureMode, Pictures};
 pub(crate) use ruler::ChangeRuler;
 pub(crate) use sound::{SoundCompare, SoundMode, Sounds};
-pub(crate) use unity::{UnityCompare, UnityEvent, UnityMode, modes_for, unity_options_menu};
+pub(crate) use unity::{UnityCompare, UnityEvent, UnityMode, modes_for, unity_options_menu, version_picker};
 pub(crate) use video::{TemporaryCopy, VideoCompare, VideoSide, Videos};

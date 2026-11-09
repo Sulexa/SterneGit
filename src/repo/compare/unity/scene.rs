@@ -22,7 +22,7 @@ use crate::{
     media::Stroke,
     repo::compare::{Version, VersionTag},
     ui::{Look as _, ctrl_wheel_area},
-    unity::{Layout, Marker, ObjectChange, Outline, Spot, State, View},
+    unity::{Graphic, Layout, Marker, ObjectChange, Outline, Paint, SpriteImage, Spot, State, View},
 };
 
 const BACKGROUND: [u8; 3] = [0x0c, 0x0e, 0x13];
@@ -44,6 +44,14 @@ const CAMERA_ASPECT: f64 = 16. / 9.;
 const PICK_PANEL_HEIGHT: f32 = 200.;
 const PROPERTY_WIDTH: f32 = 176.;
 const LINE_HEIGHT_FOR_WHEEL: f32 = 20.;
+const CANVAS_EDGE: [u8; 4] = [255, 255, 255, 170];
+const MISSING_SPRITE_ALPHA: f32 = 0.5;
+const SMALLEST_TEXT: f32 = 4.;
+const TEXT_LINE: f32 = 1.2;
+const LABEL_HEIGHT: f64 = 22.;
+const LABEL_LETTER: f64 = 6.2;
+const LABEL_PADDING: f64 = 40.;
+const LABEL_TRIES: usize = 4;
 
 pub(crate) struct SceneState {
     viewport: Viewport,
@@ -84,7 +92,7 @@ impl SceneState {
 
     pub(crate) fn zoom(&mut self, steps: f64) {
         if let Some(mapping) = self.mapping {
-            self.viewport.zoom_by(&mapping, steps, None);
+            self.mapping = Some(self.viewport.zoom_by(&mapping, steps, None));
         }
     }
 
@@ -128,11 +136,25 @@ fn sprite_rect(compare: &UnityCompare, sprite: &crate::unity::PlacedSprite) -> O
     Some((image, Area { left, top: bottom, right: left + w, bottom: bottom + h }))
 }
 
+fn areas(spot: &Spot) -> impl Iterator<Item = [f64; 4]> + '_ {
+    spot.rect.into_iter().chain(spot.graphics.iter().map(|graphic| graphic.area))
+}
+
+fn screen_area(mapping: &Mapping, area: [f64; 4]) -> [f64; 4] {
+    let (x0, y0) = mapping.screen((area[0], area[3]));
+    let (x1, y1) = mapping.screen((area[2], area[1]));
+    [x0.min(x1), y0.min(y1), (x1 - x0).abs(), (y1 - y0).abs()]
+}
+
 fn content(compare: &UnityCompare, items: &[Placed]) -> Option<Area> {
     let mut points = Vec::new();
     for item in items {
         for spot in item.before.iter().chain(&item.after) {
             points.push(spot.at);
+            for area in areas(spot) {
+                points.push((area[0], area[1]));
+                points.push((area[2], area[3]));
+            }
             for sprite in &spot.sprites {
                 if let Some((_, area)) = sprite_rect(compare, sprite) {
                     points.push((area.left, area.top));
@@ -167,6 +189,10 @@ fn spot_box(compare: &UnityCompare, spot: &Spot, mapping: &Mapping) -> [f64; 4] 
             corners.push(mapping.screen((area.right, area.bottom)));
         }
     }
+    for area in areas(spot) {
+        corners.push(mapping.screen((area[0], area[1])));
+        corners.push(mapping.screen((area[2], area[3])));
+    }
     match Area::around(corners) {
         Some(area) if area.right - area.left > 1. => [area.left, area.top, area.right - area.left, area.bottom - area.top],
         _ => {
@@ -181,7 +207,92 @@ fn moved(before: &Spot, after: &Spot) -> bool {
 }
 
 fn looks_different(before: &Spot, after: &Spot) -> bool {
-    moved(before, after) || before.sprites != after.sprites
+    moved(before, after) || before.sprites != after.sprites || before.rect != after.rect
+}
+
+fn rgba8(color: [f64; 4], opacity: f32) -> [u8; 4] {
+    let channel = |value: f64| (value.clamp(0., 1.) * 255.).round() as u8;
+    [channel(color[0]), channel(color[1]), channel(color[2]), (f32::from(channel(color[3])) * opacity) as u8]
+}
+
+fn piece(image: &SpriteImage, x: u32, y: u32, width: u32, height: u32) -> Vec<u8> {
+    let mut out = Vec::with_capacity((width * height * 4) as usize);
+    for row in y..y + height {
+        let start = ((row * image.width + x) * 4) as usize;
+        out.extend_from_slice(&image.rgba[start..start + (width * 4) as usize]);
+    }
+    out
+}
+
+fn nine_slice(sketch: &mut crate::media::Sketch, image: &SpriteImage, place: [f32; 4], border: [f32; 4], tint: [f32; 4]) {
+    let [left, top, width, height] = place;
+    let pixels = image.border.map(|side| side.round().max(0.) as u32);
+    let [cut_left, cut_bottom, cut_right, cut_top] = pixels;
+    if cut_left + cut_right >= image.width || cut_bottom + cut_top >= image.height {
+        sketch.tinted_image(&image.rgba, image.width, image.height, (left, top), (width / image.width as f32, height / image.height as f32), tint);
+        return;
+    }
+    let shrink = |a: f32, b: f32, room: f32| if a + b > room && a + b > 0. { room / (a + b) } else { 1. };
+    let across = shrink(border[0], border[2], width);
+    let down = shrink(border[3], border[1], height);
+    let (to_left, to_right, to_top, to_bottom) = (border[0] * across, border[2] * across, border[3] * down, border[1] * down);
+    let columns = [
+        (0, cut_left, left, to_left),
+        (cut_left, image.width - cut_left - cut_right, left + to_left, width - to_left - to_right),
+        (image.width - cut_right, cut_right, left + width - to_right, to_right),
+    ];
+    let rows = [
+        (0, cut_top, top, to_top),
+        (cut_top, image.height - cut_top - cut_bottom, top + to_top, height - to_top - to_bottom),
+        (image.height - cut_bottom, cut_bottom, top + height - to_bottom, to_bottom),
+    ];
+    for (from_y, tall, at_y, high) in rows {
+        for (from_x, wide, at_x, broad) in columns {
+            if tall == 0 || wide == 0 || high <= 0. || broad <= 0. {
+                continue;
+            }
+            let pixels = piece(image, from_x, from_y, wide, tall);
+            sketch.tinted_image(&pixels, wide, tall, (at_x, at_y), (broad / wide as f32, high / tall as f32), tint);
+        }
+    }
+}
+
+fn draw_graphic(compare: &UnityCompare, sketch: &mut crate::media::Sketch, graphic: &Graphic, mapping: &Mapping, device: f64, opacity: f32) {
+    let [left, top, width, height] = screen_area(mapping, graphic.area).map(|value| (value * device) as f32);
+    if !(width > 0. && height > 0.) {
+        return;
+    }
+    let tint = [graphic.color[0] as f32, graphic.color[1] as f32, graphic.color[2] as f32, graphic.color[3] as f32 * opacity];
+    let Some((guid, file_id)) = graphic.paint.sprite() else {
+        if graphic.paint == Paint::Fill {
+            sketch.fill_rect(left, top, width, height, rgba8(graphic.color, opacity));
+        }
+        return;
+    };
+    let Some(image) = compare.files.sprite(&guid, file_id) else {
+        sketch.fill_rect(left, top, width, height, rgba8(graphic.color, opacity * MISSING_SPRITE_ALPHA));
+        return;
+    };
+    let (image_width, image_height) = (image.width as f32, image.height as f32);
+    match &graphic.paint {
+        Paint::Sprite { sliced: true, unit, .. } => {
+            let scale = (unit / image.pixels_per_unit * mapping.scale * device) as f32;
+            nine_slice(sketch, image, [left, top, width, height], image.border.map(|side| side as f32 * scale), tint);
+        }
+        Paint::Sprite { keep_aspect: true, .. } => {
+            let fit = (width / image_width).min(height / image_height);
+            let (shown_width, shown_height) = (image_width * fit, image_height * fit);
+            sketch.tinted_image(
+                &image.rgba,
+                image.width,
+                image.height,
+                (left + (width - shown_width) / 2., top + (height - shown_height) / 2.),
+                (fit, fit),
+                tint,
+            );
+        }
+        _ => sketch.tinted_image(&image.rgba, image.width, image.height, (left, top), (width / image_width, height / image_height), tint),
+    }
 }
 
 fn draw_spot(compare: &UnityCompare, sketch: &mut crate::media::Sketch, spot: &Spot, mapping: &Mapping, device: f64, opacity: f32) {
@@ -208,7 +319,10 @@ fn draw_spot(compare: &UnityCompare, sketch: &mut crate::media::Sketch, spot: &S
         );
         drew = true;
     }
-    if drew {
+    for graphic in &spot.graphics {
+        draw_graphic(compare, sketch, graphic, mapping, device, opacity);
+    }
+    if drew || spot.rect.is_some() || !spot.graphics.is_empty() {
         return;
     }
     let (x, y) = mapping.screen(spot.at);
@@ -239,7 +353,7 @@ fn draw_spot(compare: &UnityCompare, sketch: &mut crate::media::Sketch, spot: &S
                 faded(MUTED),
             );
         }
-        Marker::Plain => sketch.circle(center, radius * 0.5, Stroke::solid(2. * device as f32, faded(MUTED))),
+        Marker::Plain | Marker::Canvas => sketch.circle(center, radius * 0.5, Stroke::solid(2. * device as f32, faded(MUTED))),
     }
 }
 
@@ -335,6 +449,15 @@ fn draw(compare: &UnityCompare, items: &[Placed], sketch: &mut crate::media::Ske
             draw_spot(compare, sketch, after, mapping, device, 1.);
         }
     }
+    for item in items {
+        if let Some(spot) = item.after.as_ref().or(item.before.as_ref())
+            && spot.marker == Marker::Canvas
+            && let Some(area) = spot.rect
+        {
+            let [left, top, width, height] = screen_area(mapping, area).map(|value| (value * device) as f32);
+            sketch.rect(left, top, width, height, 0., Stroke::solid(device as f32, CANVAS_EDGE));
+        }
+    }
     let mut boxes = Vec::new();
     for item in items {
         let after_box = item.after.as_ref().map(|spot| spot_box(compare, spot, mapping));
@@ -413,12 +536,11 @@ fn prepare(compare: &mut UnityCompare, bounds: Bounds<Pixels>, window: &mut Wind
     let items = placed(compare);
     let size = (f64::from(f32::from(bounds.size.width)), f64::from(f32::from(bounds.size.height)));
     let mapping = compare.scene.viewport.mapping(content(compare, &items), size);
-    let unit = items
-        .iter()
-        .flat_map(|item| item.after.iter().chain(&item.before))
+    let spots = || items.iter().flat_map(|item| item.after.iter().chain(&item.before));
+    let unit = spots()
         .flat_map(|spot| spot.sprites.iter())
         .find_map(|sprite| compare.files.sprite(&sprite.guid, sprite.file_id).map(|image| image.pixels_per_unit))
-        .unwrap_or(100.);
+        .unwrap_or(if spots().any(|spot| spot.rect.is_some()) { 1. } else { 100. });
     compare.scene.unit = unit;
     let resized = compare.scene.bounds.is_none_or(|old| old.size != bounds.size || old.origin != bounds.origin);
     let remapped = compare.scene.mapping != Some(mapping);
@@ -454,13 +576,112 @@ fn note(object: &ObjectChange) -> Option<String> {
     })
 }
 
+fn text_block(graphic: &Graphic, mapping: &Mapping, opacity: f32) -> Option<AnyElement> {
+    let Paint::Text { text, size, align } = &graphic.paint else {
+        return None;
+    };
+    let font = (size * mapping.scale) as f32;
+    if font < SMALLEST_TEXT || text.trim().is_empty() {
+        return None;
+    }
+    let [left, top, width, height] = screen_area(mapping, graphic.area);
+    let color = gpui_kit::Rgba {
+        r: graphic.color[0] as f32,
+        g: graphic.color[1] as f32,
+        b: graphic.color[2] as f32,
+        a: graphic.color[3] as f32 * opacity,
+    };
+    Some(
+        v_flex()
+            .absolute()
+            .left(px(left as f32))
+            .top(px(top as f32))
+            .w(px(width.max(1.) as f32))
+            .h(px(height.max(1.) as f32))
+            .when(align[1] == 0.5, |this| this.justify_center())
+            .when(align[1] == 1., |this| this.justify_end())
+            .text_size(px(font))
+            .line_height(px(font * TEXT_LINE))
+            .text_color(color)
+            .when(align[0] == 0.5, |this| this.text_center())
+            .when(align[0] == 1., |this| this.text_right())
+            .children(text.split('\n').map(|line| div().w_full().child(line.to_owned())))
+            .into_any_element(),
+    )
+}
+
+fn texts(compare: &UnityCompare) -> Vec<AnyElement> {
+    let Some(mapping) = compare.scene.mapping else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    let mut add = |spot: &Spot, opacity: f32| out.extend(spot.graphics.iter().filter_map(|graphic| text_block(graphic, &mapping, opacity)));
+    for item in placed(compare) {
+        match (&item.before, &item.after) {
+            (Some(before), Some(after)) => {
+                if item.state != State::Same && looks_different(before, after) {
+                    add(before, GHOST);
+                }
+                add(after, 1.);
+            }
+            (Some(before), None) => add(before, GHOST),
+            (None, Some(after)) => add(after, 1.),
+            (None, None) => {}
+        }
+    }
+    out
+}
+
+fn canvas_labels(compare: &UnityCompare, cx: &App) -> Vec<AnyElement> {
+    let Some(mapping) = compare.scene.mapping else {
+        return Vec::new();
+    };
+    let theme = cx.theme();
+    let mut corners: Vec<(i64, i64)> = Vec::new();
+    placed(compare)
+        .into_iter()
+        .filter_map(|item| {
+            let spot = item.after.or(item.before)?;
+            let area = spot.rect.filter(|_| spot.marker == Marker::Canvas)?;
+            let [left, top, ..] = screen_area(&mapping, area);
+            let corner = (left.round() as i64, top.round() as i64);
+            let below = corners.iter().filter(|other| **other == corner).count() as f64 * LABEL_HEIGHT;
+            corners.push(corner);
+            let top = top + below;
+            Some(
+                h_flex()
+                    .absolute()
+                    .left(px(left as f32 + 8.))
+                    .top(px(top as f32 + 8.))
+                    .gap_1p5()
+                    .px_1p5()
+                    .rounded(px(4.))
+                    .bg(theme.popover.opacity(0.88))
+                    .xs_text()
+                    .whitespace_nowrap()
+                    .child(Icon::new(IconName::Box).xsmall())
+                    .child(spot.name.clone())
+                    .child(
+                        div()
+                            .text_color(theme.muted_foreground)
+                            .child(format!("Screen Space · {} × {}", (area[2] - area[0]).round(), (area[3] - area[1]).round())),
+                    )
+                    .into_any_element(),
+            )
+        })
+        .collect()
+}
+
 fn labels(compare: &UnityCompare, cx: &App) -> Vec<AnyElement> {
     let Some(mapping) = compare.scene.mapping else {
         return Vec::new();
     };
     let theme = cx.theme();
     let mut out = Vec::new();
-    for item in placed(compare) {
+    let mut taken: Vec<[f64; 4]> = Vec::new();
+    let mut items = placed(compare);
+    items.sort_by_key(|item| Some(item.key) != compare.picked);
+    for item in items {
         let Some(object) = compare.comparison.objects.iter().find(|object| object.key == item.key) else {
             continue;
         };
@@ -469,10 +690,23 @@ fn labels(compare: &UnityCompare, cx: &App) -> Vec<AnyElement> {
         };
         let [x, y, w, h] = spot_box(compare, spot, &mapping);
         let camera = spot.camera.map(|size| mapping.screen((spot.at.0 - size * CAMERA_ASPECT, spot.at.1 + size)));
-        let (left, top, centered) = match camera {
+        let (left, mut top, centered) = match camera {
             Some((left, top)) => (left + 8., top + 8., false),
             None => (x + w / 2., y + h + 10., true),
         };
+        let letters = object.name.chars().count() + note(object).map_or(0, |note| note.chars().count() + 2);
+        let width = letters as f64 * LABEL_LETTER + LABEL_PADDING;
+        let start = if centered { left - width / 2. } else { left };
+        let overlaps = |top: f64| taken.iter().any(|other| start < other[2] && other[0] < start + width && top < other[3] && other[1] < top + LABEL_HEIGHT);
+        let mut tries = 0;
+        while overlaps(top) && tries < LABEL_TRIES {
+            top += LABEL_HEIGHT;
+            tries += 1;
+        }
+        if overlaps(top) {
+            continue;
+        }
+        taken.push([start, top, start + width, top + LABEL_HEIGHT]);
         out.push(
             h_flex()
                 .absolute()
@@ -565,7 +799,7 @@ fn drag(compare: &mut UnityCompare, event: &MouseMoveEvent, cx: &mut Context<Uni
     }
     let x = f64::from(f32::from(event.position.x - bounds.origin.x));
     let y = f64::from(f32::from(event.position.y - bounds.origin.y));
-    compare.scene.viewport.pan_by(&mapping, x - from_x, y - from_y);
+    compare.scene.mapping = Some(compare.scene.viewport.pan_by(&mapping, x - from_x, y - from_y));
     compare.scene.dragging = Some((x, y));
     cx.notify();
 }
@@ -579,7 +813,7 @@ fn wheel_zoom(compare: &mut UnityCompare, event: &ScrollEvent, cx: &mut Context<
         f64::from(f32::from(event.position.x - bounds.origin.x)),
         f64::from(f32::from(event.position.y - bounds.origin.y)),
     );
-    compare.scene.viewport.zoom_by(&mapping, if f32::from(delta.y) > 0. { 1. } else { -1. }, Some(at));
+    compare.scene.mapping = Some(compare.scene.viewport.zoom_by(&mapping, if f32::from(delta.y) > 0. { 1. } else { -1. }, Some(at)));
     cx.notify();
     true
 }
@@ -607,6 +841,13 @@ pub(super) fn render(compare: &mut UnityCompare, _: &mut Window, cx: &mut Contex
     } else {
         view.to_owned()
     };
+    let has_canvas = compare
+        .files
+        .layouts()
+        .into_iter()
+        .flatten()
+        .any(|layout| layout.spots.iter().any(|spot| spot.marker == Marker::Canvas));
+    let hidden_places = if has_canvas { format!("{hidden_places} · UI at one unit per pixel") } else { hidden_places };
     let legend = h_flex()
         .absolute()
         .top_2p5()
@@ -615,6 +856,8 @@ pub(super) fn render(compare: &mut UnityCompare, _: &mut Window, cx: &mut Contex
         .child(VersionTag::new(Version::Before, format!("{} · dashed", compare.sources[0]).into()))
         .child(VersionTag::new(Version::After, compare.sources[1].clone()))
         .child(div().xs_text().text_color(theme.muted_foreground).child(hidden_places));
+    let words = texts(compare);
+    let canvases = canvas_labels(compare, cx);
     let labels = labels(compare, cx);
     v_flex()
         .size_full()
@@ -629,6 +872,8 @@ pub(super) fn render(compare: &mut UnityCompare, _: &mut Window, cx: &mut Contex
                 .on_mouse_move(cx.listener(|this, event: &MouseMoveEvent, _, cx| drag(this, event, cx)))
                 .on_mouse_up(MouseButton::Left, cx.listener(|this, _, _, _| this.scene.dragging = None))
                 .child(picture)
+                .children(words)
+                .children(canvases)
                 .children(labels)
                 .child(legend)
                 .child(ctrl_wheel_area(cx.entity().downgrade(), |this: &mut UnityCompare, event: &ScrollEvent, cx: &mut Context<UnityCompare>| wheel_zoom(this, event, cx))),

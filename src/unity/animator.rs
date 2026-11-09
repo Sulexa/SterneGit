@@ -48,7 +48,7 @@ struct Drawn {
 }
 
 fn file_id(node: Option<&Node>) -> Option<i64> {
-    node?.get("fileID")?.number().map(|id| id as i64).filter(|&id| id != 0)
+    node?.get("fileID")?.integer().filter(|&id| id != 0)
 }
 
 fn position(node: Option<&Node>) -> (f64, f64) {
@@ -170,6 +170,7 @@ impl<'a> Machine<'a> {
                     state: State::Same,
                     inputs: Vec::new(),
                     outputs: Vec::new(),
+                    was_at: None,
                 },
                 Vec::new(),
             )
@@ -196,6 +197,7 @@ impl<'a> Machine<'a> {
                     state: State::Same,
                     inputs: Vec::new(),
                     outputs: Vec::new(),
+                    was_at: None,
                 },
                 fields(&state.body, &STATE_FIELDS_SKIPPED, self.lookup),
             ));
@@ -224,6 +226,7 @@ impl<'a> Machine<'a> {
                     state: State::Same,
                     inputs: Vec::new(),
                     outputs: Vec::new(),
+                    was_at: None,
                 },
                 Vec::new(),
             ));
@@ -309,6 +312,7 @@ pub(crate) fn compare_controllers(
             Some(_) if renamed || rows.iter().any(|row| row.state != State::Same) => State::Changed,
             Some(_) => State::Same,
         };
+        shown.was_at = previous.map(|entry| entry.0.at).filter(|at| *at != node.at);
         if shown.state != State::Same && !matches!(node.kind, NodeKind::Entry | NodeKind::AnyState | NodeKind::Exit) {
             changes.push(GraphChange {
                 state: shown.state,

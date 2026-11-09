@@ -1793,6 +1793,9 @@
 .scene-svg .ring.picked { stroke: var(--blue); stroke-width: 2; }
 .scene-svg .moved { stroke: var(--yellow); stroke-width: 1.5; stroke-dasharray: 5 4; }
 .scene-svg .cross { stroke: var(--red); stroke-width: 2; stroke-linecap: round; }
+.scene-svg .canvas-frame { fill: none; stroke: #ffffffb0; stroke-width: 1; }
+.scene-svg text { font-family: var(--font-sans, system-ui); }
+.canvas-name { position: absolute; display: flex; align-items: center; gap: 6px; color: var(--foreground); white-space: nowrap; }
 .scene-label { position: absolute; transform: translateX(-50%); display: flex; align-items: center; gap: 6px; padding: 1px 6px; font-size: 11px; line-height: 18px; white-space: nowrap; border-radius: 4px; border: 1px solid var(--border); background: color-mix(in srgb, var(--popover) 88%, transparent); }
 .scene-label.quiet { color: var(--muted); border-color: transparent; background: none; }
 .scene-label.corner,
@@ -1877,6 +1880,15 @@
 .list-row.graph-change { gap: 8px; }
 .graph-change > .kind { flex: none; width: 66px; }
 .graph-params.right { left: auto; right: 10px; }
+.version-picker { display: flex; align-items: center; gap: 2px; }
+.version-picker > .xs { margin-right: 6px; }
+.graph-canvas.solo .unit.removed,
+.graph-canvas.solo .state-node.removed { opacity: 1; border-style: solid; }
+.graph-canvas.solo .unit.removed .unit-head > .fill,
+.graph-canvas.solo .state-node.removed > span { text-decoration: none; }
+.graph-canvas.solo .wire.removed,
+.graph-canvas.solo .transition.removed line { stroke-dasharray: none; }
+.list-row.graph-change.elsewhere { opacity: 0.45; }
 .inspector-card.compact .card-head { padding-left: 12px; }
 .inspector-card.compact .prop-row { font-size: 12px; }
 .inspector-card.compact .prop-row > .cell { align-items: flex-start; padding-top: 5px; padding-bottom: 5px; }

@@ -170,7 +170,7 @@ impl Lookup {
     }
 
     pub(crate) fn reference(&self, node: &Node) -> Option<Value> {
-        let file_id = node.get("fileID")?.number()? as i64;
+        let file_id = node.get("fileID")?.integer()?;
         let guid = node.get("guid").and_then(Node::text).filter(|guid| !guid.is_empty());
         if file_id == 0 && guid.is_none() {
             return Some(Value::Nothing("Object".to_owned()));

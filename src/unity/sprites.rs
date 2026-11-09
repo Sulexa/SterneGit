@@ -10,6 +10,7 @@ pub(crate) struct SpriteImage {
     pub(crate) height: u32,
     pub(crate) pivot: (f64, f64),
     pub(crate) pixels_per_unit: f64,
+    pub(crate) border: [f64; 4],
 }
 
 impl SpriteImage {
@@ -44,6 +45,10 @@ fn alignment_pivot(alignment: i64, custom: (f64, f64)) -> (f64, f64) {
     }
 }
 
+fn border_of(node: Option<&Node>) -> [f64; 4] {
+    ["x", "y", "z", "w"].map(|side| number(node, side).unwrap_or(0.).max(0.))
+}
+
 fn pivot_of(entry: &Node) -> (f64, f64) {
     let alignment = entry.get("alignment").or_else(|| entry.get("spriteAlignment")).and_then(Node::number).unwrap_or(0.) as i64;
     let pivot = entry.get("pivot").or_else(|| entry.get("spritePivot"));
@@ -55,7 +60,7 @@ fn sheet_entry<'a>(importer: &'a Node, file_id: i64) -> Option<&'a Node> {
     let sprites = importer.at(&["spriteSheet", "sprites"]).map(Node::items).unwrap_or_default();
     if let Some(found) = sprites
         .iter()
-        .find(|sprite| sprite.get("internalID").and_then(Node::number).map(|id| id as i64) == Some(file_id))
+        .find(|sprite| sprite.get("internalID").and_then(Node::integer) == Some(file_id))
     {
         return Some(found);
     }
@@ -68,8 +73,7 @@ fn sheet_entry<'a>(importer: &'a Node, file_id: i64) -> Option<&'a Node> {
             entry
                 .get("first")
                 .and_then(|first| first.entries().first())
-                .and_then(|(_, id)| id.number())
-                .map(|id| id as i64)
+                .and_then(|(_, id)| id.integer())
                 == Some(file_id)
         })
         .and_then(|entry| entry.get("second").and_then(Node::text))?;
@@ -87,6 +91,10 @@ pub(crate) fn crop(rgba: &[u8], width: u32, height: u32, meta: &Node, file_id: i
         .filter(|ppu| *ppu > 0.)
         .unwrap_or(DEFAULT_PIXELS_PER_UNIT);
     let entry = importer.filter(|_| file_id != SINGLE_SPRITE).and_then(|importer| sheet_entry(importer, file_id));
+    let border = match entry {
+        Some(entry) => border_of(entry.get("border")),
+        None => border_of(importer.and_then(|importer| importer.get("spriteBorder"))),
+    };
     let (rect, pivot) = match entry {
         Some(entry) => {
             let rect = entry.get("rect");
@@ -130,6 +138,7 @@ pub(crate) fn crop(rgba: &[u8], width: u32, height: u32, meta: &Node, file_id: i
         height: crop_height,
         pivot,
         pixels_per_unit,
+        border,
     })
 }
 

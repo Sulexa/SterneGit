@@ -150,6 +150,19 @@ impl Sketch {
         scale: (f32, f32),
         opacity: f32,
     ) {
+        self.tinted_image(rgba, width, height, at, scale, [1.0, 1.0, 1.0, opacity]);
+    }
+
+    pub(crate) fn tinted_image(
+        &mut self,
+        rgba: &[u8],
+        width: u32,
+        height: u32,
+        at: (f32, f32),
+        scale: (f32, f32),
+        tint: [f32; 4],
+    ) {
+        let opacity = tint[3];
         let (columns, rows) = (width as usize, height as usize);
         let needed = columns.checked_mul(rows).and_then(|count| count.checked_mul(4));
         let fits = needed.is_some_and(|needed| needed > 0 && rgba.len() >= needed);
@@ -162,7 +175,8 @@ impl Sketch {
         for (y, row) in samples(at.1, scale.1, rows, self.height) {
             for &(x, column) in &across {
                 let texel = &rgba[(row * columns + column) * 4..][..4];
-                self.blend(x, y, [texel[0], texel[1], texel[2]], texel[3] as f32 * strength);
+                let shade = |channel: usize| (f32::from(texel[channel]) * tint[channel].clamp(0.0, 1.0)) as u8;
+                self.blend(x, y, [shade(0), shade(1), shade(2)], texel[3] as f32 * strength);
             }
         }
     }

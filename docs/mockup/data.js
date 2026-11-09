@@ -730,6 +730,7 @@ const Sample = (() => {
       { kind: 'M', path: 'Assets/Graphs/SlimeBrain.asset' },
       { kind: 'M', path: 'Assets/Art/Characters/slime.png', meta: true },
       { kind: 'M', path: 'Assets/Audio/Sfx/slime-hit.wav.meta' },
+      { kind: 'M', path: 'Assets/UI/MainMenu_Canvas.prefab' },
     ],
   };
 
@@ -895,6 +896,77 @@ const Sample = (() => {
     ],
   };
   Object.assign(prefabYaml, counts(prefabYaml.hunks));
+
+  const menuDiff = {
+    kind: 'objects',
+    unity: 'Prefab',
+    change: unityWork.unstaged[8],
+    side: 'unstaged',
+    sources: onDisk,
+    facts: 'Prefab · UI · 4 objects changed',
+    hidden: 0,
+    tree: [
+      { name: 'MainMenu_Canvas', depth: 0, open: true, prefab: true },
+      { name: 'Background_Image', depth: 1 },
+      { name: 'Logo', depth: 1, state: 'changed' },
+      { name: 'Buttons', depth: 1, open: true },
+      { name: 'Play_Button', depth: 2 },
+      { name: 'Characters_Button', depth: 2, state: 'added' },
+      { name: 'Options_Button', depth: 2 },
+      { name: 'Quit_Button', depth: 2 },
+      { name: 'Discord_Label', depth: 1, state: 'changed' },
+      { name: 'Instagram_Button', depth: 1, state: 'removed' },
+      { name: 'Version_Label', depth: 1 },
+    ],
+    selected: 'Discord_Label',
+    layout: {
+      canvas: { name: 'MainMenu_Canvas', size: [1920, 1080], note: 'Screen Space - Overlay · 1920 × 1080 from Canvas Scaler' },
+      view: 'UI, drawn as Unity draws a canvas: one unit per pixel',
+      items: [
+        { name: 'Background_Image', rect: [0, 0, 1920, 1080], fill: '#2a1f4a' },
+        { name: 'Version_Label', rect: [1560, 990, 320, 60], text: { value: 'v0.4.2', size: 30, color: '#a1a1aa', align: 'end' } },
+        { name: 'Logo', from: [610, 700, 700, 230], rect: [522, 671, 876, 288], fill: '#f472b6', radius: 36, text: { value: 'STICKERINO', size: 120, oldSize: 96, color: '#ffffff', bold: true }, state: 'changed', note: 'Scale 1 → 1.25', label: 'right' },
+        { name: 'Play_Button', rect: [710, 534, 500, 96], fill: '#fde047', radius: 20, text: { value: 'Play', size: 46, color: '#1f1535', bold: true } },
+        { name: 'Characters_Button', rect: [710, 406, 500, 96], fill: '#fde047', radius: 20, text: { value: 'Characters', size: 46, color: '#1f1535', bold: true }, state: 'added', label: 'right' },
+        { name: 'Options_Button', rect: [710, 278, 500, 96], fill: '#fde047', radius: 20, text: { value: 'Options', size: 46, color: '#1f1535', bold: true } },
+        { name: 'Quit_Button', rect: [710, 150, 500, 96], fill: '#fde047', radius: 20, text: { value: 'Quit', size: 46, color: '#1f1535', bold: true } },
+        { name: 'Discord_Label', from: [60, 40, 760, 100], rect: [60, 40, 760, 100], text: { value: 'Found a bug? Join our Discord', old: 'Join our Discord', size: 38, color: '#e9d5ff', align: 'start' }, state: 'changed', note: 'Text', label: 'above' },
+        { name: 'Instagram_Button', from: [1790, 40, 90, 90], fill: '#a78bfa', radius: 22, text: { value: 'IG', size: 34, color: '#1f1535', bold: true }, state: 'removed', label: 'left' },
+      ],
+      picked: 'Discord_Label',
+    },
+    objects: [
+      {
+        name: 'Logo',
+        parent: 'MainMenu_Canvas',
+        state: 'changed',
+        components: [{ name: 'Rect Transform', props: [['Scale', v(1, 1, 1), v(1.25, 1.25, 1)]] }],
+      },
+      {
+        name: 'Characters_Button',
+        parent: 'Buttons',
+        state: 'added',
+        components: [
+          { name: 'Rect Transform', props: [['Size', undefined, v(500, 96)]] },
+          { name: 'Image', props: [['Color', undefined, rgba('#fde047')]] },
+          { name: 'Button', props: [] },
+        ],
+      },
+      {
+        name: 'Discord_Label',
+        parent: 'MainMenu_Canvas',
+        state: 'changed',
+        components: [{ name: 'TextMeshPro - Text (UI)', props: [['Text', 'Join our Discord', 'Found a bug? Join our Discord']] }],
+      },
+      {
+        name: 'Instagram_Button',
+        parent: 'MainMenu_Canvas',
+        state: 'removed',
+        folded: true,
+        components: [{ name: 'Rect Transform', props: [] }, { name: 'Image', props: [] }, { name: 'Button', props: [] }],
+      },
+    ],
+  };
 
   const levelDiff = {
     kind: 'objects',
@@ -1167,7 +1239,7 @@ const Sample = (() => {
       { id: 'cooldown', title: 'Cooldown', kind: 'flow', icon: 'clock', state: 'changed', at: [292, 56], width: 150, rows: [[{ flow: true }, { label: 'Ready', flow: true }], [{ label: 'Duration', type: 'float', value: '0.6', was: '0.8' }, { label: 'Not Ready', flow: true }]] },
       { id: 'force', title: 'Add Force', kind: 'flow', icon: 'arrow-up', at: [458, 196], width: 128, rows: [[{ flow: true }, { flow: true }], [{ label: 'Target', type: 'object', value: 'This' }, null], [{ label: 'Force', type: 'vector' }, null], [{ label: 'Mode', type: 'object', value: 'Impulse' }, null]] },
       { id: 'log', title: 'Debug: Log', kind: 'flow', icon: 'message-square', state: 'removed', at: [458, 352], width: 128, rows: [[{ flow: true }, { flow: true }], [{ label: 'Message', type: 'object', value: '"jump"' }, null]] },
-      { id: 'vector', title: 'Create Vector 2', kind: 'value', icon: 'move-horizontal', state: 'changed', at: [284, 262], width: 150, rows: [[{ label: 'X', type: 'float', value: '0' }, { type: 'vector' }], [{ label: 'Y', type: 'float' }, null]] },
+      { id: 'vector', title: 'Create Vector 2', kind: 'value', icon: 'move-horizontal', state: 'changed', at: [284, 262], width: 150, rows: [[{ label: 'X', type: 'float', value: '0' }, { type: 'vector' }], [{ label: 'Y', type: 'float', was: '6' }, null]] },
       { id: 'multiply', title: 'Multiply', kind: 'value', icon: 'close', state: 'added', at: [146, 346], width: 116, rows: [[{ label: 'A', type: 'float', value: '7.5' }, { type: 'float' }], [{ label: 'B', type: 'float' }, null]] },
       { id: 'bonus', title: 'Get Variable', kind: 'variable', icon: 'box', state: 'added', at: [16, 440], width: 128, rows: [[{ label: 'CrownBonus', field: true }, { type: 'float' }]] },
     ],
@@ -1201,7 +1273,7 @@ const Sample = (() => {
     },
   };
 
-  const unity = { work: unityWork, prefabDiff, prefabYaml, levelDiff, materialDiff, jumpDiff, animatorDiff, brainDiff, slimeMetaDiff, guidDiff };
+  const unity = { work: unityWork, prefabDiff, prefabYaml, menuDiff, levelDiff, materialDiff, jumpDiff, animatorDiff, brainDiff, slimeMetaDiff, guidDiff };
 
   const stoppedAt ={ id: '3f2a91c', subject: 'Show conflicted files in the changes list' };
 
