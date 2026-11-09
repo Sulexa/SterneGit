@@ -219,15 +219,73 @@ const Sample = (() => {
     ],
   };
 
+  const panelSource = [
+    '',
+    'impl FileDiffPanel {',
+    'const ROWS_ABOVE_A_CHANGE: usize = 2;',
+    '',
+    'pub(crate) fn new(repository: Entity<Repository>, cx: &mut Context<Self>) -> Self {',
+    '    let diff = cx.new(|cx| DiffState::new([], cx).with_mode(DiffMode::Split));',
+    '    let diff_changed = cx.observe(&diff, |_, _, cx| cx.notify());',
+    '    Self {',
+    '        repository,',
+    '        open: None,',
+    '        patch: Load::Idle,',
+    '        diff,',
+    '        stepped: None,',
+    '        _diff_changed: diff_changed,',
+    '    }',
+    '}',
+    '',
+    'pub(crate) fn open_working_file(&mut self, repo: &Repo, change: FileChange, side: Side, cx: &mut Context<Self>) {',
+    '    let path = change.path.clone();',
+    '    self.open = Some(Open { side, path: path.clone() });',
+    '    self.patch = Load::Loading { since: Instant::now() };',
+    '    let repo = repo.clone();',
+    '    let task = cx.background_spawn(async move { repo.file_patch(&change, side) });',
+    '    cx.spawn(async move |this, cx| {',
+    '        let patch = task.await;',
+    '        this.update(cx, |this, cx| this.show_patch(&path, patch, cx))',
+    '    })',
+    '    .detach();',
+    '    cx.notify();',
+    '}',
+    '',
+    'fn show_patch(&mut self, path: &str, patch: Result<FilePatch>, cx: &mut Context<Self>) {',
+    '    if self.open.as_ref().is_none_or(|open| open.path != path) {',
+    '        return;',
+    '    }',
+    '    self.patch = match patch {',
+    '        Ok(patch) => Load::Ready(patch),',
+    '        Err(error) => Load::Failed(Failure::new(error)),',
+    '    };',
+    '    self.stepped = None;',
+    '    cx.notify();',
+    '}',
+    '',
+    'fn close(&mut self, cx: &mut Context<Self>) {',
+    '    self.open = None;',
+    '    self.patch = Load::Idle;',
+    '    self.diff.update(cx, |state, cx| state.clear(cx));',
+    '    cx.emit(Closed);',
+    '}',
+    '',
+    'fn mode(&self, cx: &App) -> DiffMode {',
+    '    self.diff.read(cx).mode()',
+    '}',
+  ];
+
   const commitFile = commitDetails.files[0];
 
   const commitFileDiff = {
     change: { kind: commitFile.kind, path: commitFile.path },
     commit: commits[2].id,
+    parent: commitDetails.parents[0],
     additions: commitFile.additions,
     deletions: commitFile.deletions,
     hunks: commitFile.hunks,
     lines: 404,
+    unchanged: (n) => panelSource[n - 44],
   };
 
   const fileHistory = {
@@ -295,7 +353,97 @@ const Sample = (() => {
 
   const patchFile = { kind: 'M', path: 'src/git/patch.rs' };
 
-  const workingDiff = (side, hunks, lines) => ({ change: patchFile, side, ...counts(hunks), hunks, lines });
+  const patchSource = [
+    'use std::path::Path;',
+    '',
+    'use super::{FileChange, Repo, Result, Side};',
+    'use crate::git::{ChangeKind, context::with_whole_file};',
+    '',
+    '#[derive(Clone, Debug)]',
+    'pub(crate) enum FilePatch {',
+    '    Diff(String),',
+    '    Binary { path: String },',
+    '    Untracked(String),',
+    '    Conflicted { path: String, contents: String },',
+    '}',
+    '',
+    'impl Repo {',
+    '    pub(crate) fn file_patch(&self, change: &FileChange, side: Side) -> Result<FilePatch> {',
+    '        if change.kind == ChangeKind::Conflicted {',
+    '            return self.conflicted(change);',
+    '        }',
+    '        let args = diff_args(change, side)?;',
+    '        let output = self.git(&args)?;',
+    '        Ok(FilePatch::Diff(output))',
+    '    }',
+    '',
+    '    pub(crate) fn file_text(&self, path: &Path) -> Result<String> {',
+    '        let bytes = std::fs::read(self.workdir().join(path))?;',
+    '        if bytes.contains(&0) {',
+    '            return Ok(String::new());',
+    '        }',
+    '        Ok(String::from_utf8_lossy(&bytes).into_owned())',
+    '    }',
+    '',
+    '    fn conflicted(&self, change: &FileChange) -> Result<FilePatch> {',
+    '        let contents = std::fs::read_to_string(self.workdir().join(&change.path))?;',
+    '        Ok(FilePatch::Conflicted { path: change.path.clone(), contents })',
+    '    }',
+    '',
+    '    fn untracked(&self, path: &str) -> Result<String> {',
+    '        let null = if cfg!(windows) { "NUL" } else { "/dev/null" };',
+    '        let args = ["diff", "--no-color", "--no-index", "--", null, path];',
+    '        self.git_allowing_changes(&args)',
+    '    }',
+    '',
+    '    pub(crate) fn with_whole_file(&self, patch: String, side: Side, path: &Path) -> String {',
+    '        match self.file_text(path) {',
+    '            Ok(text) if side == Side::Unstaged => with_whole_file(&patch, &text).unwrap_or(patch),',
+    '            _ => patch,',
+    '        }',
+    '    }',
+    '}',
+    '',
+    'fn diff_args(change: &FileChange, side: Side) -> Result<Vec<String>> {',
+    '    if change.path.is_empty() {',
+    '        anyhow::bail!("a change without a path");',
+    '    }',
+    '    if side == Side::Staged && change.kind == ChangeKind::Untracked {',
+    '        anyhow::bail!("{} is not in the index", change.path);',
+    '    }',
+    '    log::trace!("diff {} ({side:?})", change.path);',
+    '',
+    '    let mut args = vec!["diff".to_owned(), "--no-color".to_owned()];',
+    '    if side == Side::Staged {',
+    '        args.push("--cached".to_owned());',
+    '    }',
+    '    args.extend(["--".to_owned(), change.path.clone()]);',
+    '    Ok(args)',
+    '}',
+    '',
+    '#[cfg(test)]',
+    'mod tests {',
+    '    use super::{FileChange, Side, diff_args};',
+    '    use crate::git::ChangeKind;',
+    '',
+    '    #[test]',
+    '    fn staged_changes_compare_the_index_with_head() {',
+    '        let change = FileChange { kind: ChangeKind::Modified, path: "src/main.rs".into() };',
+    '        let args = diff_args(&change, Side::Staged).unwrap();',
+    '        assert_eq!(args, ["diff", "--no-color", "--cached", "--", "src/main.rs"]);',
+    '    }',
+    '',
+    '    #[test]',
+    '    fn a_change_without_a_path_has_no_arguments() {',
+    '        let change = FileChange { kind: ChangeKind::Modified, path: String::new() };',
+    '        assert!(diff_args(&change, Side::Unstaged).is_err());',
+    '    }',
+    '}',
+  ];
+
+  const patchLine = (n) => patchSource[n - 1];
+
+  const workingDiff = (side, hunks, lines, unchanged = patchLine) => ({ change: patchFile, side, ...counts(hunks), hunks, lines, unchanged });
 
   const fileDiff = workingDiff('unstaged', [
     hunk(14, 14, 'pub(crate) enum FilePatch {', conflictedBranch),
@@ -303,12 +451,15 @@ const Sample = (() => {
     hunk(52, 60, 'fn diff_args(change: &FileChange, side: Side) -> Result<Vec<String>> {', pathArguments),
   ], 183);
 
-  const stagedHunkDiff = workingDiff('staged', [hunk(14, 14, 'pub(crate) enum FilePatch {', conflictedBranch)], 179);
+  const stagedHunkDiff = workingDiff('staged', [hunk(14, 14, 'pub(crate) enum FilePatch {', conflictedBranch)], 179, (n) => patchLine(n <= 31 ? n : n + 5));
 
-  const partlyStagedDiff = workingDiff('unstaged', [
-    hunk(30, 30, 'impl Repo {', conflictedReader),
-    hunk(55, 60, 'fn diff_args(change: &FileChange, side: Side) -> Result<Vec<String>> {', pathArguments),
-  ], 183);
+  const partlyStagedDiff = {
+    ...workingDiff('unstaged', [
+      hunk(30, 30, 'impl Repo {', conflictedReader),
+      hunk(55, 60, 'fn diff_args(change: &FileChange, side: Side) -> Result<Vec<String>> {', pathArguments),
+    ], 183),
+    stagedToo: true,
+  };
 
   const partlyStaged = {
     unstaged: changes.unstaged,

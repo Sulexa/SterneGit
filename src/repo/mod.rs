@@ -1581,21 +1581,26 @@ impl RepoView {
                 .into_any_element();
         }
         let rem = window.rem_size();
-        h_resizable("sternegit-panes")
-            .child(
-                resizable_panel()
-                    .size(rem * 14.)
-                    .size_range(rem * 10. ..rem * 30.)
-                    .child(match &self.file_history {
-                        Some(file_history) => file_history
-                            .list(self.file_history_focus.clone())
-                            .on_select(cx.listener(|this, id: &ObjectId, _, cx| {
-                                this.select_file_commit(*id, cx)
-                            }))
-                            .into_any_element(),
-                        None => self.refs_list(history.clone(), cx).into_any_element(),
-                    }),
-            )
+        let comparing = self.target.has_open_file() && self.file_history.is_none();
+        let left = (!comparing).then(|| {
+            resizable_panel()
+                .size(rem * 14.)
+                .size_range(rem * 10. ..rem * 30.)
+                .child(match &self.file_history {
+                    Some(file_history) => file_history
+                        .list(self.file_history_focus.clone())
+                        .on_select(cx.listener(|this, id: &ObjectId, _, cx| {
+                            this.select_file_commit(*id, cx)
+                        }))
+                        .into_any_element(),
+                    None => self.refs_list(history.clone(), cx).into_any_element(),
+                })
+        });
+        let panes = match left {
+            Some(left) => h_resizable("sternegit-panes").child(left),
+            None => h_resizable("sternegit-file-panes"),
+        };
+        panes
             .child(resizable_panel().size_range(rem * 30. ..rem * 400.).child(
                 match (&self.target, &self.pull_pane) {
                     _ if self.target.has_open_file() => div()

@@ -13,7 +13,10 @@ use gpui_kit::{
     component::{
         ActiveTheme as _, Disableable as _, Selectable as _, Sizable as _,
         button::{Button, ButtonVariants as _},
-        diff::{Diff, DiffChangeMark, DiffFile, DiffHoverHighlight, DiffMode, DiffState},
+        diff::{
+            Diff, DiffChangeIndicator, DiffChangeMark, DiffFile, DiffHoverHighlight,
+            DiffHunkSeparator, DiffMode, DiffState,
+        },
         h_flex,
         menu::{ContextMenuExt as _, DropdownMenu as _, PopupMenuItem},
         v_flex,
@@ -28,8 +31,8 @@ use super::{
     compare::{
         ChangeRuler, ChangeStepper, Direction, FileBar, FileFacts, FilePlace, OtherFile,
         OtherFileView, PictureCompare, PictureMode, Pictures, Position, SoundCompare, SoundMode,
-        Sounds, TemporaryCopy, TextOptions, Version, VideoCompare, VideoSide, Videos, ViewBar,
-        text_options_menu,
+        Sounds, TemporaryCopy, TextOptions, Version, VersionTag, VideoCompare, VideoSide, Videos,
+        ViewBar, text_options_menu,
     },
     hunk_actions::{HunkActions, Offers, Pressed, line_at, line_span},
     merge_editor::MergeEditor,
@@ -57,7 +60,8 @@ const TEXTS: PatchTexts = PatchTexts {
     empty: "No changes to show: only whitespace, line endings or file mode differ.",
 };
 
-const ROWS_ABOVE_A_CHANGE: usize = 2;
+const ROWS_ABOVE_A_CHANGE: usize = 8;
+const SIDES_HEIGHT: f32 = 32.;
 
 pub(crate) enum FileDiffEvent {
     Close,
@@ -269,6 +273,9 @@ impl FileDiffPanel {
                             state.set_files(patch.files, cx)
                         }
                     });
+                    if !reload {
+                        this.jump_to_change(0, cx);
+                    }
                     this.redraw_after_measuring.files_changed();
                     stats
                 });
@@ -981,6 +988,9 @@ impl FileDiffPanel {
                         state.refresh_files(files, cx)
                     }
                 });
+                if from_the_top {
+                    this.jump_to_change(0, cx);
+                }
                 this.redraw_after_measuring.files_changed();
                 cx.notify();
             },
@@ -1118,6 +1128,8 @@ impl FileDiffPanel {
             .line_number(true)
             .soft_wrap(TextOptions::current(cx).wraps())
             .header_visible(false)
+            .hunk_separator(DiffHunkSeparator::Scope)
+            .change_indicator(DiffChangeIndicator::Bars)
             .border_0();
         let Some(actions) = actions else {
             return diff.into_any_element();
@@ -1155,6 +1167,7 @@ impl FileDiffPanel {
     fn text_view(&self, cx: &mut Context<Self>) -> AnyElement {
         let actions = self.hunk_actions(cx);
         let diff_view = self.diff_view(actions, cx);
+        let sides = self.sides_row(cx);
         let state = self.diff.read(cx);
         let ruler = ChangeRuler::new(
             state.change_marks(),
@@ -1164,9 +1177,56 @@ impl FileDiffPanel {
         );
         h_flex()
             .size_full()
-            .child(div().flex_1().min_w_0().h_full().child(diff_view))
+            .child(
+                v_flex()
+                    .flex_1()
+                    .min_w_0()
+                    .h_full()
+                    .children(sides)
+                    .child(div().flex_1().min_h_0().child(diff_view)),
+            )
             .child(ruler)
             .into_any_element()
+    }
+
+    fn text_sides(&self, cx: &App) -> Option<[SharedString; 2]> {
+        match self.compared.as_ref()? {
+            Compared::WorkingFile(open) => {
+                let changes = self.repository.read(cx).changes()?;
+                let change = changes.find(open.side, &open.path)?;
+                let staged_too = open.side == Side::Unstaged
+                    && changes.find(Side::Staged, &open.path).is_some();
+                Some(working_sides(change, open.side, staged_too).1)
+            }
+            Compared::CommitFile {
+                id,
+                baseline,
+                short_id,
+                file,
+            } => Some(commit_sides(file, *id, baseline.commit(), short_id).1),
+        }
+    }
+
+    fn sides_row(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let [before, after] = self.text_sides(cx)?;
+        let split = self.diff.read(cx).mode() == DiffMode::Split;
+        let border = cx.theme().border;
+        let before = VersionTag::new(Version::Before, before);
+        let after = VersionTag::new(Version::After, after);
+        let row = h_flex()
+            .flex_none()
+            .w_full()
+            .h(px(SIDES_HEIGHT))
+            .border_b_1()
+            .border_color(border);
+        Some(if split {
+            let half = || h_flex().flex_1().min_w_0().h_full().px_2();
+            row.child(half().child(before))
+                .child(half().border_l_1().border_color(border).child(after))
+                .into_any_element()
+        } else {
+            row.px_2().gap_2().child(before).child(after).into_any_element()
+        })
     }
 
     fn move_button(&self, open: &OpenFile, listed: bool, cx: &mut Context<Self>) -> AnyElement {
@@ -1316,7 +1376,7 @@ impl Render for FileDiffPanel {
                 (commit_heading(short_id, file), None)
             }
         };
-        let file_bar = self.file_bar(heading, move_button, cx);
+        let mut file_bar = self.file_bar(heading, move_button, cx);
         let shown_pictures = match self.media.value() {
             Some(Media::Pictures(view)) => Some(view.clone()),
             _ => None,
@@ -1339,7 +1399,7 @@ impl Render for FileDiffPanel {
             (Some(MediaView::Pictures | MediaView::Sounds), None, None) => (Some(ViewBar::new()), self.media_content(cx)),
             (Some(MediaView::Other), None, None) => (None, self.media_content(cx)),
             (None, _, _) => {
-                let view_bar = self.view_bar(cx);
+                file_bar = file_bar.view(self.view_bar(cx));
                 let text_view = self
                     .patch
                     .value()
@@ -1352,7 +1412,7 @@ impl Render for FileDiffPanel {
                     |_| text_view.unwrap_or_else(|| div().into_any_element()),
                     cx,
                 );
-                (Some(view_bar), content)
+                (None, content)
             }
         };
         v_flex()

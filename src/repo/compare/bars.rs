@@ -49,6 +49,7 @@ pub(crate) struct FileBar {
     facts: Option<AnyElement>,
     place: FilePlace,
     move_button: Option<AnyElement>,
+    view: Option<ViewBar>,
     on_whole_window: Handler<()>,
     on_step_file: Handler<Direction>,
     on_close: Handler<()>,
@@ -72,6 +73,7 @@ impl FileBar {
             facts: None,
             place,
             move_button: None,
+            view: None,
             on_whole_window,
             on_step_file,
             on_close,
@@ -90,6 +92,11 @@ impl FileBar {
 
     pub(crate) fn move_button(mut self, button: Option<AnyElement>) -> Self {
         self.move_button = button;
+        self
+    }
+
+    pub(crate) fn view(mut self, view: ViewBar) -> Self {
+        self.view = Some(view.inline());
         self
     }
 
@@ -138,6 +145,14 @@ impl RenderOnce for FileBar {
             .map(|position| self.file_stepper(position, cx));
         let on_whole_window = self.on_whole_window.clone();
         let on_close = self.on_close.clone();
+        let border = cx.theme().border;
+        let view = self.view.map(|view| {
+            h_flex()
+                .flex_none()
+                .gap_2()
+                .child(view)
+                .child(separator(border))
+        });
         h_flex()
             .flex_none()
             .w_full()
@@ -173,6 +188,7 @@ impl RenderOnce for FileBar {
             .child(div().flex_none().xs_text().text_color(muted).child(self.state))
             .children(self.facts.map(|facts| div().flex_none().xs_text().child(facts)))
             .child(div().flex_1())
+            .children(view)
             .children(stepper)
             .children(self.move_button)
             .child(
@@ -274,11 +290,21 @@ impl RenderOnce for ChangeStepper {
     }
 }
 
+fn separator(color: gpui_kit::Hsla) -> AnyElement {
+    div()
+        .flex_none()
+        .w(px(1.))
+        .h(px(SEPARATOR_HEIGHT))
+        .bg(color)
+        .into_any_element()
+}
+
 #[derive(IntoElement)]
 pub(crate) struct ViewBar {
     modes: Vec<Button>,
     stepper: Option<ChangeStepper>,
     tools: Vec<AnyElement>,
+    inline: bool,
 }
 
 impl ViewBar {
@@ -287,7 +313,13 @@ impl ViewBar {
             modes: Vec::new(),
             stepper: None,
             tools: Vec::new(),
+            inline: false,
         }
+    }
+
+    fn inline(mut self) -> Self {
+        self.inline = true;
+        self
     }
 
     pub(crate) fn mode(
@@ -334,19 +366,19 @@ impl RenderOnce for ViewBar {
         let separated = self.stepper.is_some() && !self.tools.is_empty();
         h_flex()
             .flex_none()
-            .w_full()
-            .min_w_0()
-            .h(px(VIEW_BAR_HEIGHT))
-            .px_3()
             .gap_2()
-            .border_b_1()
-            .border_color(border)
-            .child(h_flex().flex_none().gap_0p5().children(self.modes))
-            .child(div().flex_1())
-            .children(self.stepper)
-            .when(separated, |this| {
-                this.child(div().flex_none().w(px(1.)).h(px(SEPARATOR_HEIGHT)).bg(border))
+            .when(!self.inline, |this| {
+                this.w_full()
+                    .min_w_0()
+                    .h(px(VIEW_BAR_HEIGHT))
+                    .px_3()
+                    .border_b_1()
+                    .border_color(border)
             })
+            .child(h_flex().flex_none().gap_0p5().children(self.modes))
+            .when(!self.inline, |this| this.child(div().flex_1()))
+            .children(self.stepper)
+            .when(separated, |this| this.child(separator(border)))
             .child(h_flex().flex_none().gap_0p5().children(self.tools))
     }
 }

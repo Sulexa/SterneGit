@@ -343,19 +343,21 @@
             "color": "#7FAEF9"
           },
           "boolean": {
-            "color": "#CC9E00"
+            "color": "#F4A8C4"
           },
           "comment": {
-            "color": "#9D9D9D"
+            "color": "#7E8794",
+            "font_style": "italic"
           },
           "comment.doc": {
-            "color": "#9D9D9D"
+            "color": "#7E8794",
+            "font_style": "italic"
           },
           "constant": {
-            "color": "#CC9E00"
+            "color": "#F4A8C4"
           },
           "constructor": {
-            "color": "#CBA6F7"
+            "color": "#F0CF8E"
           },
           "embedded": {
             "color": "#CACCCA"
@@ -367,10 +369,10 @@
             "font_weight": 700
           },
           "function": {
-            "color": "#B3C5F3"
+            "color": "#7FB0FF"
           },
           "keyword": {
-            "color": "#87B1F6"
+            "color": "#D49CF6"
           },
           "link_text": {
             "color": "#419CFF",
@@ -381,44 +383,41 @@
             "font_style": "italic"
           },
           "number": {
-            "color": "#CC9E00"
+            "color": "#F4A8C4"
           },
           "string": {
-            "color": "#A3E09F"
+            "color": "#8FD6E6"
           },
           "string.escape": {
-            "color": "#68DC7C"
+            "color": "#B8E8F2"
           },
           "string.regex": {
-            "color": "#68DC7C"
+            "color": "#B8E8F2"
           },
           "string.special": {
-            "color": "#A3E09F"
+            "color": "#8FD6E6"
           },
           "string.special.symbol": {
-            "color": "#A3E09F"
+            "color": "#8FD6E6"
           },
           "tag": {
             "color": "#419CFF"
           },
           "text.literal": {
-            "color": "#A3E09F"
+            "color": "#8FD6E6"
           },
           "text.code.span": {
-            "color": "#A3E09F"
+            "color": "#8FD6E6"
           },
           "title": {
             "color": "#CC9E00",
             "font_weight": 600
           },
           "type": {
-            "color": "#CBA6F7"
-          },
-          "property": {
-            "color": "#BCC4E0"
+            "color": "#F0CF8E"
           },
           "variable.special": {
-            "color": "#419CFF"
+            "color": "#D49CF6"
           }
         }
       }

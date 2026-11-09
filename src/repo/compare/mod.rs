@@ -9,7 +9,7 @@ mod transport;
 mod video;
 
 pub(crate) use bars::{ChangeStepper, Direction, FileBar, FilePlace, Position, ViewBar};
-pub(crate) use details::Version;
+pub(crate) use details::{Version, VersionTag};
 pub(crate) use other::{FileFacts, OtherFile, OtherFileView};
 pub(crate) use options::{TextOptions, text_options_menu};
 pub(crate) use picture::{PictureCompare, PictureMode, Pictures};

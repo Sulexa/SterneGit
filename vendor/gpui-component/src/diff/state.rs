@@ -33,6 +33,7 @@ pub(crate) enum DisplayRow {
     Hunk {
         file: usize,
         hunk: usize,
+        fold: Option<Range<usize>>,
     },
     Fold {
         file: usize,
@@ -54,6 +55,18 @@ pub(crate) enum DisplayRow {
 }
 
 impl DisplayRow {
+    pub(crate) fn folded(&self) -> Option<(usize, Range<usize>)> {
+        match self {
+            Self::Fold { file, pairs }
+            | Self::Hunk {
+                file,
+                fold: Some(pairs),
+                ..
+            } => Some((*file, pairs.clone())),
+            _ => None,
+        }
+    }
+
     pub(crate) fn file(&self) -> usize {
         match self {
             Self::File(file) | Self::Notice(file) => *file,
@@ -1294,8 +1307,7 @@ impl DiffState {
 
     fn expand_line(&mut self, position: &DiffLinePosition) -> Option<usize> {
         let row = self.source_row(position)?;
-        if let Some(DisplayRow::Fold { file, pairs }) = self.rows.get(row) {
-            let (file, pairs) = (*file, pairs.clone());
+        if let Some((file, pairs)) = self.rows.get(row).and_then(DisplayRow::folded) {
             self.expanded[file].push(pairs);
             self.rebuild_at_anchor();
         }
@@ -1371,7 +1383,10 @@ impl DiffState {
             DisplayRow::Code {
                 original, modified, ..
             } => pair_position(*original, *modified),
-            DisplayRow::Fold { pairs, .. } => self.files[file]
+            DisplayRow::Fold { pairs, .. }
+            | DisplayRow::Hunk {
+                fold: Some(pairs), ..
+            } => self.files[file]
                 .pairs()
                 .get(pairs.start)
                 .and_then(|pair| pair_position(pair.original(), pair.modified())),
@@ -1634,7 +1649,12 @@ fn source_rows(files: &[DiffFile], rows: &[DisplayRow]) -> Vec<FileRows> {
                 modified,
                 ..
             } => map(*file, *original, *modified),
-            DisplayRow::Fold { file, pairs } => {
+            DisplayRow::Fold { file, pairs }
+            | DisplayRow::Hunk {
+                file,
+                fold: Some(pairs),
+                ..
+            } => {
                 for pair in &files[*file].pairs()[pairs.clone()] {
                     map(*file, pair.original(), pair.modified());
                 }
@@ -1766,6 +1786,17 @@ fn visible_pairs(
     visible
 }
 
+const SEPARATOR_LEAD: usize = 3;
+
+fn separator_at(pairs: &[super::document::LinePair], hunk: Range<usize>, lead: usize) -> usize {
+    pairs[hunk.clone()]
+        .iter()
+        .position(|pair| pair.is_changed())
+        .map_or(hunk.start, |first| {
+            (hunk.start + first).saturating_sub(lead).max(hunk.start)
+        })
+}
+
 fn project_file(
     rows: &mut Vec<DisplayRow>,
     file: usize,
@@ -1779,22 +1810,37 @@ fn project_file(
     let hunks = document.hunks();
     let hunk_end = hunk_ends(document);
     let visible = visible_pairs(document, context, min_collapsed_lines, expanded);
+    let lead = context.unwrap_or(SEPARATOR_LEAD);
+    let anchors: Vec<usize> = hunks
+        .iter()
+        .map(|hunk| separator_at(pairs, hunk.pairs(), lead))
+        .collect();
     let mut hunk_ix = 0;
     let mut ix = 0;
     while ix < pairs.len() {
-        while let Some(hunk) = hunks.get(hunk_ix) {
-            if hunk.pairs().start != ix {
-                break;
-            }
+        while anchors.get(hunk_ix) == Some(&ix) {
+            let fold = match rows.last() {
+                Some(DisplayRow::Fold {
+                    file: folded_file,
+                    pairs: folded,
+                }) if *folded_file == file && folded.end == ix => {
+                    let folded = folded.clone();
+                    rows.pop();
+                    Some(folded)
+                }
+                _ => None,
+            };
             rows.push(DisplayRow::Hunk {
                 file,
                 hunk: hunk_ix,
+                fold,
             });
             hunk_ix += 1;
         }
+        let next_anchor = anchors.get(hunk_ix).copied().unwrap_or(pairs.len());
         if !visible[ix] {
             let start = ix;
-            while ix < pairs.len() && ix < hunk_end[start] && !visible[ix] {
+            while ix < pairs.len() && ix < hunk_end[start] && ix < next_anchor && !visible[ix] {
                 ix += 1;
             }
             rows.push(DisplayRow::Fold {

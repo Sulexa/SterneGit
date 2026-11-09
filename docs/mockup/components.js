@@ -293,6 +293,12 @@ const PixelChanges = {
 
 const FoldLimit = 20;
 
+const LinesAboveAChange = 4;
+
+const ViewRows = 30;
+
+const DrawnRows = 60;
+
 const Texts = {
   welcomeTitle: 'Open a Git repository',
   welcomeDescription: 'SterneGit reads history straight from the repository on disk. Each repository opens in its own tab.',
@@ -897,14 +903,14 @@ function icon(name, size = 'md', color) {
   return `<svg class="icon" width="${px}" height="${px}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"${style}>${IconPaths[name]}</svg>`;
 }
 
-const RustTokens = /("(?:[^"\\]|\\.)*")|\b(fn|let|pub|impl|if|else|return|match|mut|use|struct|enum|crate|self|Self|true|false|move|for|in|const)\b|\b([A-Z][A-Za-z0-9_]*)\b|\b(\d+(?:\.\d+)*)\b|\b([a-z_][a-z0-9_]*)(?=\()/g;
+const RustTokens = /(\/\/.*$)|("(?:[^"\\]|\\.)*")|\b(fn|let|pub|impl|if|else|return|match|mut|use|struct|enum|crate|self|Self|move|for|in|const|as|where|loop|while|break|continue|ref|dyn|trait|type|mod|static|super|async|await|unsafe)\b|\b([A-Z][A-Z0-9_]+|true|false|\d[\d_]*(?:\.\d*)?)\b|\b([A-Z][A-Za-z0-9_]*|bool|char|str|f32|f64|usize|isize|u8|u16|u32|u64|i8|i16|i32|i64)\b|\b([a-z_][a-z0-9_]*!?)(?=\()/g;
 
 function highlight(code, words = []) {
   const pieces = [];
   let last = 0;
   for (const match of code.matchAll(RustTokens)) {
     if (match.index > last) pieces.push([last, match.index, '']);
-    const kind = match[1] ? 'string' : match[2] ? 'keyword' : match[3] ? 'type' : match[4] ? 'number' : 'function';
+    const kind = match[1] ? 'comment' : match[2] ? 'string' : match[3] ? 'keyword' : match[4] ? 'number' : match[5] ? 'type' : 'function';
     pieces.push([match.index, match.index + match[0].length, `tok-${kind}`]);
     last = match.index + match[0].length;
   }
@@ -973,11 +979,17 @@ function wordChanges(lines) {
   return words;
 }
 
+function textSides(diff) {
+  if (diff.commit) return [diff.parent || '', diff.commit];
+  if (diff.side === 'staged') return ['HEAD', 'Staged'];
+  return [diff.stagedToo ? 'Staged' : 'HEAD', 'Working copy'];
+}
+
 function changeGroups(hunks) {
   const groups = [];
   for (const h of hunks) {
     let group = null;
-    let lastNew = null;
+    let lastNew = newSpan(h)[0] - 1;
     for (const [sign, , newNo] of h.lines) {
       if (sign === ' ') {
         if (group) group.end = newNo - 1;
@@ -1010,6 +1022,16 @@ function widenedHeader(header, above, below) {
   const [, oldStart, oldCount = '1', newStart, newCount = '1', scope] = match;
   const range = (start, count) => `${Number(start) - above},${Number(count) + above + below}`;
   return `@@ -${range(oldStart, oldCount)} +${range(newStart, newCount)} @@${scope}`;
+}
+
+function wholeFileTop(hunks) {
+  return Math.max(1, newSpan(hunks[0])[0] - LinesAboveAChange);
+}
+
+function oldShift(h, at) {
+  const both = h.lines.filter((line) => line[1] !== null && line[2] !== null);
+  const line = at === 'start' ? both[0] : both[both.length - 1];
+  return line ? line[1] - line[2] : 0;
 }
 
 function hiddenLines(hunks, total) {
@@ -1720,18 +1742,20 @@ const C = {
     return `<div data-c="HistoryList" class="history v">${wip}<div class="fill" style="position:relative;overflow:hidden">${rows}<div class="scrollbar" style="top:2px;height:${thumb}px"></div></div></div>`;
   },
 
-  DiffView({ files, mode = 'unified', header = true, actions, selection, pointed, menu = '', words = true }) {
-    const fold = (count, arrow) => {
-      if (count <= 0) return '';
+  DiffView({ files, mode = 'unified', header = true, actions, selection, pointed, menu = '', words = true, look = {} }) {
+    const bars = look.marks === 'bars';
+    const foldButtons = (count, ...arrows) => {
       const partial = count > FoldLimit;
-      const reveal = partial ? C.Button({ icon: arrow, variant: 'ghost', tooltip: arrow === 'arrow-up' ? Texts.showAbove(FoldLimit) : Texts.showBelow(FoldLimit) }) : '';
+      const reveal = partial ? arrows.map((arrow) => C.Button({ icon: arrow, variant: 'ghost', tooltip: arrow === 'arrow-up' ? Texts.showAbove(FoldLimit) : Texts.showBelow(FoldLimit) })).join('') : '';
       const all = C.Button({ icon: partial ? 'chevrons-up-down' : 'chevron-down', label: counted(count, 'unchanged line', 'unchanged lines'), variant: 'ghost', tooltip: Texts.expandLines(count) });
-      return `<div class="diff-line fold">${reveal}${all}</div>`;
+      return reveal + all;
     };
+    const fold = (count, arrow) => (count <= 0 ? '' : `<div class="diff-line fold">${foldButtons(count, arrow)}</div>`);
+    const marker = (sign) => (bars ? '<span class="bar"></span>' : `<span class="sign">${sign === ' ' || !sign ? '' : sign === '-' ? '−' : '+'}</span>`);
     const line = (entry, side, marks) => {
-      if (!entry) return '<div class="diff-line blank"><span class="number"></span><span class="sign"></span><span class="text"></span></div>';
+      if (!entry) return `<div class="diff-line blank"><span class="number"></span>${marker('')}<span class="text"></span></div>`;
       const [sign, oldNo, newNo, text] = entry;
-      const kind = sign === '+' ? 'added' : sign === '-' ? 'deleted' : '';
+      const kind = sign === '+' ? 'added' : sign === '-' ? 'deleted' : 'context';
       const pointedSide = pointed && (pointed.side || (sign === '-' ? 'old' : 'new'));
       const anchored = entry === marks.pointed && (side === 'both' || side === pointedSide);
       const classes = ['diff-line', kind, marks.selected.has(entry) && 'selected'].filter(Boolean).join(' ');
@@ -1741,7 +1765,7 @@ const C = {
           : side === 'new'
             ? `<span class="number">${newNo ?? ''}</span>`
             : `<span class="number">${oldNo ?? ''}</span><span class="number">${newNo ?? ''}</span>`;
-      return `<div class="${classes}">${numbers}<span class="sign">${sign === ' ' ? '' : sign === '-' ? '−' : '+'}</span><span class="text">${highlight(text, marks.words.get(entry))}</span>${anchored ? menu : ''}</div>`;
+      return `<div class="${classes}">${numbers}${marker(sign)}<span class="text">${highlight(text, marks.words.get(entry))}</span>${anchored ? menu : ''}</div>`;
     };
     const hunk = (h, hx, marks, own) => {
       const selected = own && selection && selection.hunk === hx ? selectionSize(selection) : 0;
@@ -1749,28 +1773,64 @@ const C = {
       const above = marks.hidden ? marks.hidden.above[hx] : 0;
       const below = marks.hidden && hx === marks.last ? marks.hidden.below : 0;
       const title = marks.hidden ? widenedHeader(h.header, above, below) : h.header;
-      const top = `<div class="diff-line hunk"><span class="text">${esc(title)}</span>${buttons}</div>${fold(above, 'arrow-up')}`;
+      const scope = h.header.replace(/^@@[^@]*@@\s*/, '');
+      const top = marks.whole
+        ? buttons && `<div class="diff-line gap"><span class="fill"></span>${buttons}</div>`
+        : look.gaps === 'scope'
+          ? `<div class="diff-line gap">${above > 0 ? foldButtons(above, ...(hx ? ['arrow-down', 'arrow-up'] : ['arrow-up'])) : ''}<span class="scope">${esc(scope)}</span>${buttons}</div>`
+          : `<div class="diff-line hunk"><span class="text">${esc(title)}</span>${buttons}</div>${fold(above, 'arrow-up')}`;
       if (mode === 'split') {
         return top + pairLines(h.lines).map(([left, right]) => `<div class="diff-split-row">${line(left, 'old', marks)}${line(right, 'new', marks)}</div>`).join('');
       }
       return top + h.lines.map((entry) => line(entry, 'both', marks)).join('');
     };
+    const sidesRow = () => {
+      if (!look.sides) return '';
+      const [before, after] = look.sides.map((from, ix) => C.VersionTag({ side: ix ? 'after' : 'before', from }));
+      return mode === 'split' ? `<div class="diff-sides split"><div>${before}</div><div>${after}</div></div>` : `<div class="diff-sides">${before}${after}</div>`;
+    };
+    const scrollbars = () => {
+      if (!look.scroll) return '';
+      const thumb = '<span class="thumb"></span>';
+      return mode === 'split' ? `<div class="hscroll split"><div>${thumb}</div><div>${thumb}</div></div>` : `<div class="hscroll"><div>${thumb}</div></div>`;
+    };
+    const plain = (entry, marks) => (mode === 'split' ? `<div class="diff-split-row">${line(entry, 'old', marks)}${line(entry, 'new', marks)}</div>` : line(entry, 'both', marks));
+    const wholeFile = (f, marks, own) => {
+      const from = wholeFileTop(f.hunks);
+      const to = from + DrawnRows;
+      let next = from;
+      let rows = '';
+      f.hunks.forEach((h, hx) => {
+        const [start, end] = newSpan(h);
+        const shift = hx ? oldShift(f.hunks[hx - 1], 'end') : oldShift(h, 'start');
+        for (; next < start && next <= to; next++) rows += plain([' ', next + shift, next, f.unchanged(next) ?? ''], marks);
+        if (start <= to) rows += hunk(h, hx, marks, own);
+        next = Math.max(next, end + 1);
+      });
+      const last = f.hunks[f.hunks.length - 1];
+      for (; next <= to && f.unchanged(next) !== undefined; next++) rows += plain([' ', next + oldShift(last, 'end'), next, f.unchanged(next)], marks);
+      return rows;
+    };
     const file = (f, fx) => {
       const own = fx === 0;
+      const whole = Boolean(look.whole && f.unchanged && f.hunks.length);
       const marks = {
         selected: selectedEntries(f.hunks, own ? selection : null),
         pointed: own && pointed ? f.hunks[pointed.hunk].lines[pointed.line] : null,
         words: words ? new Map(f.hunks.flatMap((h) => [...wordChanges(h.lines)])) : new Map(),
-        hidden: f.lines && f.hunks.length ? hiddenLines(f.hunks, f.lines) : null,
+        whole,
+        hidden: !whole && f.lines && f.hunks.length ? hiddenLines(f.hunks, f.lines) : null,
         last: f.hunks.length - 1,
       };
       const top = header
         ? `<div class="diff-file-header">${C.Button({ icon: 'chevron-down', variant: 'ghost' })}<span class="title ellipsis">${esc(f.path)}</span><span class="stats xs muted">+${thousands(f.additions)} −${thousands(f.deletions)}</span></div>`
         : '';
       const end = fold(marks.hidden ? marks.hidden.below : 0, 'arrow-down');
-      return `<div class="diff-file">${top}${f.hunks.map((h, hx) => hunk(h, hx, marks, own)).join('')}${end}</div>`;
+      const body = whole ? wholeFile(f, marks, own) : f.hunks.map((h, hx) => hunk(h, hx, marks, own)).join('') + end;
+      return `<div class="diff-file">${top}${sidesRow()}${body}</div>`;
     };
-    return `<div data-c="DiffView" data-base="Diff" class="diff">${files.map(file).join('')}</div>`;
+    const classes = ['diff', bars && 'bars', look.scroll && 'nowrap', ...(look.palette || []).map((name) => `palette-${name}`)].filter(Boolean).join(' ');
+    return `<div data-c="DiffView" data-base="Diff" class="${classes}">${files.map(file).join('')}${scrollbars()}</div>`;
   },
 
   HunkActions({ side, selected = 0, writing = false }) {
@@ -1953,7 +2013,7 @@ const C = {
     return `<div data-c="ChangesList" class="changes">${form}${bar}${conflicts}${section('staged', Texts.nothingStaged)}${section('unstaged', Texts.nothingUnstaged)}</div>`;
   },
 
-  FileBar({ diff, state = 'ready', writing = false, expanded = false, filePosition }) {
+  FileBar({ diff, state = 'ready', writing = false, expanded = false, filePosition, tools = '' }) {
     const labels = diff.commit ? null : SideLabels[diff.side];
     const shownState = diff.commit ? `in ${diff.commit}` : labels.state;
     const conflicted = diff.side === 'conflicted';
@@ -1990,6 +2050,8 @@ const C = {
       `<div class="none xs muted">${esc(shownState)}</div>` +
       facts +
       `<div class="fill"></div>` +
+      tools +
+      (tools ? '<div class="separator"></div>' : '') +
       stepper +
       moveButton +
       expand +
@@ -2138,7 +2200,7 @@ const C = {
     return `<span data-c="BackdropButton" data-base="Button" class="${classes}" title="${esc(Texts.backdrop)}"><span class="swatch checker"></span></span>`;
   },
 
-  ViewOptionsMenu({ checked = ['words', 'wrap'], hot, right = 8, top = 30 }) {
+  ViewOptionsMenu({ checked = ['words', 'whole'], hot, right = 8, top = 30 }) {
     const rows = ViewOptions.map(
       (item) =>
         `<div class="item${item.key === hot ? ' hot' : ''}"><span class="check">${checked.includes(item.key) ? icon('check', 'sm') : ''}</span><span class="v label"><span>${esc(item.label)}</span><span class="about">${esc(item.about)}</span></span></div>`,
@@ -2160,14 +2222,14 @@ const C = {
     return `<div data-c="ViewBar" class="view-bar"><div class="modes">${modes}</div><div class="fill"></div>${stepper}${stepper ? separator : ''}${tools}${menu}</div>`;
   },
 
-  ChangeRuler({ hunks, lines }) {
+  ChangeRuler({ hunks, lines, shown: [top, bottom] = [] }) {
     const marks = changeGroups(hunks).map((group) => {
       const color = group.added && group.deleted ? 'var(--yellow)' : group.added ? 'var(--green)' : 'var(--red)';
       const size = Math.max(group.end - group.start + 1, 1);
       return `<span class="mark" style="top:${percentOf(group.start - 1, lines)};height:${percentOf(size, lines)};--c:${color}"></span>`;
     });
-    const [first] = newSpan(hunks[0]);
-    const [, last] = newSpan(hunks[hunks.length - 1]);
+    const first = top ?? newSpan(hunks[0])[0];
+    const last = bottom ?? newSpan(hunks[hunks.length - 1])[1];
     const shown = `<span class="view" style="top:${percentOf(first - 1, lines)};height:${percentOf(last - first + 1, lines)}"></span>`;
     return `<div data-c="ChangeRuler" class="change-ruler" title="Where the changes are in the whole file">${marks.join('')}${shown}</div>`;
   },
@@ -2325,7 +2387,7 @@ const C = {
     );
   },
 
-  FileDiffPanel({ diff, mode = 'split', state = 'ready', writing = false, reason = '', selection, pointed, expanded = false, filePosition, menuOpen = false, hot, view = {} }) {
+  FileDiffPanel({ diff, mode = 'split', state = 'ready', writing = false, reason = '', selection, pointed, expanded = false, filePosition, menuOpen = false, hot, view = {}, look = {} }) {
     const kind = diff.kind || 'text';
     const labels = diff.commit ? null : SideLabels[diff.side];
     const ready = state === 'ready';
@@ -2344,15 +2406,18 @@ const C = {
     const conflict = () => C.MergeEditor({ merge: diff });
     const text = () => {
       const diffView = C.DiffView({
-        files: [{ path: diff.change.path, additions: diff.additions, deletions: diff.deletions, hunks: diff.hunks, lines: diff.lines }],
+        files: [{ path: diff.change.path, additions: diff.additions, deletions: diff.deletions, hunks: diff.hunks, lines: diff.lines, unchanged: diff.unchanged }],
         mode,
         header: false,
         actions: labels && diff.change.kind === 'M' ? { side: diff.side, writing } : undefined,
         selection,
         pointed,
         menu: pointed && labels ? C.LineMenu({ side: diff.side, selected: pointed.selected, changed: pointed.changed, left: pointed.left, top: pointed.top, hot: pointed.hot }) : '',
+        look: { gaps: 'scope', marks: 'bars', sides: textSides(diff), scroll: true, whole: true, ...look },
       });
-      const ruler = diff.lines ? C.ChangeRuler({ hunks: diff.hunks, lines: diff.lines }) : '';
+      const whole = look.whole !== false && diff.unchanged && diff.hunks.length;
+      const top = whole ? wholeFileTop(diff.hunks) : undefined;
+      const ruler = diff.lines ? C.ChangeRuler({ hunks: diff.hunks, lines: diff.lines, shown: whole ? [top, top + ViewRows - 1] : [] }) : '';
       return `<div class="diff-area">${diffView}${ruler}</div>`;
     };
     const bodies = {
@@ -2371,7 +2436,8 @@ const C = {
           : state === 'empty'
             ? C.Hint({ message: Texts.fileEmpty })
             : bodies[kind]();
-    return `<div data-c="FileDiffPanel" class="file-diff">${C.FileBar({ diff, state, writing, expanded, filePosition })}${viewBar}<div class="fill v">${content}</div></div>`;
+    const bars = kind === 'text' ? C.FileBar({ diff, state, writing, expanded, filePosition, tools: viewBar }) : C.FileBar({ diff, state, writing, expanded, filePosition }) + viewBar;
+    return `<div data-c="FileDiffPanel" class="file-diff">${bars}<div class="fill v">${content}</div></div>`;
   },
 
   FileHistoryRow({ entry, selected = false }) {
@@ -2439,7 +2505,7 @@ const C = {
   },
 
   RepoView({ body, left, middle, right, status, toolbar = C.RepoToolbar(), expanded = false, operation = '' }) {
-    const side = (place, content) => (expanded ? '' : `<div class="pane ${place}">${content}</div>`);
+    const side = (place, content) => (expanded || content === false ? '' : `<div class="pane ${place}">${content}</div>`);
     const panes = body || `<div class="panes">${side('left', left)}<div class="pane middle">${middle}</div>${side('right', right)}</div>`;
     return `<div data-c="RepoView" class="repo-view">${toolbar}${operation}<div class="fill v">${panes}</div>${status}</div>`;
   },

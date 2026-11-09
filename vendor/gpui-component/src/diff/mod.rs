@@ -1,6 +1,7 @@
 //! Readonly, virtualized patch display inspired by Diffs from Pierre.
 //! Parse an externally supplied patch into [`DiffFile`]s, retain one
 //! [`DiffState`] for all of them in the owner, and build [`Diff`] during rendering.
+mod code_names;
 mod conflict;
 mod decoration;
 mod document;
@@ -133,6 +134,7 @@ pub enum DiffHunkSeparator {
     LineInfo,
     /// A thin divider.
     Simple,
+    Scope,
 }
 
 /// How changed lines are marked beside the code.
@@ -579,41 +581,55 @@ fn render_diff(
         soft_wrap,
     );
     if state.update_layout(layout, row_height) {
-        // Wrapped rows take the viewport width instead of their longest line.
         let width = if soft_wrap {
             px(0.)
         } else {
-            measure_code_width(
-                state.files(),
-                font_size,
-                &font_family,
-                gutter_width,
-                lane_width,
-                mode,
-                window,
-                cx,
-            )
+            measure_code_width(state.files(), font_size, &font_family, window, cx)
         };
         state.set_content_width(width);
     }
     state.sync_annotations(&props.annotations.items);
-    let content_width = state.content_width().max(state.viewport().width);
+    let content_width = state.viewport().width;
     let column_width = if mode == DiffMode::Split {
         content_width / 2.
     } else {
         content_width
     };
+    let gutters = if mode == DiffMode::Split {
+        gutter_width
+    } else {
+        gutter_width * 2.
+    };
+    let indicator_width = if props.change_indicator == DiffChangeIndicator::None {
+        rem * 0.5
+    } else {
+        rem
+    };
+    let code_left = rem * 0.5 + gutters + lane_width + indicator_width;
+    let code_area = (column_width - code_left - rem * 0.5).max(px(0.));
+    let code_scroll = CodeScroll {
+        offset: state.horizontal_scroll().clone(),
+        extent: if soft_wrap {
+            px(0.)
+        } else {
+            state.content_width() + rem
+        },
+        area: code_area,
+    };
+    let scroll_x = code_scroll.scrolled();
     let code = Rc::new(CodePresentation {
         files: state.files().to_vec(),
         presentations: state.presentations().to_vec(),
         mode,
         content_width,
         column_width,
+        scroll_x,
         font_size,
         row_height,
         gutter_width,
         rem,
         expansion_lines: state.expansion_lines(),
+        whole_file: state.context_lines().is_none(),
         line_number: props.line_number,
         syntax_highlight: props.syntax_highlight,
         header_visible: props.header_visible,
@@ -659,10 +675,6 @@ fn render_diff(
             div()
                 .id("diff-horizontal")
                 .size_full()
-                // Preserve offset tracking and clipping without GPUI's
-                // single-axis wheel remapping. The sibling mask owns X input.
-                .when(!soft_wrap, |this| this.overflow_x_hidden())
-                .track_scroll(&horizontal)
                 .child(gpui_base::ScrollBounce::new(
                     "diff-bounce",
                     &scrollbar,
@@ -674,7 +686,7 @@ fn render_diff(
                             .child(render_row(row, code.clone(), window, cx))
                             .into_any_element()
                     })
-                    .w(content_width)
+                    .w_full()
                     .h_full(),
                 ))
                 .into_any_element(),
@@ -685,7 +697,7 @@ fn render_diff(
         ))
         .when(has_rows && !soft_wrap, |this| {
             this.child(
-                ScrollableMask::new(Axis::Horizontal, &horizontal).id("diff-horizontal-wheel"),
+                ScrollableMask::new(Axis::Horizontal, &code_scroll).id("diff-horizontal-wheel"),
             )
         })
         .when(has_rows, |this| {
@@ -696,7 +708,24 @@ fn render_diff(
                     .child(Scrollbar::vertical(&scrollbar).viewport_from_layout()),
             )
             .when(!soft_wrap, |this| {
-                this.child(Scrollbar::horizontal(&horizontal))
+                let columns: &[Pixels] = if mode == DiffMode::Split {
+                    &[px(0.), column_width]
+                } else {
+                    &[px(0.)]
+                };
+                this.children(columns.iter().enumerate().map(|(ix, column)| {
+                    div()
+                        .absolute()
+                        .top_0()
+                        .bottom_0()
+                        .left(*column + code_left)
+                        .w(code_area)
+                        .child(
+                            Scrollbar::horizontal(&code_scroll)
+                                .id(("diff-code-scroll", ix))
+                                .viewport_from_layout(),
+                        )
+                }))
             })
         })
         // A line-number drag may finish anywhere, including outside the body.
@@ -722,24 +751,26 @@ fn render_diff(
             this.list().scroll_by(window.rem_size() * 1.5);
             cx.notify();
         }))
-        .on_action(cx.listener(|this, _: &ScrollLeft, window, cx| {
-            if !body_focused(this, window, cx) {
-                return;
-            }
-            let offset = this.horizontal_scroll().offset();
-            this.horizontal_scroll()
-                .set_offset(point(offset.x + window.rem_size() * 3., offset.y));
-            cx.notify();
-        }))
-        .on_action(cx.listener(|this, _: &ScrollRight, window, cx| {
-            if !body_focused(this, window, cx) {
-                return;
-            }
-            let offset = this.horizontal_scroll().offset();
-            this.horizontal_scroll()
-                .set_offset(point(offset.x - window.rem_size() * 3., offset.y));
-            cx.notify();
-        }))
+        .on_action({
+            let code_scroll = code_scroll.clone();
+            cx.listener(move |this, _: &ScrollLeft, window, cx| {
+                if !body_focused(this, window, cx) {
+                    return;
+                }
+                code_scroll.scroll_by(window.rem_size() * 3.);
+                cx.notify();
+            })
+        })
+        .on_action({
+            let code_scroll = code_scroll.clone();
+            cx.listener(move |this, _: &ScrollRight, window, cx| {
+                if !body_focused(this, window, cx) {
+                    return;
+                }
+                code_scroll.scroll_by(-window.rem_size() * 3.);
+                cx.notify();
+            })
+        })
         .on_action(cx.listener(|this, _: &PageUp, window, cx| {
             if !body_focused(this, window, cx) {
                 return;
@@ -810,8 +841,7 @@ fn render_diff(
                             let painted = if soft_wrap {
                                 px(0.)
                             } else {
-                                let painted = state.geometry().borrow().painted_width();
-                                code_width(painted, gutter_width, lane_width, rem, mode)
+                                state.geometry().borrow().painted_width()
                             };
                             if state.record_paint(bounds.size, painted) || rehinted {
                                 cx.notify();
@@ -859,11 +889,13 @@ struct CodePresentation {
     mode: DiffMode,
     content_width: Pixels,
     column_width: Pixels,
+    scroll_x: Pixels,
     font_size: Pixels,
     row_height: Pixels,
     gutter_width: Pixels,
     rem: Pixels,
     expansion_lines: usize,
+    whole_file: bool,
     line_number: bool,
     syntax_highlight: bool,
     header_visible: bool,
@@ -910,31 +942,53 @@ impl CodePresentation {
     }
 }
 
-/// Total row width for code of `width` in the current mode.
-fn code_width(
-    width: Pixels,
-    gutter_width: Pixels,
-    lane_width: Pixels,
-    rem: Pixels,
-    mode: DiffMode,
-) -> Pixels {
-    if mode == DiffMode::Split {
-        (width + gutter_width + lane_width + rem * 2.) * 2.
-    } else {
-        width + gutter_width * 2. + lane_width + rem * 2.
+#[derive(Clone)]
+struct CodeScroll {
+    offset: gpui::ScrollHandle,
+    extent: Pixels,
+    area: Pixels,
+}
+
+impl CodeScroll {
+    fn max(&self) -> Pixels {
+        (self.extent - self.area).max(px(0.))
+    }
+
+    fn scrolled(&self) -> Pixels {
+        (-self.offset.offset().x).clamp(px(0.), self.max())
+    }
+
+    fn scroll_by(&self, delta: Pixels) {
+        let x = (delta - self.scrolled()).clamp(-self.max(), px(0.));
+        self.offset.set_offset(point(x, px(0.)));
+    }
+}
+
+impl gpui_base::ScrollbarHandle for CodeScroll {
+    fn viewport_bounds(&self) -> gpui::Bounds<Pixels> {
+        gpui::Bounds::new(gpui::Point::default(), gpui::size(self.area, px(0.)))
+    }
+
+    fn offset(&self) -> gpui::Point<Pixels> {
+        point(-self.scrolled(), px(0.))
+    }
+
+    fn set_offset(&self, offset: gpui::Point<Pixels>) {
+        self.offset
+            .set_offset(point(offset.x.clamp(-self.max(), px(0.)), px(0.)));
+    }
+
+    fn content_size(&self) -> gpui::Size<Pixels> {
+        gpui::size(self.extent.max(self.area), px(0.))
     }
 }
 
 /// Estimates content width from the lines widest in display cells, then
 /// shapes those candidates with the code font for resolved geometry.
-#[allow(clippy::too_many_arguments)]
 fn measure_code_width(
     files: &[DiffFile],
     font_size: Pixels,
     family: &SharedString,
-    gutter_width: Pixels,
-    lane_width: Pixels,
-    mode: DiffMode,
     window: &mut Window,
     cx: &App,
 ) -> Pixels {
@@ -984,7 +1038,7 @@ fn measure_code_width(
                 .width
         })
         .fold(px(0.), Pixels::max);
-    code_width(width, gutter_width, lane_width, window.rem_size(), mode)
+    width
 }
 
 fn render_row(
@@ -996,7 +1050,9 @@ fn render_row(
     match row {
         DisplayRow::File(file) => render_file_header(*file, &code, window, cx),
         DisplayRow::Notice(file) => render_notice(&code.files[*file], cx),
-        DisplayRow::Hunk { file, hunk } => render_hunk_separator(*file, *hunk, &code, window, cx),
+        DisplayRow::Hunk { file, hunk, fold } => {
+            render_hunk_separator(*file, *hunk, fold.clone(), &code, window, cx)
+        }
         DisplayRow::Fold { file, pairs } => render_fold(*file, pairs.clone(), &code, cx),
         DisplayRow::Conflict {
             file,
@@ -1055,9 +1111,18 @@ fn render_row(
     }
 }
 
+fn hunk_scope(label: &str) -> Option<String> {
+    let scope = label
+        .strip_prefix("@@")
+        .and_then(|rest| rest.split_once("@@"))
+        .map(|(_, scope)| scope.trim())?;
+    (!scope.is_empty()).then(|| scope.to_string())
+}
+
 fn render_hunk_separator(
     file: usize,
     hunk: usize,
+    fold: Option<std::ops::Range<usize>>,
     code: &CodePresentation,
     window: &mut Window,
     cx: &mut App,
@@ -1076,31 +1141,55 @@ fn render_hunk_separator(
                 handler(&path, hunk, window, cx)
             })
         });
+    let buttons = fold.map(|pairs| fold_buttons(file, pairs, code, cx));
     let label = match code.hunk_separator {
         DiffHunkSeparator::Metadata => Some(hunks[hunk].label().to_string()),
         DiffHunkSeparator::LineInfo => {
             let hidden = hunks[hunk].hidden_lines_before(hunk.checked_sub(1).map(|ix| &hunks[ix]));
             (hidden > 0).then(|| t!("Diff.HiddenLines", count = hidden).to_string())
         }
-        DiffHunkSeparator::Simple => return row.h_1().into_any_element(),
+        DiffHunkSeparator::Scope => hunk_scope(hunks[hunk].label()).filter(|_| !code.whole_file),
+        DiffHunkSeparator::Simple => {
+            return match buttons {
+                Some(buttons) => row.h_6().px_2().child(buttons).into_any_element(),
+                None => row.h_1().into_any_element(),
+            };
+        }
     };
     let suffix = code
         .hunk_suffix
         .as_ref()
         .map(|render| render(&code.files[file], hunk, window, cx));
-    if label.is_none() && suffix.is_none() {
+    if label.is_none() && suffix.is_none() && buttons.is_none() {
         return div().into_any_element();
     }
-    row.h_6()
-        .child(
-            div()
-                .flex_1()
-                .min_w_0()
-                .truncate()
-                .children(label),
-        )
-        .children(suffix.map(|suffix| h_flex().flex_none().mr_neg_2().child(suffix)))
-        .into_any_element()
+    let scope = code.hunk_separator == DiffHunkSeparator::Scope;
+    row.map(|row| {
+        if scope {
+            row.h_7()
+                .pl_2()
+                .gap_2()
+                .border_t_1()
+                .border_b_1()
+                .border_color(cx.theme().border)
+        } else {
+            row.h_6()
+        }
+    })
+    .children(buttons)
+    .child(
+        div()
+            .flex_1()
+            .min_w_0()
+            .truncate()
+            .when(scope, |this| {
+                this.font_family(cx.theme().mono_font_family.clone())
+                    .text_size(code.font_size * 0.9)
+            })
+            .children(label),
+    )
+    .children(suffix.map(|suffix| h_flex().flex_none().mr_neg_2().child(suffix)))
+    .into_any_element()
 }
 
 fn render_fold(
@@ -1109,14 +1198,36 @@ fn render_fold(
     code: &CodePresentation,
     cx: &App,
 ) -> AnyElement {
+    h_flex()
+        .w_full()
+        .h_6()
+        .px_2()
+        .bg(cx.theme().muted.opacity(0.35))
+        .child(fold_buttons(file, pairs, code, cx))
+        .into_any_element()
+}
+
+fn fold_buttons(
+    file: usize,
+    pairs: std::ops::Range<usize>,
+    code: &CodePresentation,
+    cx: &App,
+) -> AnyElement {
     let document = &code.files[file];
-    // A fold bordering the hunk start has no source above it, and one
-    // bordering the hunk end has none below; offer only the meaningful sides.
-    let hunk = document
-        .hunks()
+    let hunks = document.hunks();
+    let containing = hunks
         .iter()
-        .find(|hunk| hunk.pairs().contains(&pairs.start))
-        .map_or(0..document.pairs().len(), |hunk| hunk.pairs());
+        .position(|hunk| hunk.pairs().contains(&pairs.start));
+    let hunk = containing.map_or(0..document.pairs().len(), |ix| hunks[ix].pairs());
+    let joined_above = containing.is_some_and(|ix| {
+        ix > 0 && pairs.start == hunk.start && hunks[ix].hidden_lines_before(Some(&hunks[ix - 1])) == 0
+    });
+    let joined_below = containing.is_some_and(|ix| {
+        pairs.end == hunk.end
+            && hunks
+                .get(ix + 1)
+                .is_some_and(|next| next.hidden_lines_before(Some(&hunks[ix])) == 0)
+    });
     let lines = code.expansion_lines;
     let partial = pairs.len() > lines;
     let expand = |id: (&'static str, usize), expansion: FoldExpansion| {
@@ -1134,19 +1245,16 @@ fn render_fold(
             })
     };
     h_flex()
-        .w_full()
-        .h_6()
-        .px_2()
+        .flex_none()
         .gap_1()
-        .bg(cx.theme().muted.opacity(0.35))
-        .when(partial && pairs.start > hunk.start, |this| {
+        .when(partial && (pairs.start > hunk.start || joined_above), |this| {
             this.child(
                 expand(("expand-down", pairs.start), FoldExpansion::Down)
                     .icon(IconName::ArrowDown)
                     .accessibility_label(t!("Diff.ExpandBelow", count = lines).to_string()),
             )
         })
-        .when(partial && pairs.end < hunk.end, |this| {
+        .when(partial && (pairs.end < hunk.end || joined_below), |this| {
             this.child(
                 expand(("expand-up", pairs.start), FoldExpansion::Up)
                     .icon(IconName::ArrowUp)
@@ -1414,6 +1522,7 @@ fn render_gutter(
     file: usize,
     side: DiffSide,
     ix: Option<usize>,
+    tint: Option<Hsla>,
     code: &CodePresentation,
     cx: &App,
 ) -> AnyElement {
@@ -1450,7 +1559,7 @@ fn render_gutter(
                     .items_center()
                     .justify_end()
                     .text_size(code.font_size)
-                    .text_color(cx.theme().muted_foreground)
+                    .text_color(tint.unwrap_or(cx.theme().muted_foreground))
                     .hover(|this| this.text_color(cx.theme().foreground))
                     .role(gpui::accesskit::Role::Button)
                     .aria_label(
@@ -1511,8 +1620,12 @@ fn render_cell(
             this.border_r_1().border_color(cx.theme().border)
         })
         .when(ix.is_none(), |this| {
-            this.bg(cx.theme().muted.opacity(0.3))
-                .child(div().h(code.row_height))
+            this.bg(gpui::pattern_slash(
+                cx.theme().foreground.opacity(0.05),
+                4.,
+                4.,
+            ))
+            .child(div().h(code.row_height))
         });
     let Some(ix) = ix else {
         return cell.into_any_element();
@@ -1770,7 +1883,7 @@ fn code_line(
             if code.soft_wrap {
                 this.w_full()
             } else {
-                this.flex().flex_row().flex_shrink_0()
+                this.flex().flex_row().flex_shrink_0().ml(-code.scroll_x)
             }
         })
         .children(ranges.into_iter().enumerate().map(|(chunk_ix, range)| {
@@ -1814,6 +1927,16 @@ fn code_line(
         code.hover_highlight,
         DiffHoverHighlight::Line | DiffHoverHighlight::Both
     );
+    let indicator_width = if code.change_indicator == DiffChangeIndicator::None {
+        code.rem * 0.5
+    } else {
+        code.rem
+    };
+    let code_left = code.rem * 0.5 + gutters_width + code.lane_width + indicator_width;
+    let number_tint = (changed
+        && conflict_part.is_none()
+        && code.change_indicator == DiffChangeIndicator::Bars)
+        .then_some(status);
     let add_button = add_annotation_button(
         file,
         side,
@@ -1873,7 +1996,15 @@ fn code_line(
         .text_size(code.font_size)
         .line_height(code.row_height)
         .when(changed && code.change_background, |this| {
-            this.bg(status.opacity(0.12))
+            this.child(
+                div()
+                    .absolute()
+                    .top_0()
+                    .bottom_0()
+                    .left(code_left)
+                    .right_0()
+                    .bg(status.opacity(0.12)),
+            )
         })
         // An overlay, so the change background shows through a translucent fill.
         .when_some(decoration, |this, background| {
@@ -1900,7 +2031,7 @@ fn code_line(
                 gutters
                     .into_iter()
                     .flatten()
-                    .map(|(side, ix)| render_gutter(file, side, ix, &code, cx)),
+                    .map(|(side, ix)| render_gutter(file, side, ix, number_tint, &code, cx)),
             )
         })
         .children(marker_lane)
@@ -1913,7 +2044,7 @@ fn code_line(
                     if code.soft_wrap {
                         this.flex_1().min_w_0()
                     } else {
-                        this.flex_shrink_0()
+                        this.flex_1().min_w_0().overflow_hidden()
                     }
                 })
                 .role(gpui::accesskit::Role::Label)

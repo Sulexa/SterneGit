@@ -4,6 +4,7 @@ const Catalog = (() => {
   const { rebase, merge, rebaseChanges, rebaseOneLeft, rebaseResolved, statusConflicts, slimeConflict } = Sample;
   const { statusMerged } = Sample;
   const pane = { w: 736, h: 600 };
+  const textLook = { gaps: 'scope', marks: 'bars', sides: ['HEAD', 'Working copy'], scroll: true };
   const barFrame = (bar, width = 736) => `<div class="v" style="width:${width}px;position:relative;height:${bar.includes('ViewOptionsMenu') ? 300 : 40}px">${bar}</div>`;
   const commit = (ix) => history.commits[ix];
   const ref = (name) => history.refs.find((label) => label.name === name);
@@ -208,11 +209,12 @@ const Catalog = (() => {
           name: 'DiffView',
           code: 'gpui_kit::diff::Diff',
           source: 'src/repo/patch_view.rs',
-          about: 'The kit\'s diff with line numbers and soft wrap, without its own border, showing one file without its header: the FileDiffPanel toolbar names the file instead. The kit draws the grey hunk headers and the selected lines in the selection color; while a file can be staged in parts, it also draws the line under the pointer in the hover color.',
+          about: 'The kit\'s diff as SterneGit sets it up: line numbers, no wrapping, a horizontal scrollbar per column that moves both together, and no border or file header, since the FileDiffPanel bar names the file. A row on top names the two sides. By default it holds the whole file and starts four lines above the first hunk; a thin grey row above each hunk holds its buttons, and there is none where nothing can be staged. With only the changes, one grey row between two hunks folds the unchanged lines, shows the enclosing scope and holds the hunk buttons. A changed line gets a red or green bar beside a number of the same color, and only its code is tinted. Syntax colors follow SterneGit\'s own rules on top of syntect: capitalized names and built-in types are types, names called with ( or ! are functions, numbers, booleans and CONSTANTS are literals. Selected lines take the selection color; while a file can be staged in parts, the line under the pointer takes the hover color.',
           variants: [
-            ['Unified without header (one file)', () => `<div class="v" style="width:480px;height:420px">${C.DiffView({ files: commitDetails.files.slice(0, 1), mode: 'unified', header: false })}</div>`],
-            ['Split without header (one file)', () => `<div class="v" style="width:736px;height:420px">${C.DiffView({ files: [{ path: fileDiff.change.path, additions: fileDiff.additions, deletions: fileDiff.deletions, hunks: fileDiff.hunks }], mode: 'split', header: false })}</div>`],
-            ['Lines selected', () => `<div class="v" style="width:736px;height:300px">${C.DiffView({ files: [{ path: fileDiff.change.path, hunks: fileDiff.hunks.slice(0, 1) }], mode: 'split', header: false, selection: selectedLines })}</div>`],
+            ['Unified without header (one file)', () => `<div class="v" style="width:480px;height:420px">${C.DiffView({ files: commitDetails.files.slice(0, 1), mode: 'unified', header: false, look: textLook })}</div>`],
+            ['Split, whole file from the first change', () => `<div class="v" style="width:736px;height:420px">${C.DiffView({ files: [{ path: fileDiff.change.path, hunks: fileDiff.hunks, unchanged: fileDiff.unchanged }], mode: 'split', header: false, actions: { side: 'unstaged' }, look: { ...textLook, whole: true } })}</div>`],
+            ['Split, only the changes', () => `<div class="v" style="width:736px;height:420px">${C.DiffView({ files: [{ path: fileDiff.change.path, additions: fileDiff.additions, deletions: fileDiff.deletions, hunks: fileDiff.hunks }], mode: 'split', header: false, look: textLook })}</div>`],
+            ['Lines selected', () => `<div class="v" style="width:736px;height:300px">${C.DiffView({ files: [{ path: fileDiff.change.path, hunks: fileDiff.hunks.slice(0, 1) }], mode: 'split', header: false, selection: selectedLines, look: textLook })}</div>`],
           ],
         },
       ],
@@ -921,13 +923,14 @@ const Catalog = (() => {
           name: 'FileDiffPanel',
           code: 'repo::file_diff_panel::FileDiffPanel',
           source: 'src/repo/file_diff_panel.rs',
-          about: 'A FileBar (what the file is and what acts on all of it) and a ViewBar (how to compare it) over the comparison, which takes the shape of the file: a DiffView for text, an ImageCompare for pictures, a VideoCompare, an AudioCompare, or BinaryFacts for anything else. A modified working text file gets HunkActions in each hunk header and a LineMenu on right-click; after any of them the comparison reads the file again and keeps the scroll position. A new, deleted, renamed, untracked or conflicted file only moves whole, and a file from a commit says which commit and has neither the Stage button nor the hunk actions.',
+          about: 'A FileBar (what the file is and what acts on all of it) and a ViewBar (how to compare it), on one row for text and on two for pictures, sounds and videos, over the comparison, which takes the shape of the file: a DiffView for text, an ImageCompare for pictures, a VideoCompare, an AudioCompare, or BinaryFacts for anything else. It shows the whole file, opened on its first change, unless Show the whole file is unchecked. A modified working text file gets HunkActions above each hunk and a LineMenu on right-click; after any of them the comparison reads the file again and keeps the scroll position. A new, deleted, renamed, untracked or conflicted file only moves whole, and a file from a commit says which commit and has neither the Stage button nor the hunk actions.',
           variants: [
             ['Picture', () => C.FileDiffPanel({ diff: slimeDiff, mode: 'split' }), pane],
             ['Sound', () => C.FileDiffPanel({ diff: themeDiff, mode: 'split' }), pane],
             ['From a commit', () => C.FileDiffPanel({ diff: commitFileDiff, mode: 'split' }), { w: row, h: 420 }],
             ['Split', () => C.FileDiffPanel({ diff: fileDiff, mode: 'split' }), { w: row, h: 420 }],
             ['Unified', () => C.FileDiffPanel({ diff: fileDiff, mode: 'unified' }), { w: row, h: 420 }],
+            ['Only the changes', () => C.FileDiffPanel({ diff: fileDiff, mode: 'split', look: { whole: false } }), { w: row, h: 420 }],
             ['Lines selected', () => C.FileDiffPanel({ diff: fileDiff, mode: 'split', selection: selectedLines }), { w: row, h: 420 }],
             ['Right-clicked line', () => C.FileDiffPanel({ diff: fileDiff, mode: 'unified', pointed: { hunk: 1, line: 3, left: 220, top: 12, hot: 'Stage hunk' } }), { w: row, h: 520 }],
             ['Staged hunk', () => C.FileDiffPanel({ diff: stagedHunkDiff, mode: 'split' }), { w: row, h: 340 }],
@@ -979,7 +982,7 @@ const Catalog = (() => {
     {
       key: 'compare',
       title: 'File comparison',
-      about: 'The pieces FileDiffPanel compares a file with: two bars that every kind of file shares, then one view per kind. Before is always left or on top and marked red, After right or below and marked green, like deleted and added lines.',
+      about: 'The pieces FileDiffPanel compares a file with: a FileBar that every kind of file shares, which also holds the ViewBar for text, a ViewBar of its own under it for pictures, sounds and videos, then one view per kind. Before is always left or on top and marked red, After right or below and marked green, like deleted and added lines.',
       items: [
         {
           name: 'FileBar',

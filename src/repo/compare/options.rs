@@ -26,8 +26,8 @@ impl Default for TextOptions {
     fn default() -> Self {
         Self {
             words: true,
-            wrap: true,
-            whole_file: false,
+            wrap: false,
+            whole_file: true,
             ignore_whitespace: false,
         }
     }
@@ -148,11 +148,11 @@ mod tests {
     use crate::git::Whitespace;
 
     #[test]
-    fn words_and_wrapping_start_on_and_folding_and_whitespace_start_as_git_shows_them() {
+    fn the_whole_file_shows_with_changed_words_and_long_lines_scroll() {
         let options = TextOptions::default();
         assert!(options.inline_unit().is_some());
-        assert!(options.wraps());
-        assert_eq!(options.context_lines(), Some(3));
+        assert!(!options.wraps());
+        assert_eq!(options.context_lines(), None);
         assert_eq!(options.whitespace(), Whitespace::Compared);
     }
 
@@ -161,9 +161,9 @@ mod tests {
         let options = TextOptions::default()
             .toggled(TextOption::WholeFile)
             .toggled(TextOption::IgnoreWhitespace);
-        assert_eq!(options.context_lines(), None);
+        assert_eq!(options.context_lines(), Some(3));
         assert_eq!(options.whitespace(), Whitespace::Ignored);
-        assert!(options.wraps());
+        assert!(!options.wraps());
         assert!(options.toggled(TextOption::Words).inline_unit().is_none());
     }
 }

@@ -1,8 +1,212 @@
+diff --git a/src/diff/code_names.rs b/src/diff/code_names.rs
+new file mode 100644
+index 0000000..213d660
+--- /dev/null
++++ b/src/diff/code_names.rs
+@@ -0,0 +1,173 @@
++use std::ops::Range;
++
++use gpui::SharedString;
++
++const PRIMITIVE_TYPES: &[&str] = &[
++    "bool", "boolean", "byte", "char", "double", "f32", "f64", "float", "i8", "i16", "i32", "i64",
++    "i128", "int", "isize", "long", "short", "str", "u8", "u16", "u32", "u64", "u128", "uint",
++    "usize", "void",
++];
++const SELF_WORDS: &[&str] = &["self", "Self", "this"];
++const BOOLEANS: &[&str] = &["true", "false"];
++const NOTHING: &[&str] = &["null", "nil"];
++const PROSE: &[&str] = &[
++    "astro",
++    "diff",
++    "ejs",
++    "erb",
++    "html",
++    "markdown",
++    "markdown_inline",
++    "svelte",
++    "text",
++    "toml",
++    "yaml",
++];
++
++pub(crate) fn follows_code_rules(language: &str) -> bool {
++    !PROSE.contains(&language)
++}
++
++pub(crate) fn coherent_names(
++    text: &str,
++    captured: &[(Range<usize>, SharedString)],
++) -> Vec<(Range<usize>, SharedString)> {
++    let mut named: Vec<(Range<usize>, SharedString)> = Vec::with_capacity(captured.len());
++    let mut next = 0;
++    let mut ix = 0;
++    while ix < text.len() {
++        while captured.get(next).is_some_and(|(range, _)| range.end <= ix) {
++            next += 1;
++        }
++        let base = captured
++            .get(next)
++            .filter(|(range, _)| range.start <= ix)
++            .map(|(range, name)| (range.end, name.clone()));
++        if let Some((end, name)) = &base {
++            let quoted = if is_quoted(name) {
++                Some(name.clone())
++            } else {
++                (name.as_ref() == "constant" && touches_string(captured, next))
++                    .then(|| SharedString::new_static("string"))
++            };
++            if let Some(quoted) = quoted {
++                push(&mut named, ix..*end, quoted);
++                ix = *end;
++                continue;
++            }
++        }
++        let Some(ch) = text[ix..].chars().next() else {
++            break;
++        };
++        if ch.is_alphabetic() || ch == '_' {
++            let end = word_end(text, ix);
++            let (name, end) = word_name(&text[ix..end], &text[end..], end, base.map(|(_, name)| name));
++            if let Some(name) = name {
++                push(&mut named, ix..end, name);
++            }
++            ix = end;
++        } else if ch.is_ascii_digit() {
++            let end = number_end(text, ix);
++            push(&mut named, ix..end, SharedString::new_static("number"));
++            ix = end;
++        } else {
++            let end = ix + ch.len_utf8();
++            if let Some((_, name)) = base {
++                push(&mut named, ix..end, name);
++            }
++            ix = end;
++        }
++    }
++    named
++}
++
++fn is_quoted(name: &str) -> bool {
++    name.starts_with("string") || name.starts_with("comment")
++}
++
++fn touches_string(captured: &[(Range<usize>, SharedString)], ix: usize) -> bool {
++    let range = &captured[ix].0;
++    let before = ix.checked_sub(1).is_some_and(|before| {
++        captured[before].0.end == range.start && captured[before].1.starts_with("string")
++    });
++    let after = captured
++        .get(ix + 1)
++        .is_some_and(|(next, name)| next.start == range.end && name.starts_with("string"));
++    before || after
++}
++
++fn push(named: &mut Vec<(Range<usize>, SharedString)>, range: Range<usize>, name: SharedString) {
++    match named.last_mut() {
++        Some((last, last_name)) if last.end == range.start && *last_name == name => {
++            last.end = range.end
++        }
++        _ => named.push((range, name)),
++    }
++}
++
++fn word_end(text: &str, start: usize) -> usize {
++    text[start..]
++        .find(|ch: char| !(ch.is_alphanumeric() || ch == '_'))
++        .map_or(text.len(), |offset| start + offset)
++}
++
++fn number_end(text: &str, start: usize) -> usize {
++    let bytes = text.as_bytes();
++    let mut end = start;
++    while end < bytes.len() {
++        let byte = bytes[end];
++        let fraction = byte == b'.' && bytes.get(end + 1).is_some_and(u8::is_ascii_digit);
++        if byte.is_ascii_alphanumeric() || byte == b'_' || fraction {
++            end += 1;
++        } else {
++            break;
++        }
++    }
++    end
++}
++
++fn word_name(
++    word: &str,
++    after: &str,
++    end: usize,
++    base: Option<SharedString>,
++) -> (Option<SharedString>, usize) {
++    let named = |name: &'static str| (Some(SharedString::new_static(name)), end);
++    if SELF_WORDS.contains(&word) {
++        return named("keyword");
++    }
++    if PRIMITIVE_TYPES.contains(&word) {
++        return named("type");
++    }
++    if BOOLEANS.contains(&word) {
++        return named("boolean");
++    }
++    if NOTHING.contains(&word) {
++        return named("constant");
++    }
++    if base
++        .as_ref()
++        .is_some_and(|name| name.as_ref() == "keyword" || name.as_ref() == "preproc")
++    {
++        return (base, end);
++    }
++    if is_screaming(word) {
++        return named("constant");
++    }
++    if word.starts_with(char::is_uppercase) {
++        return named("type");
++    }
++    if after.starts_with('(') {
++        return named("function");
++    }
++    if after.starts_with('!') && !after.starts_with("!=") {
++        return (Some(SharedString::new_static("function")), end + 1);
++    }
++    (base, end)
++}
++
++fn is_screaming(word: &str) -> bool {
++    word.chars().count() > 1
++        && word.chars().any(char::is_uppercase)
++        && !word.chars().any(char::is_lowercase)
++}
 diff --git a/src/diff/mod.rs b/src/diff/mod.rs
-index 2781ce0..56ac22b 100644
+index 2781ce0..82ec06c 100644
 --- a/src/diff/mod.rs
 +++ b/src/diff/mod.rs
-@@ -196,6 +196,9 @@ type MarkerRenderer = Rc<dyn Fn(&DiffGutterMarker, &mut Window, &mut App) -> Any
+@@ -1,6 +1,7 @@
+ //! Readonly, virtualized patch display inspired by Diffs from Pierre.
+ //! Parse an externally supplied patch into [`DiffFile`]s, retain one
+ //! [`DiffState`] for all of them in the owner, and build [`Diff`] during rendering.
++mod code_names;
+ mod conflict;
+ mod decoration;
+ mod document;
+@@ -16,7 +17,7 @@ pub use decoration::{DiffDecoration, DiffGutterMarker};
+ pub use document::{DiffFile, DiffFileStatus, DiffLinePosition, DiffLineRange, DiffSide};
+ pub use parser::{DiffParseError, DiffParseOptions};
+ pub use presentation::DiffInlineUnit;
+-pub use state::{DiffEvent, DiffState};
++pub use state::{DiffChangeMark, DiffEvent, DiffState};
+ 
+ use std::{collections::HashMap, rc::Rc, sync::Arc};
+ 
+@@ -133,6 +134,7 @@ pub enum DiffHunkSeparator {
+     LineInfo,
+     /// A thin divider.
+     Simple,
++    Scope,
+ }
+ 
+ /// How changed lines are marked beside the code.
+@@ -196,6 +198,9 @@ type MarkerRenderer = Rc<dyn Fn(&DiffGutterMarker, &mut Window, &mut App) -> Any
  type RangeHandler = Rc<dyn Fn(&DiffLineRange, &mut Window, &mut App)>;
  type ClickHandler = Rc<dyn Fn(&DiffLinePosition, &ClickEvent, &mut Window, &mut App)>;
  type HoverHandler = Rc<dyn Fn(Option<&DiffLinePosition>, &mut Window, &mut App)>;
@@ -12,7 +216,7 @@ index 2781ce0..56ac22b 100644
  
  #[derive(Default)]
  struct HeaderSlots {
-@@ -237,9 +240,12 @@ pub struct Diff {
+@@ -237,9 +242,12 @@ pub struct Diff {
      decorations: Rc<Decorations>,
      gutter_markers: Rc<GutterMarkers>,
      gutter_marker_content: Option<MarkerRenderer>,
@@ -25,7 +229,7 @@ index 2781ce0..56ac22b 100644
  }
  
  fn file_renderer<F, E>(render: F) -> FileRenderer
-@@ -269,9 +275,12 @@ impl Diff {
+@@ -269,9 +277,12 @@ impl Diff {
              decorations: Rc::default(),
              gutter_markers: Rc::default(),
              gutter_marker_content: None,
@@ -38,7 +242,7 @@ index 2781ce0..56ac22b 100644
          }
      }
      /// Shows the original and modified line-number lanes. Default is true.
-@@ -415,6 +424,19 @@ impl Diff {
+@@ -415,6 +426,19 @@ impl Diff {
          self.header.suffix = Some(file_renderer(render));
          self
      }
@@ -58,7 +262,7 @@ index 2781ce0..56ac22b 100644
      /// Compatibility alias for [`Self::render_annotation`].
      pub fn annotation_content<F, E>(self, render: F) -> Self
      where
-@@ -486,6 +508,26 @@ impl Diff {
+@@ -486,6 +510,26 @@ impl Diff {
          self.on_line_hover = Some(Rc::new(handler));
          self
      }
@@ -85,7 +289,75 @@ index 2781ce0..56ac22b 100644
  }
  impl Styled for Diff {
      fn style(&mut self) -> &mut StyleRefinement {
-@@ -586,10 +628,13 @@ fn render_diff(
+@@ -537,41 +581,55 @@ fn render_diff(
+         soft_wrap,
+     );
+     if state.update_layout(layout, row_height) {
+-        // Wrapped rows take the viewport width instead of their longest line.
+         let width = if soft_wrap {
+             px(0.)
+         } else {
+-            measure_code_width(
+-                state.files(),
+-                font_size,
+-                &font_family,
+-                gutter_width,
+-                lane_width,
+-                mode,
+-                window,
+-                cx,
+-            )
++            measure_code_width(state.files(), font_size, &font_family, window, cx)
+         };
+         state.set_content_width(width);
+     }
+     state.sync_annotations(&props.annotations.items);
+-    let content_width = state.content_width().max(state.viewport().width);
++    let content_width = state.viewport().width;
+     let column_width = if mode == DiffMode::Split {
+         content_width / 2.
+     } else {
+         content_width
+     };
++    let gutters = if mode == DiffMode::Split {
++        gutter_width
++    } else {
++        gutter_width * 2.
++    };
++    let indicator_width = if props.change_indicator == DiffChangeIndicator::None {
++        rem * 0.5
++    } else {
++        rem
++    };
++    let code_left = rem * 0.5 + gutters + lane_width + indicator_width;
++    let code_area = (column_width - code_left - rem * 0.5).max(px(0.));
++    let code_scroll = CodeScroll {
++        offset: state.horizontal_scroll().clone(),
++        extent: if soft_wrap {
++            px(0.)
++        } else {
++            state.content_width() + rem
++        },
++        area: code_area,
++    };
++    let scroll_x = code_scroll.scrolled();
+     let code = Rc::new(CodePresentation {
+         files: state.files().to_vec(),
+         presentations: state.presentations().to_vec(),
+         mode,
+         content_width,
+         column_width,
++        scroll_x,
+         font_size,
+         row_height,
+         gutter_width,
+         rem,
+         expansion_lines: state.expansion_lines(),
++        whole_file: state.context_lines().is_none(),
+         line_number: props.line_number,
+         syntax_highlight: props.syntax_highlight,
+         header_visible: props.header_visible,
+@@ -586,10 +644,13 @@ fn render_diff(
          decorations: props.decorations,
          gutter_markers: props.gutter_markers,
          gutter_marker_content: props.gutter_marker_content.filter(|_| marker_lane),
@@ -99,7 +371,131 @@ index 2781ce0..56ac22b 100644
          selection: state.selection().clone(),
          selected_lines: state.selected_lines(),
          selected: state.selected_span(),
-@@ -834,10 +879,13 @@ struct CodePresentation {
+@@ -614,10 +675,6 @@ fn render_diff(
+             div()
+                 .id("diff-horizontal")
+                 .size_full()
+-                // Preserve offset tracking and clipping without GPUI's
+-                // single-axis wheel remapping. The sibling mask owns X input.
+-                .when(!soft_wrap, |this| this.overflow_x_hidden())
+-                .track_scroll(&horizontal)
+                 .child(gpui_base::ScrollBounce::new(
+                     "diff-bounce",
+                     &scrollbar,
+@@ -629,7 +686,7 @@ fn render_diff(
+                             .child(render_row(row, code.clone(), window, cx))
+                             .into_any_element()
+                     })
+-                    .w(content_width)
++                    .w_full()
+                     .h_full(),
+                 ))
+                 .into_any_element(),
+@@ -640,7 +697,7 @@ fn render_diff(
+         ))
+         .when(has_rows && !soft_wrap, |this| {
+             this.child(
+-                ScrollableMask::new(Axis::Horizontal, &horizontal).id("diff-horizontal-wheel"),
++                ScrollableMask::new(Axis::Horizontal, &code_scroll).id("diff-horizontal-wheel"),
+             )
+         })
+         .when(has_rows, |this| {
+@@ -651,7 +708,24 @@ fn render_diff(
+                     .child(Scrollbar::vertical(&scrollbar).viewport_from_layout()),
+             )
+             .when(!soft_wrap, |this| {
+-                this.child(Scrollbar::horizontal(&horizontal))
++                let columns: &[Pixels] = if mode == DiffMode::Split {
++                    &[px(0.), column_width]
++                } else {
++                    &[px(0.)]
++                };
++                this.children(columns.iter().enumerate().map(|(ix, column)| {
++                    div()
++                        .absolute()
++                        .top_0()
++                        .bottom_0()
++                        .left(*column + code_left)
++                        .w(code_area)
++                        .child(
++                            Scrollbar::horizontal(&code_scroll)
++                                .id(("diff-code-scroll", ix))
++                                .viewport_from_layout(),
++                        )
++                }))
+             })
+         })
+         // A line-number drag may finish anywhere, including outside the body.
+@@ -677,24 +751,26 @@ fn render_diff(
+             this.list().scroll_by(window.rem_size() * 1.5);
+             cx.notify();
+         }))
+-        .on_action(cx.listener(|this, _: &ScrollLeft, window, cx| {
+-            if !body_focused(this, window, cx) {
+-                return;
+-            }
+-            let offset = this.horizontal_scroll().offset();
+-            this.horizontal_scroll()
+-                .set_offset(point(offset.x + window.rem_size() * 3., offset.y));
+-            cx.notify();
+-        }))
+-        .on_action(cx.listener(|this, _: &ScrollRight, window, cx| {
+-            if !body_focused(this, window, cx) {
+-                return;
+-            }
+-            let offset = this.horizontal_scroll().offset();
+-            this.horizontal_scroll()
+-                .set_offset(point(offset.x - window.rem_size() * 3., offset.y));
+-            cx.notify();
+-        }))
++        .on_action({
++            let code_scroll = code_scroll.clone();
++            cx.listener(move |this, _: &ScrollLeft, window, cx| {
++                if !body_focused(this, window, cx) {
++                    return;
++                }
++                code_scroll.scroll_by(window.rem_size() * 3.);
++                cx.notify();
++            })
++        })
++        .on_action({
++            let code_scroll = code_scroll.clone();
++            cx.listener(move |this, _: &ScrollRight, window, cx| {
++                if !body_focused(this, window, cx) {
++                    return;
++                }
++                code_scroll.scroll_by(-window.rem_size() * 3.);
++                cx.notify();
++            })
++        })
+         .on_action(cx.listener(|this, _: &PageUp, window, cx| {
+             if !body_focused(this, window, cx) {
+                 return;
+@@ -765,8 +841,7 @@ fn render_diff(
+                             let painted = if soft_wrap {
+                                 px(0.)
+                             } else {
+-                                let painted = state.geometry().borrow().painted_width();
+-                                code_width(painted, gutter_width, lane_width, rem, mode)
++                                state.geometry().borrow().painted_width()
+                             };
+                             if state.record_paint(bounds.size, painted) || rehinted {
+                                 cx.notify();
+@@ -814,11 +889,13 @@ struct CodePresentation {
+     mode: DiffMode,
+     content_width: Pixels,
+     column_width: Pixels,
++    scroll_x: Pixels,
+     font_size: Pixels,
+     row_height: Pixels,
+     gutter_width: Pixels,
+     rem: Pixels,
+     expansion_lines: usize,
++    whole_file: bool,
+     line_number: bool,
+     syntax_highlight: bool,
+     header_visible: bool,
+@@ -834,10 +911,13 @@ struct CodePresentation {
      gutter_markers: Rc<GutterMarkers>,
      /// Set only while the marker lane is shown.
      gutter_marker_content: Option<MarkerRenderer>,
@@ -113,18 +509,112 @@ index 2781ce0..56ac22b 100644
      selection: gpui_base::TextSelectionHandle,
      selected_lines: Option<DiffLineRange>,
      selected: Option<SelectedLines>,
-@@ -948,7 +996,7 @@ fn render_row(
+@@ -862,31 +942,53 @@ impl CodePresentation {
+     }
+ }
+ 
+-/// Total row width for code of `width` in the current mode.
+-fn code_width(
+-    width: Pixels,
+-    gutter_width: Pixels,
+-    lane_width: Pixels,
+-    rem: Pixels,
+-    mode: DiffMode,
+-) -> Pixels {
+-    if mode == DiffMode::Split {
+-        (width + gutter_width + lane_width + rem * 2.) * 2.
+-    } else {
+-        width + gutter_width * 2. + lane_width + rem * 2.
++#[derive(Clone)]
++struct CodeScroll {
++    offset: gpui::ScrollHandle,
++    extent: Pixels,
++    area: Pixels,
++}
++
++impl CodeScroll {
++    fn max(&self) -> Pixels {
++        (self.extent - self.area).max(px(0.))
++    }
++
++    fn scrolled(&self) -> Pixels {
++        (-self.offset.offset().x).clamp(px(0.), self.max())
++    }
++
++    fn scroll_by(&self, delta: Pixels) {
++        let x = (delta - self.scrolled()).clamp(-self.max(), px(0.));
++        self.offset.set_offset(point(x, px(0.)));
++    }
++}
++
++impl gpui_base::ScrollbarHandle for CodeScroll {
++    fn viewport_bounds(&self) -> gpui::Bounds<Pixels> {
++        gpui::Bounds::new(gpui::Point::default(), gpui::size(self.area, px(0.)))
++    }
++
++    fn offset(&self) -> gpui::Point<Pixels> {
++        point(-self.scrolled(), px(0.))
++    }
++
++    fn set_offset(&self, offset: gpui::Point<Pixels>) {
++        self.offset
++            .set_offset(point(offset.x.clamp(-self.max(), px(0.)), px(0.)));
++    }
++
++    fn content_size(&self) -> gpui::Size<Pixels> {
++        gpui::size(self.extent.max(self.area), px(0.))
+     }
+ }
+ 
+ /// Estimates content width from the lines widest in display cells, then
+ /// shapes those candidates with the code font for resolved geometry.
+-#[allow(clippy::too_many_arguments)]
+ fn measure_code_width(
+     files: &[DiffFile],
+     font_size: Pixels,
+     family: &SharedString,
+-    gutter_width: Pixels,
+-    lane_width: Pixels,
+-    mode: DiffMode,
+     window: &mut Window,
+     cx: &App,
+ ) -> Pixels {
+@@ -936,7 +1038,7 @@ fn measure_code_width(
+                 .width
+         })
+         .fold(px(0.), Pixels::max);
+-    code_width(width, gutter_width, lane_width, window.rem_size(), mode)
++    width
+ }
+ 
+ fn render_row(
+@@ -948,7 +1050,9 @@ fn render_row(
      match row {
          DisplayRow::File(file) => render_file_header(*file, &code, window, cx),
          DisplayRow::Notice(file) => render_notice(&code.files[*file], cx),
 -        DisplayRow::Hunk { file, hunk } => render_hunk_separator(*file, *hunk, &code, cx),
-+        DisplayRow::Hunk { file, hunk } => render_hunk_separator(*file, *hunk, &code, window, cx),
++        DisplayRow::Hunk { file, hunk, fold } => {
++            render_hunk_separator(*file, *hunk, fold.clone(), &code, window, cx)
++        }
          DisplayRow::Fold { file, pairs } => render_fold(*file, pairs.clone(), &code, cx),
          DisplayRow::Conflict {
              file,
-@@ -1011,31 +1059,48 @@ fn render_hunk_separator(
+@@ -1007,35 +1111,85 @@ fn render_row(
+     }
+ }
+ 
++fn hunk_scope(label: &str) -> Option<String> {
++    let scope = label
++        .strip_prefix("@@")
++        .and_then(|rest| rest.split_once("@@"))
++        .map(|(_, scope)| scope.trim())?;
++    (!scope.is_empty()).then(|| scope.to_string())
++}
++
+ fn render_hunk_separator(
      file: usize,
      hunk: usize,
++    fold: Option<std::ops::Range<usize>>,
      code: &CodePresentation,
 -    cx: &App,
 +    window: &mut Window,
@@ -150,6 +640,7 @@ index 2781ce0..56ac22b 100644
 +                handler(&path, hunk, window, cx)
 +            })
 +        });
++    let buttons = fold.map(|pairs| fold_buttons(file, pairs, code, cx));
 +    let label = match code.hunk_separator {
 +        DiffHunkSeparator::Metadata => Some(hunks[hunk].label().to_string()),
          DiffHunkSeparator::LineInfo => {
@@ -161,31 +652,196 @@ index 2781ce0..56ac22b 100644
 -                .child(t!("Diff.HiddenLines", count = hidden).to_string())
 -                .into_any_element()
 +            (hidden > 0).then(|| t!("Diff.HiddenLines", count = hidden).to_string())
++        }
++        DiffHunkSeparator::Scope => hunk_scope(hunks[hunk].label()).filter(|_| !code.whole_file),
++        DiffHunkSeparator::Simple => {
++            return match buttons {
++                Some(buttons) => row.h_6().px_2().child(buttons).into_any_element(),
++                None => row.h_1().into_any_element(),
++            };
          }
 -        DiffHunkSeparator::Simple => row.h_1().into_any_element(),
-+        DiffHunkSeparator::Simple => return row.h_1().into_any_element(),
 +    };
 +    let suffix = code
 +        .hunk_suffix
 +        .as_ref()
 +        .map(|render| render(&code.files[file], hunk, window, cx));
-+    if label.is_none() && suffix.is_none() {
++    if label.is_none() && suffix.is_none() && buttons.is_none() {
 +        return div().into_any_element();
      }
-+    row.h_6()
-+        .child(
-+            div()
-+                .flex_1()
-+                .min_w_0()
-+                .truncate()
-+                .children(label),
-+        )
-+        .children(suffix.map(|suffix| h_flex().flex_none().mr_neg_2().child(suffix)))
-+        .into_any_element()
++    let scope = code.hunk_separator == DiffHunkSeparator::Scope;
++    row.map(|row| {
++        if scope {
++            row.h_7()
++                .pl_2()
++                .gap_2()
++                .border_t_1()
++                .border_b_1()
++                .border_color(cx.theme().border)
++        } else {
++            row.h_6()
++        }
++    })
++    .children(buttons)
++    .child(
++        div()
++            .flex_1()
++            .min_w_0()
++            .truncate()
++            .when(scope, |this| {
++                this.font_family(cx.theme().mono_font_family.clone())
++                    .text_size(code.font_size * 0.9)
++            })
++            .children(label),
++    )
++    .children(suffix.map(|suffix| h_flex().flex_none().mr_neg_2().child(suffix)))
++    .into_any_element()
  }
  
  fn render_fold(
-@@ -1824,6 +1889,12 @@ fn code_line(
+@@ -1043,15 +1197,37 @@ fn render_fold(
+     pairs: std::ops::Range<usize>,
+     code: &CodePresentation,
+     cx: &App,
++) -> AnyElement {
++    h_flex()
++        .w_full()
++        .h_6()
++        .px_2()
++        .bg(cx.theme().muted.opacity(0.35))
++        .child(fold_buttons(file, pairs, code, cx))
++        .into_any_element()
++}
++
++fn fold_buttons(
++    file: usize,
++    pairs: std::ops::Range<usize>,
++    code: &CodePresentation,
++    cx: &App,
+ ) -> AnyElement {
+     let document = &code.files[file];
+-    // A fold bordering the hunk start has no source above it, and one
+-    // bordering the hunk end has none below; offer only the meaningful sides.
+-    let hunk = document
+-        .hunks()
++    let hunks = document.hunks();
++    let containing = hunks
+         .iter()
+-        .find(|hunk| hunk.pairs().contains(&pairs.start))
+-        .map_or(0..document.pairs().len(), |hunk| hunk.pairs());
++        .position(|hunk| hunk.pairs().contains(&pairs.start));
++    let hunk = containing.map_or(0..document.pairs().len(), |ix| hunks[ix].pairs());
++    let joined_above = containing.is_some_and(|ix| {
++        ix > 0 && pairs.start == hunk.start && hunks[ix].hidden_lines_before(Some(&hunks[ix - 1])) == 0
++    });
++    let joined_below = containing.is_some_and(|ix| {
++        pairs.end == hunk.end
++            && hunks
++                .get(ix + 1)
++                .is_some_and(|next| next.hidden_lines_before(Some(&hunks[ix])) == 0)
++    });
+     let lines = code.expansion_lines;
+     let partial = pairs.len() > lines;
+     let expand = |id: (&'static str, usize), expansion: FoldExpansion| {
+@@ -1069,19 +1245,16 @@ fn render_fold(
+             })
+     };
+     h_flex()
+-        .w_full()
+-        .h_6()
+-        .px_2()
++        .flex_none()
+         .gap_1()
+-        .bg(cx.theme().muted.opacity(0.35))
+-        .when(partial && pairs.start > hunk.start, |this| {
++        .when(partial && (pairs.start > hunk.start || joined_above), |this| {
+             this.child(
+                 expand(("expand-down", pairs.start), FoldExpansion::Down)
+                     .icon(IconName::ArrowDown)
+                     .accessibility_label(t!("Diff.ExpandBelow", count = lines).to_string()),
+             )
+         })
+-        .when(partial && pairs.end < hunk.end, |this| {
++        .when(partial && (pairs.end < hunk.end || joined_below), |this| {
+             this.child(
+                 expand(("expand-up", pairs.start), FoldExpansion::Up)
+                     .icon(IconName::ArrowUp)
+@@ -1349,6 +1522,7 @@ fn render_gutter(
+     file: usize,
+     side: DiffSide,
+     ix: Option<usize>,
++    tint: Option<Hsla>,
+     code: &CodePresentation,
+     cx: &App,
+ ) -> AnyElement {
+@@ -1385,7 +1559,7 @@ fn render_gutter(
+                     .items_center()
+                     .justify_end()
+                     .text_size(code.font_size)
+-                    .text_color(cx.theme().muted_foreground)
++                    .text_color(tint.unwrap_or(cx.theme().muted_foreground))
+                     .hover(|this| this.text_color(cx.theme().foreground))
+                     .role(gpui::accesskit::Role::Button)
+                     .aria_label(
+@@ -1446,8 +1620,12 @@ fn render_cell(
+             this.border_r_1().border_color(cx.theme().border)
+         })
+         .when(ix.is_none(), |this| {
+-            this.bg(cx.theme().muted.opacity(0.3))
+-                .child(div().h(code.row_height))
++            this.bg(gpui::pattern_slash(
++                cx.theme().foreground.opacity(0.05),
++                4.,
++                4.,
++            ))
++            .child(div().h(code.row_height))
+         });
+     let Some(ix) = ix else {
+         return cell.into_any_element();
+@@ -1705,7 +1883,7 @@ fn code_line(
+             if code.soft_wrap {
+                 this.w_full()
+             } else {
+-                this.flex().flex_row().flex_shrink_0()
++                this.flex().flex_row().flex_shrink_0().ml(-code.scroll_x)
+             }
+         })
+         .children(ranges.into_iter().enumerate().map(|(chunk_ix, range)| {
+@@ -1749,6 +1927,16 @@ fn code_line(
+         code.hover_highlight,
+         DiffHoverHighlight::Line | DiffHoverHighlight::Both
+     );
++    let indicator_width = if code.change_indicator == DiffChangeIndicator::None {
++        code.rem * 0.5
++    } else {
++        code.rem
++    };
++    let code_left = code.rem * 0.5 + gutters_width + code.lane_width + indicator_width;
++    let number_tint = (changed
++        && conflict_part.is_none()
++        && code.change_indicator == DiffChangeIndicator::Bars)
++        .then_some(status);
+     let add_button = add_annotation_button(
+         file,
+         side,
+@@ -1808,7 +1996,15 @@ fn code_line(
+         .text_size(code.font_size)
+         .line_height(code.row_height)
+         .when(changed && code.change_background, |this| {
+-            this.bg(status.opacity(0.12))
++            this.child(
++                div()
++                    .absolute()
++                    .top_0()
++                    .bottom_0()
++                    .left(code_left)
++                    .right_0()
++                    .bg(status.opacity(0.12)),
++            )
+         })
+         // An overlay, so the change background shows through a translucent fill.
+         .when_some(decoration, |this, background| {
+@@ -1824,12 +2020,18 @@ fn code_line(
                  handler(hovered.then_some(&position), window, cx)
              })
          })
@@ -198,11 +854,208 @@ index 2781ce0..56ac22b 100644
          .when(code.line_number, |this| {
              this.children(
                  gutters
+                     .into_iter()
+                     .flatten()
+-                    .map(|(side, ix)| render_gutter(file, side, ix, &code, cx)),
++                    .map(|(side, ix)| render_gutter(file, side, ix, number_tint, &code, cx)),
+             )
+         })
+         .children(marker_lane)
+@@ -1842,7 +2044,7 @@ fn code_line(
+                     if code.soft_wrap {
+                         this.flex_1().min_w_0()
+                     } else {
+-                        this.flex_shrink_0()
++                        this.flex_1().min_w_0().overflow_hidden()
+                     }
+                 })
+                 .role(gpui::accesskit::Role::Label)
+diff --git a/src/diff/presentation.rs b/src/diff/presentation.rs
+index f3cf61c..296ba98 100644
+--- a/src/diff/presentation.rs
++++ b/src/diff/presentation.rs
+@@ -7,7 +7,11 @@ use gpui::{HighlightStyle, SharedString};
+ use gpui_base::input::HighlightStyleResolver;
+ use similar::{ChangeTag, TextDiff};
+ 
+-use super::{DiffFile, DiffSide, document::SourceLine};
++use super::{
++    DiffFile, DiffSide,
++    code_names::{coherent_names, follows_code_rules},
++    document::SourceLine,
++};
+ use crate::{Rope, highlighter::SyntaxHighlighter};
+ 
+ /// The unit inline changes are compared and emphasized in.
+@@ -122,20 +126,28 @@ impl FilePresentation {
+                         })
+                         .map(|(range, style)| (range, SyntaxPaint::Style(style)))
+                         .collect(),
+-                    None => highlighters
+-                        .entry(language.clone())
+-                        .or_insert_with(|| SyntaxHighlighter::new(language))
+-                        .capture_names(&Rope::from_str(text))
+-                        .into_iter()
+-                        .map(|(range, name)| {
+-                            let next = name_ixs.len().min(u16::MAX as usize) as u16;
+-                            let ix = *name_ixs.entry(name.clone()).or_insert_with(|| {
+-                                presentation.names.push(name.clone());
+-                                next
+-                            });
+-                            (range, SyntaxPaint::Name(ix))
+-                        })
+-                        .collect(),
++                    None => {
++                        let captured = highlighters
++                            .entry(language.clone())
++                            .or_insert_with(|| SyntaxHighlighter::new(language))
++                            .capture_names(&Rope::from_str(text));
++                        let named = if follows_code_rules(language) {
++                            coherent_names(text, &captured)
++                        } else {
++                            captured
++                        };
++                        named
++                            .into_iter()
++                            .map(|(range, name)| {
++                                let next = name_ixs.len().min(u16::MAX as usize) as u16;
++                                let ix = *name_ixs.entry(name.clone()).or_insert_with(|| {
++                                    presentation.names.push(name.clone());
++                                    next
++                                });
++                                (range, SyntaxPaint::Name(ix))
++                            })
++                            .collect()
++                    }
+                 },
+             );
+             presentation.syntax[side as usize] = LineSpans::from_lines(per_line);
 diff --git a/src/diff/state.rs b/src/diff/state.rs
-index fb309b8..f2ba66e 100644
+index fb309b8..cb8e78f 100644
 --- a/src/diff/state.rs
 +++ b/src/diff/state.rs
-@@ -635,6 +635,26 @@ impl DiffState {
+@@ -33,6 +33,7 @@ pub(crate) enum DisplayRow {
+     Hunk {
+         file: usize,
+         hunk: usize,
++        fold: Option<Range<usize>>,
+     },
+     Fold {
+         file: usize,
+@@ -54,6 +55,18 @@ pub(crate) enum DisplayRow {
+ }
+ 
+ impl DisplayRow {
++    pub(crate) fn folded(&self) -> Option<(usize, Range<usize>)> {
++        match self {
++            Self::Fold { file, pairs }
++            | Self::Hunk {
++                file,
++                fold: Some(pairs),
++                ..
++            } => Some((*file, pairs.clone())),
++            _ => None,
++        }
++    }
++
+     pub(crate) fn file(&self) -> usize {
+         match self {
+             Self::File(file) | Self::Notice(file) => *file,
+@@ -65,6 +78,16 @@ impl DisplayRow {
+     }
+ }
+ 
++/// One run of changed rows: where it starts, how many rows it spans, and
++/// whether it adds lines, removes them, or both.
++#[derive(Clone, Copy, Debug, PartialEq, Eq)]
++pub struct DiffChangeMark {
++    pub first_row: usize,
++    pub rows: usize,
++    pub adds: bool,
++    pub removes: bool,
++}
++
+ /// Which part of a collapsed unchanged range a disclosure reveals.
+ #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+ pub(crate) enum FoldExpansion {
+@@ -564,6 +587,76 @@ impl DiffState {
+         self.collapsed.contains(path)
+     }
+ 
++    /// The number of rows shown, file headers, hunk headers and folds included.
++    pub fn row_count(&self) -> usize {
++        self.rows.len()
++    }
++
++    /// The row at the top of the viewport.
++    pub fn top_row(&self) -> usize {
++        self.list.logical_scroll_top().item_ix
++    }
++
++    /// The rows at least partly inside the viewport.
++    pub fn visible_rows(&self) -> Range<usize> {
++        let count = self.rows.len();
++        let top = self.top_row().min(count);
++        let bottom = self.list.viewport_bounds().bottom();
++        let end = (top..count)
++            .find(|&ix| {
++                self.list
++                    .bounds_for_item(ix)
++                    .is_none_or(|bounds| bounds.top() >= bottom)
++            })
++            .unwrap_or(count);
++        top..end.max((top + 1).min(count))
++    }
++
++    /// Each run of changed rows, in display order, as the change
++    /// navigation steps through them.
++    pub fn change_marks(&self) -> Vec<DiffChangeMark> {
++        self.change_rows
++            .iter()
++            .map(|&first_row| {
++                let file = self.rows[first_row].file();
++                let mut mark = DiffChangeMark {
++                    first_row,
++                    rows: 0,
++                    adds: false,
++                    removes: false,
++                };
++                for row in &self.rows[first_row..] {
++                    match row {
++                        DisplayRow::Code {
++                            file: row_file,
++                            original,
++                            modified,
++                            changed: true,
++                        } if *row_file == file => {
++                            mark.rows += 1;
++                            mark.adds |= modified.is_some();
++                            mark.removes |= original.is_some();
++                        }
++                        _ => break,
++                    }
++                }
++                mark
++            })
++            .collect()
++    }
++
++    /// Scrolls so that `row` sits at the top of the viewport.
++    pub fn scroll_to_row(&mut self, row: usize, cx: &mut Context<Self>) {
++        let Some(last) = self.rows.len().checked_sub(1) else {
++            return;
++        };
++        self.list.scroll_to(ListOffset {
++            item_ix: row.min(last),
++            offset_in_item: px(0.),
++        });
++        cx.notify();
++    }
++
+     pub(crate) fn rows(&self) -> &Rc<Vec<DisplayRow>> {
+         &self.rows
+     }
+@@ -635,6 +728,26 @@ impl DiffState {
          cx.notify();
      }
  
@@ -229,6 +1082,103 @@ index fb309b8..f2ba66e 100644
      /// Changes the display mode while preserving source-line selection and a
      /// nearby source row.
      pub fn set_mode(&mut self, mode: DiffMode, cx: &mut Context<Self>) {
+@@ -1194,8 +1307,7 @@ impl DiffState {
+ 
+     fn expand_line(&mut self, position: &DiffLinePosition) -> Option<usize> {
+         let row = self.source_row(position)?;
+-        if let Some(DisplayRow::Fold { file, pairs }) = self.rows.get(row) {
+-            let (file, pairs) = (*file, pairs.clone());
++        if let Some((file, pairs)) = self.rows.get(row).and_then(DisplayRow::folded) {
+             self.expanded[file].push(pairs);
+             self.rebuild_at_anchor();
+         }
+@@ -1271,7 +1383,10 @@ impl DiffState {
+             DisplayRow::Code {
+                 original, modified, ..
+             } => pair_position(*original, *modified),
+-            DisplayRow::Fold { pairs, .. } => self.files[file]
++            DisplayRow::Fold { pairs, .. }
++            | DisplayRow::Hunk {
++                fold: Some(pairs), ..
++            } => self.files[file]
+                 .pairs()
+                 .get(pairs.start)
+                 .and_then(|pair| pair_position(pair.original(), pair.modified())),
+@@ -1534,7 +1649,12 @@ fn source_rows(files: &[DiffFile], rows: &[DisplayRow]) -> Vec<FileRows> {
+                 modified,
+                 ..
+             } => map(*file, *original, *modified),
+-            DisplayRow::Fold { file, pairs } => {
++            DisplayRow::Fold { file, pairs }
++            | DisplayRow::Hunk {
++                file,
++                fold: Some(pairs),
++                ..
++            } => {
+                 for pair in &files[*file].pairs()[pairs.clone()] {
+                     map(*file, pair.original(), pair.modified());
+                 }
+@@ -1666,6 +1786,17 @@ fn visible_pairs(
+     visible
+ }
+ 
++const SEPARATOR_LEAD: usize = 3;
++
++fn separator_at(pairs: &[super::document::LinePair], hunk: Range<usize>, lead: usize) -> usize {
++    pairs[hunk.clone()]
++        .iter()
++        .position(|pair| pair.is_changed())
++        .map_or(hunk.start, |first| {
++            (hunk.start + first).saturating_sub(lead).max(hunk.start)
++        })
++}
++
+ fn project_file(
+     rows: &mut Vec<DisplayRow>,
+     file: usize,
+@@ -1679,22 +1810,37 @@ fn project_file(
+     let hunks = document.hunks();
+     let hunk_end = hunk_ends(document);
+     let visible = visible_pairs(document, context, min_collapsed_lines, expanded);
++    let lead = context.unwrap_or(SEPARATOR_LEAD);
++    let anchors: Vec<usize> = hunks
++        .iter()
++        .map(|hunk| separator_at(pairs, hunk.pairs(), lead))
++        .collect();
+     let mut hunk_ix = 0;
+     let mut ix = 0;
+     while ix < pairs.len() {
+-        while let Some(hunk) = hunks.get(hunk_ix) {
+-            if hunk.pairs().start != ix {
+-                break;
+-            }
++        while anchors.get(hunk_ix) == Some(&ix) {
++            let fold = match rows.last() {
++                Some(DisplayRow::Fold {
++                    file: folded_file,
++                    pairs: folded,
++                }) if *folded_file == file && folded.end == ix => {
++                    let folded = folded.clone();
++                    rows.pop();
++                    Some(folded)
++                }
++                _ => None,
++            };
+             rows.push(DisplayRow::Hunk {
+                 file,
+                 hunk: hunk_ix,
++                fold,
+             });
+             hunk_ix += 1;
+         }
++        let next_anchor = anchors.get(hunk_ix).copied().unwrap_or(pairs.len());
+         if !visible[ix] {
+             let start = ix;
+-            while ix < pairs.len() && ix < hunk_end[start] && !visible[ix] {
++            while ix < pairs.len() && ix < hunk_end[start] && ix < next_anchor && !visible[ix] {
+                 ix += 1;
+             }
+             rows.push(DisplayRow::Fold {
 diff --git a/src/input/popovers/code_action_menu.rs b/src/input/popovers/code_action_menu.rs
 index 1e3af71..bece509 100644
 --- a/src/input/popovers/code_action_menu.rs
@@ -321,6 +1271,105 @@ index e5849c1..19ac794 100644
              window_half_height.min(px(450.))
          });
  
+diff --git a/src/theme/default-theme.json b/src/theme/default-theme.json
+index b4a7f1f..7e159f0 100644
+--- a/src/theme/default-theme.json
++++ b/src/theme/default-theme.json
+@@ -343,19 +343,21 @@
+             "color": "#7FAEF9"
+           },
+           "boolean": {
+-            "color": "#CC9E00"
++            "color": "#F4A8C4"
+           },
+           "comment": {
+-            "color": "#9D9D9D"
++            "color": "#7E8794",
++            "font_style": "italic"
+           },
+           "comment.doc": {
+-            "color": "#9D9D9D"
++            "color": "#7E8794",
++            "font_style": "italic"
+           },
+           "constant": {
+-            "color": "#CC9E00"
++            "color": "#F4A8C4"
+           },
+           "constructor": {
+-            "color": "#CBA6F7"
++            "color": "#F0CF8E"
+           },
+           "embedded": {
+             "color": "#CACCCA"
+@@ -367,10 +369,10 @@
+             "font_weight": 700
+           },
+           "function": {
+-            "color": "#B3C5F3"
++            "color": "#7FB0FF"
+           },
+           "keyword": {
+-            "color": "#87B1F6"
++            "color": "#D49CF6"
+           },
+           "link_text": {
+             "color": "#419CFF",
+@@ -381,44 +383,41 @@
+             "font_style": "italic"
+           },
+           "number": {
+-            "color": "#CC9E00"
++            "color": "#F4A8C4"
+           },
+           "string": {
+-            "color": "#A3E09F"
++            "color": "#8FD6E6"
+           },
+           "string.escape": {
+-            "color": "#68DC7C"
++            "color": "#B8E8F2"
+           },
+           "string.regex": {
+-            "color": "#68DC7C"
++            "color": "#B8E8F2"
+           },
+           "string.special": {
+-            "color": "#A3E09F"
++            "color": "#8FD6E6"
+           },
+           "string.special.symbol": {
+-            "color": "#A3E09F"
++            "color": "#8FD6E6"
+           },
+           "tag": {
+             "color": "#419CFF"
+           },
+           "text.literal": {
+-            "color": "#A3E09F"
++            "color": "#8FD6E6"
+           },
+           "text.code.span": {
+-            "color": "#A3E09F"
++            "color": "#8FD6E6"
+           },
+           "title": {
+             "color": "#CC9E00",
+             "font_weight": 600
+           },
+           "type": {
+-            "color": "#CBA6F7"
+-          },
+-          "property": {
+-            "color": "#BCC4E0"
++            "color": "#F0CF8E"
+           },
+           "variable.special": {
+-            "color": "#419CFF"
++            "color": "#D49CF6"
+           }
+         }
+       }
 diff --git a/src/window_border.rs b/src/window_border.rs
 index 2e950d6..c7973c5 100644
 --- a/src/window_border.rs

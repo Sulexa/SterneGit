@@ -10,7 +10,7 @@ const Screens = (() => {
   const repo = ({ left, middle, right, selectedRow = null, wipSelected = false, status = {}, toolbar }) =>
     C.RepoView({
       toolbar,
-      left: left || C.RefsList({ refs: history.refs, selectedRow, collapsed }),
+      left: left ?? C.RefsList({ refs: history.refs, selectedRow, collapsed }),
       middle: middle || C.HistoryList({ history, selectedRow, changes, wipSelected }),
       right,
       status: C.RepoStatusBar({
@@ -40,6 +40,7 @@ const Screens = (() => {
   const commitFileComparison = () =>
     repo({
       selectedRow: selected,
+      left: false,
       middle: C.FileDiffPanel({ diff: commitFileDiff, mode: 'split' }),
       right: C.CommitPanel({ commit: history.commits[selected], details: commitDetails, open: commitFileDiff.change.path }),
     });
@@ -58,7 +59,8 @@ const Screens = (() => {
   const fileComparison = (mode, extra = {}) =>
     repo({
       wipSelected: true,
-      middle: C.FileDiffPanel({ diff: extra.diff || fileDiff, mode, selection: extra.selection, pointed: extra.pointed, menuOpen: extra.menuOpen, hot: extra.hot }),
+      left: false,
+      middle: C.FileDiffPanel({ diff: extra.diff || fileDiff, mode, selection: extra.selection, pointed: extra.pointed, menuOpen: extra.menuOpen, hot: extra.hot, look: extra.look }),
       right: C.ChangesList({ changes: extra.changes || changes, open: openFile, view: extra.view }),
     });
 
@@ -93,7 +95,7 @@ const Screens = (() => {
       tabStrip: C.TabStrip({ tabs: gameTabs, active: gameTabs.length - 1 }),
       body: C.RepoView({
         expanded,
-        left: C.RefsList({ refs: starfall.refs, selectedRow: null }),
+        left: false,
         middle: C.FileDiffPanel({ diff, mode, expanded, view, filePosition: [changedFiles.indexOf(diff.change) + 1, changedFiles.length] }),
         right: C.ChangesList({ changes: assets, open: { side: diff.side, path: diff.change.path } }),
         status: C.RepoStatusBar({ summary: historySummary(starfall) }),
@@ -329,7 +331,7 @@ const Screens = (() => {
     {
       id: 'commit-file',
       title: 'Commit file comparison',
-      about: "A file was clicked in the selected commit's file list. The middle pane swaps the graph for a comparison of that file with the commit's first parent; the file stays highlighted on the right, another click opens another file, and Esc or × goes back to the graph.",
+      about: "A file was clicked in the selected commit's file list. The middle pane swaps the graph for a comparison of that file with the commit's first parent, and the refs pane steps aside; the row above the columns names the parent and the commit by their short ids. The whole file is shown as the commit left it, opened on its first change; with nothing to stage, no row comes between its lines. The file stays highlighted on the right, another click opens another file, and Esc or × goes back to the graph and the refs.",
       source: 'src/repo/file_diff_panel.rs',
       render: () => C.SterneGit({ topBar: topBar(), tabStrip: tabStrip(), body: commitFileComparison() }),
     },
@@ -428,6 +430,7 @@ const Screens = (() => {
           tabStrip: tabStrip(),
           body: repo({
             wipSelected: true,
+            left: false,
             middle: C.FileDiffPanel({ diff: fileDiff, mode: 'split' }),
             right: C.ChangesList({ changes, open: openFile, picked: pickedFiles }),
           }),
@@ -444,6 +447,7 @@ const Screens = (() => {
           tabStrip: tabStrip(),
           body: repo({
             wipSelected: true,
+            left: false,
             middle: C.FileDiffPanel({ diff: fileDiff, mode: 'split' }),
             right: C.ChangesList({
               changes,
@@ -465,6 +469,7 @@ const Screens = (() => {
           tabStrip: tabStrip(),
           body: repo({
             wipSelected: true,
+            left: false,
             middle: C.FileDiffPanel({ diff: fileDiff, mode: 'split' }),
             right: C.ChangesList({ changes, open: openFile, picked: pickedFiles }),
           }),
@@ -487,14 +492,14 @@ const Screens = (() => {
     {
       id: 'file-split',
       title: 'File comparison — Split',
-      about: 'A file was clicked in the changes list. The middle pane swaps the graph for a side-by-side comparison; Esc or × goes back to the graph. The file bar names the file and holds what acts on all of it: Stage, the button that gives the comparison the whole window, and ×. The view bar under it picks Split or Unified, counts the changes and steps through them with ↑ and ↓ (Alt+Up, Alt+Down), and opens the view options. Changed words are highlighted inside changed lines. SterneGit reads the whole file, so each hunk header is followed by the unchanged lines above it, folded: a click shows them all, or 20 at a time when there are more. The strip at the right edge marks where the changes sit and what part of the comparison is in view; a click on a mark goes there. Each hunk header ends with Discard hunk and Stage hunk, so one part of the file can be staged or thrown away without the rest.',
+      about: "A file was clicked in the changes list. The middle pane swaps the graph for a side-by-side comparison, and the refs pane steps aside to give it room; Esc or × brings both back. One bar names the file and holds everything that acts on it: Split or Unified, the change count with ↑ and ↓ (Alt+Up, Alt+Down), the view options, Stage, the button that gives the comparison the whole window, and ×. A row above the columns names the two sides: Before, HEAD (Staged once part of the file is staged), and After, Working copy. A changed line has a red or green bar beside a number of the same color, and its changed words are highlighted; a line that exists on one side only leaves a hatched gap on the other. Long lines run past the edge: each column has a horizontal scrollbar, both columns move together and the line numbers stay in place. The whole file is there, and it opens on its first change rather than at line 1: the view starts four lines above that change's hunk, so the change sits near the top with what comes before it just above. ↑ and ↓ bring the other changes to the same place. A thin grey row above each hunk holds Discard hunk and Stage hunk. The strip at the right edge is the whole file: it marks where the changes sit and what part of the file is in view; a click on a mark goes there.",
       source: 'src/repo/file_diff_panel.rs',
       render: () => C.SterneGit({ topBar: topBar(), tabStrip: tabStrip(), body: fileComparison('split') }),
     },
     {
       id: 'file-unified',
       title: 'File comparison — Unified',
-      about: 'The same comparison in one column, after clicking Unified. The hunk buttons are the same.',
+      about: "The same comparison in one column, after clicking Unified: the whole file again, opened on its first change. Both side names sit above it, each line keeps both of its numbers, and one horizontal scrollbar moves the code. The hunk buttons are the same.",
       source: 'src/repo/file_diff_panel.rs',
       render: () => C.SterneGit({ topBar: topBar(), tabStrip: tabStrip(), body: fileComparison('unified') }),
     },
@@ -532,9 +537,16 @@ const Screens = (() => {
     {
       id: 'view-options',
       title: 'File comparison — view options',
-      about: 'The ⋯ at the right end of the view bar opens the options of every text comparison, in every tab: changed words highlighted, long lines wrapped, the whole file shown instead of the changed parts, whitespace changes hidden. While whitespace is hidden the hunk buttons and the line menu go away, because Git could not apply those parts to the file.',
+      about: 'The ⋯ in the file bar opens the options of every text comparison, in every tab: changed words highlighted, long lines wrapped instead of scrolled (off by default), the whole file shown instead of only the changed parts (on by default), whitespace changes hidden. While whitespace is hidden the hunk buttons and the line menu go away, because Git could not apply those parts to the file.',
       source: 'src/repo/file_diff_panel.rs',
       render: () => C.SterneGit({ topBar: topBar(), tabStrip: tabStrip(), body: fileComparison('split', { menuOpen: true, hot: 'whitespace' }) }),
+    },
+    {
+      id: 'file-changes-only',
+      title: 'File comparison — only the changes',
+      about: 'With Show the whole file unchecked in ⋯, the comparison keeps only the changed parts and opens at the top. Between two hunks a single grey row folds the unchanged lines, names the function or block the next hunk sits in, and ends with Discard hunk and Stage hunk; a click on the fold shows the lines, or 20 at a time when there are more. A file longer than 100,000 lines always opens this way.',
+      source: 'src/repo/file_diff_panel.rs',
+      render: () => C.SterneGit({ topBar: topBar(), tabStrip: tabStrip(), body: fileComparison('split', { look: { whole: false } }) }),
     },
     {
       id: 'picture-split',
@@ -787,7 +799,7 @@ const Screens = (() => {
           body: C.RepoView({
             toolbar: C.RepoToolbar({ unavailable: busyDuringOperation }),
             operation: C.OperationBar({ operation: starfallMerge, conflicts: starfallConflicts.conflicted.length }),
-            left: C.RefsList({ refs: starfall.refs, selectedRow: null }),
+            left: false,
             middle: C.FileDiffPanel({ diff: slimeConflict, mode: 'split' }),
             right: C.ChangesList({ changes: starfallConflicts, open: { side: 'conflicted', path: slimeConflict.change.path }, operation: starfallMerge }),
             status: C.RepoStatusBar({ summary: historySummary(starfall) }),
@@ -1168,12 +1180,12 @@ const Screens = (() => {
       const { list, pulled, shown, details, failing, failingDetails, fork, forkDetails, mergedSha } = Sample.pulls;
       const refsWithPulls = (pulls, refs = pulled.refs, selectedRow = null) => C.RefsList({ refs, selectedRow, collapsed, pulls: { pulls: list.open, ...pulls } });
       const graph = (selectedRow = selected) => C.HistoryList({ history: pulled, selectedRow, changes });
-      const pullView = ({ pull = shown, info = details, middle, right, pulls = {}, refs, overlays = '', position, head = history.head }) =>
+      const pullView = ({ pull = shown, info = details, middle, right, pulls = {}, refs, overlays = '', position, head = history.head, left }) =>
         C.SterneGit({
           topBar: topBar({ head }),
           tabStrip: tabStrip(),
           body: C.RepoView({
-            left: refsWithPulls({ selected: pull.number, ...pulls }, refs),
+            left: left ?? refsWithPulls({ selected: pull.number, ...pulls }, refs),
             middle: middle || C.PullOverview({ pull, details: info }),
             right: right || C.PullFiles({ pull, details: info }),
             status: C.RepoStatusBar({ summary: historySummary(history), position: position || PullTexts.position(pull.number, list.open.length, PullTexts.filters.open) }),
@@ -1241,6 +1253,7 @@ const Screens = (() => {
           source: 'src/repo/file_diff_panel.rs',
           render: () =>
             pullView({
+              left: false,
               middle: C.FileDiffPanel({ diff: { ...commitFileDiff, commit: `#${shown.number}` }, mode: 'split', filePosition: [1, details.files.length] }),
               right: C.PullFiles({ pull: shown, details, open: commitFileDiff.change.path }),
             }),

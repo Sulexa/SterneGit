@@ -7,7 +7,11 @@ use gpui::{HighlightStyle, SharedString};
 use gpui_base::input::HighlightStyleResolver;
 use similar::{ChangeTag, TextDiff};
 
-use super::{DiffFile, DiffSide, document::SourceLine};
+use super::{
+    DiffFile, DiffSide,
+    code_names::{coherent_names, follows_code_rules},
+    document::SourceLine,
+};
 use crate::{Rope, highlighter::SyntaxHighlighter};
 
 /// The unit inline changes are compared and emphasized in.
@@ -122,20 +126,28 @@ impl FilePresentation {
                         })
                         .map(|(range, style)| (range, SyntaxPaint::Style(style)))
                         .collect(),
-                    None => highlighters
-                        .entry(language.clone())
-                        .or_insert_with(|| SyntaxHighlighter::new(language))
-                        .capture_names(&Rope::from_str(text))
-                        .into_iter()
-                        .map(|(range, name)| {
-                            let next = name_ixs.len().min(u16::MAX as usize) as u16;
-                            let ix = *name_ixs.entry(name.clone()).or_insert_with(|| {
-                                presentation.names.push(name.clone());
-                                next
-                            });
-                            (range, SyntaxPaint::Name(ix))
-                        })
-                        .collect(),
+                    None => {
+                        let captured = highlighters
+                            .entry(language.clone())
+                            .or_insert_with(|| SyntaxHighlighter::new(language))
+                            .capture_names(&Rope::from_str(text));
+                        let named = if follows_code_rules(language) {
+                            coherent_names(text, &captured)
+                        } else {
+                            captured
+                        };
+                        named
+                            .into_iter()
+                            .map(|(range, name)| {
+                                let next = name_ixs.len().min(u16::MAX as usize) as u16;
+                                let ix = *name_ixs.entry(name.clone()).or_insert_with(|| {
+                                    presentation.names.push(name.clone());
+                                    next
+                                });
+                                (range, SyntaxPaint::Name(ix))
+                            })
+                            .collect()
+                    }
                 },
             );
             presentation.syntax[side as usize] = LineSpans::from_lines(per_line);
