@@ -2526,6 +2526,10 @@ const C = {
     );
   },
 
+  ResizeHandle({ state = 'idle' } = {}) {
+    return `<div data-c="ResizeHandle" class="resize-handle ${state}"><span class="pill"></span></div>`;
+  },
+
   HierarchyTree({ tree, selected }) {
     const rows = tree.map((node) => {
       const spacer = `<span class="none" style="width:${node.depth * 16}px"></span>`;
@@ -2580,8 +2584,9 @@ const C = {
     return `<div data-c="ObjectSection" class="object-section ${state}">${head}${cards}</div>`;
   },
 
-  InspectorSides({ sources }) {
-    return `<div data-c="InspectorSides" class="inspector-sides"><div class="prop xs muted">Property</div><div>${C.VersionTag({ side: 'before', from: sources[0] })}</div><div>${C.VersionTag({ side: 'after', from: sources[1] })}</div></div>`;
+  InspectorSides({ sources, handle }) {
+    const edge = handle === undefined ? '' : `<div class="prop-edge">${C.ResizeHandle({ state: handle })}</div>`;
+    return `<div data-c="InspectorSides" class="inspector-sides"><div class="prop xs muted">Property</div><div>${C.VersionTag({ side: 'before', from: sources[0] })}</div><div>${C.VersionTag({ side: 'after', from: sources[1] })}</div>${edge}</div>`;
   },
 
   GuidWarning({ guid }) {
@@ -2602,11 +2607,15 @@ const C = {
     );
   },
 
-  ObjectCompare({ diff }) {
-    const tree = diff.tree ? C.HierarchyTree({ tree: diff.tree, selected: diff.selected }) : '';
+  ObjectCompare({ diff, hierarchy = {}, property = {} }) {
+    const { width = 232, handle } = hierarchy;
+    const { width: propWidth = 176, handle: propHandle = 'idle' } = property;
+    const tree = diff.tree
+      ? `<div class="hierarchy-pane" style="width:${width}px">${C.HierarchyTree({ tree: diff.tree, selected: diff.selected })}</div>${C.ResizeHandle({ state: handle })}`
+      : '';
     const warning = diff.guid ? C.GuidWarning({ guid: diff.guid }) : '';
     const sections = diff.objects.map((object) => C.ObjectSection({ object })).join('');
-    return `<div data-c="ObjectCompare" class="object-compare">${tree}<div class="inspector">${warning}${C.InspectorSides({ sources: diff.sources })}<div class="inspector-scroll">${sections}</div></div></div>`;
+    return `<div data-c="ObjectCompare" class="object-compare">${tree}<div class="inspector" style="--prop-w:${propWidth}px">${warning}${C.InspectorSides({ sources: diff.sources, handle: propHandle })}<div class="inspector-scroll">${sections}</div></div></div>`;
   },
 
   SceneLayout({ diff, width = 940, height = 500 }) {
@@ -2983,7 +2992,7 @@ const C = {
       video: () => C.VideoCompare({ diff, mode }),
       audio: () => C.AudioCompare({ diff, mode }),
       binary: () => C.BinaryFacts({ diff }),
-      objects: () => (mode !== 'scene' ? C.ObjectCompare({ diff }) : diff.layout.canvas ? C.CanvasLayout({ diff }) : C.SceneLayout({ diff })),
+      objects: () => (mode !== 'scene' ? C.ObjectCompare({ diff, hierarchy: view.hierarchy, property: view.property }) : diff.layout.canvas ? C.CanvasLayout({ diff }) : C.SceneLayout({ diff })),
       curves: () => C.CurveCompare({ diff }),
       animator: () => C.AnimatorCompare({ diff, shown: view.shown }),
       scriptgraph: () => C.ScriptGraphCompare({ diff, shown: view.shown }),

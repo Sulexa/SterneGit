@@ -1,13 +1,15 @@
 use std::ops::Range;
 
 use gpui_kit::{
-    AnyElement, App, Context, Div, InteractiveElement as _, IntoElement, ParentElement as _, SharedString,
-    StatefulInteractiveElement as _, Styled as _, Window,
+    AnyElement, App, AppContext as _, Axis, Context, Div, DragMoveEvent, InteractiveElement as _, IntoElement,
+    ParentElement as _, Pixels, Render, SharedString, StatefulInteractiveElement as _, Styled as _, Window,
     assets::IconName,
     component::{
         ActiveTheme as _, Icon, Selectable as _, Sizable as _,
         button::{Button, ButtonVariants as _},
-        h_flex, v_flex,
+        h_flex,
+        resizable::resize_handle,
+        v_flex,
     },
     div, list,
     prelude::FluentBuilder as _,
@@ -18,6 +20,7 @@ use super::{
     UnityCompare,
     cells::{cell_tint, hatched, state_badge, value_cell},
     guid,
+    widths::{HIERARCHY_LEAST, HierarchyEdge, INSPECTOR_LEAST, InspectorWidths, PropertyEdge},
 };
 use crate::{
     repo::compare::{Version, VersionTag},
@@ -25,8 +28,6 @@ use crate::{
     unity::{Anchor, ObjectChange, PartChange, Row, State, TreeRow},
 };
 
-const TREE_WIDTH: f32 = 232.;
-const PROPERTY_WIDTH: f32 = 176.;
 const SIDES_HEIGHT: f32 = 32.;
 const OBJECT_HEIGHT: f32 = 34.;
 const PART_HEIGHT: f32 = 26.;
@@ -327,7 +328,7 @@ fn tree_rows(compare: &UnityCompare, range: Range<usize>, cx: &mut Context<Unity
         .collect()
 }
 
-fn hierarchy(compare: &UnityCompare, cx: &mut Context<UnityCompare>) -> AnyElement {
+fn hierarchy(compare: &UnityCompare, width: Pixels, cx: &mut Context<UnityCompare>) -> AnyElement {
     let theme = cx.theme();
     let muted = theme.muted_foreground;
     let shown = visible_tree(compare).len();
@@ -339,11 +340,10 @@ fn hierarchy(compare: &UnityCompare, cx: &mut Context<UnityCompare>) -> AnyEleme
         .collect::<Vec<_>>()
         .join(" · ");
     v_flex()
-        .flex_none()
-        .w(px(TREE_WIDTH))
+        .relative()
+        .w(width)
+        .min_w(HIERARCHY_LEAST)
         .h_full()
-        .border_r_1()
-        .border_color(theme.border)
         .bg(theme.sidebar)
         .child(
             h_flex()
@@ -388,6 +388,28 @@ fn hierarchy(compare: &UnityCompare, cx: &mut Context<UnityCompare>) -> AnyEleme
         .into_any_element()
 }
 
+fn divider_at<Edge: Copy + Render>(id: &'static str, left: Pixels, edge: Edge) -> Div {
+    div().absolute().top_0().left(left).h_full().child(
+        resize_handle::<Edge, Edge>(id, Axis::Horizontal).on_drag(edge, |edge, _, _, cx| cx.new(|_| *edge)),
+    )
+}
+
+fn sides_with_handle(compare: &UnityCompare, property: Pixels, cx: &App) -> AnyElement {
+    div()
+        .relative()
+        .flex_none()
+        .child(sides_row(&compare.sources, property.as_f32(), cx))
+        .child(divider_at("unity-property-edge", property, PropertyEdge))
+        .into_any_element()
+}
+
+fn resize(widths: InspectorWidths, cx: &mut Context<UnityCompare>) {
+    if widths != InspectorWidths::current(cx) {
+        cx.set_global(widths);
+        cx.notify();
+    }
+}
+
 fn listed_row(compare: &UnityCompare, ix: usize, cx: &mut Context<UnityCompare>) -> AnyElement {
     let item = compare.flat[ix];
     let current = current_flat(compare) == Some(item);
@@ -399,7 +421,8 @@ fn listed_row(compare: &UnityCompare, ix: usize, cx: &mut Context<UnityCompare>)
         }
         Flat::Row(object_ix, part_ix, row_ix) => {
             let row = &compare.comparison.objects[object_ix].parts[part_ix].rows[row_ix];
-            property_row(row, PROPERTY_WIDTH, PART_INDENT, current, cx).into_any_element()
+            let property = InspectorWidths::current(cx).property.as_f32();
+            property_row(row, property, PART_INDENT, current, cx).into_any_element()
         }
     }
 }
@@ -421,17 +444,30 @@ pub(super) fn render(compare: &mut UnityCompare, _: &mut Window, cx: &mut Contex
             .child(list(compare.rows.clone(), cx.processor(|this, ix, _, cx| listed_row(this, ix, cx))).size_full())
             .into_any_element()
     };
+    let widths = InspectorWidths::current(cx);
+    let has_tree = !compare.comparison.tree.is_empty();
     let warning = compare.files.guid_change.clone().map(|change| guid::warning(change, cx));
     let inspector = v_flex()
+        .relative()
         .flex_1()
+        .flex_basis(INSPECTOR_LEAST)
         .min_w_0()
         .h_full()
+        .on_drag_move(cx.listener(|_, event: &DragMoveEvent<PropertyEdge>, _, cx| {
+            let wanted = event.event.position.x - event.bounds.left();
+            resize(InspectorWidths::current(cx).with_property(wanted, event.bounds.size.width), cx)
+        }))
         .children(warning)
-        .child(sides_row(&compare.sources, PROPERTY_WIDTH, cx))
-        .child(body);
+        .child(sides_with_handle(compare, widths.property, cx))
+        .child(body)
+        .when(has_tree, |this| this.child(divider_at("unity-hierarchy-edge", px(0.), HierarchyEdge)));
     h_flex()
         .size_full()
-        .when(!compare.comparison.tree.is_empty(), |this| this.child(hierarchy(compare, cx)))
+        .on_drag_move(cx.listener(|_, event: &DragMoveEvent<HierarchyEdge>, _, cx| {
+            let wanted = event.event.position.x - event.bounds.left();
+            resize(InspectorWidths::current(cx).with_hierarchy(wanted, event.bounds.size.width), cx)
+        }))
+        .when(has_tree, |this| this.child(hierarchy(compare, widths.hierarchy, cx)))
         .child(inspector)
         .into_any_element()
 }

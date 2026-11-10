@@ -620,6 +620,20 @@ const Screens = (() => {
       render: () => unityComparison(unity.prefabDiff, 'inspector'),
     },
     {
+      id: 'unity-prefab-hierarchy-width',
+      title: 'Unity — prefab, widening the Hierarchy',
+      about: 'The line between the Hierarchy and the Inspector is the divider of the panes: the pointer turns into a resize arrow over it, and a pill grows on it while it is dragged. The Hierarchy goes from 200 px up to 640 px, and the Inspector keeps at least 480 px. Both widths are shared by every Unity file in every tab until SterneGit closes.',
+      source: 'src/repo/compare/unity/inspector.rs',
+      render: () => unityComparison(unity.prefabDiff, 'inspector', { view: { hierarchy: { width: 340, handle: 'dragging' } } }),
+    },
+    {
+      id: 'unity-prefab-property-width',
+      title: 'Unity — prefab, widening the Property column',
+      about: 'The line between Property and Before in the header row is a divider too: dragging it sets the width of the property names for every row. It goes from 120 px up to 480 px and leaves each value column at least 120 px.',
+      source: 'src/repo/compare/unity/inspector.rs',
+      render: () => unityComparison(unity.prefabDiff, 'inspector', { view: { property: { width: 236, handle: 'dragging' } } }),
+    },
+    {
       id: 'unity-options',
       title: 'Unity — view options',
       about: "The ⋯ of a Unity comparison holds its own options, for every Unity file in every tab. Hide what Unity changes on its own is on by default: Unity rewrites values on save that nobody changed, such as floats that round differently (0.99999994 for 1), prefab overrides in another order, a serializedVersion bump or editor-only fields; the view bar says how many such changes are hidden. Show unchanged properties lists the whole component, not only its changed rows. Show file IDs adds the fileID of each object and component, for when YAML has to be read next to it.",

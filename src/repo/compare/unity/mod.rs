@@ -6,6 +6,7 @@ mod inspector;
 mod options;
 mod scene;
 mod sheet;
+mod widths;
 
 use std::{collections::HashSet, sync::Arc};
 

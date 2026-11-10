@@ -1184,6 +1184,18 @@ const Catalog = (() => {
           ],
         },
         {
+          name: 'ResizeHandle',
+          code: 'repo::compare::unity::inspector::divider_at',
+          source: 'src/repo/compare/unity/inspector.rs',
+          about: 'The kit’s divider, on the line between the Hierarchy and the Inspector and on the line between Property and Before in the Inspector’s header: a hairline at rest, with a hit band 4 px wider on each side and a resize arrow. A pill grows on it when the pointer is over it, longer and more solid when pressed and while dragging.',
+          variants: [
+            ['At rest', () => C.ResizeHandle(), { w: 40, h: 80 }],
+            ['Hovered', () => C.ResizeHandle({ state: 'hovered' }), { w: 40, h: 80 }],
+            ['Pressed', () => C.ResizeHandle({ state: 'pressed' }), { w: 40, h: 80 }],
+            ['Dragging', () => C.ResizeHandle({ state: 'dragging' }), { w: 40, h: 80 }],
+          ],
+        },
+        {
           name: 'ObjectSection',
           code: 'repo::compare::unity::inspector::object_head',
           source: 'src/repo/compare/unity/inspector.rs',
