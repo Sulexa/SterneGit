@@ -135,6 +135,7 @@ pub enum DiffHunkSeparator {
     /// A thin divider.
     Simple,
     Scope,
+    ScopeAlways,
 }
 
 /// How changed lines are marked beside the code.
@@ -1149,6 +1150,7 @@ fn render_hunk_separator(
             (hidden > 0).then(|| t!("Diff.HiddenLines", count = hidden).to_string())
         }
         DiffHunkSeparator::Scope => hunk_scope(hunks[hunk].label()).filter(|_| !code.whole_file),
+        DiffHunkSeparator::ScopeAlways => hunk_scope(hunks[hunk].label()),
         DiffHunkSeparator::Simple => {
             return match buttons {
                 Some(buttons) => row.h_6().px_2().child(buttons).into_any_element(),
@@ -1163,7 +1165,10 @@ fn render_hunk_separator(
     if label.is_none() && suffix.is_none() && buttons.is_none() {
         return div().into_any_element();
     }
-    let scope = code.hunk_separator == DiffHunkSeparator::Scope;
+    let scope = matches!(
+        code.hunk_separator,
+        DiffHunkSeparator::Scope | DiffHunkSeparator::ScopeAlways
+    );
     row.map(|row| {
         if scope {
             row.h_7()

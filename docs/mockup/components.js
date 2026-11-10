@@ -1893,8 +1893,10 @@ const C = {
       const title = marks.hidden ? widenedHeader(h.header, above, below) : h.header;
       const scope = h.header.replace(/^@@[^@]*@@\s*/, '');
       const top = marks.whole
-        ? buttons && `<div class="diff-line gap"><span class="fill"></span>${buttons}</div>`
-        : look.gaps === 'scope'
+        ? look.gaps === 'scope-always'
+          ? `<div class="diff-line gap"><span class="scope">${esc(scope)}</span>${buttons}</div>`
+          : buttons && `<div class="diff-line gap"><span class="fill"></span>${buttons}</div>`
+        : look.gaps === 'scope' || look.gaps === 'scope-always'
           ? `<div class="diff-line gap">${above > 0 ? foldButtons(above, ...(hx ? ['arrow-down', 'arrow-up'] : ['arrow-up'])) : ''}<span class="scope">${esc(scope)}</span>${buttons}</div>`
           : `<div class="diff-line hunk"><span class="text">${esc(title)}</span>${buttons}</div>${fold(above, 'arrow-up')}`;
       if (mode === 'split') {
@@ -2967,7 +2969,7 @@ const C = {
         selection,
         pointed,
         menu: pointed && labels ? C.LineMenu({ side: diff.side, selected: pointed.selected, changed: pointed.changed, left: pointed.left, top: pointed.top, hot: pointed.hot }) : '',
-        look: { gaps: 'scope', marks: 'bars', sides: textSides(diff), scroll: true, whole: true, hints: diff.hints, ...look },
+        look: { gaps: diff.unity ? 'scope-always' : 'scope', marks: 'bars', sides: textSides(diff), scroll: true, whole: true, hints: diff.hints, ...look },
       });
       const whole = look.whole !== false && diff.unchanged && diff.hunks.length;
       const top = whole ? wholeFileTop(diff.hunks) : undefined;

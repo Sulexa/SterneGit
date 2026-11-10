@@ -629,7 +629,7 @@ const Screens = (() => {
     {
       id: 'unity-prefab-yaml',
       title: 'Unity — prefab, YAML',
-      about: "YAML shows the text Unity saved, as a text comparison with only the changed parts. The grey row above each part names the object and the component it belongs to (Slime › Slime Controller) instead of a YAML header, and every fileID and GUID has its name after the line, as a # comment: the object, the script or the asset it points to. The names are only shown, never written into the file. This is where parts of the file can be staged or discarded with Stage hunk and Discard hunk, as in any text file.",
+      about: "YAML shows the text Unity saved as a text comparison of the whole file, opened on the first change like any text file; Show the whole file in the ⋯ menu folds the unchanged lines away. The grey row above each change names the object and the component it belongs to (Slime › Slime Controller), and stays when the whole file is shown, since the YAML around a change rarely says whose it is. Every fileID and GUID has its name after the line, as a # comment: the object, the script or the asset it points to. The names are only shown, never written into the file. This is where parts of the file can be staged or discarded with Stage hunk and Discard hunk, as in any text file.",
       source: 'src/unity/hints.rs',
       render: () => unityComparison(unity.prefabYaml, 'yaml'),
     },

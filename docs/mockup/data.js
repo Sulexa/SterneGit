@@ -841,12 +841,76 @@ const Sample = (() => {
     ],
   };
 
+  const prefabYamlAround = [
+    [208, ['  m_SortingLayerID: 0', '  m_SortingOrder: 2', '  m_Sprite: {fileID: 21300000, guid: 9a8b7c6d5e4f40312a1b0c9d8e7f6a5b, type: 3}', '--- !u!50 &5208833104513330127']],
+    [
+      219,
+      [
+        '  m_AngularDamping: 0.05',
+        '  m_Material: {fileID: 0}',
+        '  m_IncludeLayers:',
+        '    serializedVersion: 2',
+        '    m_Bits: 0',
+        '  m_ExcludeLayers:',
+        '    serializedVersion: 2',
+        '    m_Bits: 0',
+        '  m_Interpolate: 1',
+        '  m_SleepingMode: 1',
+        '  m_CollisionDetection: 1',
+        '  m_Constraints: 4',
+        '--- !u!95 &1592374480263370021',
+        'Animator:',
+        '  serializedVersion: 7',
+        '  m_ObjectHideFlags: 0',
+        '  m_GameObject: {fileID: 3381795302254875041}',
+        '  m_Enabled: 1',
+        '  m_Avatar: {fileID: 0}',
+        '  m_Controller: {fileID: 9100000, guid: 5e4d3c2b1a0948f7e6d5c4b3a2918070, type: 2}',
+        '  m_CullingMode: 0',
+        '  m_UpdateMode: 0',
+        '  m_ApplyRootMotion: 0',
+        '  m_LinearVelocityBlending: 0',
+        '  m_StabilizeFeet: 0',
+        '  m_WarningMessage: ',
+        '  m_KeepAnimatorStateOnDisable: 0',
+        '--- !u!114 &8045172693318120554',
+      ],
+    ],
+    [
+      257,
+      [
+        '  hurtSound: {fileID: 8300000, guid: 1b2c3d4e5f60718293a4b5c6d7e8f901, type: 3}',
+        '  invincibleTime: 0.6',
+        '  knockback: {x: 4, y: 3}',
+        '--- !u!4 &1148820317265581290',
+        'Transform:',
+        '  m_ObjectHideFlags: 0',
+        '  m_GameObject: {fileID: 3381795302254875041}',
+        '  serializedVersion: 2',
+        '  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}',
+        '  m_LocalPosition: {x: 0, y: 0, z: 0}',
+        '  m_LocalScale: {x: 1, y: 1, z: 1}',
+        '  m_ConstrainProportionsScale: 0',
+        '  m_Children: []',
+        '  m_Father: {fileID: 0}',
+      ],
+    ],
+  ];
+
   const prefabYaml = {
     ...prefabDiff,
     kind: 'text',
     lines: 412,
+    unchanged: (n) => {
+      if (n < 1 || n > 412) return undefined;
+      const block = prefabYamlAround.find(([from, lines]) => n >= from && n < from + lines.length);
+      return block ? block[1][n - block[0]] : '  m_ObjectHideFlags: 0';
+    },
     hints: [
       ['fileID: 3381795302254875041', 'Slime'],
+      ['guid: 9a8b7c6d5e4f40312a1b0c9d8e7f6a5b', 'Slime.png'],
+      ['guid: 5e4d3c2b1a0948f7e6d5c4b3a2918070', 'Slime.controller'],
+      ['guid: 1b2c3d4e5f60718293a4b5c6d7e8f901', 'Hurt.wav'],
       ['guid: 4f1d0c7a2b9e4e3f8a6b5c4d3e2f1a09', 'SlimeController.cs'],
       ['fileID: 4823015530731772630', 'Crown (Transform)'],
       ['fileID: 2290457312861453377', 'Crown (Sprite Renderer)'],

@@ -148,7 +148,8 @@ impl Repo {
         );
         let _ = std::fs::remove_dir_all(&folder);
         let _ = self;
-        Ok(String::from_utf8_lossy(&output?).into_owned())
+        let patch = String::from_utf8_lossy(&output?).into_owned();
+        Ok(with_whole_file(&patch, after).unwrap_or(patch))
     }
 
     pub(crate) fn file_patch_with(
@@ -310,6 +311,24 @@ mod tests {
         for patch in [unstaged, committed, texts] {
             assert_eq!(added_and_removed_lines(&patch), (INSERTED_LINES, 0));
         }
+        Ok(())
+    }
+
+    #[test]
+    fn the_patch_between_two_texts_shows_every_line_of_the_new_one() -> Result<()> {
+        let scratch = ScratchRepo::new("whole-texts")?;
+        scratch.write("seed.txt", "seed\n")?;
+        scratch.git(&["add", "seed.txt"])?;
+        scratch.commit("Seed")?;
+        let (repo, _) = scratch.open()?;
+        let after = lookalike_blocks_with_insertions();
+        let patch = repo.texts_patch(&lookalike_blocks(), &after, "shop.json")?;
+        let shown: Vec<&str> = patch
+            .lines()
+            .skip_while(|line| !line.starts_with("@@ "))
+            .filter_map(|line| line.strip_prefix(' ').or_else(|| line.strip_prefix('+')))
+            .collect();
+        assert_eq!(shown, after.lines().collect::<Vec<_>>());
         Ok(())
     }
 

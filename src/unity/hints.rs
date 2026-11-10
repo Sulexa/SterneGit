@@ -168,4 +168,18 @@ Rigidbody2D:
         assert!(annotated.contains("type: 3}  # slime.png\n"), "{annotated}");
         assert!(annotated.contains("+  m_Mass: 1.4\n"));
     }
+
+    #[test]
+    fn a_part_spread_over_the_whole_file_is_named_after_the_object_of_its_change() {
+        let docs = documents(AFTER);
+        let mut lookup = Lookup::default();
+        lookup.objects = object_names(&docs, &lookup.assets);
+        let mut lines = AFTER.lines().map(|line| format!(" {line}\n")).collect::<Vec<_>>();
+        lines[10] = "-  m_Mass: 1\n+  m_Mass: 1.4\n".to_owned();
+        let patch = format!("diff --git a/S.prefab b/S.prefab\n--- a/S.prefab\n+++ b/S.prefab\n@@ -1,12 +1,12 @@ GameObject:\n{}", lines.concat());
+        let annotated = Scopes::new(&docs, &docs, &lookup).annotate(&patch);
+        assert!(annotated.contains("@@ -1,12 +1,12 @@ Slime › Rigidbody 2D\n"), "{annotated}");
+        assert!(annotated.contains("   - component: {fileID: 500}  # Slime (Rigidbody 2D)\n"), "{annotated}");
+        assert!(annotated.contains("   m_GameObject: {fileID: 100}  # Slime\n"), "{annotated}");
+    }
 }

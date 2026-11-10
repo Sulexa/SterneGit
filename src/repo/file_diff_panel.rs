@@ -64,7 +64,6 @@ const TEXTS: PatchTexts = PatchTexts {
 };
 
 const ROWS_ABOVE_A_CHANGE: usize = 8;
-const UNITY_CONTEXT_LINES: usize = 3;
 const SIDES_HEIGHT: f32 = 32.;
 
 pub(crate) enum FileDiffEvent {
@@ -277,19 +276,6 @@ impl FileDiffPanel {
         UnityKind::of(path).is_some() && !self.not_unity.contains(path)
     }
 
-    fn context_lines(&self, options: TextOptions) -> Option<usize> {
-        if self.unity_text.is_some() {
-            Some(UNITY_CONTEXT_LINES)
-        } else {
-            options.context_lines()
-        }
-    }
-
-    fn sync_context_lines(&mut self, cx: &mut Context<Self>) {
-        let lines = self.context_lines(TextOptions::current(cx));
-        self.diff.update(cx, |state, cx| state.set_context_lines(lines, cx));
-    }
-
     #[allow(clippy::too_many_arguments)]
     fn open_working_text(
         &mut self,
@@ -308,7 +294,6 @@ impl FileDiffPanel {
         self.leave_media(cx);
         if unity.is_none() {
             self.unity_text = None;
-            self.sync_context_lines(cx);
         }
         let binary = working_request(MediaView::Other, &change, side, staged_too);
         let repo_for_binary = repo.clone();
@@ -318,18 +303,13 @@ impl FileDiffPanel {
         let task = run_in_background(
             cx,
             move || -> anyhow::Result<(WorkingPatch, Option<Arc<UnityFiles>>)> {
-                match &unity {
-                    Some(request) => {
-                        let files = Arc::new(read_unity(&repo, request)?);
-                        let patch = repo.file_patch_with(&change, side, whitespace)?;
-                        let patch = unity_patch(&repo, &files, patch)?;
-                        Ok((working_patch(patch)?, Some(files)))
-                    }
-                    None => {
-                        let patch = repo.file_patch_with(&change, side, whitespace)?;
-                        Ok((working_patch(spread_working(&repo, patch, &change, side))?, None))
-                    }
-                }
+                let files = unity.as_ref().map(|request| read_unity(&repo, request).map(Arc::new)).transpose()?;
+                let patch = spread_working(&repo, repo.file_patch_with(&change, side, whitespace)?, &change, side);
+                let patch = match &files {
+                    Some(files) => unity_patch(&repo, files, patch)?,
+                    None => patch,
+                };
+                Ok((working_patch(patch)?, files))
             },
             move |this, result: anyhow::Result<(WorkingPatch, Option<Arc<UnityFiles>>)>, cx| {
                 if let Err(error) = &result
@@ -347,7 +327,6 @@ impl FileDiffPanel {
                 }
                 let stats = result.map(|(patch, files)| {
                     this.unity_text = files;
-                    this.sync_context_lines(cx);
                     let stats = PatchStats::of(&patch.files);
                     this.parts = patch.hunks.map(|hunks| WorkingParts {
                         side,
@@ -441,20 +420,19 @@ impl FileDiffPanel {
     }
 
     fn reopen(&mut self, cx: &mut Context<Self>) {
-        match &self.compared {
+        match self.compared.take() {
             Some(Compared::WorkingFile(open)) => {
-                let open = open.clone();
                 let repository = self.repository.read(cx);
                 let change = repository
                     .changes()
                     .and_then(|changes| changes.find(open.side, &open.path))
                     .cloned();
-                if let (Some(repo), Some(change)) = (repository.repo().cloned(), change) {
-                    self.open_working_file(&repo, change, open.side, cx);
+                match (repository.repo().cloned(), change) {
+                    (Some(repo), Some(change)) => self.open_working_file(&repo, change, open.side, cx),
+                    _ => self.compared = Some(Compared::WorkingFile(open)),
                 }
             }
             Some(Compared::CommitFile { id, baseline, short_id, file }) => {
-                let (id, baseline, short_id, file) = (*id, *baseline, short_id.clone(), file.clone());
                 self.open_commit_file(id, baseline, short_id, file, cx);
             }
             None => {}
@@ -758,7 +736,6 @@ impl FileDiffPanel {
             return;
         }
         self.unity_text = None;
-        self.sync_context_lines(cx);
         let view = media_view(file.path()).or_else(|| file.is_binary().then_some(MediaView::Other));
         if let Some(view) = view {
             let reload = self.shows_commit_file(id, file.path());
@@ -1295,6 +1272,9 @@ impl FileDiffPanel {
                     .map(|path| OsStr::new(path.as_ref()))
                     .collect();
                 let mut text = repo.commit_file_patch(id, baseline, &paths, whitespace)?;
+                if spreads(kind) {
+                    text = repo.with_whole_file(text, Revision::Commit(id), OsStr::new(path.as_ref()));
+                }
                 let mut files = None;
                 if let Some(request) = &unity_request {
                     let read = Arc::new(read_unity(&repo, request)?);
@@ -1303,8 +1283,6 @@ impl FileDiffPanel {
                         FilePatch::Conflicted { contents, .. } => contents,
                     };
                     files = Some(read);
-                } else if spreads(kind) {
-                    text = repo.with_whole_file(text, Revision::Commit(id), OsStr::new(path.as_ref()));
                 }
                 let parsed = parse_patch(&text)?;
                 let found = parsed.iter().find(|file| *file.path() == path).cloned().or_else(|| files.as_ref().and(parsed.into_iter().next()));
@@ -1323,11 +1301,7 @@ impl FileDiffPanel {
                 let Ok((reread, unity_files)) = result else {
                     return;
                 };
-                let entered_unity = unity_files.is_some() != this.unity_text.is_some();
                 this.unity_text = unity_files;
-                if entered_unity {
-                    this.sync_context_lines(cx);
-                }
                 let Some(Compared::CommitFile { file: shown, .. }) = &mut this.compared else {
                     return;
                 };
@@ -1358,10 +1332,9 @@ impl FileDiffPanel {
 
     fn apply_options(&mut self, cx: &mut Context<Self>) {
         let options = TextOptions::current(cx);
-        let lines = self.context_lines(options);
         self.diff.update(cx, |state, cx| {
             state.set_inline_unit(options.inline_unit(), cx);
-            state.set_context_lines(lines, cx);
+            state.set_context_lines(options.context_lines(), cx);
         });
         if options.whitespace() != self.whitespace {
             self.reread(cx);
@@ -1486,7 +1459,11 @@ impl FileDiffPanel {
             .line_number(true)
             .soft_wrap(TextOptions::current(cx).wraps())
             .header_visible(false)
-            .hunk_separator(DiffHunkSeparator::Scope)
+            .hunk_separator(if self.unity_text.is_some() {
+                DiffHunkSeparator::ScopeAlways
+            } else {
+                DiffHunkSeparator::Scope
+            })
             .change_indicator(DiffChangeIndicator::Bars)
             .border_0();
         let Some(actions) = actions else {
