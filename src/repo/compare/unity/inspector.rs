@@ -1,3 +1,5 @@
+use std::ops::Range;
+
 use gpui_kit::{
     AnyElement, App, Context, Div, InteractiveElement as _, IntoElement, ParentElement as _, SharedString,
     StatefulInteractiveElement as _, Styled as _, Window,
@@ -7,9 +9,9 @@ use gpui_kit::{
         button::{Button, ButtonVariants as _},
         h_flex, v_flex,
     },
-    div,
+    div, list,
     prelude::FluentBuilder as _,
-    px,
+    px, uniform_list,
 };
 
 use super::{
@@ -32,10 +34,20 @@ const INDENT: f32 = 16.;
 const PART_INDENT: f32 = 28.;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Flat {
+pub(super) enum Flat {
     Object(usize),
     Part(usize, usize),
     Row(usize, usize, usize),
+}
+
+impl From<Anchor> for Flat {
+    fn from(anchor: Anchor) -> Self {
+        match (anchor.part, anchor.row) {
+            (Some(part), Some(row)) => Flat::Row(anchor.object, part, row),
+            (Some(part), None) => Flat::Part(anchor.object, part),
+            _ => Flat::Object(anchor.object),
+        }
+    }
 }
 
 fn is_open(compare: &UnityCompare, object: &ObjectChange) -> bool {
@@ -57,22 +69,33 @@ fn flat_rows(compare: &UnityCompare) -> Vec<Flat> {
     rows
 }
 
+pub(super) fn relist(compare: &mut UnityCompare) {
+    let top = compare.rows.logical_scroll_top();
+    compare.flat = flat_rows(compare);
+    compare.rows.reset(compare.flat.len());
+    compare.rows.scroll_to(top);
+}
+
+pub(super) fn refold(compare: &mut UnityCompare) {
+    let flat = flat_rows(compare);
+    let (replaced, count) = changed_span(&compare.flat, &flat);
+    compare.rows.splice(replaced, count);
+    compare.flat = flat;
+}
+
+fn changed_span(old: &[Flat], new: &[Flat]) -> (Range<usize>, usize) {
+    let start = old.iter().zip(new).take_while(|(old, new)| old == new).count();
+    let end = old[start..].iter().rev().zip(new[start..].iter().rev()).take_while(|(old, new)| old == new).count();
+    (start..old.len() - end, new.len() - start - end)
+}
+
 pub(super) fn flat_index(compare: &UnityCompare, anchor: Anchor) -> Option<usize> {
-    let wanted = match (anchor.part, anchor.row) {
-        (Some(part), Some(row)) => Flat::Row(anchor.object, part, row),
-        (Some(part), None) => Flat::Part(anchor.object, part),
-        _ => Flat::Object(anchor.object),
-    };
-    flat_rows(compare).iter().position(|row| *row == wanted)
+    let wanted = Flat::from(anchor);
+    compare.flat.iter().position(|row| *row == wanted)
 }
 
 fn current_flat(compare: &UnityCompare) -> Option<Flat> {
-    let anchor = compare.comparison.anchors.get(compare.current)?;
-    Some(match (anchor.part, anchor.row) {
-        (Some(part), Some(row)) => Flat::Row(anchor.object, part, row),
-        (Some(part), None) => Flat::Part(anchor.object, part),
-        _ => Flat::Object(anchor.object),
-    })
+    compare.comparison.anchors.get(compare.current).copied().map(Flat::from)
 }
 
 pub(super) fn sides_row(sources: &[SharedString; 2], property: f32, cx: &App) -> AnyElement {
@@ -254,11 +277,13 @@ fn visible_tree(compare: &UnityCompare) -> Vec<&TreeRow> {
     out
 }
 
-fn hierarchy(compare: &UnityCompare, cx: &mut Context<UnityCompare>) -> AnyElement {
+fn tree_rows(compare: &UnityCompare, range: Range<usize>, cx: &mut Context<UnityCompare>) -> Vec<AnyElement> {
     let theme = cx.theme();
     let muted = theme.muted_foreground;
-    let rows: Vec<AnyElement> = visible_tree(compare)
+    visible_tree(compare)
         .into_iter()
+        .skip(range.start)
+        .take(range.len())
         .map(|row| {
             let key = row.key;
             let open = !compare.collapsed.contains(&key);
@@ -299,7 +324,13 @@ fn hierarchy(compare: &UnityCompare, cx: &mut Context<UnityCompare>) -> AnyEleme
                 .on_click(cx.listener(move |this, _, _, cx| this.reveal(key, cx)))
                 .into_any_element()
         })
-        .collect();
+        .collect()
+}
+
+fn hierarchy(compare: &UnityCompare, cx: &mut Context<UnityCompare>) -> AnyElement {
+    let theme = cx.theme();
+    let muted = theme.muted_foreground;
+    let shown = visible_tree(compare).len();
     let tally = [(State::Added, "added"), (State::Removed, "removed"), (State::Changed, "changed")]
         .iter()
         .map(|(state, word)| (compare.comparison.tree.iter().filter(|row| row.state == *state).count(), *word))
@@ -338,7 +369,11 @@ fn hierarchy(compare: &UnityCompare, cx: &mut Context<UnityCompare>) -> AnyEleme
                         })),
                 ),
         )
-        .child(div().id("unity-tree").flex_1().min_h_0().overflow_y_scroll().children(rows))
+        .child(
+            uniform_list("unity-tree", shown, cx.processor(|this, range, _, cx| tree_rows(this, range, cx)))
+                .flex_1()
+                .min_h_0(),
+        )
         .child(
             h_flex()
                 .flex_none()
@@ -353,27 +388,23 @@ fn hierarchy(compare: &UnityCompare, cx: &mut Context<UnityCompare>) -> AnyEleme
         .into_any_element()
 }
 
-pub(super) fn render(compare: &mut UnityCompare, _: &mut Window, cx: &mut Context<UnityCompare>) -> AnyElement {
-    let current = current_flat(compare);
-    let flat = flat_rows(compare);
-    let mut rows: Vec<AnyElement> = Vec::with_capacity(flat.len());
-    for item in flat {
-        let element = match item {
-            Flat::Object(object_ix) => {
-                let object = compare.comparison.objects[object_ix].clone();
-                object_head(compare, &object, object_ix, current == Some(item), cx)
-            }
-            Flat::Part(object_ix, part_ix) => {
-                let part = &compare.comparison.objects[object_ix].parts[part_ix];
-                part_head(part, PART_INDENT, cx).when(current == Some(item), |this| this.border_l_2().border_color(cx.theme().blue)).into_any_element()
-            }
-            Flat::Row(object_ix, part_ix, row_ix) => {
-                let row = &compare.comparison.objects[object_ix].parts[part_ix].rows[row_ix];
-                property_row(row, PROPERTY_WIDTH, PART_INDENT, current == Some(item), cx).into_any_element()
-            }
-        };
-        rows.push(element);
+fn listed_row(compare: &UnityCompare, ix: usize, cx: &mut Context<UnityCompare>) -> AnyElement {
+    let item = compare.flat[ix];
+    let current = current_flat(compare) == Some(item);
+    match item {
+        Flat::Object(object_ix) => object_head(compare, &compare.comparison.objects[object_ix], object_ix, current, cx),
+        Flat::Part(object_ix, part_ix) => {
+            let part = &compare.comparison.objects[object_ix].parts[part_ix];
+            part_head(part, PART_INDENT, cx).when(current, |this| this.border_l_2().border_color(cx.theme().blue)).into_any_element()
+        }
+        Flat::Row(object_ix, part_ix, row_ix) => {
+            let row = &compare.comparison.objects[object_ix].parts[part_ix].rows[row_ix];
+            property_row(row, PROPERTY_WIDTH, PART_INDENT, current, cx).into_any_element()
+        }
     }
+}
+
+pub(super) fn render(compare: &mut UnityCompare, _: &mut Window, cx: &mut Context<UnityCompare>) -> AnyElement {
     let empty = compare.comparison.objects.is_empty();
     let body = if empty {
         let hidden = compare.comparison.hidden;
@@ -385,12 +416,9 @@ pub(super) fn render(compare: &mut UnityCompare, _: &mut Window, cx: &mut Contex
         crate::ui::hint(message, cx)
     } else {
         div()
-            .id("unity-inspector")
             .flex_1()
             .min_h_0()
-            .overflow_y_scroll()
-            .track_scroll(&compare.scroll)
-            .children(rows)
+            .child(list(compare.rows.clone(), cx.processor(|this, ix, _, cx| listed_row(this, ix, cx))).size_full())
             .into_any_element()
     };
     let warning = compare.files.guid_change.clone().map(|change| guid::warning(change, cx));
@@ -406,4 +434,18 @@ pub(super) fn render(compare: &mut UnityCompare, _: &mut Window, cx: &mut Contex
         .when(!compare.comparison.tree.is_empty(), |this| this.child(hierarchy(compare, cx)))
         .child(inspector)
         .into_any_element()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Flat, changed_span};
+
+    #[test]
+    fn folding_an_object_replaces_only_its_own_rows() {
+        let folded = [Flat::Object(0), Flat::Object(1), Flat::Object(2)];
+        let unfolded = [Flat::Object(0), Flat::Object(1), Flat::Part(1, 0), Flat::Row(1, 0, 0), Flat::Object(2)];
+        assert_eq!(changed_span(&folded, &unfolded), (2..2, 2));
+        assert_eq!(changed_span(&unfolded, &folded), (2..4, 0));
+        assert_eq!(changed_span(&folded, &folded), (3..3, 0));
+    }
 }

@@ -10,8 +10,8 @@ mod sheet;
 use std::{collections::HashSet, sync::Arc};
 
 use gpui_kit::{
-    AnyElement, App, Bounds, Context, EventEmitter, IntoElement, Pixels, Render, ScrollHandle, SharedString,
-    Subscription, Window, assets::IconName,
+    AnyElement, App, Bounds, Context, EventEmitter, IntoElement, ListAlignment, ListOffset, ListState, Pixels, Render,
+    ScrollHandle, SharedString, Subscription, Window, assets::IconName, px,
 };
 
 pub(crate) use graph::version_picker;
@@ -19,6 +19,7 @@ pub(crate) use options::{UnityOptions, unity_options_menu};
 
 use self::{
     graph::GraphState,
+    inspector::Flat,
     scene::SceneState,
     sheet::Sheet,
 };
@@ -103,6 +104,8 @@ pub(crate) fn modes_for(shape: Shape, kind: UnityKind) -> Vec<ModeLook> {
     if kind.has_hierarchy() && shape == Shape::Objects { vec![main, scene, text] } else { vec![main, text] }
 }
 
+const MEASURED_AHEAD: f32 = 1000.;
+
 pub(crate) enum UnityEvent {
     KeepOldGuid(GuidChange),
     PointToNewGuid(GuidChange),
@@ -124,7 +127,8 @@ pub(crate) struct UnityCompare {
     collapsed: HashSet<i64>,
     changed_only: bool,
     picked: Option<i64>,
-    scroll: ScrollHandle,
+    flat: Vec<Flat>,
+    rows: ListState,
     changes_scroll: ScrollHandle,
     scene: SceneState,
     curves: Sheet,
@@ -161,7 +165,8 @@ impl UnityCompare {
             collapsed: HashSet::new(),
             changed_only: false,
             picked: None,
-            scroll: ScrollHandle::new(),
+            flat: Vec::new(),
+            rows: ListState::new(0, ListAlignment::Top, px(MEASURED_AHEAD)),
             changes_scroll: ScrollHandle::new(),
             curves: Sheet::default(),
             curves_bounds: None,
@@ -176,7 +181,10 @@ impl UnityCompare {
     fn recompute(&mut self) {
         let options = self.options.options();
         match self.files.shape {
-            Shape::Objects => self.comparison = self.files.compare(options),
+            Shape::Objects => {
+                self.comparison = self.files.compare(options);
+                inspector::relist(self);
+            }
             Shape::Clip => self.clip = self.files.clip(options),
             Shape::Controller | Shape::Graph => {
                 self.graph = self.files.graph(self.layer, options);
@@ -281,12 +289,12 @@ impl UnityCompare {
         };
         if let Some(object) = self.comparison.objects.get(anchor.object) {
             self.picked = Some(object.key);
-            if object.state == State::Removed && anchor.part.is_some() {
-                self.unfolded.insert(object.key);
+            if object.state == State::Removed && anchor.part.is_some() && self.unfolded.insert(object.key) {
+                inspector::refold(self);
             }
         }
         if let Some(row) = inspector::flat_index(self, anchor) {
-            self.scroll.scroll_to_top_of_item(row.saturating_sub(1));
+            self.scroll_to_row(row.saturating_sub(1));
         }
     }
 
@@ -392,6 +400,7 @@ impl UnityCompare {
         if !self.unfolded.remove(&key) {
             self.unfolded.insert(key);
         }
+        inspector::refold(self);
         cx.notify();
     }
 
@@ -414,8 +423,15 @@ impl UnityCompare {
                 },
             )
         {
-            self.scroll.scroll_to_top_of_item(row);
+            self.scroll_to_row(row);
         }
+    }
+
+    fn scroll_to_row(&self, item_ix: usize) {
+        self.rows.scroll_to(ListOffset {
+            item_ix,
+            offset_in_item: px(0.),
+        });
     }
 
     fn choose_change(&mut self, ix: usize, cx: &mut Context<Self>) {
