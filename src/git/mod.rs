@@ -282,6 +282,55 @@ pub(crate) mod scratch {
             let _ = std::fs::remove_dir_all(&self.dir);
         }
     }
+
+    const LOOKALIKE_BLOCKS: usize = 100;
+    const BLOCKS_BETWEEN_INSERTIONS: usize = 10;
+    const BLOCKS_PER_INSERTION: usize = 10;
+    const LINES_PER_BLOCK: usize = 8;
+    const FIRST_INSERTED_BLOCK: usize = 1_000_000;
+    pub(crate) const INSERTED_LINES: usize =
+        LOOKALIKE_BLOCKS / BLOCKS_BETWEEN_INSERTIONS * BLOCKS_PER_INSERTION * LINES_PER_BLOCK;
+
+    pub(crate) fn lookalike_blocks() -> String {
+        (0..LOOKALIKE_BLOCKS).map(lookalike_block).collect()
+    }
+
+    pub(crate) fn lookalike_blocks_with_insertions() -> String {
+        let mut inserted = FIRST_INSERTED_BLOCK..;
+        (0..LOOKALIKE_BLOCKS)
+            .flat_map(|id| {
+                let insertion = match id % BLOCKS_BETWEEN_INSERTIONS == BLOCKS_BETWEEN_INSERTIONS / 2 {
+                    true => inserted.by_ref().take(BLOCKS_PER_INSERTION).collect(),
+                    false => Vec::new(),
+                };
+                insertion.into_iter().chain([id])
+            })
+            .map(lookalike_block)
+            .collect()
+    }
+
+    fn lookalike_block(id: usize) -> String {
+        let kind = id % 11;
+        let value = kind % 5;
+        format!(
+            "--- !u!114 &{id}\nMonoBehaviour:\n  m_ObjectHideFlags: 0\n  m_GameObject: {{fileID: {kind}}}\n  m_Enabled: 1\n  m_Value: {value}\n  m_Color: {{r: 1, g: 1, b: 1, a: 1}}\n  m_Items: []\n"
+        )
+    }
+
+    pub(crate) fn added_and_removed_lines(patch: &str) -> (usize, usize) {
+        let mut in_hunk = false;
+        let (mut added, mut removed) = (0, 0);
+        for line in patch.lines() {
+            match line.as_bytes().first() {
+                _ if line.starts_with("diff ") => in_hunk = false,
+                _ if line.starts_with("@@") => in_hunk = true,
+                Some(b'+') if in_hunk => added += 1,
+                Some(b'-') if in_hunk => removed += 1,
+                _ => {}
+            }
+        }
+        (added, removed)
+    }
 }
 
 #[cfg(test)]

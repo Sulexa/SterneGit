@@ -6,7 +6,7 @@ use gpui_kit::SharedString;
 
 use super::{
     ChangeKind, Commit, Repo,
-    command::{Exit, READ_ONLY, run},
+    command::{Exit, READ_ONLY, UNIQUE_LINES_FIRST, run},
     text::decode,
 };
 
@@ -20,6 +20,7 @@ const FOLLOWED_LOG: &[&str] = &[
     "--no-color",
     "--no-ext-diff",
     "--no-textconv",
+    UNIQUE_LINES_FIRST,
     "--format=%x01%H",
     "--raw",
     "--numstat",
@@ -145,7 +146,32 @@ mod tests {
     use gix::ObjectId;
 
     use super::{LineCounts, Step, followed_steps};
-    use crate::git::{ChangeKind, fixtures::id, scratch::ScratchRepo};
+    use crate::git::{
+        ChangeKind,
+        fixtures::id,
+        scratch::{INSERTED_LINES, ScratchRepo, lookalike_blocks, lookalike_blocks_with_insertions},
+    };
+
+    #[test]
+    fn blocks_inserted_between_lookalike_blocks_count_as_added_lines_only() -> Result<()> {
+        let scratch = ScratchRepo::new("lookalike-history")?;
+        scratch.write("shop.prefab", &lookalike_blocks())?;
+        scratch.git(&["add", "shop.prefab"])?;
+        scratch.commit("Add the shop")?;
+        scratch.write("shop.prefab", &lookalike_blocks_with_insertions())?;
+        scratch.git(&["commit", "--quiet", "-am", "Insert offers"])?;
+        let (repo, history) = scratch.open()?;
+        let head: Vec<ObjectId> = history.head_id.into_iter().collect();
+        let newest = repo.file_history(OsStr::new("shop.prefab"), &head)?[0].lines;
+        assert_eq!(
+            newest,
+            Some(LineCounts {
+                added: INSERTED_LINES,
+                removed: 0
+            })
+        );
+        Ok(())
+    }
 
     fn summary(
         repo: &crate::git::Repo,

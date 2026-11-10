@@ -6,7 +6,7 @@ use gpui_kit::SharedString;
 
 use super::{
     ChangeKind, FileChange, Repo, Side,
-    command::{Exit, READ_ONLY, run, run_text},
+    command::{Exit, READ_ONLY, UNIQUE_LINES_FIRST, run, run_text},
     context::with_whole_file,
     hunks::Hunks,
     text::decode,
@@ -27,6 +27,7 @@ const COMMIT_PATCH: &[&str] = &[
     "--format=",
     "--first-parent",
     "--patch",
+    UNIQUE_LINES_FIRST,
     "--find-renames",
     "--src-prefix=a/",
     "--dst-prefix=b/",
@@ -40,6 +41,7 @@ const FILE_PATCH: &[&str] = &[
     "--no-color",
     "--no-ext-diff",
     "--no-textconv",
+    UNIQUE_LINES_FIRST,
     "--src-prefix=a/",
     "--dst-prefix=b/",
 ];
@@ -137,6 +139,7 @@ impl Repo {
                 "diff",
                 "--no-index",
                 "--no-color",
+                UNIQUE_LINES_FIRST,
                 "--",
                 &format!("a/{name}"),
                 &format!("b/{name}"),
@@ -273,9 +276,42 @@ mod tests {
 
     use anyhow::Result;
 
-    use crate::git::{Side, scratch::ScratchRepo};
+    use super::FilePatch;
+    use crate::git::{
+        Side,
+        scratch::{
+            INSERTED_LINES, ScratchRepo, added_and_removed_lines, lookalike_blocks,
+            lookalike_blocks_with_insertions,
+        },
+    };
 
     const LONG_AGO: Duration = Duration::from_secs(1_000_000_000);
+
+    #[test]
+    fn blocks_inserted_between_lookalike_blocks_show_as_added_lines_only() -> Result<()> {
+        let scratch = ScratchRepo::new("lookalike-blocks")?;
+        scratch.write("shop.prefab", &lookalike_blocks())?;
+        scratch.git(&["add", "shop.prefab"])?;
+        scratch.commit("Add the shop")?;
+        scratch.write("shop.prefab", &lookalike_blocks_with_insertions())?;
+        let (repo, _) = scratch.open()?;
+        let edited = repo.status()?.unstaged[0].clone();
+        let FilePatch::Diff { text: unstaged, .. } = repo.file_patch(&edited, Side::Unstaged)? else {
+            panic!("the edit isn't a conflict");
+        };
+        scratch.git(&["commit", "--quiet", "-am", "Insert offers"])?;
+        let (repo, history) = scratch.open()?;
+        let committed = repo.commit_details(history.commits[0].id)?.patch;
+        let texts = repo.texts_patch(
+            &lookalike_blocks(),
+            &lookalike_blocks_with_insertions(),
+            "shop.prefab",
+        )?;
+        for patch in [unstaged, committed, texts] {
+            assert_eq!(added_and_removed_lines(&patch), (INSERTED_LINES, 0));
+        }
+        Ok(())
+    }
 
     #[test]
     fn reading_the_repository_leaves_its_index_alone() -> Result<()> {

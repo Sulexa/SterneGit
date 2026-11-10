@@ -10,6 +10,7 @@ use anyhow::{Context as _, Result, bail};
 use super::{access::Access, text::decode};
 
 pub(crate) const READ_ONLY: &str = "--no-optional-locks";
+pub(crate) const UNIQUE_LINES_FIRST: &str = "--histogram";
 const NO_EDITOR: &str = ":";
 const GIT_MISSING: &str = "Couldn't run git. Is it installed and on PATH?";
 
