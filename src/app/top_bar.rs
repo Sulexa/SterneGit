@@ -1,5 +1,6 @@
 use gpui_kit::{
-    AnyElement, App, Entity, IntoElement, ParentElement as _, RenderOnce, SharedString, Styled as _, Window,
+    AnyElement, App, Entity, InteractiveElement as _, IntoElement, ParentElement as _, RenderOnce, SharedString,
+    Styled as _, Window,
     assets::IconName,
     component::{
         ActiveTheme as _, Disableable as _, Icon, Sizable as _, StyledExt as _, TitleBar,
@@ -181,5 +182,5 @@ fn update_button(status: &Status, cx: &App) -> Option<AnyElement> {
         }
         _ => return None,
     };
-    Some(h_flex().flex_none().gap_1().children(buttons).into_any_element())
+    Some(h_flex().flex_none().gap_1().occlude().children(buttons).into_any_element())
 }
