@@ -7,11 +7,11 @@ const Screens = (() => {
   const topBar = (extra = {}) => C.TopBar({ repository: history.name, head: history.head, ...extra });
   const tabStrip = (overrides = {}) => C.TabStrip({ tabs: tabs.map((tab, ix) => ({ ...tab, ...(overrides[ix] || {}) })), active: 0 });
 
-  const repo = ({ left, middle, right, selectedRow = null, wipSelected = false, status = {}, toolbar }) =>
+  const repo = ({ left, middle, right, selectedRow = null, picked = [], wipSelected = false, status = {}, toolbar }) =>
     C.RepoView({
       toolbar,
-      left: left ?? C.RefsList({ refs: history.refs, selectedRow, collapsed }),
-      middle: middle || C.HistoryList({ history, selectedRow, changes, wipSelected }),
+      left: left ?? C.RefsList({ refs: history.refs, selectedRow, picked, collapsed }),
+      middle: middle || C.HistoryList({ history, selectedRow, picked, changes, wipSelected }),
       right,
       status: C.RepoStatusBar({
         summary: historySummary(history),
@@ -62,6 +62,27 @@ const Screens = (() => {
       left: false,
       middle: C.FileDiffPanel({ diff: extra.diff || fileDiff, mode, selection: extra.selection, pointed: extra.pointed, menuOpen: extra.menuOpen, hot: extra.hot, look: extra.look }),
       right: C.ChangesList({ changes: extra.changes || changes, open: openFile, view: extra.view }),
+    });
+
+  const { pickedLine, pickedApart, pickedHead } = Sample;
+  const rowsOf = (from, pick) => pick.rows.map((row) => from.commits[row]);
+  const pickStatus = (pick) => ({ position: Texts.commitsPicked(pick.rows.length) });
+
+  const commitsPicked = (pick, { open, middle } = {}) =>
+    repo({
+      picked: pick.rows,
+      left: middle ? false : undefined,
+      middle,
+      right: C.PickedCommitsPanel({ commits: rowsOf(history, pick), together: pick.files && pick, open }),
+      status: pickStatus(pick),
+    });
+
+  const headPicked = () =>
+    repo({
+      left: C.RefsList({ refs: tracked.refs, selectedRow: null, picked: pickedHead.rows, collapsed }),
+      middle: C.HistoryList({ history: tracked, selectedRow: null, picked: pickedHead.rows, changes }),
+      right: C.PickedCommitsPanel({ commits: rowsOf(tracked, pickedHead), together: pickedHead }),
+      status: pickStatus(pickedHead),
     });
 
   const firstUnstaged = changes.unstaged[0];
@@ -309,6 +330,80 @@ const Screens = (() => {
           body: commitSelected(),
           overlays: C.TagDialog({ commit: history.commits[1], value: 'v0.3.0', remote: 'origin' }),
         }),
+    },
+    {
+      id: 'commits-picked',
+      title: 'Several commits picked',
+      about: "A click on a commit selects it alone, as before. Ctrl+click (Cmd+click on macOS) adds a commit to the pick or takes it out; Shift+click picks every commit row from the last one clicked to this one, and Ctrl+Shift+click adds that run to the pick. Shift+Up and Shift+Down (Shift+K, Shift+J) grow or shrink the run from the last commit clicked; a plain click goes back to one commit, Up and Down step from the commit clicked last, and Esc closes an open file, then goes back to the commit clicked first. Stashes and the uncommitted changes rows stay out of a pick: Ctrl or Shift on one selects it alone, and a run skips them. The picked rows are highlighted in the graph, and so are the refs on them in the left pane; the status bar counts them. The right pane lists the picked commits, newest first, with their authors and days; a click on one there selects it alone. When they follow one another on a single line, each one the first parent of the one above it, the pane also shows their changes together: what changed from the parent of the oldest to the newest, its files and line counts, as one commit would show them. The pick is kept on refresh as long as its commits are still in the graph. Here Sam Lee's three commits of feature/diff-view were Ctrl+clicked.",
+      source: 'src/repo/history_list.rs',
+      render: () => C.SterneGit({ topBar: topBar(), tabStrip: tabStrip(), body: commitsPicked(pickedLine) }),
+    },
+    {
+      id: 'commits-picked-apart',
+      title: 'Commits picked across lines',
+      about: "Shift+click picks the rows as the graph shows them, so a run can mix lines. Here Split the diff parser out of the commit panel was clicked, then Add Split and Unified toggles Shift+clicked: two commits of main and two of feature/diff-view. Their changes can't be added up into one comparison, so the pane lists them and says why. Their menu still copies their hashes and messages.",
+      source: 'src/repo/history_list.rs',
+      render: () => C.SterneGit({ topBar: topBar(), tabStrip: tabStrip(), body: commitsPicked(pickedApart) }),
+    },
+    {
+      id: 'commits-picked-file',
+      title: 'A file of picked commits',
+      about: "A click on a file in the changes of a pick compares it in the middle pane, as for one commit: Before is the parent of the oldest picked commit, After the newest one, and the bar says in 3 commits. Alt+Left and Alt+Right step through the files of the pick. Esc or × brings the graph back with the pick kept.",
+      source: 'src/repo/file_diff_panel.rs',
+      render: () =>
+        C.SterneGit({
+          topBar: topBar(),
+          tabStrip: tabStrip(),
+          body: commitsPicked(pickedLine, {
+            open: commitFileDiff.change.path,
+            middle: C.FileDiffPanel({
+              diff: { ...commitFileDiff, parent: pickedLine.from, commit: history.commits[pickedLine.rows[0]].id, picked: pickedLine.rows.length, additions: 87, deletions: 15 },
+              mode: 'split',
+              filePosition: [5, pickedLine.files.length],
+            }),
+          }),
+        }),
+    },
+    {
+      id: 'commits-menu',
+      title: 'Right-click on picked commits',
+      about: "A right-click on a picked commit opens a menu that acts on every picked commit; a right-click on a commit outside the pick opens the one-commit menu for it and leaves the pick as it is. Cherry-pick 3 commits onto main copies them onto main, oldest first, when main holds none of them and none is a merge. Revert takes its place when main holds every one of them, and when main holds only some, neither is offered. Squash 3 commits… is offered when they follow one another on a single line, none is a merge and a local branch holds the newest. Copy 3 hashes copies their full hashes and Copy 3 messages their whole messages, in the order the graph shows them, one per line or separated by a blank line. Check out, Create branch, Create tag and Reset need one commit, so they are left out. As for one commit, the changes in the way are stashed and brought back. When one of the commits conflicts, the OperationBar says which: Commit 2 of 3, its id and subject; Commit goes on with the rest and Abort puts main back as it was before the first. Then a notification says Cherry-picked 3 commits onto main.",
+      source: 'src/repo/commit_menu.rs',
+      render: () =>
+        C.SterneGit({
+          topBar: topBar(),
+          tabStrip: tabStrip(),
+          body: commitsPicked(pickedLine),
+          overlays: C.CommitMenu({ picked: rowsOf(history, pickedLine), current: history.head, held: 'none', line: true, left: 440, top: 268, hot: Texts.cherryPickCommits(3, history.head) }),
+        }),
+    },
+    {
+      id: 'commits-menu-head',
+      title: 'Right-click on picked commits of main',
+      about: "When main holds every picked commit, Revert 2 commits takes the place of Cherry-pick: it reverts them newest first, each in a commit of its own, a merge against its first parent. Here the two newest commits of main were picked with a click and a Shift+click; origin/main doesn't have them yet.",
+      source: 'src/repo/commit_menu.rs',
+      render: () =>
+        C.SterneGit({
+          topBar: topBar(),
+          tabStrip: tabStrip(),
+          body: headPicked(),
+          overlays: C.CommitMenu({ picked: rowsOf(tracked, pickedHead), current: tracked.head, held: 'all', line: true, left: 440, top: 186, hot: Texts.squashCommits(2) }),
+        }),
+    },
+    {
+      id: 'squash-commits',
+      title: 'Squash commits',
+      about: "Squash 2 commits… asks for the message of the one commit that takes their place: the subject of the oldest, then its description and the messages of the others, oldest first, ready to edit. The new commit has the files of the newest picked commit and the author and date of the oldest; you are its committer. As when a message is edited, it is written in place without git rebase: the commits after them, on every local branch that holds the newest, are written again on top with their own files, so nothing can conflict, and the working files, the staged changes and the stashes stay as they are. A line says what moves. When a remote branch already has the commits, a warning says the next push needs Force push; tags on them stay on the old commits, and so does a branch that holds only some of them. As in the other dialogs, Enter in the subject squashes, and so does Ctrl+Enter in the description; Esc cancels. Then the new commit is selected and a notification says Squashed 2 commits into its id.",
+      source: 'src/repo/commit_menu.rs',
+      render: () => {
+        const [newer, older] = rowsOf(tracked, pickedHead);
+        return C.SterneGit({
+          topBar: topBar(),
+          tabStrip: tabStrip(),
+          body: headPicked(),
+          overlays: C.SquashDialog({ commits: [newer, older], subject: older.subject, description: newer.subject, branches: [tracked.head] }),
+        });
+      },
     },
     {
       id: 'stashes',

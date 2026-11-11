@@ -2,7 +2,30 @@ use gix::ObjectId;
 
 use super::{History, RefLabel};
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Held {
+    All,
+    Partly,
+    Not,
+}
+
 impl History {
+    pub(crate) fn held_by_head(&self, ids: &[ObjectId]) -> Held {
+        let mut reached = vec![false; self.commits.len()];
+        if let Some(head) = self.head_id.and_then(|head| self.row_of(&head)) {
+            self.reach([head], &mut reached);
+        }
+        let held = ids
+            .iter()
+            .filter(|id| self.row_of(id).is_some_and(|row| reached[row]))
+            .count();
+        match held {
+            0 => Held::Not,
+            held if held == ids.len() => Held::All,
+            _ => Held::Partly,
+        }
+    }
+
     pub(crate) fn head_holds(&self, id: &ObjectId) -> bool {
         let Some(head) = self.head_id.and_then(|head| self.row_of(&head)) else {
             return false;
@@ -65,6 +88,7 @@ mod tests {
     use anyhow::Result;
     use gix::ObjectId;
 
+    use super::Held;
     use crate::git::{History, RefKind, RefLabel, scratch::ScratchRepo};
 
     fn branch<'a>(history: &'a History, name: &str) -> &'a RefLabel {
@@ -122,6 +146,22 @@ mod tests {
         assert!(history.head_holds(&id(&scratch, "main~1")?));
         assert!(history.head_holds(&id(&scratch, "main")?));
         assert!(!history.head_holds(&id(&scratch, "topic")?));
+        Ok(())
+    }
+
+    #[test]
+    fn head_holds_all_some_or_none_of_several_commits() -> Result<()> {
+        let scratch = ScratchRepo::new("head-holds-several")?;
+        scratch.commit("first")?;
+        scratch.git(&["switch", "--quiet", "--create=topic"])?;
+        scratch.commit("topic")?;
+        scratch.git(&["switch", "--quiet", "main"])?;
+        scratch.commit("second")?;
+        let (_, history) = scratch.open()?;
+        let (main, first, topic) = (id(&scratch, "main")?, id(&scratch, "main~1")?, id(&scratch, "topic")?);
+        assert_eq!(history.held_by_head(&[main, first]), Held::All);
+        assert_eq!(history.held_by_head(&[main, topic]), Held::Partly);
+        assert_eq!(history.held_by_head(&[topic]), Held::Not);
         Ok(())
     }
 

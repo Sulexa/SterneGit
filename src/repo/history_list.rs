@@ -1,4 +1,4 @@
-use std::{path::Path, sync::Arc};
+use std::{path::Path, rc::Rc, sync::Arc};
 
 use gix::ObjectId;
 use gpui_kit::{
@@ -19,8 +19,8 @@ use crate::{
     actions::HISTORY_CONTEXT,
     git::{History, RefLabel, ShownRef, WorkingChanges, Worktree, WorktreeChanges},
     ui::{
-        self, GraphNode, Handler, Look as _, Palette, ROW_HEIGHT, commit_subject, handler,
-        is_double_click, list_row, ref_badge, stash_badge, thousands, worktree_badge,
+        self, GraphNode, Handler, Look as _, Palette, Pick, Picked, ROW_HEIGHT, commit_subject,
+        handler, is_double_click, list_row, ref_badge, stash_badge, thousands, worktree_badge,
     },
 };
 
@@ -36,10 +36,11 @@ const ID_WIDTH: Pixels = px(56.);
 pub(crate) struct HistoryList {
     history: Arc<History>,
     selected: Option<usize>,
+    picked: Rc<Picked<ObjectId>>,
     uncommitted: Option<(Arc<WorkingChanges>, bool)>,
     focus: FocusHandle,
     scroll: UniformListScrollHandle,
-    on_select_commit: Option<Handler<ObjectId>>,
+    on_select_commit: Option<Handler<(ObjectId, Pick)>>,
     on_select_uncommitted: Option<Handler<()>>,
     on_check_out: Option<Handler<RefLabel>>,
     on_select_worktree: Option<Handler<Arc<Path>>>,
@@ -53,7 +54,7 @@ pub(crate) struct HistoryList {
 
 #[derive(Clone)]
 struct RowActions {
-    on_select: Option<Handler<ObjectId>>,
+    on_select: Option<Handler<(ObjectId, Pick)>>,
     on_check_out: Option<Handler<RefLabel>>,
     on_select_worktree: Option<Handler<Arc<Path>>>,
     menus: RefMenus,
@@ -73,6 +74,7 @@ impl HistoryList {
         Self {
             history,
             selected: None,
+            picked: Rc::default(),
             uncommitted: None,
             focus,
             scroll,
@@ -136,8 +138,8 @@ impl HistoryList {
         self
     }
 
-    pub(crate) fn selected(mut self, commit: Option<ObjectId>) -> Self {
-        self.selected = commit.and_then(|id| self.history.row_of(&id));
+    pub(crate) fn picked(mut self, picked: Rc<Picked<ObjectId>>) -> Self {
+        self.picked = picked;
         self
     }
 
@@ -154,7 +156,7 @@ impl HistoryList {
 
     pub(crate) fn on_select_commit(
         mut self,
-        callback: impl Fn(&ObjectId, &mut Window, &mut App) + 'static,
+        callback: impl Fn(&(ObjectId, Pick), &mut Window, &mut App) + 'static,
     ) -> Self {
         self.on_select_commit = Some(handler(callback));
         self
@@ -182,6 +184,7 @@ impl RenderOnce for HistoryList {
         let Self {
             history,
             selected,
+            picked,
             uncommitted,
             focus,
             scroll,
@@ -231,7 +234,7 @@ impl RenderOnce for HistoryList {
                             commit_row(
                                 &history,
                                 row,
-                                selected == Some(row),
+                                selected == Some(row) || picked.contains(&history.commits[row].id),
                                 graph_width,
                                 &palette,
                                 &actions,
@@ -351,7 +354,15 @@ fn commit_row(
                 ),
         )
         .when_some(actions.on_select.clone(), |row, on_select| {
-            row.on_click(move |_, window, cx| on_select(&id, window, cx))
+            let alone = stash.is_some();
+            row.on_click(move |event, window, cx| {
+                let modifiers = event.modifiers();
+                let pick = match alone {
+                    true => Pick::Only,
+                    false => Pick::new(modifiers.secondary(cx), modifiers.shift),
+                };
+                on_select(&(id, pick), window, cx)
+            })
         });
     match (stash, actions.stash_menu.clone(), actions.commit_menu.clone()) {
         (Some(stash), Some(stash_menu), _) => {

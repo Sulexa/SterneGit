@@ -33,4 +33,4 @@ pub(crate) use rows::{
     FilePlace, ROW_HEIGHT, SectionHeader, file_row, file_row_tagged, folder_row, list_row, tree_line,
 };
 pub(crate) use side::{BySide, SideUi};
-pub(crate) use text::{commit_subject, counted, thousands};
+pub(crate) use text::{commit_subject, counted, listed, thousands};

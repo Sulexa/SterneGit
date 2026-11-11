@@ -117,6 +117,33 @@ const Sample = (() => {
     };
   })();
 
+  const pickedLine = {
+    rows: [2, 4, 9],
+    from: commits[10].id,
+    files: [
+      { path: 'Cargo.toml', kind: 'M', additions: 2, deletions: 0, hunks: [] },
+      { path: 'src/git/patch.rs', kind: 'A', additions: 142, deletions: 0, hunks: [] },
+      { path: 'src/repo/commit_files.rs', kind: 'A', additions: 98, deletions: 0, hunks: [] },
+      { path: 'src/repo/commit_panel.rs', kind: 'M', additions: 12, deletions: 64, hunks: [] },
+      { path: 'src/repo/file_diff_panel.rs', kind: 'M', additions: 87, deletions: 15, hunks: [] },
+      { path: 'src/repo/view_bar.rs', kind: 'A', additions: 46, deletions: 0, hunks: [] },
+    ],
+  };
+
+  const pickedApart = { rows: [1, 2, 3, 4] };
+
+  const pickedHead = {
+    rows: [0, 1],
+    from: commits[3].id,
+    files: [
+      { path: 'src/git/status.rs', kind: 'A', additions: 96, deletions: 0, hunks: [] },
+      { path: 'src/repo/changes_list.rs', kind: 'A', additions: 210, deletions: 0, hunks: [] },
+      { path: 'src/repo/commit_panel.rs', kind: 'M', additions: 8, deletions: 112, hunks: [] },
+      { path: 'src/repo/mod.rs', kind: 'M', additions: 34, deletions: 6, hunks: [] },
+      { path: 'src/repo/patch_view.rs', kind: 'A', additions: 120, deletions: 0, hunks: [] },
+    ],
+  };
+
   const changes = {
     unstaged: [
       { kind: 'M', path: 'src/git/command.rs' },
@@ -1676,6 +1703,7 @@ const Sample = (() => {
 
   return {
     history, tracked, stashed, collapsed, changes, partlyStaged, draft, commitDetails, commitFileDiff, fileHistory, fileDiff, stagedHunkDiff, partlyStagedDiff, selectedLines, tabs,
+    pickedLine, pickedApart, pickedHead,
     starfall, assets, slimeDiff, crownIcon, introDiff, themeDiff, modelDiff,
     unity,
     rebasing, rebase, merge, starfallMerge, rebaseChanges, rebaseOneLeft, rebaseResolved, statusConflicts, statusMerged, slimeConflict, starfallConflicts,

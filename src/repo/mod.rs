@@ -20,12 +20,14 @@ mod navigation;
 mod operation;
 mod operation_bar;
 mod patch_view;
+mod picked_panel;
 mod pulls;
 mod ref_menus;
 mod ref_tree;
 mod refs_list;
 mod repository;
 mod saved_folds;
+mod squash_dialog;
 mod stash_menu;
 mod status_bar;
 mod tag_dialog;
@@ -62,8 +64,8 @@ use gpui_kit::{
 use crate::{
     accounts,
     actions::{
-        CloseDiff, CopyHash, Fetch, NewerCommit, NextChange, NextFile, OlderCommit, PreviousChange,
-        PreviousFile, Refresh, WholeWindow,
+        CloseDiff, CopyHash, Fetch, NewerCommit, NextChange, NextFile, OlderCommit, PickNewerCommit,
+        PickOlderCommit, PreviousChange, PreviousFile, Refresh, WholeWindow,
     },
     git::{
         Baseline, ChangeKind, Commit, FileChange, FileCommit, HISTORY_LIMIT, History, NamedRemote,
@@ -75,13 +77,16 @@ use crate::{
         open_sign_in,
     },
     ui::{
-        self, Failure, FileView, Folded, Handler, Look as _, Notice, Picked, PickedFor, handler,
-        run_in_background, thousands,
+        self, Failure, FileView, Folded, Handler, Look as _, Notice, Pick, Picked, PickedFor,
+        handler, run_in_background, thousands,
     },
 };
 use behind_dialog::open_behind_dialog;
 use branch_dialog::{open_branch_dialog, open_branch_dialog_at};
-use commit_menu::{CommitAction, CommitMenu, confirm_reset_hard, copy_commit_message};
+use commit_menu::{
+    CommitAction, CommitMenu, PickedAction, confirm_reset_hard, copy_commit_hashes,
+    copy_commit_message, copy_commit_messages,
+};
 use tag_dialog::open_tag_dialog;
 use tag_menu::{
     TagAction, TagMenu, confirm_delete as confirm_delete_tag,
@@ -93,13 +98,14 @@ use changes_list::{ChangesList, SideFolds, SideScrolls, discard_question};
 use commit_form::CommitForm;
 use commit_panel::{CommitPanel, OpenCommitFile, ShowFileHistory, copy_commit_hash};
 use compare::{Direction, FilePlace, Position};
-use file_diff_panel::{FileDiffEvent, FileDiffPanel, Resolution};
+use file_diff_panel::{CommitNames, FileDiffEvent, FileDiffPanel, Resolution};
 use file_history::{FileHistory, HistorySource};
 use file_tree::{FileTreeRow, file_rows};
 use history_list::HistoryList;
 use navigation::{OpenFile, Step, Target};
 use operation::{Finish, Operation, Outcome};
 use operation_bar::OperationBar;
+use picked_panel::{PickedPanel, SelectPickedCommit};
 use pulls::{
     CreatePull, Listing, PullMarks, PullView, PullViewEvent, Pulls, PullsSection, Reach,
     SectionState, filter_label, marks_for, open_create_pull,
@@ -108,7 +114,8 @@ use ref_tree::RefGroup;
 use refs_list::{RefsList, WorktreeSection};
 pub(crate) use repository::{Repository, RepositoryEvent};
 use message_editor::{NOT_SAVED, message_saved};
-use repository::Reworded;
+use repository::{Reworded, Squashed};
+use squash_dialog::{NOT_SQUASHED, open_squash_dialog, squashed};
 use saved_folds::LeftPaneFolds;
 use status_bar::RepoStatusBar;
 use toolbar::{RepoToolbar, ToolbarState, notification};
@@ -166,6 +173,7 @@ pub(crate) struct RepoView {
     here: Working,
     elsewhere: Option<Elsewhere>,
     commit_panel: Entity<CommitPanel>,
+    picked_panel: Entity<PickedPanel>,
     file_diff: Entity<FileDiffPanel>,
     file_history: Option<FileHistory>,
     whole_window: bool,
@@ -183,7 +191,7 @@ pub(crate) struct RepoView {
     reading_remotes: Option<Task<()>>,
     pulls: Entity<Pulls>,
     pull_pane: Option<PullPane>,
-    _subscriptions: [Subscription; 7],
+    _subscriptions: [Subscription; 9],
 }
 
 impl EventEmitter<RepoViewEvent> for RepoView {}
@@ -193,6 +201,7 @@ impl RepoView {
         let left_pane = LeftPaneFolds::load(&path);
         let repository = cx.new(|_| Repository::new(path));
         let commit_panel = cx.new(|_| CommitPanel::new(repository.clone()));
+        let picked_panel = cx.new(|_| PickedPanel::default());
         let commit_form = cx.new(|cx| CommitForm::new(repository.clone(), window, cx));
         let file_diff = cx.new(|cx| FileDiffPanel::new(repository.clone(), cx));
         let pulls = cx.new(|cx| Pulls::new(repository.clone(), cx));
@@ -221,6 +230,7 @@ impl RepoView {
                     }
                 }
                 RepositoryEvent::Reworded(reworded) => this.on_reworded(reworded, window, cx),
+                RepositoryEvent::Squashed(done) => this.on_squashed(done, window, cx),
                 RepositoryEvent::PullModeNotSaved(failure) => window.push_notification(
                     Notification::error(failure.message())
                         .title("Couldn't save the pull mode")
@@ -246,6 +256,12 @@ impl RepoView {
             cx.subscribe_in(&commit_panel, window, |this, _, ShowFileHistory(file), window, cx| {
                 this.open_commit_file_history(file.clone(), window, cx)
             }),
+            cx.subscribe(&picked_panel, |this, _, OpenCommitFile(file), cx| {
+                this.open_picked_file(file.clone(), cx)
+            }),
+            cx.subscribe(&picked_panel, |this, _, SelectPickedCommit(id), cx| {
+                this.show_commit(*id, cx)
+            }),
             cx.observe(&commit_panel, |this, _, cx| {
                 this.open_history_file(cx);
                 this.place_file(cx)
@@ -263,6 +279,7 @@ impl RepoView {
             here: Working::new(repository.clone(), commit_form),
             elsewhere: None,
             commit_panel,
+            picked_panel,
             file_diff,
             file_history: None,
             whole_window: false,
@@ -370,6 +387,8 @@ impl RepoView {
     pub(crate) fn copy_hash(&self, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(id) = self.target.commit() {
             copy_commit_hash(id, window, cx);
+        } else if let (Some(picked), Some(history)) = (self.target.several(), self.repository.read(cx).history()) {
+            copy_commit_hashes(&history.in_graph_order(picked.keys()), window, cx);
         }
     }
 
@@ -395,6 +414,7 @@ impl RepoView {
         }
         match surviving {
             Target::Commit { id, .. } => self.show_commit(id, cx),
+            Target::Commits { .. } => self.show_picked(surviving, cx),
             Target::Nothing => {
                 self.target = Target::Nothing;
                 self.pull_pane = None;
@@ -507,6 +527,111 @@ impl RepoView {
                 ),
             Err(_) => {}
         }
+    }
+
+    fn on_squashed(&mut self, done: &Squashed, window: &mut Window, cx: &mut Context<Self>) {
+        match done.outcome.as_ref() {
+            Ok(now) => {
+                window.push_notification(Notification::success(squashed(done.count, *now)), cx);
+                self.target = Target::at_commit(*now);
+                self.file_diff.update(cx, |panel, cx| panel.close(cx));
+            }
+            Err(failure) => window.push_notification(
+                Notification::error(failure.message())
+                    .title(NOT_SQUASHED)
+                    .autohide(false),
+                cx,
+            ),
+        }
+    }
+
+    fn pick_commit(&mut self, id: ObjectId, pick: Pick, cx: &mut Context<Self>) {
+        if pick == Pick::Only {
+            self.select_commit(id, cx);
+            return;
+        }
+        let Some(history) = self.repository.read(cx).history().cloned() else {
+            return;
+        };
+        if let Some(next) = self.target.after_pick(id, pick, &history.pickable()) {
+            self.go_to(next, cx);
+        }
+    }
+
+    fn grow_pick(&mut self, step: Step, cx: &mut Context<Self>) {
+        if self.file_history.is_some() {
+            return;
+        }
+        let Some(history) = self.repository.read(cx).history().cloned() else {
+            return;
+        };
+        let Some(next) = self.target.grown(step, &history) else {
+            return;
+        };
+        let cursor = next.picked().cursor().and_then(|id| history.row_of(id));
+        self.go_to(next, cx);
+        if let Some(row) = cursor {
+            self.history_scroll.scroll_to_item(row, ScrollStrategy::Nearest);
+        }
+    }
+
+    fn go_to(&mut self, next: Target, cx: &mut Context<Self>) {
+        match next {
+            Target::Commit { id, .. } => self.show_commit(id, cx),
+            Target::Commits { .. } => {
+                self.pull_pane = None;
+                self.file_diff.update(cx, |panel, cx| panel.close(cx));
+                self.show_picked(next, cx);
+            }
+            Target::Nothing | Target::WorkingTree { .. } | Target::Worktree { .. } | Target::Pull { .. } => {}
+        }
+    }
+
+    fn show_picked(&mut self, target: Target, cx: &mut Context<Self>) {
+        let repository = self.repository.read(cx);
+        let (Some(repo), Some(history), Some(picked)) =
+            (repository.repo().cloned(), repository.history().cloned(), target.several().cloned())
+        else {
+            return;
+        };
+        let newest_first = history.in_graph_order(picked.keys());
+        let line = history.line_of(&newest_first);
+        let commits = history.picked_commits(&newest_first);
+        if target.has_open_file() != self.target.has_open_file() || self.target.several() != Some(&picked) {
+            self.file_diff.update(cx, |panel, cx| panel.close(cx));
+        }
+        self.target = target;
+        self.picked_panel
+            .update(cx, |panel, cx| panel.show(&repo, commits, line, cx));
+        cx.notify();
+    }
+
+    fn open_picked_file(&mut self, file: DiffFile, cx: &mut Context<Self>) {
+        let (compared, count) = {
+            let panel = self.picked_panel.read(cx);
+            (panel.compared(), panel.count())
+        };
+        let Some((newest, base)) = compared else {
+            return;
+        };
+        let Target::Commits { open, .. } = &mut self.target else {
+            return;
+        };
+        let path = file.path().clone();
+        *open = Some(path.clone());
+        self.picked_panel
+            .update(cx, |panel, cx| panel.mark_open(Some(path), cx));
+        let names = CommitNames {
+            shown_in: format!("{} commits", thousands(count)).into(),
+            after: short_id(newest),
+        };
+        let here = self.repository.clone();
+        self.file_diff.update(cx, |panel, cx| {
+            panel.use_repository(here);
+            panel.open_commit_file(newest, Baseline::Commit(base), names, file, cx)
+        });
+        self.place_file(cx);
+        cx.notify();
     }
 
     fn select_commit(&mut self, id: ObjectId, cx: &mut Context<Self>) {
@@ -826,7 +951,7 @@ impl RepoView {
         let here = self.repository.clone();
         self.file_diff.update(cx, |panel, cx| {
             panel.use_repository(here);
-            panel.open_commit_file(head, Baseline::Commit(merge_base), label, file, cx)
+            panel.open_commit_file(head, Baseline::Commit(merge_base), CommitNames::one(label), file, cx)
         });
         self.place_file(cx);
         cx.notify();
@@ -961,6 +1086,10 @@ impl RepoView {
     }
 
     fn open_commit_file(&mut self, file: DiffFile, cx: &mut Context<Self>) {
+        if self.target.several().is_some() {
+            self.open_picked_file(file, cx);
+            return;
+        }
         let Target::Commit { id, open } = &mut self.target else {
             return;
         };
@@ -980,7 +1109,7 @@ impl RepoView {
         let here = self.repository.clone();
         self.file_diff.update(cx, |panel, cx| {
             panel.use_repository(here);
-            panel.open_commit_file(id, Baseline::FirstParent(parent), short_id(id), file, cx)
+            panel.open_commit_file(id, Baseline::FirstParent(parent), CommitNames::one(short_id(id)), file, cx)
         });
         self.place_file(cx);
         cx.notify();
@@ -1168,8 +1297,12 @@ impl RepoView {
                     }))
                     .collect()
             }
-            Target::Commit { .. } => {
-                let Some(files) = self.commit_panel.read(cx).files() else {
+            Target::Commit { .. } | Target::Commits { .. } => {
+                let files = match &self.target {
+                    Target::Commits { .. } => self.picked_panel.read(cx).files(),
+                    _ => self.commit_panel.read(cx).files(),
+                };
+                let Some(files) = files else {
                     return Vec::new();
                 };
                 file_rows(view, files.iter().map(|file| file.path().as_ref()), &unfolded)
@@ -1204,7 +1337,7 @@ impl RepoView {
             ) => {
                 *side == open.side && change.path == open.path
             }
-            (Openable::Commit(file), Target::Commit { open: Some(path), .. })
+            (Openable::Commit(file), Target::Commit { open: Some(path), .. } | Target::Commits { open: Some(path), .. })
             | (Openable::Pull(file), Target::Pull { open: Some(path), .. }) => file.path() == path,
             _ => false,
         })
@@ -1253,6 +1386,10 @@ impl RepoView {
             self.middle_focus.focus(window, cx);
             return;
         }
+        if let Some(Target::Commit { id, .. }) = self.target.back_to_one() {
+            self.show_commit(id, cx);
+            return;
+        }
         let leaving_history = self.file_history.is_some();
         self.close_file(cx);
         if leaving_history {
@@ -1279,6 +1416,8 @@ impl RepoView {
         if self.target.close_file() {
             self.commit_panel
                 .update(cx, |panel, cx| panel.mark_open(None, cx));
+            self.picked_panel
+                .update(cx, |panel, cx| panel.mark_open(None, cx));
             if let Some(pane) = &self.pull_pane {
                 pane.view.update(cx, |view, cx| view.mark_open(None, cx));
             }
@@ -1301,7 +1440,7 @@ impl RepoView {
         match self.target.step(step, history, repository.has_changes()) {
             Some(Target::Commit { id, .. }) => self.select_commit(id, cx),
             Some(Target::WorkingTree { .. }) => self.select_working_tree(cx),
-            Some(Target::Nothing | Target::Pull { .. } | Target::Worktree { .. }) | None => {}
+            Some(Target::Nothing | Target::Commits { .. } | Target::Pull { .. } | Target::Worktree { .. }) | None => {}
         }
     }
 
@@ -1435,11 +1574,38 @@ impl RepoView {
             repository.is_writing(),
             repository.underway().is_some(),
         )
+        .picked(self.target.picked())
         .on_action(cx.listener(
             |this, (id, action): &(ObjectId, CommitAction), window, cx| {
                 this.act_on_commit(*id, *action, window, cx)
             },
         ))
+        .on_picked(cx.listener(
+            |this, (ids, action): &(Vec<ObjectId>, PickedAction), window, cx| {
+                this.act_on_picked(ids.clone(), *action, window, cx)
+            },
+        ))
+    }
+
+    fn act_on_picked(
+        &mut self,
+        newest_first: Vec<ObjectId>,
+        action: PickedAction,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let repository = self.repository.clone();
+        match action {
+            PickedAction::CherryPick => repository
+                .update(cx, |repository, cx| repository.cherry_pick_several(newest_first, cx)),
+            PickedAction::Revert => repository
+                .update(cx, |repository, cx| repository.revert_several(newest_first, cx)),
+            PickedAction::Squash => open_squash_dialog(repository, newest_first, window, cx),
+            PickedAction::CopyHashes => copy_commit_hashes(&newest_first, window, cx),
+            PickedAction::CopyMessages => {
+                copy_commit_messages(&repository, &newest_first, window, cx)
+            }
+        }
     }
 
     fn act_on_commit(
@@ -1668,6 +1834,7 @@ impl RepoView {
                             self.changes_list(open.clone(), cx).into_any_element()
                         }
                         (Target::Commit { .. }, _) => self.commit_panel.clone().into_any_element(),
+                        (Target::Commits { .. }, _) => self.picked_panel.clone().into_any_element(),
                         (Target::Pull { .. }, Some(view)) => view.update(cx, |view, cx| view.files_panel(cx)),
                         (Target::Pull { .. } | Target::Nothing, _) => {
                             ui::hint("Select a commit to see its changes.", cx)
@@ -1707,7 +1874,7 @@ impl RepoView {
         RefsList::new(history, &self.left_pane.refs, self.refs_scroll.clone())
             .pulls(section, marks)
             .worktrees(worktrees)
-            .selected(self.target.commit())
+            .picked(self.target.picked())
             .branch_menu(branch_menu)
             .tag_menu(tag_menu)
             .stash_menu(stash_menu)
@@ -1753,13 +1920,15 @@ impl RepoView {
         .stash_menu(stash_menu)
         .commit_menu(commit_menu)
         .marks(marks)
-        .selected(self.target.commit())
+        .picked(self.target.picked())
         .uncommitted(changes, self.target.is_working_tree())
         .worktrees(elsewhere, selected_worktree.as_deref(), worktree_menu)
         .on_select_worktree(cx.listener(|this, location: &Arc<Path>, window, cx| {
             this.select_worktree(location.clone(), window, cx)
         }))
-        .on_select_commit(cx.listener(|this, id: &ObjectId, _, cx| this.select_commit(*id, cx)))
+        .on_select_commit(cx.listener(|this, (id, pick): &(ObjectId, Pick), _, cx| {
+            this.pick_commit(*id, *pick, cx)
+        }))
         .on_select_uncommitted(cx.listener(|this, _: &(), _, cx| this.select_working_tree(cx)))
         .on_check_out(cx.listener(|this, label: &RefLabel, window, cx| {
             this.act_on_branch(label.clone(), BranchAction::CheckOut, window, cx)
@@ -1815,12 +1984,19 @@ impl RepoView {
 impl Render for RepoView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let status_bar = RepoStatusBar::new(self.repository.read(cx), self.target.commit())
+            .picked(self.target.several().map(|picked| picked.len()))
             .in_file_history(self.file_history.as_ref().and_then(FileHistory::place))
             .at_pull(self.pull_position(cx));
         v_flex()
             .pane()
             .on_action(cx.listener(|this, _: &OlderCommit, _, cx| this.step(Step::Older, cx)))
             .on_action(cx.listener(|this, _: &NewerCommit, _, cx| this.step(Step::Newer, cx)))
+            .on_action(cx.listener(|this, _: &PickOlderCommit, _, cx| {
+                this.grow_pick(Step::Older, cx)
+            }))
+            .on_action(cx.listener(|this, _: &PickNewerCommit, _, cx| {
+                this.grow_pick(Step::Newer, cx)
+            }))
             .on_action(cx.listener(|this, _: &Refresh, _, cx| {
                 this.repository
                     .update(cx, |repository, cx| repository.refresh(cx))

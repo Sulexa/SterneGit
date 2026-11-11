@@ -84,12 +84,27 @@ enum Merging {
     Open(Entity<MergeEditor>),
 }
 
+#[derive(Clone)]
+pub(crate) struct CommitNames {
+    pub(crate) shown_in: SharedString,
+    pub(crate) after: SharedString,
+}
+
+impl CommitNames {
+    pub(crate) fn one(name: SharedString) -> Self {
+        Self {
+            shown_in: name.clone(),
+            after: name,
+        }
+    }
+}
+
 enum Compared {
     WorkingFile(OpenFile),
     CommitFile {
         id: ObjectId,
         baseline: Baseline,
-        short_id: SharedString,
+        names: CommitNames,
         file: DiffFile,
     },
 }
@@ -432,8 +447,8 @@ impl FileDiffPanel {
                     _ => self.compared = Some(Compared::WorkingFile(open)),
                 }
             }
-            Some(Compared::CommitFile { id, baseline, short_id, file }) => {
-                self.open_commit_file(id, baseline, short_id, file, cx);
+            Some(Compared::CommitFile { id, baseline, names, file }) => {
+                self.open_commit_file(id, baseline, names, file, cx);
             }
             None => {}
         }
@@ -710,15 +725,15 @@ impl FileDiffPanel {
         &mut self,
         id: ObjectId,
         baseline: Baseline,
-        short_id: SharedString,
+        names: CommitNames,
         file: DiffFile,
         cx: &mut Context<Self>,
     ) {
         self.leave_merge();
         if self.routes_to_unity(file.path()) {
             let reload = self.shows_commit_file(id, file.path());
-            let request = commit_request(MediaView::Unity, &file, id, baseline.commit(), &short_id);
-            self.compared = Some(Compared::CommitFile { id, baseline, short_id, file });
+            let request = commit_request(MediaView::Unity, &file, id, baseline.commit(), &names);
+            self.compared = Some(Compared::CommitFile { id, baseline, names, file });
             if self.unity_mode == UnityMode::Text {
                 self.leave_media(cx);
                 self.parts = None;
@@ -739,8 +754,8 @@ impl FileDiffPanel {
         let view = media_view(file.path()).or_else(|| file.is_binary().then_some(MediaView::Other));
         if let Some(view) = view {
             let reload = self.shows_commit_file(id, file.path());
-            let request = commit_request(view, &file, id, baseline.commit(), &short_id);
-            self.compared = Some(Compared::CommitFile { id, baseline, short_id, file });
+            let request = commit_request(view, &file, id, baseline.commit(), &names);
+            self.compared = Some(Compared::CommitFile { id, baseline, names, file });
             if let Some(repo) = self.repository.read(cx).repo().cloned() {
                 self.open_media(&repo, request, reload, cx);
             }
@@ -762,7 +777,7 @@ impl FileDiffPanel {
         if !same {
             self.stepped = None;
         }
-        self.compared = Some(Compared::CommitFile { id, baseline, short_id, file });
+        self.compared = Some(Compared::CommitFile { id, baseline, names, file });
         self.reread_commit_file(!same, cx);
         cx.notify();
     }
@@ -1259,8 +1274,8 @@ impl FileDiffPanel {
         let kind = change_kind(file);
         let whitespace = TextOptions::current(cx).whitespace();
         let unity_request = match &self.compared {
-            Some(Compared::CommitFile { short_id, file, .. }) if self.unity_mode == UnityMode::Text && self.routes_to_unity(file.path()) => {
-                Some(commit_request(MediaView::Unity, file, id, baseline.commit(), short_id))
+            Some(Compared::CommitFile { names, file, .. }) if self.unity_mode == UnityMode::Text && self.routes_to_unity(file.path()) => {
+                Some(commit_request(MediaView::Unity, file, id, baseline.commit(), names))
             }
             _ => None,
         };
@@ -1536,9 +1551,9 @@ impl FileDiffPanel {
             Compared::CommitFile {
                 id,
                 baseline,
-                short_id,
+                names,
                 file,
-            } => Some(commit_sides(file, *id, baseline.commit(), short_id).1),
+            } => Some(commit_sides(file, *id, baseline.commit(), names).1),
         }
     }
 
@@ -1713,8 +1728,8 @@ impl Render for FileDiffPanel {
                 };
                 (heading, Some(button))
             }
-            Some(Compared::CommitFile { short_id, file, .. }) => {
-                (commit_heading(short_id, file), None)
+            Some(Compared::CommitFile { names, file, .. }) => {
+                (commit_heading(names, file), None)
             }
         };
         let mut file_bar = self.file_bar(heading, move_button, cx);
@@ -1884,9 +1899,9 @@ fn commit_request(
     file: &DiffFile,
     id: ObjectId,
     parent: Option<ObjectId>,
-    short_id: &SharedString,
+    names: &CommitNames,
 ) -> MediaRequest {
-    let (sides, sources) = commit_sides(file, id, parent, short_id);
+    let (sides, sources) = commit_sides(file, id, parent, names);
     MediaRequest {
         view,
         sides,
@@ -2104,7 +2119,7 @@ fn commit_sides(
     file: &DiffFile,
     id: ObjectId,
     parent: Option<ObjectId>,
-    short_id: &SharedString,
+    names: &CommitNames,
 ) -> (Sides, [SharedString; 2]) {
     let kind = change_kind(file);
     let path = OsString::from(file.path().as_ref());
@@ -2120,7 +2135,7 @@ fn commit_sides(
         path,
     });
     let parent_name = parent.map_or_else(SharedString::default, crate::git::short_id);
-    (Sides { before, after }, [parent_name, short_id.clone()])
+    (Sides { before, after }, [parent_name, names.after.clone()])
 }
 
 fn read_pictures(repo: &Repo, sides: Sides, extension: Option<&str>) -> anyhow::Result<(Pictures, bool)> {
@@ -2200,11 +2215,11 @@ fn conflict_request(change: &FileChange, current: bool, incoming: bool) -> Media
     }
 }
 
-fn commit_heading(short_id: &SharedString, file: &DiffFile) -> Heading {
+fn commit_heading(names: &CommitNames, file: &DiffFile) -> Heading {
     Heading {
         kind: change_kind(file),
         path: file.path().clone(),
         original: renamed_from(file).cloned(),
-        state: format!("in {short_id}").into(),
+        state: format!("in {}", names.shown_in).into(),
     }
 }

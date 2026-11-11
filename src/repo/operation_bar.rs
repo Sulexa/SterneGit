@@ -75,7 +75,9 @@ pub(crate) fn wording(underway: &Underway) -> Wording {
 
 fn picked(picking: &Picking) -> Step {
     Step {
-        position: None,
+        position: picking
+            .place
+            .map(|place| format!("Commit {} of {}", place.at, place.of).into()),
         id: picking.commit.id.clone().into(),
         subject: picking.commit.subject.clone().into(),
     }
@@ -272,6 +274,7 @@ mod tests {
         let picking = Picking {
             branch: "main".into(),
             commit,
+            place: None,
         };
         let words = wording(&Underway::CherryPick(picking.clone()));
         assert_eq!(words.title, "Cherry-picking onto main");
@@ -284,8 +287,14 @@ mod tests {
             })
         );
         assert_eq!((words.abort, words.finish), ("Abort cherry-pick", "Commit"));
-        let words = wording(&Underway::Revert(picking));
+        let words = wording(&Underway::Revert(picking.clone()));
         assert_eq!(words.title, "Reverting on main");
         assert_eq!((words.abort, words.finish), ("Abort revert", "Commit revert"));
+        let several = Picking {
+            place: Some(crate::git::Place { at: 2, of: 3 }),
+            ..picking
+        };
+        let position = wording(&Underway::CherryPick(several)).step.and_then(|step| step.position);
+        assert_eq!(position.as_deref(), Some("Commit 2 of 3"));
     }
 }

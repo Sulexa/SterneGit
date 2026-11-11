@@ -29,11 +29,17 @@ pub(crate) enum RepositoryEvent {
     Unpublished,
     Operated(Operated),
     Reworded(Reworded),
+    Squashed(Squashed),
     PullModeNotSaved(Failure),
 }
 
 pub(crate) struct Reworded {
     pub(crate) id: ObjectId,
+    pub(crate) outcome: Result<ObjectId, Failure>,
+}
+
+pub(crate) struct Squashed {
+    pub(crate) count: usize,
     pub(crate) outcome: Result<ObjectId, Failure>,
 }
 
@@ -516,6 +522,36 @@ impl Repository {
         cx.notify();
     }
 
+    pub(crate) fn squash(
+        &mut self,
+        newest: ObjectId,
+        oldest: ObjectId,
+        count: usize,
+        message: String,
+        cx: &mut Context<Self>,
+    ) {
+        if self.write.is_running() {
+            return;
+        }
+        let Some(repo) = self.repo().cloned() else {
+            return;
+        };
+        self.status_read.cancel();
+        let task = run_in_background(
+            cx,
+            move || repo.squash(newest, oldest, &message),
+            move |this, result, cx| {
+                this.write.finish();
+                let outcome = result.map_err(|error| Failure::git_reason(&error));
+                cx.emit(RepositoryEvent::Squashed(Squashed { count, outcome }));
+                this.refresh(cx);
+                cx.notify();
+            },
+        );
+        self.write.run(task);
+        cx.notify();
+    }
+
     pub(crate) fn pull(&mut self, cx: &mut Context<Self>) {
         let mode = self.pull_mode();
         self.operate(
@@ -694,6 +730,42 @@ impl Repository {
             move |repo| {
                 repo.revert(id, merge)
                     .map(|picked| operation::reverted(&short, &branch, picked))
+            },
+            cx,
+        );
+    }
+
+    pub(crate) fn cherry_pick_several(&mut self, newest_first: Vec<ObjectId>, cx: &mut Context<Self>) {
+        let count = newest_first.len();
+        let branch = self.checked_out_name();
+        let oldest_first: Vec<ObjectId> = newest_first.into_iter().rev().collect();
+        self.write_and_report(
+            None,
+            operation::cherry_pick_several_failed(count, &branch),
+            move |repo| {
+                repo.cherry_pick_several(&oldest_first)
+                    .map(|picked| operation::cherry_picked_several(count, &branch, picked))
+            },
+            cx,
+        );
+    }
+
+    pub(crate) fn revert_several(&mut self, newest_first: Vec<ObjectId>, cx: &mut Context<Self>) {
+        let count = newest_first.len();
+        let branch = self.checked_out_name();
+        let merges = self.history().is_some_and(|history| {
+            newest_first.iter().any(|id| {
+                history
+                    .row_of(id)
+                    .is_some_and(|row| history.commits[row].parents.len() > 1)
+            })
+        });
+        self.write_and_report(
+            None,
+            operation::revert_several_failed(count),
+            move |repo| {
+                repo.revert_several(&newest_first, merges)
+                    .map(|picked| operation::reverted_several(count, &branch, picked))
             },
             cx,
         );

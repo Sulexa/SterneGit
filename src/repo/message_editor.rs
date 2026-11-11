@@ -18,7 +18,7 @@ use super::repository::{Repository, RepositoryEvent, Reworded};
 use crate::{
     actions::CloseDiff,
     git::{RewordScope, commit_message, short_id},
-    ui::{Failure, Look as _, counted},
+    ui::{Failure, Look as _, counted, listed},
 };
 
 const DESCRIPTION_ROWS: usize = 4;
@@ -287,17 +287,6 @@ impl Lines {
             pushed,
             tags,
         }
-    }
-}
-
-fn listed(names: &[SharedString]) -> String {
-    match names {
-        [] => String::new(),
-        [only] => only.to_string(),
-        [first @ .., last] => format!(
-            "{} and {last}",
-            first.iter().map(SharedString::as_ref).collect::<Vec<&str>>().join(", ")
-        ),
     }
 }
 

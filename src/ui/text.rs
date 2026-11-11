@@ -30,9 +30,28 @@ pub(crate) fn counted(n: usize, singular: &str, plural: &str) -> String {
     )
 }
 
+pub(crate) fn listed<S: AsRef<str>>(names: &[S]) -> String {
+    match names {
+        [] => String::new(),
+        [only] => only.as_ref().to_owned(),
+        [first @ .., last] => format!(
+            "{} and {}",
+            first.iter().map(AsRef::as_ref).collect::<Vec<&str>>().join(", "),
+            last.as_ref()
+        ),
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{counted, thousands};
+    use super::{counted, listed, thousands};
+
+    #[test]
+    fn names_are_listed_with_and_before_the_last() {
+        assert_eq!(listed::<&str>(&[]), "");
+        assert_eq!(listed(&["main"]), "main");
+        assert_eq!(listed(&["Alex", "Sam", "Robin"]), "Alex, Sam and Robin");
+    }
 
     #[test]
     fn thousands_are_grouped() {

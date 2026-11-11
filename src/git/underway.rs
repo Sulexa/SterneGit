@@ -7,6 +7,7 @@ use super::{
     Carried, Repo,
     command::{Exit, run},
     history::{Commit, short_id},
+    merge::Ran,
     refs::{RefKind, RefLabel, read_labels},
 };
 
@@ -16,6 +17,9 @@ const REVERT_HEAD: &str = "REVERT_HEAD";
 const BRANCHES: &str = "refs/heads/";
 const QUOTE: char = '\'';
 const SUBJECT_MARK_OF_NEWER_GITS: &str = "# ";
+const SEQUENCE_TODO: &str = "sequencer/todo";
+const SEQUENCE_START: &str = "sequencer/head";
+const LONGEST_SEQUENCE: usize = 10_000;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) enum Underway {
@@ -29,6 +33,13 @@ pub(crate) enum Underway {
 pub(crate) struct Picking {
     pub(crate) branch: String,
     pub(crate) commit: Replaying,
+    pub(crate) place: Option<Place>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub(crate) struct Place {
+    pub(crate) at: usize,
+    pub(crate) of: usize,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -101,10 +112,10 @@ impl Repo {
             Err(_) if self.underway().is_some() && self.has_conflicts() => {
                 Ok(Continued::StoppedAgain)
             }
-            Err(_) if underway.picks() && self.underway().is_some() => {
-                self.skip_underway()?;
-                self.done_with(&underway, before).map(Continued::Emptied)
-            }
+            Err(_) if underway.picks() && self.underway().is_some() => match self.skip_empty_picks()? {
+                Ran::Through => self.done_with(&underway, before).map(Continued::Emptied),
+                Ran::Stopped => Ok(Continued::StoppedAgain),
+            },
             Err(error) => Err(error),
         }
     }
@@ -118,10 +129,15 @@ impl Repo {
         self.done_with(&underway, before)
     }
 
-    pub(super) fn skip_underway(&self) -> Result<()> {
-        match self.underway() {
-            Some(underway) => run(&self.location, &underway.skip_args(), Exit::Success).map(drop),
-            None => Ok(()),
+    pub(super) fn skip_empty_picks(&self) -> Result<Ran> {
+        loop {
+            let Some(underway) = self.underway() else {
+                return Ok(Ran::Through);
+            };
+            match self.run_until_stopped(&underway.skip_args())? {
+                Ran::Stopped if !self.has_conflicts() => {}
+                ran => return Ok(ran),
+            }
         }
     }
 
@@ -160,7 +176,35 @@ fn picking(repo: &gix::Repository, head_file: &str) -> Option<Picking> {
             id: short_id(id).to_string(),
             subject,
         },
+        place: sequence_place(repo),
     })
+}
+
+fn sequence_place(repo: &gix::Repository) -> Option<Place> {
+    let todo = std::fs::read_to_string(repo.git_dir().join(SEQUENCE_TODO)).ok()?;
+    let left = todo
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty() && !line.starts_with('#'))
+        .count();
+    let started = read_trimmed(&repo.git_dir().join(SEQUENCE_START))?;
+    let started = ObjectId::from_hex(started.as_bytes()).ok()?;
+    let done = first_parents_between(repo, repo.head_id().ok()?.detach(), started)?;
+    (done + left > 1).then_some(Place {
+        at: done + 1,
+        of: done + left,
+    })
+}
+
+fn first_parents_between(repo: &gix::Repository, newest: ObjectId, oldest: ObjectId) -> Option<usize> {
+    let mut at = newest;
+    for steps in 0..LONGEST_SEQUENCE {
+        if at == oldest {
+            return Some(steps);
+        }
+        at = repo.find_commit(at).ok()?.parent_ids().next()?.detach();
+    }
+    None
 }
 
 fn head_branch(repo: &gix::Repository) -> String {

@@ -2,8 +2,9 @@ use gpui_kit::SharedString;
 
 use crate::{
     git::{
-        Behind, Carried, CaughtUp, CheckedOut, Continued, FolderLeft, Merged, Picked, Pulled,
-        Pushed, Rebased, RefLabel, Refusal, RemoteBranch, ResetMode, TagPushed, Tracking, Underway,
+        Behind, Carried, CaughtUp, CheckedOut, Continued, FolderLeft, Merged, Picked, Picking,
+        Pulled, Pushed, Rebased, RefLabel, Refusal, RemoteBranch, ResetMode, TagPushed, Tracking,
+        Underway,
     },
     ui::{Failure, thousands},
 };
@@ -219,6 +220,32 @@ pub(crate) fn reverted(id: &str, branch: &str, (picked, carried): (Picked, Carri
     put_back(done.into(), &format!("the updated {branch}"), carried)
 }
 
+pub(crate) fn cherry_picked_several(count: usize, branch: &str, (picked, carried): (Picked, Carried)) -> Outcome {
+    let done = match picked {
+        Picked::Stopped => return Outcome::Stopped,
+        Picked::Committed => format!("Cherry-picked {count} commits onto {branch}"),
+        Picked::AlreadyThere => format!("{branch} already has the changes of these {count} commits, so nothing was added"),
+    };
+    put_back(done.into(), &format!("the updated {branch}"), carried)
+}
+
+pub(crate) fn reverted_several(count: usize, branch: &str, (picked, carried): (Picked, Carried)) -> Outcome {
+    let done = match picked {
+        Picked::Stopped => return Outcome::Stopped,
+        Picked::Committed => format!("Reverted {count} commits"),
+        Picked::AlreadyThere => format!("The changes of these {count} commits are already undone on {branch}"),
+    };
+    put_back(done.into(), &format!("the updated {branch}"), carried)
+}
+
+pub(crate) fn cherry_pick_several_failed(count: usize, branch: &str) -> SharedString {
+    format!("Couldn't cherry-pick {count} commits onto {branch}").into()
+}
+
+pub(crate) fn revert_several_failed(count: usize) -> SharedString {
+    format!("Couldn't revert {count} commits").into()
+}
+
 pub(crate) fn checked_out_commit(id: &str) -> SharedString {
     format!("Checked out {id}: HEAD is detached").into()
 }
@@ -263,6 +290,12 @@ pub(crate) fn continued(underway: &Underway, continued: Continued) -> Outcome {
             &merging.into,
             (Merged::WithMergeCommit, carried),
         ),
+        Underway::CherryPick(Picking { place: Some(place), branch, .. }) => {
+            cherry_picked_several(place.of, branch, (picked, carried))
+        }
+        Underway::Revert(Picking { place: Some(place), branch, .. }) => {
+            reverted_several(place.of, branch, (picked, carried))
+        }
         Underway::CherryPick(picking) => {
             cherry_picked(&picking.commit.id, &picking.branch, (picked, carried))
         }
@@ -445,8 +478,9 @@ pub(crate) fn failure(error: &anyhow::Error) -> Failure {
 #[cfg(test)]
 mod tests {
     use super::{
-        Finish, Outcome, aborted, caught_up, checked_out, cherry_picked, continued, deleted,
-        failure, finish_failed, merged, pulled, pulled_back, pushed, rebased, reverted,
+        Finish, Outcome, aborted, caught_up, checked_out, cherry_picked, cherry_picked_several,
+        continued, deleted,
+        failure, finish_failed, merged, pulled, pulled_back, pushed, rebased, reverted, reverted_several,
         switched, tag_created, worktrees_removed,
     };
     use crate::git::{
@@ -503,6 +537,7 @@ mod tests {
                 id: "f1bbcd8".into(),
                 subject: "Split the diff parser".into(),
             },
+            place: None,
         });
         assert_eq!(
             continued(&picking, Continued::Finished(Carried::Along)),
@@ -516,6 +551,30 @@ mod tests {
         assert_eq!(
             aborted(&picking, Carried::Along),
             Outcome::Done("Aborted the revert: main is back where it was".into())
+        );
+    }
+
+    #[test]
+    fn several_commits_are_counted_once_their_sequence_is_done() {
+        assert_eq!(
+            cherry_picked_several(3, "main", (Picked::Committed, Carried::Along)),
+            Outcome::Done("Cherry-picked 3 commits onto main".into())
+        );
+        assert_eq!(
+            reverted_several(2, "main", (Picked::AlreadyThere, Carried::Along)),
+            Outcome::Done("The changes of these 2 commits are already undone on main".into())
+        );
+        let picking = Underway::CherryPick(Picking {
+            branch: "main".into(),
+            commit: Replaying {
+                id: "8ff3473".into(),
+                subject: "Add Split and Unified toggles".into(),
+            },
+            place: Some(crate::git::Place { at: 2, of: 3 }),
+        });
+        assert_eq!(
+            continued(&picking, Continued::Finished(Carried::Along)),
+            Outcome::Done("Cherry-picked 3 commits onto main".into())
         );
     }
 

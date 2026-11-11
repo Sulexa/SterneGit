@@ -1,4 +1,4 @@
-use std::{collections::HashSet, sync::Arc};
+use std::{collections::HashSet, rc::Rc, sync::Arc};
 
 use gix::ObjectId;
 use gpui_kit::{
@@ -12,8 +12,8 @@ use gpui_kit::{
 
 use super::repository::Repository;
 use crate::{
-    git::{ChangeKind, History, ResetMode, WorkingChanges, short_id},
-    ui::{Handler, counted, handler},
+    git::{ChangeKind, Held, History, ResetMode, WorkingChanges, short_id},
+    ui::{Handler, Picked, counted, handler, thousands},
 };
 
 const CHECK_OUT: &str = "Check out this commit";
@@ -66,6 +66,35 @@ impl CommitAction {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum PickedAction {
+    CherryPick,
+    Revert,
+    Squash,
+    CopyHashes,
+    CopyMessages,
+}
+
+impl PickedAction {
+    fn available(self, writing: bool, underway: bool) -> bool {
+        match self {
+            PickedAction::CopyHashes | PickedAction::CopyMessages => true,
+            _ => !writing && !underway,
+        }
+    }
+
+    fn text(self, count: usize, branch: &str) -> String {
+        let count = thousands(count);
+        match self {
+            PickedAction::CherryPick => format!("Cherry-pick {count} commits onto {branch}"),
+            PickedAction::Revert => format!("Revert {count} commits"),
+            PickedAction::Squash => format!("Squash {count} commits…"),
+            PickedAction::CopyHashes => format!("Copy {count} hashes"),
+            PickedAction::CopyMessages => format!("Copy {count} messages"),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Entry {
     Action(CommitAction),
     Reset,
@@ -76,7 +105,9 @@ pub(crate) struct CommitMenu {
     history: Arc<History>,
     writing: bool,
     underway: bool,
+    picked: Rc<Picked<ObjectId>>,
     on_action: Option<Handler<(ObjectId, CommitAction)>>,
+    on_picked: Option<Handler<(Vec<ObjectId>, PickedAction)>>,
 }
 
 impl CommitMenu {
@@ -85,8 +116,23 @@ impl CommitMenu {
             history,
             writing,
             underway,
+            picked: Rc::default(),
             on_action: None,
+            on_picked: None,
         }
+    }
+
+    pub(crate) fn picked(mut self, picked: Rc<Picked<ObjectId>>) -> Self {
+        self.picked = picked;
+        self
+    }
+
+    pub(crate) fn on_picked(
+        mut self,
+        callback: impl Fn(&(Vec<ObjectId>, PickedAction), &mut Window, &mut App) + 'static,
+    ) -> Self {
+        self.on_picked = Some(handler(callback));
+        self
     }
 
     pub(crate) fn on_action(
@@ -104,6 +150,9 @@ impl CommitMenu {
         window: &mut Window,
         cx: &mut Context<PopupMenu>,
     ) -> PopupMenu {
+        if self.picked.len() > 1 && self.picked.contains(&id) {
+            return self.build_picked(menu);
+        }
         let branch = self.branch();
         let merge = self.is_merge(&id);
         let mut menu = menu;
@@ -127,6 +176,52 @@ impl CommitMenu {
             }
         }
         menu
+    }
+
+    fn build_picked(&self, menu: PopupMenu) -> PopupMenu {
+        let newest_first = self.history.in_graph_order(self.picked.keys());
+        let branch = self.branch();
+        let mut menu = menu;
+        for (ix, group) in self.offered_picks(&newest_first).into_iter().enumerate() {
+            if ix > 0 {
+                menu = menu.separator();
+            }
+            for action in group {
+                let on_picked = self.on_picked.clone();
+                let chosen = (newest_first.clone(), action);
+                menu = menu.item(
+                    PopupMenuItem::new(action.text(newest_first.len(), &branch))
+                        .disabled(!action.available(self.writing, self.underway) || on_picked.is_none())
+                        .on_click(move |_, window, cx| {
+                            if let Some(on_picked) = &on_picked {
+                                on_picked(&chosen, window, cx)
+                            }
+                        }),
+                );
+            }
+        }
+        menu
+    }
+
+    fn offered_picks(&self, newest_first: &[ObjectId]) -> Vec<Vec<PickedAction>> {
+        use PickedAction::*;
+        let merges = newest_first.iter().any(|id| self.is_merge(id));
+        let undo = match self.history.held_by_head(newest_first) {
+            Held::All => Some(Revert),
+            Held::Not if !merges => Some(CherryPick),
+            Held::Not | Held::Partly => None,
+        };
+        let squash = self
+            .history
+            .line_of(newest_first)
+            .filter(|line| self.history.squash_scope(line, newest_first).is_some())
+            .map(|_| Squash);
+        [undo, squash]
+            .into_iter()
+            .flatten()
+            .map(|action| vec![action])
+            .chain([vec![CopyHashes, CopyMessages]])
+            .collect()
     }
 
     fn branch(&self) -> String {
@@ -201,6 +296,33 @@ pub(crate) fn copy_commit_message(
         }
         Some(Err(error)) => window.push_notification(error.to_string(), cx),
         None => {}
+    }
+}
+
+pub(crate) fn copy_commit_hashes(newest_first: &[ObjectId], window: &mut Window, cx: &mut App) {
+    let hashes: Vec<String> = newest_first.iter().map(ObjectId::to_string).collect();
+    cx.write_to_clipboard(ClipboardItem::new_string(hashes.join("\n")));
+    window.push_notification(format!("{} copied", counted(hashes.len(), "hash", "hashes")), cx);
+}
+
+pub(crate) fn copy_commit_messages(
+    repository: &Entity<Repository>,
+    newest_first: &[ObjectId],
+    window: &mut Window,
+    cx: &mut App,
+) {
+    let Some(repo) = repository.read(cx).repo().cloned() else {
+        return;
+    };
+    let messages: Result<Vec<String>, _> = newest_first.iter().map(|id| repo.message(*id)).collect();
+    match messages {
+        Ok(messages) => {
+            let joined = messages.iter().map(|message| message.trim_end()).collect::<Vec<_>>().join("\n\n");
+            cx.write_to_clipboard(ClipboardItem::new_string(joined));
+            let copied = counted(messages.len(), "commit message", "commit messages");
+            window.push_notification(format!("{copied} copied"), cx);
+        }
+        Err(error) => window.push_notification(error.to_string(), cx),
     }
 }
 
@@ -284,8 +406,21 @@ mod tests {
     use anyhow::Result;
     use gix::ObjectId;
 
-    use super::{CommitAction, CommitMenu, Entry, reset_hard_question};
+    use super::{CommitAction, CommitMenu, Entry, PickedAction, reset_hard_question};
     use crate::git::{ResetMode, fixtures::id, scratch::ScratchRepo};
+
+    fn picked_texts(menu: &CommitMenu, newest_first: &[ObjectId]) -> Vec<Vec<String>> {
+        let branch = menu.branch();
+        menu.offered_picks(newest_first)
+            .into_iter()
+            .map(|group| {
+                group
+                    .into_iter()
+                    .map(|action| action.text(newest_first.len(), &branch))
+                    .collect()
+            })
+            .collect()
+    }
 
     fn texts(menu: &CommitMenu, id: &ObjectId) -> Vec<Vec<String>> {
         let branch = menu.branch();
@@ -385,6 +520,52 @@ mod tests {
         assert_eq!(open(false, true), [TagHere, CopyHash, CopyMessage]);
         assert_eq!(open(true, false), [CopyHash, CopyMessage]);
         assert_eq!(open(false, false).len(), 8);
+    }
+
+    #[test]
+    fn picked_commits_of_the_branch_are_reverted_and_a_line_of_them_squashed() -> Result<()> {
+        let scratch = graph("commit-menu-picked-held")?;
+        scratch.commit("third")?;
+        scratch.commit("fourth")?;
+        let menu = menu(&scratch)?;
+        let line = [rev(&scratch, "main")?, rev(&scratch, "main~1")?];
+        assert_eq!(
+            picked_texts(&menu, &line),
+            [vec!["Revert 2 commits"], vec!["Squash 2 commits…"], vec!["Copy 2 hashes", "Copy 2 messages"]]
+        );
+        let through_the_merge = [rev(&scratch, "main~1")?, rev(&scratch, "main~2")?];
+        assert_eq!(picked_texts(&menu, &through_the_merge)[0], ["Revert 2 commits"]);
+        assert_eq!(picked_texts(&menu, &through_the_merge).len(), 2);
+        Ok(())
+    }
+
+    #[test]
+    fn picked_commits_of_other_branches_are_cherry_picked_unless_the_branch_holds_some() -> Result<()> {
+        let scratch = graph("commit-menu-picked-other")?;
+        scratch.git(&["switch", "--quiet", "other"])?;
+        scratch.commit("other two")?;
+        scratch.git(&["switch", "--quiet", "main"])?;
+        let menu = menu(&scratch)?;
+        let other = [rev(&scratch, "other")?, rev(&scratch, "other~1")?];
+        assert_eq!(picked_texts(&menu, &other)[0], ["Cherry-pick 2 commits onto main"]);
+        assert_eq!(picked_texts(&menu, &other)[1], ["Squash 2 commits…"]);
+        let mixed = [rev(&scratch, "other")?, rev(&scratch, "main")?];
+        assert_eq!(picked_texts(&menu, &mixed), [vec!["Copy 2 hashes", "Copy 2 messages"]]);
+        Ok(())
+    }
+
+    #[test]
+    fn only_copies_wait_for_nothing_on_picked_commits() {
+        use PickedAction::*;
+        let open = |writing, underway| {
+            [CherryPick, Revert, Squash, CopyHashes, CopyMessages]
+                .into_iter()
+                .filter(|action| action.available(writing, underway))
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(open(false, true), [CopyHashes, CopyMessages]);
+        assert_eq!(open(true, false), [CopyHashes, CopyMessages]);
+        assert_eq!(open(false, false).len(), 5);
     }
 
     #[test]

@@ -23,6 +23,7 @@ impl Pick {
 pub(crate) struct Picked<K: Hash + Eq> {
     keys: HashSet<K>,
     anchor: Option<K>,
+    cursor: Option<K>,
 }
 
 impl<K: Hash + Eq> Default for Picked<K> {
@@ -30,6 +31,7 @@ impl<K: Hash + Eq> Default for Picked<K> {
         Self {
             keys: HashSet::new(),
             anchor: None,
+            cursor: None,
         }
     }
 }
@@ -38,12 +40,29 @@ impl<K: Clone + Hash + Eq> Picked<K> {
     pub(crate) fn only(key: K) -> Self {
         Self {
             keys: HashSet::from([key.clone()]),
-            anchor: Some(key),
+            anchor: Some(key.clone()),
+            cursor: Some(key),
         }
     }
 
     pub(crate) fn contains(&self, key: &K) -> bool {
         self.keys.contains(key)
+    }
+
+    pub(crate) fn len(&self) -> usize {
+        self.keys.len()
+    }
+
+    pub(crate) fn keys(&self) -> impl Iterator<Item = &K> {
+        self.keys.iter()
+    }
+
+    pub(crate) fn anchor(&self) -> Option<&K> {
+        self.anchor.as_ref()
+    }
+
+    pub(crate) fn cursor(&self) -> Option<&K> {
+        self.cursor.as_ref().or(self.anchor.as_ref())
     }
 
     pub(crate) fn after(&self, key: K, pick: Pick, shown: &[K]) -> Self {
@@ -63,7 +82,8 @@ impl<K: Clone + Hash + Eq> Picked<K> {
                 }
                 Self {
                     keys: kept,
-                    anchor: Some(key),
+                    anchor: Some(key.clone()),
+                    cursor: Some(key),
                 }
             }
             (Pick::Run | Pick::AddRun, Some(anchor)) => {
@@ -74,6 +94,7 @@ impl<K: Clone + Hash + Eq> Picked<K> {
                 Self {
                     keys: kept,
                     anchor: Some(anchor.clone()),
+                    cursor: Some(key),
                 }
             }
         }
@@ -83,6 +104,9 @@ impl<K: Clone + Hash + Eq> Picked<K> {
         self.keys.retain(|key| keep(key));
         if !self.anchor.as_ref().is_some_and(&keep) {
             self.anchor = None;
+        }
+        if !self.cursor.as_ref().is_some_and(&keep) {
+            self.cursor = None;
         }
     }
 }
@@ -212,6 +236,19 @@ mod tests {
         picked.retain(|key| *key != "b");
         assert_eq!(keys(&picked), ["c", "d"]);
         assert_eq!(keys(&picked.after("e", Pick::Run, &SHOWN)), ["e"]);
+    }
+
+    #[test]
+    fn the_cursor_follows_the_last_click_while_a_run_keeps_its_anchor() {
+        let picked = clicks(&[("b", Pick::Only), ("d", Pick::Run)]);
+        assert_eq!((picked.anchor(), picked.cursor()), (Some(&"b"), Some(&"d")));
+        let grown = picked.after("e", Pick::Run, &SHOWN);
+        assert_eq!(keys(&grown), ["b", "c", "d", "e"]);
+        let shrunk = grown.after("c", Pick::Run, &SHOWN);
+        assert_eq!(keys(&shrunk), ["b", "c"]);
+        assert_eq!(shrunk.cursor(), Some(&"c"));
+        let toggled = shrunk.after("e", Pick::Toggle, &SHOWN);
+        assert_eq!((toggled.anchor(), toggled.cursor(), toggled.len()), (Some(&"e"), Some(&"e"), 3));
     }
 
     #[test]

@@ -28,7 +28,7 @@ pub(crate) fn hint(message: impl Into<SharedString>, cx: &App) -> AnyElement {
         .p_6()
         .sm_text()
         .text_color(cx.theme().muted_foreground)
-        .child(message.into())
+        .child(div().min_w_0().max_w_full().text_center().child(message.into()))
         .into_any_element()
 }
 

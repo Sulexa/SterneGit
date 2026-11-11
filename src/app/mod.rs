@@ -22,6 +22,7 @@ use crate::{
     actions::{
         About, CheckForUpdates, CloneRepository, CloseDiff, CloseTab, CopyHash, Fetch, HISTORY_CONTEXT, NewRepository,
         NewerCommit, NextChange, NextFile, NextTab, OlderCommit, OpenRepository, OpenSettings,
+        PickNewerCommit, PickOlderCommit,
         PreviousChange, PreviousFile, PreviousTab, ResetZoom,
         LoopChange, MEDIA_CONTEXT, PlayPause, Quit, Refresh, SwitchVersion, WINDOW_CONTEXT, WholeWindow,
         ZoomIn, ZoomOut,
@@ -85,6 +86,16 @@ fn bind_keys(cx: &mut App) {
     cx.bind_keys(menus_show_the_last_key(
         NewerCommit,
         ["k", "up"],
+        HISTORY_CONTEXT,
+    ));
+    cx.bind_keys(menus_show_the_last_key(
+        PickOlderCommit,
+        ["shift-j", "shift-down"],
+        HISTORY_CONTEXT,
+    ));
+    cx.bind_keys(menus_show_the_last_key(
+        PickNewerCommit,
+        ["shift-k", "shift-up"],
         HISTORY_CONTEXT,
     ));
     cx.bind_keys(menus_show_the_last_key(

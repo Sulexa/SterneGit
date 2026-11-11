@@ -66,6 +66,13 @@ impl RepoStatusBar {
 }
 
 impl RepoStatusBar {
+    pub(crate) fn picked(mut self, count: Option<usize>) -> Self {
+        if let Some(count) = count.filter(|count| *count > 1) {
+            self.position = format!("{} commits picked", thousands(count));
+        }
+        self
+    }
+
     pub(crate) fn at_pull(mut self, place: Option<String>) -> Self {
         if let Some(place) = place {
             self.position = place;

@@ -3,6 +3,8 @@ const Catalog = (() => {
   const { slimeDiff, crownIcon, introDiff, themeDiff, modelDiff } = Sample;
   const { rebase, merge, rebaseChanges, rebaseOneLeft, rebaseResolved, statusConflicts, slimeConflict } = Sample;
   const { statusMerged, unity } = Sample;
+  const { pickedLine, pickedApart, pickedHead } = Sample;
+  const picks = (pick) => pick.rows.map(commit);
   const pane ={ w: 736, h: 600 };
   const textLook = { gaps: 'scope', marks: 'bars', sides: ['HEAD', 'Working copy'], scroll: true };
   const barFrame = (bar, width = 736) => `<div class="v" style="width:${width}px;position:relative;height:${bar.includes('ViewOptionsMenu') ? 300 : 40}px">${bar}</div>`;
@@ -513,6 +515,7 @@ const Catalog = (() => {
             ['Merge ready to commit', () => C.OperationBar({ operation: merge }), { w: 940 }],
             ['Cherry-pick stopped', () => C.OperationBar({ operation: { kind: 'cherry-pick', onto: 'main', commit: commit(4) }, conflicts: 1 }), { w: 940 }],
             ['Revert stopped', () => C.OperationBar({ operation: { kind: 'revert', branch: 'main', commit: commit(1) }, conflicts: 1 }), { w: 940 }],
+            ['Cherry-pick of 3 stopped at the second', () => C.OperationBar({ operation: { kind: 'cherry-pick', onto: 'main', step: 2, total: 3, commit: commit(4) }, conflicts: 1 }), { w: 940 }],
           ],
         },
         {
@@ -715,6 +718,20 @@ const Catalog = (() => {
             ['The HEAD commit', () => menuFrame(C.CommitMenu({ commit: commit(0), current: 'main' }), 260)],
             ['A merge', () => menuFrame(C.CommitMenu({ commit: commit(3), current: 'main' }), 260)],
             ['Detached HEAD', () => menuFrame(C.CommitMenu({ commit: commit(9), reachable: false }), 260)],
+            ['3 picked, one line, none on main', () => menuFrame(C.CommitMenu({ picked: picks(pickedLine), current: 'main', held: 'none', line: true }), 280)],
+            ['2 picked, one line, both on main', () => menuFrame(C.CommitMenu({ picked: picks(pickedHead), current: 'main', held: 'all', line: true }), 280)],
+            ['4 picked across lines', () => menuFrame(C.CommitMenu({ picked: picks(pickedApart), current: 'main', held: 'some' }), 280)],
+          ],
+        },
+        {
+          name: 'SquashDialog',
+          code: 'repo::squash_dialog::SquashDialog',
+          source: 'src/repo/commit_menu.rs',
+          about: 'Opened by Squash n commits… in a CommitMenu on picked commits. A kit dialog like the TagDialog: the subject has the focus, filled with the oldest commit’s subject, then the description, filled with the oldest commit’s description and the other messages oldest first, then what squashing moves, a warning when a remote branch already has the commits, and the tags that stay behind, as in the MessageEditor. Squash n commits stays disabled while the subject is empty. Enter in the subject or Ctrl+Enter squashes, Esc cancels. Squashing writes one commit with the newest commit’s files and the oldest’s author and date, then the commits after them again on top, keeping their files, so nothing conflicts.',
+          variants: [
+            ['Not pushed', () => bigDialog(C.SquashDialog({ commits: [commit(0), commit(1)], subject: commit(1).subject, description: commit(0).subject, branches: ['main'] }), 420)],
+            ['Pushed, commits after, tags', () => bigDialog(C.SquashDialog({ commits: picks(pickedLine), subject: commit(9).subject, description: `${commit(4).subject}\n\n${commit(2).subject}`, focus: 'description', after: 2, branches: ['feature/diff-view'], remotes: ['origin/feature/diff-view'], tags: ['v0.1.1'] }), 460)],
+            ['Subject emptied', () => bigDialog(C.SquashDialog({ commits: [commit(0), commit(1)], description: commit(0).subject, branches: ['main'] }), 420)],
           ],
         },
         {
@@ -747,7 +764,8 @@ const Catalog = (() => {
           source: 'src/repo/history_list.rs',
           about: 'The Uncommitted changes row when the work tree has changes, then one row per commit and one per stash, a stash at the time it was made. The graph is as wide as the widest visible row.',
           variants: [
-            ['With stashes', () => C.HistoryList({ history: { ...stashed.history, commits: stashed.history.commits.slice(0, 8) }, selectedRow: 3, changes }), { w: row, h: 260 }],['First rows', () => C.HistoryList({ history: { ...history, commits: history.commits.slice(0, 12) }, selectedRow: 2, changes }), { w: row, h: 370 }]],
+            ['With stashes', () => C.HistoryList({ history: { ...stashed.history, commits: stashed.history.commits.slice(0, 8) }, selectedRow: 3, changes }), { w: row, h: 260 }],['First rows', () => C.HistoryList({ history: { ...history, commits: history.commits.slice(0, 12) }, selectedRow: 2, changes }), { w: row, h: 370 }],
+            ['Three commits picked', () => C.HistoryList({ history: { ...history, commits: history.commits.slice(0, 12) }, selectedRow: null, picked: pickedLine.rows, changes }), { w: row, h: 370 }]],
         },
         {
           name: 'CommitRow',
@@ -788,6 +806,17 @@ const Catalog = (() => {
             ['Failed', () => C.CommitPanel({ commit: commit(2), details: commitDetails, state: 'failed', reason: 'stream did not contain valid UTF-8' }), { w: 480, h: 260 }],
             ['No file changed', () => C.CommitPanel({ commit: commit(3), details: { body: '', parents: ['b47d0a8', 'e1c55f2'], files: [] }, state: 'empty' }), { w: 480, h: 260 }],
             ['Nothing selected', () => C.CommitPanel({}), { w: 480, h: 160 }],
+          ],
+        },
+        {
+          name: 'PickedCommitsPanel',
+          code: 'repo::commit_panel::PickedCommitsPanel',
+          source: 'src/repo/commit_panel.rs',
+          about: 'Takes the place of the CommitPanel while two or more commits are picked: how many, their authors and days, the picked commits newest first (168 px at most, then it scrolls), each with its AuthorAvatar, subject and short id; a click on one selects it alone. When the commits follow one another on a single line it adds their changes together, from the parent of the oldest to the newest, with file and line counts, the FileViewToggle and the CommitFiles; a click on a file compares it in the middle pane. Otherwise a Hint says why there is no combined change.',
+          variants: [
+            ['One line', () => C.PickedCommitsPanel({ commits: picks(pickedLine), together: pickedLine }), { w: 480, h: 460 }],
+            ['A file open, as a tree', () => C.PickedCommitsPanel({ commits: picks(pickedLine), together: pickedLine, open: 'src/repo/file_diff_panel.rs', view: 'tree' }), { w: 480, h: 460 }],
+            ['Across lines', () => C.PickedCommitsPanel({ commits: picks(pickedApart) }), { w: 480, h: 360 }],
           ],
         },
         {

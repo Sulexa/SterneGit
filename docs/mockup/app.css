@@ -699,6 +699,23 @@
 .message-editor > .edit-actions { gap: 8px; }
 .message-editor > .failure { color: var(--red); }
 
+.picked-commits {
+  max-height: 168px;
+  margin: 2px -8px;
+  overflow: hidden;
+}
+.picked-commit {
+  flex: none;
+  height: 24px;
+  gap: 8px;
+  padding: 0 8px;
+  border-radius: 6px;
+}
+.picked-commit:hover { background: var(--list-hover); }
+
+.squash-dialog > .squash-notes { gap: 6px; margin-top: 12px; }
+.squash-dialog .edit-warn { gap: 6px; color: var(--yellow); }
+
 .file-row {
   gap: 8px;
   padding-left: 12px;

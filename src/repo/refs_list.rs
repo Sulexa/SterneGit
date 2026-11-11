@@ -1,4 +1,4 @@
-use std::{path::Path, sync::Arc};
+use std::{path::Path, rc::Rc, sync::Arc};
 
 use gix::ObjectId;
 use gpui_kit::{
@@ -26,7 +26,7 @@ use super::{
 use crate::{
     git::{AheadBehind, History, RefKind, RefLabel, Stash, Worktree},
     ui::{
-        Folded, Handler, Look as _, PullMark, SectionHeader, checked_out_in, counted, handler,
+        Folded, Handler, Look as _, Picked, PullMark, SectionHeader, checked_out_in, counted, handler,
         is_double_click, list_row, pull_chip, thousands, tree_line,
     },
 };
@@ -47,7 +47,7 @@ pub(crate) struct WorktreeSection {
 pub(crate) struct RefsList {
     history: Arc<History>,
     rows: Vec<RefTreeRow>,
-    selected: Option<ObjectId>,
+    picked: Rc<Picked<ObjectId>>,
     scroll: UniformListScrollHandle,
     on_reveal: Option<Handler<usize>>,
     on_reveal_stash: Option<Handler<ObjectId>>,
@@ -76,7 +76,7 @@ impl RefsList {
         Self {
             rows: ref_tree(&history.refs, listed, folded),
             history,
-            selected: None,
+            picked: Rc::default(),
             scroll,
             on_reveal: None,
             on_reveal_stash: None,
@@ -116,8 +116,8 @@ impl RefsList {
         self
     }
 
-    pub(crate) fn selected(mut self, commit: Option<ObjectId>) -> Self {
-        self.selected = commit;
+    pub(crate) fn picked(mut self, picked: Rc<Picked<ObjectId>>) -> Self {
+        self.picked = picked;
         self
     }
 
@@ -159,7 +159,7 @@ impl RenderOnce for RefsList {
         let Self {
             history,
             rows,
-            selected,
+            picked,
             scroll,
             on_reveal,
             on_reveal_stash,
@@ -194,7 +194,7 @@ impl RenderOnce for RefsList {
                             None => pulls
                                 .as_ref()
                                 .map_or_else(|| div().into_any_element(), |pulls| pulls.row(ix, cx)),
-                            Some(ix) => ref_tree_row(&rows[ix], &history, selected, &marks, &handlers, cx),
+                            Some(ix) => ref_tree_row(&rows[ix], &history, &picked, &marks, &handlers, cx),
                         })
                         .collect::<Vec<_>>()
                 })
@@ -218,7 +218,7 @@ struct RowHandlers {
 fn ref_tree_row(
     row: &RefTreeRow,
     history: &History,
-    selected: Option<ObjectId>,
+    picked: &Picked<ObjectId>,
     marks: &PullMarks,
     handlers: &RowHandlers,
     cx: &App,
@@ -254,7 +254,7 @@ fn ref_tree_row(
             &history.refs[ix],
             ix,
             depth,
-            selected,
+            picked,
             marks.get(&history.refs[ix].full_name()).copied(),
             RefClicks {
                 on_reveal: on_reveal.clone(),
@@ -266,7 +266,7 @@ fn ref_tree_row(
         &RefTreeRow::Stash { ix } => stash_row(
             &history.stashes[ix],
             ix,
-            selected,
+            picked,
             on_reveal_stash.clone(),
             stash_menu.clone(),
             cx,
@@ -353,7 +353,7 @@ fn ref_row(
     label: &RefLabel,
     ix: usize,
     depth: usize,
-    selected: Option<ObjectId>,
+    picked: &Picked<ObjectId>,
     mark: Option<PullMark>,
     clicks: RefClicks,
     menus: &RefMenus,
@@ -367,7 +367,7 @@ fn ref_row(
     let double_clicked = label.clone();
     let row = list_row(
         SharedString::from(format!("{:?}/{}", label.kind, label.name)),
-        selected == Some(label.target),
+        picked.contains(&label.target),
     )
     .px_3()
     .child(
@@ -448,13 +448,13 @@ fn apart_in_words(apart: AheadBehind, upstream: &str) -> String {
 fn stash_row(
     stash: &Stash,
     ix: usize,
-    selected: Option<ObjectId>,
+    picked: &Picked<ObjectId>,
     on_reveal: Option<Handler<ObjectId>>,
     stash_menu: Option<StashMenu>,
     cx: &App,
 ) -> AnyElement {
     let id = stash.id;
-    let row = list_row(SharedString::from(format!("stash/{ix}")), selected == Some(id))
+    let row = list_row(SharedString::from(format!("stash/{ix}")), picked.contains(&id))
         .px_3()
         .child(tree_line(
             0,

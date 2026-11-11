@@ -125,37 +125,85 @@ impl Descent<'_> {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum Rewrite {
+    Message,
+    Squash,
+}
+
+impl Rewrite {
+    fn moved_meanwhile(self, name: &str) -> String {
+        match self {
+            Rewrite::Message => format!(
+                "{name} moved while the message was saved, so nothing changed. Save again to rewrite it from where it is now."
+            ),
+            Rewrite::Squash => format!(
+                "{name} moved while the commits were squashed, so nothing changed. Squash again to rewrite it from where it is now."
+            ),
+        }
+    }
+}
+
+pub(super) struct Copied<'a> {
+    pub(super) message: Option<&'a BStr>,
+    pub(super) tree: Option<ObjectId>,
+}
+
 impl Repo {
     pub(crate) fn reword(&self, id: ObjectId, message: &str) -> Result<ObjectId> {
+        let message = self.cleaned_message(message)?;
+        let reflog = format!("SterneGit: edit the message of {}", short_id(id));
+        let copied = Copied {
+            message: Some(message.as_bstr()),
+            tree: None,
+        };
+        self.rewrite_above(id, id, copied, &reflog, Rewrite::Message)
+    }
+
+    pub(super) fn cleaned_message(&self, message: &str) -> Result<Vec<u8>> {
         let message = run_with_input(&self.location, &["stripspace"], message.as_bytes())?;
         if message.is_empty() {
             bail!("A commit message can't be empty");
         }
+        Ok(message)
+    }
+
+    pub(super) fn rewrite_above(
+        &self,
+        target: ObjectId,
+        copy_of: ObjectId,
+        copied: Copied<'_>,
+        reflog: &str,
+        rewrite: Rewrite,
+    ) -> Result<ObjectId> {
         let repo = self.local();
         let tips = local_tips(&repo)?;
-        let parents = walk_above(&repo, &tips, id)?;
+        let parents = walk_above(&repo, &tips, target)?;
         let mut descent = Descent {
             parents: &parents,
-            target: id,
+            target,
             holds: HashMap::new(),
             oldest_first: Vec::new(),
         };
         let moved: Vec<&Tip> = tips.iter().filter(|tip| descent.holds(tip.id)).collect();
         if moved.is_empty() {
-            bail!("No local branch holds {}", short_id(id));
+            bail!("No local branch holds {}", short_id(target));
         }
         let committer = run(&self.location, &["var", "GIT_COMMITTER_IDENT"], Exit::Success)?;
         let committer = committer.trim_end().as_bstr();
         let mut rewritten = HashMap::new();
-        let reworded = copy_commit(&repo, id, &rewritten, committer, Some(message.as_bstr()))?;
-        rewritten.insert(id, reworded);
+        let replacement = copy_commit(&repo, copy_of, &rewritten, committer, copied)?;
+        rewritten.insert(target, replacement);
         for commit in descent.oldest_first {
-            let copy = copy_commit(&repo, commit, &rewritten, committer, None)?;
+            let kept = Copied {
+                message: None,
+                tree: None,
+            };
+            let copy = copy_commit(&repo, commit, &rewritten, committer, kept)?;
             rewritten.insert(commit, copy);
         }
-        let reflog = format!("SterneGit: edit the message of {}", short_id(id));
-        self.move_tips(&repo, &moved, &rewritten, &reflog)?;
-        Ok(reworded)
+        self.move_tips(&repo, &moved, &rewritten, reflog, rewrite)?;
+        Ok(replacement)
     }
 
     fn move_tips(
@@ -164,6 +212,7 @@ impl Repo {
         moved: &[&Tip],
         rewritten: &HashMap<ObjectId, ObjectId>,
         reflog: &str,
+        rewrite: Rewrite,
     ) -> Result<()> {
         let mut updates = Vec::new();
         for tip in moved {
@@ -175,9 +224,7 @@ impl Repo {
         match run_with_input(&self.location, &args, &updates) {
             Ok(_) => Ok(()),
             Err(error) => Err(match moved_meanwhile(repo, moved) {
-                Some(name) => anyhow!(
-                    "{name} moved while the message was saved, so nothing changed. Save again to rewrite it from where it is now."
-                ),
+                Some(name) => anyhow!(rewrite.moved_meanwhile(&name)),
                 None => error,
             }),
         }
@@ -242,10 +289,11 @@ fn copy_commit(
     id: ObjectId,
     rewritten: &HashMap<ObjectId, ObjectId>,
     committer: &BStr,
-    message: Option<&BStr>,
+    copied: Copied<'_>,
 ) -> Result<ObjectId> {
     let object = repo.find_object(id)?;
     let parents: Vec<String>;
+    let tree = copied.tree.map(|tree| tree.to_string());
     let mut commit = CommitRef::from_bytes(&object.data, repo.object_hash())?;
     parents = commit
         .parents
@@ -260,7 +308,10 @@ fn copy_commit(
     commit
         .extra_headers
         .retain(|(name, _)| !SIGNATURES.contains(&name.as_bytes()));
-    if let Some(message) = message {
+    if let Some(tree) = &tree {
+        commit.tree = tree.as_bytes().as_bstr();
+    }
+    if let Some(message) = copied.message {
         commit.message = message;
         commit.encoding = None;
     }
@@ -274,7 +325,7 @@ mod tests {
 
     use std::collections::HashMap;
 
-    use super::{RewordScope, local_tips};
+    use super::{Rewrite, RewordScope, local_tips};
     use crate::git::{command::run_with_input, scratch::ScratchRepo};
 
     fn id(scratch: &ScratchRepo, revision: &str) -> Result<ObjectId> {
@@ -395,7 +446,7 @@ mod tests {
         let moved: Vec<_> = tips.iter().collect();
         let rewritten = HashMap::from([(id(&scratch, "main")?, id(&scratch, "main~1")?)]);
         scratch.git(&["update-ref", "refs/heads/main", "main~2"])?;
-        let error = repo.move_tips(&local, &moved, &rewritten, "test").unwrap_err();
+        let error = repo.move_tips(&local, &moved, &rewritten, "test", Rewrite::Message).unwrap_err();
         assert_eq!(
             error.to_string(),
             "main moved while the message was saved, so nothing changed. Save again to rewrite it from where it is now."

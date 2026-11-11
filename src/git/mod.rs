@@ -25,6 +25,7 @@ mod refusal;
 mod remote;
 mod reset;
 mod reword;
+mod squash;
 pub(crate) mod ssh_key;
 mod stash;
 mod status;
@@ -69,14 +70,16 @@ pub(crate) use pull_mode::PullMode;
 pub(crate) use refs::{AheadBehind, RefDigest, RefKind, RefLabel, RemoteBranch, ShownRef};
 pub(crate) use refusal::{Refusal, Tracking};
 pub(crate) use remote::{Behind, CaughtUp, Pulled, Pushed};
+pub(crate) use reach::Held;
 pub(crate) use reset::ResetMode;
 pub(crate) use reword::RewordScope;
+pub(crate) use squash::Line;
 pub(crate) use stash::{Carried, Stash};
 pub(crate) use status::{ChangeKind, FileChange, Side, WorkingChanges};
 pub(crate) use tag::{TagPushed, new_tag_name};
 pub(crate) use underway::{Continued, Picking, Rebasing, Underway};
 #[cfg(test)]
-pub(crate) use underway::{Merging, Replaying};
+pub(crate) use underway::{Merging, Place, Replaying};
 pub(crate) use version::{Conflicted, Revision, Version};
 pub(crate) use worktree::{
     FolderLeft, Worktree, WorktreeChanges, WorktreeStart, changes_elsewhere, folder_is_free,

@@ -509,6 +509,25 @@ const Texts = {
   deleteFiles: (n) => `Delete ${n} files…`,
   openFiles: (n) => `Open ${n} files`,
   copyPaths: (n) => `Copy ${n} paths`,
+  commitsPicked: (n) => `${thousands(n)} commits picked`,
+  pickedTogether: (from, to) => `Their changes together, from ${from} to ${to}`,
+  pickedApart: "These commits don't follow one another on a single line, so their changes can't be shown as one. Ctrl+click the commits of one branch, or Shift+click a run of them, to see their changes together.",
+  cherryPickCommits: (n, branch) => `Cherry-pick ${n} commits onto ${branch}`,
+  revertCommits: (n) => `Revert ${n} commits`,
+  squashCommits: (n) => `Squash ${n} commits…`,
+  copyHashes: (n) => `Copy ${n} hashes`,
+  copyMessages: (n) => `Copy ${n} messages`,
+  squashTitle: (n) => `Squash ${n} commits into one`,
+  squashDescription: (newest, oldest) => `One commit takes their place, with the files of ${newest}, the author and date of ${oldest}, and this message.`,
+  squashMoves: (after, branches) =>
+    after
+      ? `Squashing gives the ${counted(after, 'commit', 'commits')} after them new hashes, and moves ${listed(branches)}.`
+      : `Squashing moves ${listed(branches)} to the new commit.`,
+  squashPushed: (remotes) => `${listed(remotes)} already ${remotes.length > 1 ? 'have' : 'has'} them: the next push needs Force push.`,
+  squashButton: (n) => `Squash ${n} commits`,
+  squashTooltip: 'Squash the commits  Ctrl+Enter',
+  squashed: (n, id) => `Squashed ${n} commits into ${id}`,
+  cherryPickedCommits: (n, branch) => `Cherry-picked ${n} commits onto ${branch}`,
   historyPosition: (at, n, name) => `Commit ${thousands(at)} of ${thousands(n)} changing ${name}`,
   renamedFrom: (path) => `Renamed from ${path}`,
   hear: (side) => `Hear ${side === 'before' ? 'the version before the change' : 'the changed version'}  Tab switches`,
@@ -1483,6 +1502,14 @@ function commitMenuItems({ commit, current, reachable = true, reset }) {
   ]);
 }
 
+function pickedCommitsMenuItems({ commits, current, held = 'none', line = false }) {
+  const item = (text) => [text, ''];
+  const n = commits.length;
+  const merges = commits.some((commit) => commit.merge);
+  const undo = held === 'all' ? item(Texts.revertCommits(n)) : held === 'none' && !merges && item(Texts.cherryPickCommits(n, current || 'HEAD'));
+  return menuGroups([[undo], [line && !merges && item(Texts.squashCommits(n))], [item(Texts.copyHashes(n)), item(Texts.copyMessages(n))]]);
+}
+
 const typedOrigin = (origin) => origin.startsWith('{');
 
 const originHost = (origin) => (typedOrigin(origin) ? null : new URL(origin).host);
@@ -1773,12 +1800,12 @@ const C = {
     return C.ListRow({ content, selected, name: 'StashRow' });
   },
 
-  RefsList({ refs, stashes = [], selectedRow, collapsed = [], pulls, worktrees }) {
+  RefsList({ refs, stashes = [], selectedRow, picked = [], collapsed = [], pulls, worktrees }) {
     const closed = new Set(collapsed);
     const nodes = (kind, list, depth) =>
       list
         .map((node) => {
-          if (!node.children) return C.RefRow({ label: node.label, name: node.name, depth, selected: node.label.row === selectedRow });
+          if (!node.children) return C.RefRow({ label: node.label, name: node.name, depth, selected: node.label.row === selectedRow || picked.includes(node.label.row) });
           const open = !closed.has(`${kind}:${node.path}`);
           return treeGroup(open, C.RefFolderRow({ name: node.name, kind, depth, open }), nodes(kind, node.children, depth + 1));
         })
@@ -1844,14 +1871,14 @@ const C = {
     return C.ListRow({ content, selected, extraClass: 'commit-row', name: 'WorktreeChangesRow' });
   },
 
-  HistoryList({ history, selectedRow, changes, wipSelected = false }) {
+  HistoryList({ history, selectedRow, picked = [], changes, wipSelected = false }) {
     const width = graphWidth(history.commits);
     const wip = changes && (changes.conflicted?.length || changes.unstaged.length || changes.staged.length) ? C.UncommittedRow({ changes, selected: wipSelected }) : '';
     const rows = history.commits
       .map((commit, ix) =>
         commit.wip
           ? C.WorktreeChangesRow({ tree: commit.wip, graph: commit.graph, width, selected: ix === selectedRow })
-          : C.CommitRow({ commit, selected: ix === selectedRow, width, pulls: history.pulls, elsewhere: history.elsewhere }),
+          : C.CommitRow({ commit, selected: ix === selectedRow || picked.includes(ix), width, pulls: history.pulls, elsewhere: history.elsewhere }),
       )
       .join('');
     const thumb = Math.max(20, Math.round((28 / history.total) * 800));
@@ -2022,6 +2049,30 @@ const C = {
     return `<div data-c="CommitPanel" class="commit-panel">${header}<div class="fill v">${content}</div></div>`;
   },
 
+  PickedCommitsPanel({ commits, together, open, view = 'list' }) {
+    const authors = [...new Set(commits.map((commit) => commit.author))];
+    const days = commits.map((commit) => commit.date.slice(0, 10)).sort();
+    const span = days[0] === days[days.length - 1] ? days[0] : `${days[0]} – ${days[days.length - 1]}`;
+    const row = (commit) =>
+      `<div class="picked-commit h">${C.AuthorAvatar({ name: commit.author, email: commit.email })}<div class="fill ellipsis sm">${esc(commit.subject || '(no message)')}</div><span class="none xs muted mono">${esc(commit.id)}</span></div>`;
+    const files = together ? together.files : [];
+    const additions = files.reduce((sum, f) => sum + f.additions, 0);
+    const deletions = files.reduce((sum, f) => sum + f.deletions, 0);
+    const changes = together
+      ? `<div class="xs muted">${esc(Texts.pickedTogether(together.from, commits[0].id))}</div>` +
+        `<div class="h xs" style="gap:12px"><div class="muted">${counted(files.length, 'file', 'files')}</div>${C.Additions({ count: additions })}${C.Deletions({ count: deletions })}<div class="fill"></div>${C.FileViewToggle({ view })}</div>`
+      : '';
+    const header =
+      `<div class="panel-header">` +
+      `<div class="base medium">${esc(Texts.commitsPicked(commits.length))}</div>` +
+      `<div class="h xs muted" style="gap:8px"><span class="ellipsis">${esc(listed(authors))}</span><span>·</span><span class="none">${esc(span)}</span></div>` +
+      `<div class="picked-commits v">${commits.map(row).join('')}</div>` +
+      changes +
+      `</div>`;
+    const body = together ? C.CommitFiles({ files, open, view }) : C.Hint({ message: Texts.pickedApart });
+    return `<div data-c="PickedCommitsPanel" class="commit-panel">${header}<div class="fill v">${body}</div></div>`;
+  },
+
   MessageEditor({ subject = '', description = '', focus, after = 0, branches = [], remotes = [], tags = [], saving = false, changed = true, failure }) {
     const lines = [
       `<div class="xs muted">${esc(Texts.rewrites(after, branches))}</div>`,
@@ -2138,7 +2189,7 @@ const C = {
 
   FileBar({ diff, state = 'ready', writing = false, expanded = false, filePosition, tools = '' }) {
     const labels = diff.commit ? null : SideLabels[diff.side];
-    const shownState = diff.commit ? `in ${diff.commit}` : labels.state;
+    const shownState = diff.picked ? `in ${counted(diff.picked, 'commit', 'commits')}` : diff.commit ? `in ${diff.commit}` : labels.state;
     const conflicted = diff.side === 'conflicted';
     const total = conflicted && diff.parts ? diff.parts.filter((part) => part.conflict).length : 0;
     const chosen = conflicted && diff.resolutions ? diff.resolutions.filter(Boolean).length : 0;
@@ -3084,7 +3135,7 @@ const C = {
     const stuck = conflicts > 0;
     const glyph = stuck ? icon('triangle-alert', 'md', 'var(--yellow)') : icon('circle-check', 'md', 'var(--green)');
     const stopped = operation.commit ? `<span class="mono muted">${esc(operation.commit.id)}</span><span class="ellipsis">${esc(operation.commit.subject)}</span>` : '';
-    const step = kind === 'rebase' ? `<span class="muted">Commit ${operation.step} of ${operation.total}</span>${stopped}` : stopped;
+    const step = operation.total ? `<span class="muted">Commit ${operation.step} of ${operation.total}</span>${stopped}` : stopped;
     const state = stuck
       ? `<span class="conflict-count">${esc(counted(conflicts, 'conflicted file', 'conflicted files'))}</span>`
       : `<span class="resolved">${esc(OperationTexts.noConflicts)}</span>`;
@@ -3207,8 +3258,27 @@ const C = {
     return C.AlertDialog({ title: Texts.deleteStashTitle(stash.name), description: Texts.deleteStashDescription(stash.message), confirm: 'Delete', name: 'DeleteStashDialog' });
   },
 
-  CommitMenu({ commit, current, reachable = true, reset, left = 0, top = 0, hot }) {
-    return C.Menu({ items: commitMenuItems({ commit, current, reachable, reset }), left, top, hot, name: 'CommitMenu' });
+  CommitMenu({ commit, current, reachable = true, reset, picked = [], held, line, left = 0, top = 0, hot }) {
+    const items = picked.length > 1 ? pickedCommitsMenuItems({ commits: picked, current, held, line }) : commitMenuItems({ commit, current, reachable, reset });
+    return C.Menu({ items, left, top, hot, name: 'CommitMenu' });
+  },
+
+  SquashDialog({ commits, subject = '', description = '', focus = 'subject', after = 0, branches = [], remotes = [], tags = [] }) {
+    const n = commits.length;
+    const [newest, oldest] = [commits[0], commits[n - 1]];
+    const lines = [
+      `<div class="xs muted">${esc(Texts.squashMoves(after, branches))}</div>`,
+      remotes.length ? `<div class="h xs edit-warn">${icon('triangle-alert', 'xs')}<span>${esc(Texts.squashPushed(remotes))}</span></div>` : '',
+      tags.length ? `<div class="xs muted">${esc(Texts.tagsStay(tags))}</div>` : '',
+    ];
+    const buttons =
+      C.Button({ label: 'Cancel', size: 'md' }) +
+      C.Button({ label: Texts.squashButton(n), variant: 'primary', size: 'md', disabled: subject.trim() === '', tooltip: Texts.squashTooltip });
+    const close = `<span class="close">${icon('close', 'sm')}</span>`;
+    const fields =
+      `<div class="v field">${C.Input({ value: subject, placeholder: Texts.commitMessage, focused: focus === 'subject' })}</div>` +
+      `<div class="v field">${C.Input({ value: description, placeholder: Texts.commitDescription, lines: 4, focused: focus === 'description' })}</div>`;
+    return `<div class="overlay"><div data-c="SquashDialog" data-base="Dialog" class="dialog squash-dialog">${close}<div class="base semibold">${esc(Texts.squashTitle(n))}</div><div class="sm muted">${esc(Texts.squashDescription(newest.id, oldest.id))}</div>${fields}<div class="v squash-notes">${join(lines)}</div><div class="footer stretch">${buttons}</div></div></div>`;
   },
 
   ResetHardDialog({ branch, commit, files, lost = 0 }) {

@@ -3,6 +3,8 @@ gpui_kit::actions!(
     [
         OlderCommit,
         NewerCommit,
+        PickOlderCommit,
+        PickNewerCommit,
         Refresh,
         Fetch,
         OpenRepository,

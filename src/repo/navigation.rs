@@ -1,9 +1,12 @@
-use std::{path::Path, sync::Arc};
+use std::{path::Path, rc::Rc, sync::Arc};
 
 use gix::ObjectId;
 use gpui_kit::SharedString;
 
-use crate::git::{History, Side, WorkingChanges};
+use crate::{
+    git::{History, Side, WorkingChanges},
+    ui::{Pick, Picked},
+};
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct OpenFile {
@@ -28,6 +31,10 @@ pub(crate) enum Target {
     Nothing,
     Commit {
         id: ObjectId,
+        open: Option<SharedString>,
+    },
+    Commits {
+        picked: Rc<Picked<ObjectId>>,
         open: Option<SharedString>,
     },
     WorkingTree {
@@ -57,27 +64,58 @@ impl Target {
     pub(crate) fn commit(&self) -> Option<ObjectId> {
         match self {
             Target::Commit { id, .. } => Some(*id),
-            Target::Nothing | Target::WorkingTree { .. } | Target::Worktree { .. } | Target::Pull { .. } => None,
+            Target::Nothing
+            | Target::Commits { .. }
+            | Target::WorkingTree { .. }
+            | Target::Worktree { .. }
+            | Target::Pull { .. } => None,
+        }
+    }
+
+    pub(crate) fn several(&self) -> Option<&Rc<Picked<ObjectId>>> {
+        match self {
+            Target::Commits { picked, .. } => Some(picked),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn picked(&self) -> Rc<Picked<ObjectId>> {
+        match self {
+            Target::Commits { picked, .. } => picked.clone(),
+            Target::Commit { id, .. } => Rc::new(Picked::only(*id)),
+            Target::Nothing | Target::WorkingTree { .. } | Target::Worktree { .. } | Target::Pull { .. } => {
+                Rc::default()
+            }
         }
     }
 
     pub(crate) fn pull(&self) -> Option<u64> {
         match self {
             Target::Pull { number, .. } => Some(*number),
-            Target::Nothing | Target::Commit { .. } | Target::WorkingTree { .. } | Target::Worktree { .. } => None,
+            Target::Nothing
+            | Target::Commit { .. }
+            | Target::Commits { .. }
+            | Target::WorkingTree { .. }
+            | Target::Worktree { .. } => None,
         }
     }
 
     pub(crate) fn worktree(&self) -> Option<&Arc<Path>> {
         match self {
             Target::Worktree { location, .. } => Some(location),
-            Target::Nothing | Target::Commit { .. } | Target::WorkingTree { .. } | Target::Pull { .. } => None,
+            Target::Nothing
+            | Target::Commit { .. }
+            | Target::Commits { .. }
+            | Target::WorkingTree { .. }
+            | Target::Pull { .. } => None,
         }
     }
 
     pub(crate) fn has_open_file(&self) -> bool {
         match self {
-            Target::Commit { open, .. } | Target::Pull { open, .. } => open.is_some(),
+            Target::Commit { open, .. } | Target::Commits { open, .. } | Target::Pull { open, .. } => {
+                open.is_some()
+            }
             Target::WorkingTree { open } | Target::Worktree { open, .. } => open.is_some(),
             Target::Nothing => false,
         }
@@ -85,7 +123,9 @@ impl Target {
 
     pub(crate) fn close_file(&mut self) -> bool {
         match self {
-            Target::Commit { open, .. } | Target::Pull { open, .. } => open.take().is_some(),
+            Target::Commit { open, .. } | Target::Commits { open, .. } | Target::Pull { open, .. } => {
+                open.take().is_some()
+            }
             Target::WorkingTree { open } | Target::Worktree { open, .. } => open.take().is_some(),
             Target::Nothing => false,
         }
@@ -94,7 +134,39 @@ impl Target {
     pub(crate) fn working_file(&self) -> Option<&OpenFile> {
         match self {
             Target::WorkingTree { open } | Target::Worktree { open, .. } => open.as_ref(),
-            Target::Nothing | Target::Commit { .. } | Target::Pull { .. } => None,
+            Target::Nothing | Target::Commit { .. } | Target::Commits { .. } | Target::Pull { .. } => None,
+        }
+    }
+
+    pub(crate) fn after_pick(&self, id: ObjectId, pick: Pick, shown: &[ObjectId]) -> Option<Target> {
+        of_picked(self.picked().after(id, pick, shown))
+    }
+
+    pub(crate) fn grown(&self, step: Step, history: &History) -> Option<Target> {
+        let shown = history.pickable();
+        let cursor = self.focus()?;
+        let at = shown.iter().position(|id| *id == cursor)?;
+        let next = match step {
+            Step::Newer => at.checked_sub(1)?,
+            Step::Older => at + 1,
+        };
+        self.after_pick(*shown.get(next)?, Pick::Run, &shown)
+    }
+
+    pub(crate) fn back_to_one(&self) -> Option<Target> {
+        match self {
+            Target::Commits { picked, open: None } => picked.anchor().copied().map(Target::at_commit),
+            _ => None,
+        }
+    }
+
+    fn focus(&self) -> Option<ObjectId> {
+        match self {
+            Target::Commit { id, .. } => Some(*id),
+            Target::Commits { picked, .. } => picked.cursor().copied(),
+            Target::Nothing | Target::WorkingTree { .. } | Target::Worktree { .. } | Target::Pull { .. } => {
+                None
+            }
         }
     }
 
@@ -134,6 +206,15 @@ impl Target {
                 .map_or_else(|| commit_or_nothing(head_or_newest(history)), Target::at_commit),
             Target::Commit { id, .. } if history.row_of(id).is_some() => self.clone(),
             Target::Commit { .. } => commit_or_nothing(history.newest()),
+            Target::Commits { picked, .. } => {
+                let mut kept = (**picked).clone();
+                kept.retain(|id| history.row_of(id).is_some() && history.stash_index(id).is_none());
+                if kept == **picked {
+                    self.clone()
+                } else {
+                    of_picked(kept).unwrap_or_else(|| commit_or_nothing(history.newest()))
+                }
+            }
             Target::Pull { .. } => self.clone(),
             Target::Nothing => commit_or_nothing(head_or_newest(history)),
         }
@@ -162,12 +243,14 @@ impl Target {
                 .changes_row_of(location)
                 .and_then(|row| history.commits.get(row + 1))
                 .map(|commit| Target::at_commit(commit.id)),
-            (Target::Commit { id, .. }, Step::Newer) if *id == newest && has_changes => {
+            (Target::Commit { .. } | Target::Commits { .. }, Step::Newer)
+                if self.focus() == Some(newest) && has_changes =>
+            {
                 Some(Target::WorkingTree { open: None })
             }
             _ => {
                 let row = self
-                    .commit()
+                    .focus()
                     .and_then(|id| history.row_of(&id))
                     .unwrap_or(0);
                 let last = history.commits.len() - 1;
@@ -180,11 +263,22 @@ impl Target {
                     match next {
                         Some(next) if history.worktree_on_row(next).is_some() => row = next,
                         Some(next) => break Some(Target::at_commit(history.commits[next].id)),
-                        None => break self.commit().map(Target::at_commit),
+                        None => break self.focus().map(Target::at_commit),
                     }
                 }
             }
         }
+    }
+}
+
+fn of_picked(picked: Picked<ObjectId>) -> Option<Target> {
+    match picked.len() {
+        0 => None,
+        1 => picked.keys().next().copied().map(Target::at_commit),
+        _ => Some(Target::Commits {
+            picked: Rc::new(picked),
+            open: None,
+        }),
     }
 }
 
@@ -209,10 +303,15 @@ fn clean_at_shown_head(changes: &WorkingChanges, history: &History) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use std::rc::Rc;
+
     use super::{OpenFile, Step, Target};
-    use crate::git::{
-        ChangeKind, FileChange, Side, WorkingChanges,
-        fixtures::{id, linear_history},
+    use crate::{
+        git::{
+            ChangeKind, FileChange, Side, WorkingChanges,
+            fixtures::{id, linear_history},
+        },
+        ui::Pick,
     };
 
     fn file(path: &str) -> FileChange {
@@ -517,6 +616,84 @@ mod tests {
         assert!(in_working_tree.close_file());
         assert_eq!(in_working_tree, Target::WorkingTree { open: None });
         assert!(!Target::Nothing.close_file());
+    }
+
+    fn picks(target: &Target) -> Vec<u8> {
+        let mut bytes: Vec<u8> = (1..=9)
+            .filter(|byte| target.picked().contains(&id(*byte)))
+            .collect();
+        bytes.sort_unstable();
+        bytes
+    }
+
+    fn shown(bytes: &[u8]) -> Vec<gix::ObjectId> {
+        bytes.iter().copied().map(id).collect()
+    }
+
+    #[test]
+    fn ctrl_and_shift_pick_several_commits_and_one_left_is_a_plain_selection() {
+        let rows = shown(&[5, 4, 3, 2, 1]);
+        let added = at(4).after_pick(id(2), Pick::Toggle, &rows).expect("a pick");
+        assert_eq!(picks(&added), [2, 4]);
+        assert!(matches!(added, Target::Commits { open: None, .. }));
+        assert_eq!(added.commit(), None);
+        let run = added.after_pick(id(5), Pick::Run, &rows).expect("a run");
+        assert_eq!(picks(&run), [2, 3, 4, 5]);
+        assert_eq!(added.after_pick(id(2), Pick::Toggle, &rows), Some(at(4)));
+        assert_eq!(at(4).after_pick(id(4), Pick::Toggle, &rows), None);
+        assert_eq!(run.after_pick(id(1), Pick::Only, &rows), Some(at(1)));
+    }
+
+    #[test]
+    fn shift_steps_grow_and_shrink_the_run_from_the_last_click() {
+        let history = linear_history(&[5, 4, 3, 2, 1], Some(5));
+        let grown = at(3).grown(Step::Older, &history).expect("grown");
+        assert_eq!(picks(&grown), [2, 3]);
+        let grown = grown.grown(Step::Older, &history).expect("grown again");
+        assert_eq!(picks(&grown), [1, 2, 3]);
+        assert_eq!(grown.grown(Step::Older, &history), None);
+        let shrunk = grown.grown(Step::Newer, &history).expect("shrunk");
+        assert_eq!(picks(&shrunk), [2, 3]);
+        assert_eq!(shrunk.step(Step::Older, &history, false), Some(at(1)));
+        assert_eq!(shrunk.step(Step::Newer, &history, false), Some(at(3)));
+        assert_eq!(shrunk.back_to_one(), Some(at(3)));
+    }
+
+    #[test]
+    fn a_reload_keeps_the_picked_commits_that_are_still_there() {
+        let rows = shown(&[5, 4, 3, 2, 1]);
+        let picked = at(5)
+            .after_pick(id(3), Pick::Toggle, &rows)
+            .and_then(|target| target.after_pick(id(1), Pick::Toggle, &rows))
+            .expect("a pick");
+        let mut opened = picked.clone();
+        if let Target::Commits { open, .. } = &mut opened {
+            *open = Some("a.rs".into());
+        }
+        let all_there = linear_history(&[5, 4, 3, 2, 1], Some(5));
+        assert_eq!(opened.after_history_read(&all_there, None), opened);
+        let one_gone = linear_history(&[5, 4, 3, 2], Some(5));
+        assert_eq!(picks(&picked.after_history_read(&one_gone, None)), [3, 5]);
+        let two_gone = linear_history(&[5, 4, 2], Some(5));
+        assert_eq!(picked.after_history_read(&two_gone, None), at(5));
+        let all_gone = linear_history(&[7, 6], Some(7));
+        assert_eq!(picked.after_history_read(&all_gone, None), at(7));
+    }
+
+    #[test]
+    fn a_pick_with_a_file_open_closes_the_file_before_going_back_to_one_commit() {
+        let rows = shown(&[3, 2, 1]);
+        let picked = at(3).after_pick(id(1), Pick::Run, &rows).expect("a run");
+        let mut opened = picked.clone();
+        if let Target::Commits { open, .. } = &mut opened {
+            *open = Some("a.rs".into());
+        }
+        assert!(opened.has_open_file());
+        assert_eq!(opened.back_to_one(), None);
+        assert!(opened.close_file());
+        assert_eq!(opened, picked);
+        assert_eq!(opened.back_to_one(), Some(at(3)));
+        assert!(Rc::ptr_eq(&opened.picked(), opened.several().expect("several")));
     }
 
     #[test]
