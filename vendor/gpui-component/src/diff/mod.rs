@@ -36,7 +36,7 @@ use crate::{
     button::{Button, ButtonVariants as _},
     h_flex,
     input::{Copy, SelectAll},
-    scroll::{ScrollableMask, Scrollbar},
+    scroll::{ScrollableMask, Scrollbar, ScrollbarMode},
     v_flex,
 };
 use actions::*;
@@ -618,6 +618,11 @@ fn render_diff(
         area: code_area,
     };
     let scroll_x = code_scroll.scrolled();
+    let code_scrollbar_lane = if code_scroll.max() > px(0.) {
+        Scrollbar::width()
+    } else {
+        px(0.)
+    };
     let code = Rc::new(CodePresentation {
         files: state.files().to_vec(),
         presentations: state.presentations().to_vec(),
@@ -676,6 +681,7 @@ fn render_diff(
             div()
                 .id("diff-horizontal")
                 .size_full()
+                .pb(code_scrollbar_lane)
                 .child(gpui_base::ScrollBounce::new(
                     "diff-bounce",
                     &scrollbar,
@@ -724,6 +730,7 @@ fn render_diff(
                         .child(
                             Scrollbar::horizontal(&code_scroll)
                                 .id(("diff-code-scroll", ix))
+                                .mode(ScrollbarMode::Always)
                                 .viewport_from_layout(),
                         )
                 }))

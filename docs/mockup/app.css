@@ -893,10 +893,10 @@
 .diff.nowrap { position: relative; }
 .diff.nowrap .diff-line > .text { white-space: pre; overflow: hidden; word-break: normal; }
 
-.hscroll { position: absolute; z-index: 3; left: 0; right: 0; bottom: 0; height: 10px; display: flex; }
+.hscroll { position: absolute; z-index: 3; left: 0; right: 0; bottom: 0; height: 16px; display: flex; background: var(--background); }
 .hscroll > div { position: relative; flex: 1; min-width: 0; }
 .hscroll.split > div + div { margin-left: 1px; }
-.hscroll .thumb { position: absolute; left: 60px; bottom: 2px; width: 46%; height: 6px; border-radius: 3px; background: var(--scrollbar-thumb); }
+.hscroll .thumb { position: absolute; left: 60px; bottom: 4px; width: 46%; height: 6px; border-radius: 3px; background: var(--scrollbar-thumb); }
 
 
 .diff-area {
