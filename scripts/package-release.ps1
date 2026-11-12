@@ -83,7 +83,7 @@ function Get-PreviousTag([bool] $preRelease) {
     $ErrorActionPreference = 'Continue'
     $arguments = @('describe', '--tags', '--abbrev=0')
     if (-not $preRelease) { $arguments += @('--exclude', 'v*-*') }
-    $previous = & git -C $root @arguments "$Tag^" 2>$null
+    $previous = & git -C $root @arguments 'HEAD^' 2>$null
     if ($LASTEXITCODE -ne 0) { return $null }
     $previous
 }
@@ -94,8 +94,8 @@ function Write-Notes([string] $path, [bool] $preRelease) {
         $lines = @('First release.')
     }
     else {
-        $subjects = & git -C $root log --format='- %s' "$previous..$Tag"
-        if ($LASTEXITCODE -ne 0) { throw "git log $previous..$Tag failed." }
+        $subjects = & git -C $root log --no-merges --format='- %s' "$previous..HEAD"
+        if ($LASTEXITCODE -ne 0) { throw "git log $previous..HEAD failed." }
         $lines = @("Changes since $previous`:", '') + @($subjects)
     }
     [IO.File]::WriteAllText($path, (($lines -join "`n") + "`n"))

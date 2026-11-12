@@ -47,21 +47,26 @@ xkbcommon, Vulkan, fontconfig).
 
 ## Releasing
 
-Set the new version in `Cargo.toml`, commit it, then push a tag naming it:
+Work happens on `develop`. To release, set the new version in `Cargo.toml`, commit
+it, and bring it to `master`:
 
 ```sh
-git tag v0.2.0
-git push origin v0.2.0
+git checkout master
+git merge develop
+git push origin master
 ```
 
-The Release workflow runs only for such tags. On Windows it runs the tests, builds
-the exe with the address of the update feed, packs the setup with Inno Setup and the
-portable zip, and publishes them with `latest.json` (version, download addresses and
-SHA-256) and the subjects of the commits since the previous tag. It stops if the tag
-and `Cargo.toml` disagree. A tag with a label, like `v0.3.0-rc.1`, becomes a
-pre-release that installed copies never update to. `scripts/package-release.ps1 -Tag
-v0.2.0` does the same packaging locally when Inno Setup 6 is installed. Rust is
-pinned in `rust-toolchain.toml`, so CI builds with the same compiler.
+The Release workflow runs for every push to `master`. On Windows it runs the tests
+with the exe built for release, with the address of the update feed, then packs the
+setup with Inno Setup and the portable zip, tags the commit `v` + the version, and
+publishes them with `latest.json` (version, download addresses and SHA-256) and the
+subjects of the commits since the previous release. When that version is already
+released it only runs the tests and warns, and it stops if the tag already names
+another commit. A version with a label, like `0.3.0-rc.1`, becomes a pre-release
+that installed copies never update to. `scripts/package-release.ps1 -Tag v0.2.0`
+does the same packaging locally when Inno Setup 6 is installed. Rust is pinned in
+`rust-toolchain.toml`, so CI builds with the same compiler, and its build cache is
+kept on `master`, so a release doesn't rebuild the dependencies.
 
 ## Using it
 
