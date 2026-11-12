@@ -248,6 +248,16 @@ impl Account {
         fields.extend(self.others.clone());
         Value::Object(fields)
     }
+
+    pub(crate) fn covers(&self, path: &str) -> bool {
+        let mut parts = path.trim_matches('/').split('/');
+        self.server
+            .path_segments()
+            .into_iter()
+            .flatten()
+            .filter(|segment| !segment.is_empty())
+            .all(|segment| parts.next().is_some_and(|part| part.eq_ignore_ascii_case(segment)))
+    }
 }
 
 pub(crate) fn authority(url: &Url) -> Option<String> {
@@ -351,6 +361,28 @@ mod tests {
         );
         assert!(is_header_name("PRIVATE-TOKEN"));
         assert!(!is_header_name("X:Y"));
+    }
+
+    #[test]
+    fn an_account_on_a_whole_server_covers_every_path_on_it() {
+        let account = fixtures::github("1");
+        for path in ["octo/app", "/octo", "", "anything/at/all/"] {
+            assert!(account.covers(path), "{path}");
+        }
+    }
+
+    #[test]
+    fn an_account_on_a_server_path_covers_only_paths_under_it() {
+        let account = fixtures::account("https://dev.azure.com/contoso/", "1", &[]);
+        for path in ["contoso/Web", "/Contoso/Web/_git/app", "contoso"] {
+            assert!(account.covers(path), "{path}");
+        }
+        for path in ["fabrikam/Web", "contosos/Web", ""] {
+            assert!(!account.covers(path), "{path}");
+        }
+        let collection = fixtures::account("https://devops.example.com:8443/tfs/DefaultCollection", "1", &[]);
+        assert!(collection.covers("tfs/defaultcollection/Game/_git/client"));
+        assert!(!collection.covers("tfs/Other/Game"));
     }
 
     #[test]

@@ -1224,6 +1224,15 @@ const Screens = (() => {
       };
       const pair = [personal, work];
       const choiceBar = (open) => C.AccountChoiceBar({ host: 'github.com', owner: 'sternegit-org', accounts: pair, chosen: 'alex-martin', open });
+      const azureOffer = {
+        choice: 'Azure DevOps — dev.azure.com',
+        field: { label: 'Organization address', value: 'https://dev.azure.com/starfall', example: 'https://dev.azure.com/contoso' },
+        methods: ['device', 'token'],
+        host: 'dev.azure.com',
+        page: 'microsoft.com/devicelogin',
+        scopes: 'Code (Read, write, & manage) and Project and Team (Read)',
+        token: '••••••••••••••••••••••••••••••••••••••••••••••••••••',
+      };
       return [
         {
           id: 'app-file-menu',
@@ -1258,6 +1267,27 @@ const Screens = (() => {
           about: "Add account… asks which service, among every started connector's services, then how to sign in. The connector's manifest lists the methods each service offers: GitHub Enterprise Server asks for its address first and has no browser sign-in. Choosing a method moves to its step in the same dialog; Esc or Cancel closes it.",
           source: 'src/accounts/account.rs',
           render: () => settings('accounts', accountsPage(), C.SignInDialog({ step: 'choose', hot: 'device' })),
+        },
+        {
+          id: 'add-account-azure-devops',
+          title: 'Add an Azure DevOps account',
+          about: "Azure DevOps accounts belong to one organization: the dialog asks for the organization's address, labelled and filled in as the manifest's field says, and the account claims only the remotes under it, by HTTPS or SSH. A second organization is a second account, even for the same person. Azure DevOps Server asks for a collection address the same way and offers only a pasted token. There is no Credential Manager choice: its Azure DevOps token lasts an hour and SterneGit can't renew it.",
+          source: 'src/hosting/sign_in.rs',
+          render: () => settings('accounts', accountsPage(), C.SignInDialog({ step: 'choose', service: 'Azure DevOps', hot: 'token', offer: azureOffer })),
+        },
+        {
+          id: 'sign-in-browser-azure-devops',
+          title: 'Sign in to Azure DevOps with the browser',
+          about: "The device flow of Microsoft Entra ID, run from the manifest like GitHub's: SterneGit opens microsoft.com/devicelogin, and the user signs in with the work account that reaches the organization. Tokens last about an hour and SterneGit renews them as it does GitHub's. Personal Microsoft accounts can't sign in this way; they paste a token.",
+          source: 'src/hosting/sign_in.rs',
+          render: () => settings('accounts', accountsPage(), C.SignInDialog({ step: 'device', service: 'Azure DevOps', offer: azureOffer })),
+        },
+        {
+          id: 'sign-in-token-azure-devops',
+          title: 'Sign in to Azure DevOps with a token',
+          about: "Create a token on Azure DevOps opens the organization's Personal access tokens page. Azure DevOps can't tick scopes from a link, so the dialog names them, from the manifest. The token is sent as Basic with an empty user, to the organization's address only.",
+          source: 'src/hosting/sign_in.rs',
+          render: () => settings('accounts', accountsPage(), C.SignInDialog({ step: 'token', service: 'Azure DevOps', offer: azureOffer })),
         },
         {
           id: 'sign-in-browser',
@@ -1579,6 +1609,17 @@ const Screens = (() => {
               refs: pulled.refs.map((label) => (label.pull && label.pull.number === shown.number ? { ...label, pull: undefined } : label)),
               position: `Pull request #${shown.number} · merged`,
               overlays: toast(C.Notification({ kind: 'success', title: PullTexts.merged(shown.number, shown.base), message: PullTexts.mergedMessage(shown.head), action: C.Button({ label: PullTexts.deleteBranch, icon: 'trash-2', size: 'sm', tooltip: PullTexts.deleteBranchTooltip }) })),
+            }),
+        },
+        {
+          id: 'pull-merge-queued',
+          title: 'Pull request merge queued',
+          about: "Azure DevOps completes a pull request in the background: pulls.merge can answer before the merge exists, with Merged.queued. The notification then says Completing instead of Merged and offers no Delete branch, since deleting the source branch now could stop the merge. SterneGit fetches as after any merge. Until Azure DevOps has finished, the overview shows Checking whether it can merge, with Merge disabled; the overview reads the pull request again after every fetch, and the first one that finds it completed shows Merged.",
+          source: 'src/repo/pulls/overview.rs',
+          render: () =>
+            pullView({
+              position: `Pull request #${shown.number}`,
+              overlays: toast(C.Notification({ kind: 'info', title: PullTexts.completing(shown.number, shown.base), message: PullTexts.completingMessage('Azure DevOps') })),
             }),
         },
         {

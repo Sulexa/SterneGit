@@ -1,0 +1,76 @@
+{
+  "op": "pulls.comment",
+  "account": {
+    "id": "azure-devops:dev.azure.com:contoso.6c8f1a2b-4d3e-4f5a-9b8c-7d6e5f4a3b2c",
+    "login": "robin@contoso.com",
+    "endpoints": {
+      "api": "https://dev.azure.com/contoso/"
+    }
+  },
+  "repo": {
+    "owner": "contoso/Web",
+    "name": "app"
+  },
+  "input": {
+    "number": 42,
+    "body": "Merging after lunch."
+  },
+  "exchanges": [
+    {
+      "method": "POST",
+      "url": "https://dev.azure.com/contoso/Web/_apis/git/repositories/app/pullRequests/42/threads?api-version=6.0",
+      "status": 200,
+      "headers": [
+        [
+          "content-type",
+          "application/json; charset=utf-8; api-version=6.0"
+        ]
+      ],
+      "body": {
+        "pullRequestThreadContext": null,
+        "id": 106,
+        "publishedDate": "2026-11-04T11:02:03.4560000Z",
+        "lastUpdatedDate": "2026-11-04T11:02:03.4560000Z",
+        "comments": [
+          {
+            "id": 1,
+            "parentCommentId": 0,
+            "author": {
+              "displayName": "Robin Park",
+              "url": "https://spsprodweu5.vssps.visualstudio.com/A1/_apis/Identities/6c8f1a2b-4d3e-4f5a-9b8c-7d6e5f4a3b2c",
+              "id": "6c8f1a2b-4d3e-4f5a-9b8c-7d6e5f4a3b2c",
+              "uniqueName": "robin@contoso.com",
+              "imageUrl": "https://dev.azure.com/contoso/_api/_common/identityImage?id=6c8f1a2b-4d3e-4f5a-9b8c-7d6e5f4a3b2c",
+              "descriptor": "aad.NmM4ZjFhMmItNGQzZS03ZjVhLTliOGMtN2Q2ZTVmNGEzYjJj"
+            },
+            "content": "Merging after lunch.",
+            "publishedDate": "2026-11-04T11:02:03.4560000Z",
+            "lastUpdatedDate": "2026-11-04T11:02:03.4560000Z",
+            "lastContentUpdatedDate": "2026-11-04T11:02:03.4560000Z",
+            "commentType": "text",
+            "usersLiked": []
+          }
+        ],
+        "status": "active",
+        "threadContext": null,
+        "properties": {},
+        "identities": null,
+        "isDeleted": false
+      }
+    }
+  ],
+  "output": {
+    "ok": {
+      "author": {
+        "avatar_url": null,
+        "login": "robin@contoso.com",
+        "name": "Robin Park"
+      },
+      "body": "Merging after lunch.",
+      "created_at": "2026-11-04T11:02:03Z",
+      "id": "106.1",
+      "reply_to": null,
+      "web_url": null
+    }
+  }
+}

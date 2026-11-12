@@ -1,0 +1,365 @@
+{
+  "op": "pulls.checks",
+  "account": {
+    "id": "azure-devops:dev.azure.com:contoso.6c8f1a2b-4d3e-4f5a-9b8c-7d6e5f4a3b2c",
+    "login": "robin@contoso.com",
+    "endpoints": {
+      "api": "https://dev.azure.com/contoso/"
+    }
+  },
+  "repo": {
+    "owner": "contoso/Web",
+    "name": "app"
+  },
+  "input": {
+    "sha": "9f1c2b3a4d5e6f708192a3b4c5d6e7f809102132"
+  },
+  "exchanges": [
+    {
+      "method": "GET",
+      "url": "https://dev.azure.com/contoso/Web/_apis/git/repositories/app/commits/9f1c2b3a4d5e6f708192a3b4c5d6e7f809102132/statuses?latestOnly=true&api-version=6.0",
+      "status": 200,
+      "headers": [
+        [
+          "content-type",
+          "application/json; charset=utf-8; api-version=6.0"
+        ]
+      ],
+      "body": {
+        "count": 2,
+        "value": [
+          {
+            "id": 1,
+            "state": "succeeded",
+            "description": "Build 812 succeeded",
+            "context": {
+              "name": "build",
+              "genre": "continuous-integration"
+            },
+            "targetUrl": "https://ci.contoso.com/builds/812",
+            "creationDate": "2026-11-03T18:58:00Z"
+          },
+          {
+            "id": 2,
+            "state": "pending",
+            "description": "Waiting for staging",
+            "context": {
+              "name": "deploy",
+              "genre": ""
+            },
+            "creationDate": "2026-11-03T18:59:00Z"
+          }
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "url": "https://dev.azure.com/contoso/Web/_apis/git/repositories/app/pullrequestquery?api-version=6.0",
+      "status": 200,
+      "headers": [
+        [
+          "content-type",
+          "application/json; charset=utf-8; api-version=6.0"
+        ]
+      ],
+      "body": {
+        "queries": [
+          {
+            "items": [
+              "9f1c2b3a4d5e6f708192a3b4c5d6e7f809102132"
+            ],
+            "type": "lastMergeSourceCommit"
+          }
+        ],
+        "results": [
+          {
+            "9f1c2b3a4d5e6f708192a3b4c5d6e7f809102132": [
+              {
+                "repository": {
+                  "id": "5a6b7c8d-9e0f-4a1b-8c2d-3e4f5a6b7c8d",
+                  "name": "app",
+                  "url": "https://dev.azure.com/contoso/b0a1c2d3-e4f5-4a6b-8c7d-9e0f1a2b3c4d/_apis/git/repositories/5a6b7c8d-9e0f-4a1b-8c2d-3e4f5a6b7c8d",
+                  "project": {
+                    "id": "b0a1c2d3-e4f5-4a6b-8c7d-9e0f1a2b3c4d",
+                    "name": "Web",
+                    "state": "unchanged",
+                    "visibility": "unchanged",
+                    "lastUpdateTime": "0001-01-01T00:00:00"
+                  }
+                },
+                "pullRequestId": 42,
+                "codeReviewId": 42,
+                "status": "active",
+                "createdBy": {
+                  "displayName": "Sam Lee",
+                  "url": "https://spsprodweu5.vssps.visualstudio.com/A1/_apis/Identities/1f2e3d4c-5b6a-4978-8a9b-0c1d2e3f4a5b",
+                  "id": "1f2e3d4c-5b6a-4978-8a9b-0c1d2e3f4a5b",
+                  "uniqueName": "sam@contoso.com",
+                  "imageUrl": "https://dev.azure.com/contoso/_api/_common/identityImage?id=1f2e3d4c-5b6a-4978-8a9b-0c1d2e3f4a5b",
+                  "descriptor": "aad.NmM4ZjFhMmItNGQzZS03ZjVhLTliOGMtN2Q2ZTVmNGEzYjJj"
+                },
+                "creationDate": "2026-11-03T18:50:12.4372361Z",
+                "title": "Add tabs to the settings page",
+                "description": "Add tabs to the settings page.",
+                "sourceRefName": "refs/heads/topic/tabs",
+                "targetRefName": "refs/heads/main",
+                "mergeStatus": "succeeded",
+                "isDraft": false,
+                "mergeId": "0f9e8d7c-6b5a-4938-a7b6-c5d4e3f2a1b0",
+                "lastMergeSourceCommit": {
+                  "commitId": "9f1c2b3a4d5e6f708192a3b4c5d6e7f809102132",
+                  "url": "https://dev.azure.com/contoso/b0a1c2d3-e4f5-4a6b-8c7d-9e0f1a2b3c4d/_apis/git/repositories/5a6b7c8d-9e0f-4a1b-8c2d-3e4f5a6b7c8d/commits/9f1c2b3a4d5e6f708192a3b4c5d6e7f809102132"
+                },
+                "lastMergeTargetCommit": {
+                  "commitId": "1a2b3c4d5e6f708192a3b4c5d6e7f80910213243",
+                  "url": "https://dev.azure.com/contoso/b0a1c2d3-e4f5-4a6b-8c7d-9e0f1a2b3c4d/_apis/git/repositories/5a6b7c8d-9e0f-4a1b-8c2d-3e4f5a6b7c8d/commits/1a2b3c4d5e6f708192a3b4c5d6e7f80910213243"
+                },
+                "reviewers": [
+                  {
+                    "displayName": "Robin Park",
+                    "url": "https://spsprodweu5.vssps.visualstudio.com/A1/_apis/Identities/6c8f1a2b-4d3e-4f5a-9b8c-7d6e5f4a3b2c",
+                    "id": "6c8f1a2b-4d3e-4f5a-9b8c-7d6e5f4a3b2c",
+                    "uniqueName": "robin@contoso.com",
+                    "imageUrl": "https://dev.azure.com/contoso/_api/_common/identityImage?id=6c8f1a2b-4d3e-4f5a-9b8c-7d6e5f4a3b2c",
+                    "descriptor": "aad.NmM4ZjFhMmItNGQzZS03ZjVhLTliOGMtN2Q2ZTVmNGEzYjJj",
+                    "reviewerUrl": "https://spsprodweu5.vssps.visualstudio.com/A1/_apis/Identities/6c8f1a2b-4d3e-4f5a-9b8c-7d6e5f4a3b2c",
+                    "vote": 10,
+                    "hasDeclined": false,
+                    "isFlagged": false,
+                    "isRequired": true
+                  },
+                  {
+                    "displayName": "Jo Martin",
+                    "url": "https://spsprodweu5.vssps.visualstudio.com/A1/_apis/Identities/2a3b4c5d-6e7f-4a8b-9c0d-1e2f3a4b5c6d",
+                    "id": "2a3b4c5d-6e7f-4a8b-9c0d-1e2f3a4b5c6d",
+                    "uniqueName": "jo@contoso.com",
+                    "imageUrl": "https://dev.azure.com/contoso/_api/_common/identityImage?id=2a3b4c5d-6e7f-4a8b-9c0d-1e2f3a4b5c6d",
+                    "descriptor": "aad.NmM4ZjFhMmItNGQzZS03ZjVhLTliOGMtN2Q2ZTVmNGEzYjJj",
+                    "reviewerUrl": "https://spsprodweu5.vssps.visualstudio.com/A1/_apis/Identities/2a3b4c5d-6e7f-4a8b-9c0d-1e2f3a4b5c6d",
+                    "vote": 0,
+                    "hasDeclined": false,
+                    "isFlagged": false
+                  }
+                ],
+                "url": "https://dev.azure.com/contoso/b0a1c2d3-e4f5-4a6b-8c7d-9e0f1a2b3c4d/_apis/git/repositories/5a6b7c8d-9e0f-4a1b-8c2d-3e4f5a6b7c8d/pullRequests/42",
+                "supportsIterations": true
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "method": "GET",
+      "url": "https://dev.azure.com/contoso/Web/_apis/git/repositories/app/pullRequests/42/statuses?api-version=6.0-preview.1",
+      "status": 200,
+      "headers": [
+        [
+          "content-type",
+          "application/json; charset=utf-8; api-version=6.0"
+        ]
+      ],
+      "body": {
+        "count": 3,
+        "value": [
+          {
+            "id": 1,
+            "iterationId": 1,
+            "state": "failed",
+            "description": "3 problems",
+            "context": {
+              "name": "lint",
+              "genre": "sternegit-ci"
+            },
+            "creationDate": "2026-11-03T18:52:00Z"
+          },
+          {
+            "id": 2,
+            "iterationId": 2,
+            "state": "succeeded",
+            "description": "No problems",
+            "context": {
+              "name": "lint",
+              "genre": "sternegit-ci"
+            },
+            "creationDate": "2026-11-03T19:10:00Z"
+          },
+          {
+            "id": 3,
+            "iterationId": 2,
+            "state": "pending",
+            "context": {
+              "name": "security-scan"
+            },
+            "creationDate": "2026-11-03T19:11:00Z"
+          }
+        ]
+      }
+    },
+    {
+      "method": "GET",
+      "url": "https://dev.azure.com/contoso/Web/_apis/policy/evaluations?artifactId=vstfs%3A%2F%2F%2FCodeReview%2FCodeReviewId%2Fb0a1c2d3-e4f5-4a6b-8c7d-9e0f1a2b3c4d%2F42&api-version=6.0-preview.1",
+      "status": 200,
+      "headers": [
+        [
+          "content-type",
+          "application/json; charset=utf-8; api-version=6.0"
+        ]
+      ],
+      "body": {
+        "count": 4,
+        "value": [
+          {
+            "configuration": {
+              "isEnabled": true,
+              "isBlocking": true,
+              "isDeleted": false,
+              "type": {
+                "id": "0609b952-1397-4640-95ec-e00a01b2c241",
+                "url": "https://dev.azure.com/contoso/b0a1c2d3-e4f5-4a6b-8c7d-9e0f1a2b3c4d/_apis/policy/types/0609b952-1397-4640-95ec-e00a01b2c241",
+                "displayName": "Build"
+              },
+              "id": 7,
+              "settings": {
+                "buildDefinitionId": 12,
+                "displayName": "CI"
+              }
+            },
+            "artifactId": "vstfs:///CodeReview/CodeReviewId/x/y",
+            "evaluationId": "e1",
+            "startedDate": "2026-11-03T18:51:00.000Z",
+            "status": "approved",
+            "context": {
+              "buildId": 812,
+              "buildDefinitionId": 12
+            }
+          },
+          {
+            "configuration": {
+              "isEnabled": true,
+              "isBlocking": true,
+              "isDeleted": false,
+              "type": {
+                "id": "fa6e9c5c-8a4b-4f5e-9b8a-7c6d5e4f3a2b",
+                "url": "https://dev.azure.com/contoso/b0a1c2d3-e4f5-4a6b-8c7d-9e0f1a2b3c4d/_apis/policy/types/fa6e9c5c-8a4b-4f5e-9b8a-7c6d5e4f3a2b",
+                "displayName": "Minimum number of reviewers"
+              },
+              "id": 7,
+              "settings": {
+                "scope": [
+                  {
+                    "repositoryId": "5a6b7c8d-9e0f-4a1b-8c2d-3e4f5a6b7c8d",
+                    "refName": "refs/heads/main",
+                    "matchKind": "exact"
+                  }
+                ]
+              }
+            },
+            "artifactId": "vstfs:///CodeReview/CodeReviewId/x/y",
+            "evaluationId": "e1",
+            "startedDate": "2026-11-03T18:51:00.000Z",
+            "status": "queued"
+          },
+          {
+            "configuration": {
+              "isEnabled": true,
+              "isBlocking": true,
+              "isDeleted": false,
+              "type": {
+                "id": "40e92b44-2fe1-4dd6-b3d8-74a9c21d0c6e",
+                "url": "https://dev.azure.com/contoso/b0a1c2d3-e4f5-4a6b-8c7d-9e0f1a2b3c4d/_apis/policy/types/40e92b44-2fe1-4dd6-b3d8-74a9c21d0c6e",
+                "displayName": "Work item linking"
+              },
+              "id": 7,
+              "settings": {
+                "scope": [
+                  {
+                    "repositoryId": "5a6b7c8d-9e0f-4a1b-8c2d-3e4f5a6b7c8d",
+                    "refName": "refs/heads/main",
+                    "matchKind": "exact"
+                  }
+                ]
+              }
+            },
+            "artifactId": "vstfs:///CodeReview/CodeReviewId/x/y",
+            "evaluationId": "e1",
+            "startedDate": "2026-11-03T18:51:00.000Z",
+            "status": "notApplicable"
+          },
+          {
+            "configuration": {
+              "isEnabled": true,
+              "isBlocking": false,
+              "isDeleted": false,
+              "type": {
+                "id": "c6a1889d-b943-4856-b76f-9e46bb6b0df2",
+                "url": "https://dev.azure.com/contoso/b0a1c2d3-e4f5-4a6b-8c7d-9e0f1a2b3c4d/_apis/policy/types/c6a1889d-b943-4856-b76f-9e46bb6b0df2",
+                "displayName": "Comment requirements"
+              },
+              "id": 7,
+              "settings": {
+                "scope": [
+                  {
+                    "repositoryId": "5a6b7c8d-9e0f-4a1b-8c2d-3e4f5a6b7c8d",
+                    "refName": "refs/heads/main",
+                    "matchKind": "exact"
+                  }
+                ]
+              }
+            },
+            "artifactId": "vstfs:///CodeReview/CodeReviewId/x/y",
+            "evaluationId": "e1",
+            "startedDate": "2026-11-03T18:51:00.000Z",
+            "status": "approved"
+          }
+        ]
+      }
+    }
+  ],
+  "output": {
+    "ok": [
+      {
+        "description": "Build 812 succeeded",
+        "name": "continuous-integration/build",
+        "state": "success",
+        "web_url": "https://ci.contoso.com/builds/812"
+      },
+      {
+        "description": "Waiting for staging",
+        "name": "deploy",
+        "state": "pending",
+        "web_url": null
+      },
+      {
+        "description": "No problems",
+        "name": "sternegit-ci/lint",
+        "state": "success",
+        "web_url": null
+      },
+      {
+        "description": null,
+        "name": "security-scan",
+        "state": "pending",
+        "web_url": null
+      },
+      {
+        "description": "Required",
+        "name": "CI",
+        "state": "success",
+        "web_url": "https://dev.azure.com/contoso/Web/_build/results?buildId=812"
+      },
+      {
+        "description": "Required",
+        "name": "Minimum number of reviewers",
+        "state": "pending",
+        "web_url": null
+      },
+      {
+        "description": "Optional",
+        "name": "Comment requirements",
+        "state": "success",
+        "web_url": null
+      }
+    ]
+  }
+}

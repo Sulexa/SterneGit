@@ -1,0 +1,71 @@
+{
+  "op": "repositories.create",
+  "account": {
+    "id": "azure-devops:dev.azure.com:contoso.6c8f1a2b-4d3e-4f5a-9b8c-7d6e5f4a3b2c",
+    "login": "robin@contoso.com",
+    "endpoints": {
+      "api": "https://dev.azure.com/contoso/"
+    }
+  },
+  "input": {
+    "owner": "contoso/Web",
+    "name": "tools",
+    "description": "Small tools",
+    "visibility": "private",
+    "initialize": false
+  },
+  "exchanges": [
+    {
+      "method": "GET",
+      "url": "https://dev.azure.com/contoso/_apis/projects/Web?api-version=6.0",
+      "status": 200,
+      "headers": [
+        [
+          "content-type",
+          "application/json; charset=utf-8; api-version=6.0"
+        ]
+      ],
+      "body": {
+        "id": "b0a1c2d3-e4f5-4a6b-8c7d-9e0f1a2b3c4d",
+        "name": "Web",
+        "url": "https://dev.azure.com/contoso/_apis/projects/b0a1c2d3-e4f5-4a6b-8c7d-9e0f1a2b3c4d",
+        "state": "wellFormed",
+        "revision": 11,
+        "visibility": "private",
+        "lastUpdateTime": "2026-10-02T08:11:45.183Z"
+      }
+    },
+    {
+      "method": "POST",
+      "url": "https://dev.azure.com/contoso/Web/_apis/git/repositories?api-version=6.0",
+      "status": 409,
+      "headers": [
+        [
+          "content-type",
+          "application/json; charset=utf-8; api-version=6.0"
+        ]
+      ],
+      "body": {
+        "$id": "1",
+        "innerException": null,
+        "message": "TF400948: A Git repository with the name tools already exists.",
+        "typeName": "Microsoft.TeamFoundation.GitRepositoryNameAlreadyExistsException, Microsoft.TeamFoundation.Server.Core",
+        "typeKey": "GitRepositoryNameAlreadyExistsException",
+        "errorCode": 0,
+        "eventId": 3000
+      }
+    }
+  ],
+  "output": {
+    "err": {
+      "fields": [
+        {
+          "field": "name",
+          "message": "TF400948: A Git repository with the name tools already exists."
+        }
+      ],
+      "kind": "invalid",
+      "message": "TF400948: A Git repository with the name tools already exists."
+    }
+  }
+}

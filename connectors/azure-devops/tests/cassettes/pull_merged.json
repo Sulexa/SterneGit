@@ -1,0 +1,172 @@
+{
+  "op": "pulls.get",
+  "account": {
+    "id": "azure-devops:dev.azure.com:contoso.6c8f1a2b-4d3e-4f5a-9b8c-7d6e5f4a3b2c",
+    "login": "robin@contoso.com",
+    "endpoints": {
+      "api": "https://dev.azure.com/contoso/"
+    }
+  },
+  "repo": {
+    "owner": "contoso/Web",
+    "name": "app"
+  },
+  "input": {
+    "number": 12
+  },
+  "exchanges": [
+    {
+      "method": "GET",
+      "url": "https://dev.azure.com/contoso/Web/_apis/git/repositories/app/pullrequests/12?api-version=6.0",
+      "status": 200,
+      "headers": [
+        [
+          "content-type",
+          "application/json; charset=utf-8; api-version=6.0"
+        ]
+      ],
+      "body": {
+        "repository": {
+          "id": "5a6b7c8d-9e0f-4a1b-8c2d-3e4f5a6b7c8d",
+          "name": "app",
+          "url": "https://dev.azure.com/contoso/b0a1c2d3-e4f5-4a6b-8c7d-9e0f1a2b3c4d/_apis/git/repositories/5a6b7c8d-9e0f-4a1b-8c2d-3e4f5a6b7c8d",
+          "project": {
+            "id": "b0a1c2d3-e4f5-4a6b-8c7d-9e0f1a2b3c4d",
+            "name": "Web",
+            "state": "unchanged",
+            "visibility": "unchanged",
+            "lastUpdateTime": "0001-01-01T00:00:00"
+          }
+        },
+        "pullRequestId": 12,
+        "codeReviewId": 12,
+        "status": "completed",
+        "createdBy": {
+          "displayName": "Sam Lee",
+          "url": "https://spsprodweu5.vssps.visualstudio.com/A1/_apis/Identities/1f2e3d4c-5b6a-4978-8a9b-0c1d2e3f4a5b",
+          "id": "1f2e3d4c-5b6a-4978-8a9b-0c1d2e3f4a5b",
+          "uniqueName": "sam@contoso.com",
+          "imageUrl": "https://dev.azure.com/contoso/_api/_common/identityImage?id=1f2e3d4c-5b6a-4978-8a9b-0c1d2e3f4a5b",
+          "descriptor": "aad.NmM4ZjFhMmItNGQzZS03ZjVhLTliOGMtN2Q2ZTVmNGEzYjJj"
+        },
+        "creationDate": "2026-10-20T10:00:00Z",
+        "title": "Move the site to the new build",
+        "description": "Move the site to the new build.",
+        "sourceRefName": "refs/heads/topic/build",
+        "targetRefName": "refs/heads/main",
+        "mergeStatus": "succeeded",
+        "isDraft": false,
+        "mergeId": "0f9e8d7c-6b5a-4938-a7b6-c5d4e3f2a1b0",
+        "lastMergeSourceCommit": {
+          "commitId": "4d5e6f708192a3b4c5d6e7f80910213243546576",
+          "url": "https://dev.azure.com/contoso/b0a1c2d3-e4f5-4a6b-8c7d-9e0f1a2b3c4d/_apis/git/repositories/5a6b7c8d-9e0f-4a1b-8c2d-3e4f5a6b7c8d/commits/4d5e6f708192a3b4c5d6e7f80910213243546576"
+        },
+        "lastMergeTargetCommit": {
+          "commitId": "1a2b3c4d5e6f708192a3b4c5d6e7f80910213243",
+          "url": "https://dev.azure.com/contoso/b0a1c2d3-e4f5-4a6b-8c7d-9e0f1a2b3c4d/_apis/git/repositories/5a6b7c8d-9e0f-4a1b-8c2d-3e4f5a6b7c8d/commits/1a2b3c4d5e6f708192a3b4c5d6e7f80910213243"
+        },
+        "reviewers": [
+          {
+            "displayName": "Robin Park",
+            "url": "https://spsprodweu5.vssps.visualstudio.com/A1/_apis/Identities/6c8f1a2b-4d3e-4f5a-9b8c-7d6e5f4a3b2c",
+            "id": "6c8f1a2b-4d3e-4f5a-9b8c-7d6e5f4a3b2c",
+            "uniqueName": "robin@contoso.com",
+            "imageUrl": "https://dev.azure.com/contoso/_api/_common/identityImage?id=6c8f1a2b-4d3e-4f5a-9b8c-7d6e5f4a3b2c",
+            "descriptor": "aad.NmM4ZjFhMmItNGQzZS03ZjVhLTliOGMtN2Q2ZTVmNGEzYjJj",
+            "reviewerUrl": "https://spsprodweu5.vssps.visualstudio.com/A1/_apis/Identities/6c8f1a2b-4d3e-4f5a-9b8c-7d6e5f4a3b2c",
+            "vote": 10,
+            "hasDeclined": false,
+            "isFlagged": false
+          }
+        ],
+        "url": "https://dev.azure.com/contoso/b0a1c2d3-e4f5-4a6b-8c7d-9e0f1a2b3c4d/_apis/git/repositories/5a6b7c8d-9e0f-4a1b-8c2d-3e4f5a6b7c8d/pullRequests/12",
+        "supportsIterations": true,
+        "closedDate": "2026-10-21T16:42:09.873Z",
+        "lastMergeCommit": {
+          "commitId": "5e6f708192a3b4c5d6e7f8091021324354657687"
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "url": "https://dev.azure.com/contoso/Web/_apis/git/policy/configurations?repositoryId=5a6b7c8d-9e0f-4a1b-8c2d-3e4f5a6b7c8d&refName=refs%2Fheads%2Fmain&policyType=fa4e907d-c16b-4a4c-9dfa-4916e5d171ab&api-version=6.0-preview.1",
+      "status": 200,
+      "headers": [
+        [
+          "content-type",
+          "application/json; charset=utf-8; api-version=6.0"
+        ]
+      ],
+      "body": {
+        "count": 0,
+        "value": []
+      }
+    },
+    {
+      "method": "GET",
+      "url": "https://dev.azure.com/contoso/Web/_apis/policy/evaluations?artifactId=vstfs%3A%2F%2F%2FCodeReview%2FCodeReviewId%2Fb0a1c2d3-e4f5-4a6b-8c7d-9e0f1a2b3c4d%2F12&api-version=6.0-preview.1",
+      "status": 200,
+      "headers": [
+        [
+          "content-type",
+          "application/json; charset=utf-8; api-version=6.0"
+        ]
+      ],
+      "body": {
+        "count": 0,
+        "value": []
+      }
+    }
+  ],
+  "output": {
+    "ok": {
+      "base_sha": "1a2b3c4d5e6f708192a3b4c5d6e7f80910213243",
+      "body": "Move the site to the new build.",
+      "fetch": {
+        "refspec": "refs/heads/topic/build",
+        "sha": "4d5e6f708192a3b4c5d6e7f80910213243546576",
+        "url": null
+      },
+      "merge_methods": [
+        "merge",
+        "squash",
+        "rebase",
+        "semi_linear"
+      ],
+      "mergeability": {
+        "kind": "unknown"
+      },
+      "summary": {
+        "author": {
+          "avatar_url": null,
+          "login": "sam@contoso.com",
+          "name": "Sam Lee"
+        },
+        "base": {
+          "branch": "main",
+          "repo": null,
+          "sha": "1a2b3c4d5e6f708192a3b4c5d6e7f80910213243"
+        },
+        "checks": null,
+        "created_at": "2026-10-20T10:00:00Z",
+        "draft": false,
+        "head": {
+          "branch": "topic/build",
+          "repo": null,
+          "sha": "4d5e6f708192a3b4c5d6e7f80910213243546576"
+        },
+        "number": 12,
+        "review": "approved",
+        "state": "merged",
+        "title": "Move the site to the new build",
+        "updated_at": "2026-10-21T16:42:09Z",
+        "web_url": "https://dev.azure.com/contoso/Web/_git/app/pullrequest/12"
+      },
+      "verdicts": [
+        "comment",
+        "approve",
+        "request_changes"
+      ]
+    }
+  }
+}

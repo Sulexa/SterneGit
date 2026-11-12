@@ -1554,6 +1554,18 @@ const Sample = (() => {
       owners: [],
       using: [],
     },
+    {
+      id: 'azure-devops:dev.azure.com:starfall.6c8f1a2b-4d3e-4f5a-9b8c-7d6e5f4a3b2c',
+      login: 'alex@starfall.games',
+      name: 'Alex Martin',
+      email: 'alex@starfall.games',
+      service: 'Azure DevOps',
+      server: 'dev.azure.com/starfall',
+      method: 'token',
+      scopes: [],
+      owners: [],
+      using: [],
+    },
   ];
 
   const serverKeys = [
@@ -1591,7 +1603,25 @@ const Sample = (() => {
     { id: 'github', name: 'GitHub', version: '0.1.0', origin: 'bundled', standing: 'ready', grant: githubGrant, accounts: 3 },
     { id: 'gitlab', name: 'GitLab', version: '1.2.0', origin: 'installed', standing: 'waiting', grant: gitlabGrant, accounts: 0 },
     { id: 'gitea', name: 'Gitea', version: '0.3.1', was: '0.3.0', origin: 'installed', standing: 'updated', grant: { reach: [{ origin: '{server}/api/v1/', token: true, typed: true }], images: [], remotes: ['{server.host}'], signIn: [], features: ['Browse and clone repositories'] }, accounts: 1 },
-    { id: 'azure-devops', name: 'Azure DevOps', version: '0.9.0', origin: 'installed', standing: 'unusable', problem: 'Needs a newer SterneGit: it speaks protocol 2.0, and this SterneGit speaks 1.0.' },
+    {
+      id: 'azure-devops',
+      name: 'Azure DevOps',
+      version: '0.1.0',
+      origin: 'bundled',
+      standing: 'ready',
+      grant: {
+        reach: [
+          { origin: '{organization}/', token: true, typed: true },
+          { origin: '{collection}/', token: true, typed: true },
+        ],
+        images: [],
+        remotes: ['{organization.host}', 'ssh.dev.azure.com', 'vs-ssh.visualstudio.com', '{collection.host}'],
+        signIn: ['https://login.microsoftonline.com/organizations/oauth2/v2.0/devicecode', 'https://login.microsoftonline.com/organizations/oauth2/v2.0/token'],
+        features: ['Browse and clone repositories', 'Create and publish repositories', 'Pull requests: list, create, merge'],
+      },
+      accounts: 1,
+    },
+    { id: 'sourcehut', name: 'SourceHut', version: '0.9.0', origin: 'installed', standing: 'unusable', problem: 'Needs a newer SterneGit: it speaks protocol 2.0, and this SterneGit speaks 1.0.' },
     { id: 'bitbucket', name: 'Bitbucket', version: '0.2.0', origin: 'installed', standing: 'failed', problem: 'Stopped while starting: it ran out of time.', log: ['info  hello from bitbucket 0.2.0', 'debug building the route table', 'debug building the route table'] },
   ];
 

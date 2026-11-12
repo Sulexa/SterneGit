@@ -441,7 +441,7 @@ pub(crate) mod tests {
             .unwrap_or_else(|| panic!("no {origin:?} connector {wanted}"))
     }
 
-    pub(crate) fn started_github() -> Catalog {
+    pub(crate) fn started_bundled() -> Catalog {
         let folders = ConnectorFolders {
             source: Some(sources()),
             ..ConnectorFolders::default()
@@ -452,18 +452,16 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn the_bundled_github_connector_is_found_in_the_sources_matches_its_pins_and_starts() {
-        let catalog = started_github();
-        let [github] = catalog.connectors() else {
-            panic!("expected only GitHub");
-        };
-        assert_eq!(
-            (github.id.0.as_str(), github.origin, &github.standing),
-            ("github", Origin::Bundled, &Standing::Ready)
-        );
-        assert_eq!(github.folder, sources().join("github").join("dist"));
-        assert!(github.started.is_some());
-        assert!(github.module.is_none(), "the module bytes are dropped once compiled");
+    fn the_bundled_connectors_are_found_in_the_sources_match_their_pins_and_start() {
+        let catalog = started_bundled();
+        let ids: Vec<&str> = catalog.connectors().iter().map(|connector| connector.id.0.as_str()).collect();
+        assert_eq!(ids, ["github", "azure-devops"]);
+        for connector in catalog.connectors() {
+            assert_eq!((connector.origin, &connector.standing), (Origin::Bundled, &Standing::Ready), "{}", connector.id.0);
+            assert_eq!(connector.folder, sources().join(&connector.id.0).join("dist"));
+            assert!(connector.started.is_some(), "{}", connector.id.0);
+            assert!(connector.module.is_none(), "the module bytes are dropped once compiled");
+        }
     }
 
     #[test]
@@ -637,10 +635,17 @@ pub(crate) mod tests {
         assert!(matches!(standing(&catalog, "github", Origin::Installed), Standing::Waiting(_)));
         assert!(catalog.connectors().iter().any(|connector| connector.replaces_bundled));
         catalog.approve(&id("github")).unwrap();
-        assert_eq!(catalog.connectors().len(), 1);
-        assert_eq!(catalog.connectors()[0].origin, Origin::Installed);
+        let github = |catalog: &Catalog| -> Vec<Origin> {
+            catalog
+                .connectors()
+                .iter()
+                .filter(|connector| connector.id == id("github"))
+                .map(|connector| connector.origin)
+                .collect()
+        };
+        assert_eq!(github(&catalog), [Origin::Installed]);
         let again = Catalog::discover(&folders, Approvals::at(approvals_file.clone()));
-        assert_eq!(again.connectors().len(), 1);
+        assert_eq!(github(&again), [Origin::Installed]);
         assert_eq!(standing(&again, "github", Origin::Installed), Standing::Ready);
         let mut approvals = Approvals::at(approvals_file.clone());
         let mut without_replacing = approvals.get(&id("github")).cloned().unwrap();
@@ -654,7 +659,7 @@ pub(crate) mod tests {
 
     #[test]
     fn approving_what_needs_no_approval_does_nothing() {
-        let mut catalog = started_github();
+        let mut catalog = started_bundled();
         assert_eq!(catalog.approve(&id("github")).unwrap(), None);
         assert_eq!(catalog.approve(&id("unknown")).unwrap(), None);
     }

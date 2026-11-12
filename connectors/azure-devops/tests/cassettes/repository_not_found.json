@@ -1,0 +1,41 @@
+{
+  "op": "repositories.get",
+  "account": {
+    "id": "azure-devops:dev.azure.com:contoso.6c8f1a2b-4d3e-4f5a-9b8c-7d6e5f4a3b2c",
+    "login": "robin@contoso.com",
+    "endpoints": {
+      "api": "https://dev.azure.com/contoso/"
+    }
+  },
+  "repo": {
+    "owner": "contoso/Web",
+    "name": "gone"
+  },
+  "exchanges": [
+    {
+      "method": "GET",
+      "url": "https://dev.azure.com/contoso/Web/_apis/git/repositories/gone?api-version=6.0",
+      "status": 404,
+      "headers": [
+        [
+          "content-type",
+          "application/json; charset=utf-8; api-version=6.0"
+        ]
+      ],
+      "body": {
+        "$id": "1",
+        "innerException": null,
+        "message": "TF401019: The Git repository with name or identifier gone does not exist or you do not have permissions for the operation you are attempting.",
+        "typeName": "Microsoft.TeamFoundation.GitRepositoryNotFoundException, Microsoft.TeamFoundation.Server.Core",
+        "typeKey": "GitRepositoryNotFoundException",
+        "errorCode": 0,
+        "eventId": 3000
+      }
+    }
+  ],
+  "output": {
+    "err": {
+      "kind": "not_found"
+    }
+  }
+}

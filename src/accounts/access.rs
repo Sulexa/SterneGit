@@ -31,15 +31,23 @@ pub(crate) fn serves(book: &AccountBook, remote_urls: &[String], account: &Accou
 }
 
 pub(crate) fn access_as(account: &Account, owner: &str) -> Access {
-    let server = account.server.as_str().trim_end_matches('/');
     Access {
         helper: std::env::current_exe().ok(),
         scopes: vec![CredentialScope {
-            prefix: format!("{server}/{}", owner.trim_matches('/')),
+            prefix: owner_prefix(account, owner),
             account: account.id.as_str().to_owned(),
         }],
         attendance: Attendance::Attended,
     }
+}
+
+fn owner_prefix(account: &Account, owner: &str) -> String {
+    let mut prefix = account.server.clone();
+    prefix.set_path("");
+    if let Ok(mut path) = prefix.path_segments_mut() {
+        path.clear().extend(owner.split('/').filter(|part| !part.is_empty()));
+    }
+    prefix.as_str().trim_end_matches('/').to_owned()
 }
 
 fn access_for(
@@ -68,11 +76,14 @@ fn scope_for(book: &AccountBook, remote: &Url) -> Option<CredentialScope> {
     }
     let host = authority(remote)?;
     let server = format!("{scheme}://{host}");
-    let on_host: Vec<_> = book.on_host(scheme, &host).collect();
+    let on_host: Vec<_> = book
+        .on_host(scheme, &host)
+        .filter(|account| account.covers(remote.path()))
+        .collect();
     match on_host.as_slice() {
         [] => None,
         [only] => Some(CredentialScope {
-            prefix: server,
+            prefix: as_written_in(remote, &server, only),
             account: only.id.as_str().to_owned(),
         }),
         _ => book
@@ -87,6 +98,21 @@ fn scope_for(book: &AccountBook, remote: &Url) -> Option<CredentialScope> {
     }
 }
 
+fn as_written_in(remote: &Url, server: &str, account: &Account) -> String {
+    let depth = account
+        .server
+        .path_segments()
+        .into_iter()
+        .flatten()
+        .filter(|segment| !segment.is_empty())
+        .count();
+    let written: Vec<&str> = remote.path_segments().into_iter().flatten().take(depth).collect();
+    match written.as_slice() {
+        [] => server.to_owned(),
+        parts => format!("{server}/{}", parts.join("/")),
+    }
+}
+
 fn is_under(path: &str, owner: &str) -> bool {
     path.trim_start_matches('/')
         .strip_prefix(owner)
@@ -97,7 +123,7 @@ fn is_under(path: &str, owner: &str) -> bool {
 mod tests {
     use std::path::PathBuf;
 
-    use super::{access_for, serves};
+    use super::{access_for, owner_prefix, serves};
     use crate::{
         accounts::{AccountBook, account::fixtures},
         git::{Access, Attendance, CredentialScope},
@@ -163,6 +189,40 @@ mod tests {
         assert!(!serves(&book, &on_github, &fixtures::github("2").id), "two fit, none chosen");
         book.choose("github.com", "a", fixtures::github("2").id);
         assert!(serves(&book, &on_github, &fixtures::github("2").id), "chosen for the owner");
+    }
+
+    #[test]
+    fn accounts_on_server_paths_answer_each_for_the_remotes_under_their_own_path() {
+        let mut book = AccountBook::default();
+        book.put(fixtures::account("https://dev.azure.com/contoso", "1", &[]));
+        book.put(fixtures::account("https://dev.azure.com/fabrikam", "2", &[]));
+        let access = access_for(
+            &book,
+            &remotes(&[
+                "https://dev.azure.com/contoso/Web/_git/app",
+                "https://fabrikam@dev.azure.com/Fabrikam/Game%20Tools/_git/build",
+                "https://dev.azure.com/northwind/Web/_git/app",
+            ]),
+            Some(PathBuf::from("sternegit")),
+            Attendance::Attended,
+        );
+        assert_eq!(
+            access.scopes,
+            [
+                scoped("https://dev.azure.com/contoso", "github:dev.azure.com:1"),
+                scoped("https://dev.azure.com/Fabrikam", "github:dev.azure.com:2"),
+            ]
+        );
+    }
+
+    #[test]
+    fn cloning_as_an_account_scopes_it_to_the_owner_from_the_server_root() {
+        let github = fixtures::github("1");
+        assert_eq!(owner_prefix(&github, "octo"), "https://github.com/octo");
+        let azure = fixtures::account("https://dev.azure.com/contoso/", "1", &[]);
+        assert_eq!(owner_prefix(&azure, "contoso/Game Tools"), "https://dev.azure.com/contoso/Game%20Tools");
+        let server = fixtures::account("http://devops.example.com:8080/tfs/DefaultCollection", "1", &[]);
+        assert_eq!(owner_prefix(&server, "/tfs/DefaultCollection/Game/"), "http://devops.example.com:8080/tfs/DefaultCollection/Game");
     }
 
     #[test]

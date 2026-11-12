@@ -280,16 +280,27 @@ mod tests {
         fs::remove_dir_all(folder).unwrap();
     }
 
-    #[test]
-    fn the_committed_github_module_answers_every_cassette_inside_the_sandbox() {
-        let github = Path::new(env!("CARGO_MANIFEST_DIR")).join("connectors").join("github");
+    fn plays_every_cassette(connector: &str) -> usize {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("connectors").join(connector);
         let mut played = 0;
-        for entry in fs::read_dir(github.join("tests").join("cassettes")).unwrap() {
+        for entry in fs::read_dir(root.join("tests").join("cassettes")).unwrap() {
             let cassette = entry.unwrap().path();
-            let trial = try_connector(&github.join("dist"), Some(&cassette)).unwrap();
+            let trial = try_connector(&root.join("dist"), Some(&cassette)).unwrap();
             assert!(trial.passed(), "{}", cassette.display());
             played += 1;
         }
+        played
+    }
+
+    #[test]
+    fn the_committed_github_module_answers_every_cassette_inside_the_sandbox() {
+        let played = plays_every_cassette("github");
         assert!(played >= 19, "only {played} cassettes");
+    }
+
+    #[test]
+    fn the_committed_azure_devops_module_answers_every_cassette_inside_the_sandbox() {
+        let played = plays_every_cassette("azure-devops");
+        assert!(played >= 30, "only {played} cassettes");
     }
 }

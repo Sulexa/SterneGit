@@ -139,7 +139,7 @@ impl DeviceFlow {
                 Some("authorization_pending") => Polled::Waiting,
                 Some("slow_down") => Polled::SlowDown,
                 Some("expired_token") => Polled::Expired,
-                Some("access_denied") => Polled::Denied,
+                Some("access_denied" | "authorization_declined") => Polled::Denied,
                 _ => Polled::Failed(oauth::refusal(&answer, "The server answered without a token")),
             }
         }
@@ -268,6 +268,19 @@ mod tests {
             let polled = smol::block_on(flow(&server).poll(&code(), cancel));
             assert!(!polled.keeps_waiting());
             assert_eq!(polled, expected);
+        }
+    }
+
+    #[test]
+    fn microsoft_entra_answers_a_poll_with_400_and_says_why_in_the_body() {
+        for (body, expected) in [
+            (r#"{"error":"authorization_pending","error_description":"AADSTS70016: OAuth 2.0 device flow error."}"#, Polled::Waiting),
+            (r#"{"error":"authorization_declined","error_description":"AADSTS70000: The user declined."}"#, Polled::Denied),
+            (r#"{"error":"expired_token"}"#, Polled::Expired),
+        ] {
+            let server = TestServer::start(move |_| Reply::status(400).body(body));
+            let (_keep, cancel) = cancel_pair();
+            assert_eq!(smol::block_on(flow(&server).poll(&code(), cancel)), expected);
         }
     }
 

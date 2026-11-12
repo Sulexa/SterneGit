@@ -657,9 +657,9 @@ const HostTexts = {
   service: 'Service',
   serverAddress: 'Server address',
   methodDevice: 'Sign in with the browser',
-  methodDeviceAbout: 'GitHub shows a short code to confirm. Recommended.',
+  methodDeviceAbout: (service = 'GitHub') => `${service} shows a short code to confirm. Recommended.`,
   methodToken: 'Paste a token',
-  methodTokenAbout: 'Make a token on GitHub with the scopes SterneGit needs.',
+  methodTokenAbout: (service = 'GitHub') => `Make a token on ${service} with the scopes SterneGit needs.`,
   methodCredential: "Use Git Credential Manager's token",
   methodCredentialAbout: (host) => `Reuse the token Git already has for ${host}.`,
   signInTo: (service) => `Sign in to ${service}`,
@@ -673,7 +673,8 @@ const HostTexts = {
   tryAgain: 'Try again',
   tokenTitle: (service) => `Sign in to ${service} with a token`,
   tokenAbout: (scopes) => `Create a classic token with the scopes ${scopes}, then paste it here. SterneGit checks it before saving it.`,
-  createToken: 'Create a token on GitHub',
+  tokenAboutListed: (scopes) => `Create a token with the scopes ${scopes}, then paste it here. SterneGit checks it before saving it.`,
+  createToken: (service = 'GitHub') => `Create a token on ${service}`,
   tokenLabel: 'Token',
   tokenRefused: (service) => `${service} refused this token: it may have expired or been revoked.`,
   tokenLacks: (scope) => `This token lacks ${scope}, so SterneGit can't add SSH keys with it. Signing in works anyway.`,
@@ -911,6 +912,8 @@ const PullTexts = {
   rebaseNote: (n, base) => `Each of the ${counted(n, 'commit', 'commits')} is replayed onto ${base}; GitHub keeps their messages.`,
   merged: (n, base) => `Merged #${n} into ${base}`,
   mergedMessage: (head) => `${head} isn't needed any more.`,
+  completing: (n, base) => `Completing #${n} into ${base}`,
+  completingMessage: (service) => `${service} finishes the merge on its side. The pull request shows Merged after the next fetch.`,
   deleteBranchTooltip: 'Delete it from the remote, and here unless it is checked out or holds other commits',
   deleteBranch: 'Delete branch',
   movedOn: (head) => `${head} moved since SterneGit read it, so nothing was merged. Look at the new commits first.`,
@@ -3580,19 +3583,25 @@ const C = {
     return `<div data-c="ApprovalPage" class="v page">${header}${warning}${grant}${rest}${actions}</div>`;
   },
 
-  SignInDialog({ step = 'choose', service = 'GitHub', host = 'github.com', enterprise = false, problem, warning, hot }) {
+  SignInDialog({ step = 'choose', service = 'GitHub', host = 'github.com', enterprise = false, offer, problem, warning, hot }) {
     const name = 'SignInDialog';
     const cancel = C.Button({ label: HostTexts.cancel, size: 'md' });
+    const shown =
+      offer ||
+      (enterprise
+        ? { choice: 'GitHub Enterprise Server', field: { label: HostTexts.serverAddress, value: 'https://github.acme.dev' }, methods: ['token', 'credential'], host: 'github.acme.dev' }
+        : { choice: 'GitHub — github.com', methods: ['device', 'token', 'credential'], host });
     if (step === 'choose') {
       const option = (key, glyph, label, about) =>
         `<div class="method-option${key === hot ? ' hot' : ''}">${icon(glyph, 'md', 'var(--muted)')}<div class="v fill"><span class="sm medium">${esc(label)}</span><span class="xs muted">${esc(about)}</span></div>${icon('chevron-right', 'sm', 'var(--muted)')}</div>`;
-      const services = formField({ label: HostTexts.service, control: C.Select({ value: enterprise ? 'GitHub Enterprise Server' : 'GitHub — github.com', lead: `<span class="prefix">${icon('plug', 'sm')}</span>` }) });
-      const server = enterprise ? formField({ label: HostTexts.serverAddress, control: C.Input({ value: 'https://github.acme.dev', focused: true }), hint: 'The address you open in the browser' }) : '';
-      const methods = [
-        !enterprise && option('device', 'log-in', HostTexts.methodDevice, HostTexts.methodDeviceAbout),
-        option('token', 'key-round', HostTexts.methodToken, HostTexts.methodTokenAbout),
-        option('credential', 'shield-check', HostTexts.methodCredential, HostTexts.methodCredentialAbout(enterprise ? 'github.acme.dev' : host)),
-      ].filter(Boolean);
+      const services = formField({ label: HostTexts.service, control: C.Select({ value: shown.choice, lead: `<span class="prefix">${icon('plug', 'sm')}</span>` }) });
+      const server = shown.field ? formField({ label: shown.field.label, control: C.Input({ value: shown.field.value, placeholder: shown.field.example, focused: true }), hint: 'The address you open in the browser' }) : '';
+      const offered = {
+        device: option('device', 'log-in', HostTexts.methodDevice, HostTexts.methodDeviceAbout(service)),
+        token: option('token', 'key-round', HostTexts.methodToken, HostTexts.methodTokenAbout(service)),
+        credential: option('credential', 'shield-check', HostTexts.methodCredential, HostTexts.methodCredentialAbout(shown.host)),
+      };
+      const methods = shown.methods.map((method) => offered[method]);
       return dialogShell({ name, title: HostTexts.addAccountTitle, body: `<div class="form">${services}${server}<div class="v" style="gap:8px">${methods.join('')}</div></div>`, buttons: cancel });
     }
     if (step === 'device' || step === 'expired' || step === 'denied') {
@@ -3608,13 +3617,14 @@ const C = {
         step === 'device'
           ? C.Button({ label: HostTexts.openAgain, icon: 'external-link', size: 'md', variant: 'ghost' }) + cancel
           : cancel + C.Button({ label: step === 'expired' ? HostTexts.newCode : HostTexts.tryAgain, variant: 'primary', size: 'md' });
-      return dialogShell({ name, title: HostTexts.signInTo(service), description: HostTexts.deviceOpened(`${host}/login/device`), body: code + status, buttons });
+      return dialogShell({ name, title: HostTexts.signInTo(service), description: HostTexts.deviceOpened(shown.page || `${host}/login/device`), body: code + status, buttons });
     }
     if (step === 'token') {
-      const create = C.Button({ label: HostTexts.createToken, icon: 'external-link', size: 'sm', variant: 'ghost' });
-      const field = formField({ label: HostTexts.tokenLabel, control: C.Input({ value: 'ghp_••••••••••••••••••••••••••••••••••••', focused: true, mono: true }), problem, warning, extra: create });
+      const create = C.Button({ label: HostTexts.createToken(service), icon: 'external-link', size: 'sm', variant: 'ghost' });
+      const field = formField({ label: HostTexts.tokenLabel, control: C.Input({ value: shown.token || 'ghp_••••••••••••••••••••••••••••••••••••', focused: true, mono: true }), problem, warning, extra: create });
       const buttons = cancel + C.Button({ label: HostTexts.signInButton, variant: 'primary', size: 'md', disabled: Boolean(problem) });
-      return dialogShell({ name, title: HostTexts.tokenTitle(service), description: HostTexts.tokenAbout('repo, read:org, write:public_key and workflow'), body: `<div class="form">${field}</div>`, buttons });
+      const about = shown.scopes ? HostTexts.tokenAboutListed(shown.scopes) : HostTexts.tokenAbout('repo, read:org, write:public_key and workflow');
+      return dialogShell({ name, title: HostTexts.tokenTitle(service), description: about, body: `<div class="form">${field}</div>`, buttons });
     }
     const failure = problem ? `<div class="dialog-status">${icon('circle-x', 'md', 'var(--red)')}<span>${esc(problem)}</span></div>` : '';
     const buttons = cancel + C.Button({ label: HostTexts.useToken, variant: 'primary', size: 'md', disabled: Boolean(problem) });

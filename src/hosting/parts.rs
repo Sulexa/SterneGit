@@ -40,9 +40,10 @@ pub(crate) fn account_avatar(account: &Account, size: f32) -> impl IntoElement {
 
 pub(crate) fn server_name(account: &Account) -> String {
     let host = account.server.host_str().unwrap_or_default();
+    let path = account.server.path().trim_end_matches('/');
     match account.server.port() {
-        Some(port) => format!("{host}:{port}"),
-        None => host.to_owned(),
+        Some(port) => format!("{host}:{port}{path}"),
+        None => format!("{host}{path}"),
     }
 }
 
@@ -378,4 +379,18 @@ pub(crate) fn toggle_pair(
 pub(crate) fn hot_row(id: impl Into<ElementId>, cx: &App) -> gpui_kit::Stateful<Div> {
     let hover = cx.theme().list_hover;
     row().id(id).hover(move |style| style.bg(hover))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::server_name;
+    use crate::accounts::fixtures;
+
+    #[test]
+    fn an_account_is_named_by_its_server_with_its_port_and_path() {
+        let named = |server: &str| server_name(&fixtures::account(server, "1", &[]));
+        assert_eq!(named("https://github.com"), "github.com");
+        assert_eq!(named("https://dev.azure.com/contoso/"), "dev.azure.com/contoso");
+        assert_eq!(named("http://devops.example.com:8080/tfs/DefaultCollection"), "devops.example.com:8080/tfs/DefaultCollection");
+    }
 }

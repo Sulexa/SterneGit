@@ -1,0 +1,24 @@
+{
+  "op": "account.who_am_i",
+  "account": {
+    "id": "azure-devops:dev.azure.com:contoso.6c8f1a2b-4d3e-4f5a-9b8c-7d6e5f4a3b2c",
+    "login": "robin@contoso.com",
+    "endpoints": {
+      "api": "https://dev.azure.com/contoso/"
+    }
+  },
+  "exchanges": [
+    {
+      "method": "GET",
+      "url": "https://dev.azure.com/contoso/_apis/connectionData",
+      "status": 401,
+      "headers": [],
+      "body": ""
+    }
+  ],
+  "output": {
+    "err": {
+      "kind": "signed_out"
+    }
+  }
+}

@@ -1,0 +1,191 @@
+{
+  "op": "repositories.list",
+  "account": {
+    "id": "azure-devops:dev.azure.com:contoso.6c8f1a2b-4d3e-4f5a-9b8c-7d6e5f4a3b2c",
+    "login": "robin@contoso.com",
+    "endpoints": {
+      "api": "https://dev.azure.com/contoso/"
+    }
+  },
+  "input": {
+    "search": null,
+    "owner": null,
+    "cursor": null
+  },
+  "exchanges": [
+    {
+      "method": "GET",
+      "url": "https://dev.azure.com/contoso/_apis/git/repositories?api-version=6.0",
+      "status": 200,
+      "headers": [
+        [
+          "content-type",
+          "application/json; charset=utf-8; api-version=6.0"
+        ]
+      ],
+      "body": {
+        "count": 4,
+        "value": [
+          {
+            "id": "5a6b7c8d-9e0f-4a1b-8c2d-3e4f5a6b7c8d",
+            "name": "app",
+            "url": "https://dev.azure.com/contoso/b0a1c2d3-e4f5-4a6b-8c7d-9e0f1a2b3c4d/_apis/git/repositories/5a6b7c8d-9e0f-4a1b-8c2d-3e4f5a6b7c8d",
+            "project": {
+              "id": "b0a1c2d3-e4f5-4a6b-8c7d-9e0f1a2b3c4d",
+              "name": "Web",
+              "url": "https://dev.azure.com/contoso/_apis/projects/b0a1c2d3-e4f5-4a6b-8c7d-9e0f1a2b3c4d",
+              "state": "wellFormed",
+              "revision": 11,
+              "visibility": "private",
+              "lastUpdateTime": "2026-10-02T08:11:45.183Z"
+            },
+            "size": 48213,
+            "remoteUrl": "https://contoso@dev.azure.com/contoso/Web/_git/app",
+            "sshUrl": "git@ssh.dev.azure.com:v3/contoso/Web/app",
+            "webUrl": "https://dev.azure.com/contoso/Web/_git/app",
+            "isDisabled": false,
+            "isInMaintenance": false,
+            "defaultBranch": "refs/heads/main"
+          },
+          {
+            "id": "9e0f1a2b-3c4d-4e5f-8a6b-7c8d9e0f1a2b",
+            "name": "old-site",
+            "url": "https://dev.azure.com/contoso/b0a1c2d3-e4f5-4a6b-8c7d-9e0f1a2b3c4d/_apis/git/repositories/9e0f1a2b-3c4d-4e5f-8a6b-7c8d9e0f1a2b",
+            "project": {
+              "id": "b0a1c2d3-e4f5-4a6b-8c7d-9e0f1a2b3c4d",
+              "name": "Web",
+              "url": "https://dev.azure.com/contoso/_apis/projects/b0a1c2d3-e4f5-4a6b-8c7d-9e0f1a2b3c4d",
+              "state": "wellFormed",
+              "revision": 11,
+              "visibility": "private",
+              "lastUpdateTime": "2026-10-02T08:11:45.183Z"
+            },
+            "size": 48213,
+            "remoteUrl": "https://contoso@dev.azure.com/contoso/Web/_git/old-site",
+            "sshUrl": "git@ssh.dev.azure.com:v3/contoso/Web/old-site",
+            "webUrl": "https://dev.azure.com/contoso/Web/_git/old-site",
+            "isDisabled": true,
+            "isInMaintenance": false,
+            "defaultBranch": "refs/heads/main"
+          },
+          {
+            "id": "7c8d9e0f-1a2b-4c3d-ae4f-5a6b7c8d9e0f",
+            "name": "build scripts",
+            "url": "https://dev.azure.com/contoso/c1b2a3d4-f5e6-4b7a-9d8c-0f1e2a3b4c5d/_apis/git/repositories/7c8d9e0f-1a2b-4c3d-ae4f-5a6b7c8d9e0f",
+            "project": {
+              "id": "c1b2a3d4-f5e6-4b7a-9d8c-0f1e2a3b4c5d",
+              "name": "Game Tools",
+              "url": "https://dev.azure.com/contoso/_apis/projects/c1b2a3d4-f5e6-4b7a-9d8c-0f1e2a3b4c5d",
+              "state": "wellFormed",
+              "revision": 11,
+              "visibility": "private",
+              "lastUpdateTime": "2026-10-02T08:11:45.183Z"
+            },
+            "size": 48213,
+            "remoteUrl": "https://contoso@dev.azure.com/contoso/Game%20Tools/_git/build%20scripts",
+            "sshUrl": "git@ssh.dev.azure.com:v3/contoso/Game%20Tools/build%20scripts",
+            "webUrl": "https://dev.azure.com/contoso/Game%20Tools/_git/build%20scripts",
+            "isDisabled": false,
+            "isInMaintenance": false,
+            "defaultBranch": "refs/heads/develop"
+          },
+          {
+            "id": "8d9e0f1a-2b3c-4d4e-bf5a-6b7c8d9e0f1a",
+            "name": "docs",
+            "url": "https://dev.azure.com/contoso/b0a1c2d3-e4f5-4a6b-8c7d-9e0f1a2b3c4d/_apis/git/repositories/8d9e0f1a-2b3c-4d4e-bf5a-6b7c8d9e0f1a",
+            "project": {
+              "id": "b0a1c2d3-e4f5-4a6b-8c7d-9e0f1a2b3c4d",
+              "name": "Web",
+              "url": "https://dev.azure.com/contoso/_apis/projects/b0a1c2d3-e4f5-4a6b-8c7d-9e0f1a2b3c4d",
+              "state": "wellFormed",
+              "revision": 11,
+              "visibility": "private",
+              "lastUpdateTime": "2026-10-02T08:11:45.183Z"
+            },
+            "size": 0,
+            "remoteUrl": "https://contoso@dev.azure.com/contoso/Web/_git/docs",
+            "sshUrl": "git@ssh.dev.azure.com:v3/contoso/Web/docs",
+            "webUrl": "https://dev.azure.com/contoso/Web/_git/docs",
+            "isDisabled": false,
+            "isInMaintenance": false
+          }
+        ]
+      }
+    }
+  ],
+  "output": {
+    "ok": {
+      "items": [
+        {
+          "archived": false,
+          "clone": {
+            "https": "https://dev.azure.com/contoso/Game%20Tools/_git/build%20scripts",
+            "ssh": "git@ssh.dev.azure.com:v3/contoso/Game%20Tools/build%20scripts"
+          },
+          "default_branch": "develop",
+          "description": null,
+          "fork": false,
+          "repo": {
+            "name": "build scripts",
+            "owner": "contoso/Game Tools"
+          },
+          "updated_at": null,
+          "visibility": "private",
+          "web_url": "https://dev.azure.com/contoso/Game%20Tools/_git/build%20scripts"
+        },
+        {
+          "archived": false,
+          "clone": {
+            "https": "https://dev.azure.com/contoso/Web/_git/app",
+            "ssh": "git@ssh.dev.azure.com:v3/contoso/Web/app"
+          },
+          "default_branch": "main",
+          "description": null,
+          "fork": false,
+          "repo": {
+            "name": "app",
+            "owner": "contoso/Web"
+          },
+          "updated_at": null,
+          "visibility": "private",
+          "web_url": "https://dev.azure.com/contoso/Web/_git/app"
+        },
+        {
+          "archived": false,
+          "clone": {
+            "https": "https://dev.azure.com/contoso/Web/_git/docs",
+            "ssh": "git@ssh.dev.azure.com:v3/contoso/Web/docs"
+          },
+          "default_branch": null,
+          "description": null,
+          "fork": false,
+          "repo": {
+            "name": "docs",
+            "owner": "contoso/Web"
+          },
+          "updated_at": null,
+          "visibility": "private",
+          "web_url": "https://dev.azure.com/contoso/Web/_git/docs"
+        },
+        {
+          "archived": true,
+          "clone": {
+            "https": "https://dev.azure.com/contoso/Web/_git/old-site",
+            "ssh": "git@ssh.dev.azure.com:v3/contoso/Web/old-site"
+          },
+          "default_branch": "main",
+          "description": null,
+          "fork": false,
+          "repo": {
+            "name": "old-site",
+            "owner": "contoso/Web"
+          },
+          "updated_at": null,
+          "visibility": "private",
+          "web_url": "https://dev.azure.com/contoso/Web/_git/old-site"
+        }
+      ],
+      "next": null
+    }
+  }
+}

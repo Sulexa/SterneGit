@@ -1,0 +1,49 @@
+{
+  "op": "pulls.merge",
+  "account": {
+    "id": "azure-devops:dev.azure.com:contoso.6c8f1a2b-4d3e-4f5a-9b8c-7d6e5f4a3b2c",
+    "login": "robin@contoso.com",
+    "endpoints": {
+      "api": "https://dev.azure.com/contoso/"
+    }
+  },
+  "repo": {
+    "owner": "contoso/Web",
+    "name": "app"
+  },
+  "input": {
+    "number": 42,
+    "method": "squash",
+    "title": "Add tabs to the settings page (#42)",
+    "message": "Keeps the order between launches.",
+    "expected_head": "9f1c2b3a4d5e6f708192a3b4c5d6e7f809102132"
+  },
+  "exchanges": [
+    {
+      "method": "PATCH",
+      "url": "https://dev.azure.com/contoso/Web/_apis/git/repositories/app/pullrequests/42?api-version=6.0",
+      "status": 409,
+      "headers": [
+        [
+          "content-type",
+          "application/json; charset=utf-8; api-version=6.0"
+        ]
+      ],
+      "body": {
+        "$id": "1",
+        "innerException": null,
+        "message": "TF401181: The pull request cannot be completed because the source branch has been updated since it was last reviewed.",
+        "typeName": "Microsoft.TeamFoundation.GitPullRequestStaleException, Microsoft.TeamFoundation.Server.Core",
+        "typeKey": "GitPullRequestStaleException",
+        "errorCode": 0,
+        "eventId": 3000
+      }
+    }
+  ],
+  "output": {
+    "err": {
+      "kind": "conflict",
+      "message": "TF401181: The pull request cannot be completed because the source branch has been updated since it was last reviewed."
+    }
+  }
+}

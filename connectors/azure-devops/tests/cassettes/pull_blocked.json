@@ -1,0 +1,264 @@
+{
+  "op": "pulls.get",
+  "account": {
+    "id": "azure-devops:dev.azure.com:contoso.6c8f1a2b-4d3e-4f5a-9b8c-7d6e5f4a3b2c",
+    "login": "robin@contoso.com",
+    "endpoints": {
+      "api": "https://dev.azure.com/contoso/"
+    }
+  },
+  "repo": {
+    "owner": "contoso/Web",
+    "name": "app"
+  },
+  "input": {
+    "number": 40
+  },
+  "exchanges": [
+    {
+      "method": "GET",
+      "url": "https://dev.azure.com/contoso/Web/_apis/git/repositories/app/pullrequests/40?api-version=6.0",
+      "status": 200,
+      "headers": [
+        [
+          "content-type",
+          "application/json; charset=utf-8; api-version=6.0"
+        ]
+      ],
+      "body": {
+        "repository": {
+          "id": "5a6b7c8d-9e0f-4a1b-8c2d-3e4f5a6b7c8d",
+          "name": "app",
+          "url": "https://dev.azure.com/contoso/b0a1c2d3-e4f5-4a6b-8c7d-9e0f1a2b3c4d/_apis/git/repositories/5a6b7c8d-9e0f-4a1b-8c2d-3e4f5a6b7c8d",
+          "project": {
+            "id": "b0a1c2d3-e4f5-4a6b-8c7d-9e0f1a2b3c4d",
+            "name": "Web",
+            "state": "unchanged",
+            "visibility": "unchanged",
+            "lastUpdateTime": "0001-01-01T00:00:00"
+          }
+        },
+        "pullRequestId": 40,
+        "codeReviewId": 40,
+        "status": "active",
+        "createdBy": {
+          "displayName": "Robin Park",
+          "url": "https://spsprodweu5.vssps.visualstudio.com/A1/_apis/Identities/6c8f1a2b-4d3e-4f5a-9b8c-7d6e5f4a3b2c",
+          "id": "6c8f1a2b-4d3e-4f5a-9b8c-7d6e5f4a3b2c",
+          "uniqueName": "robin@contoso.com",
+          "imageUrl": "https://dev.azure.com/contoso/_api/_common/identityImage?id=6c8f1a2b-4d3e-4f5a-9b8c-7d6e5f4a3b2c",
+          "descriptor": "aad.NmM4ZjFhMmItNGQzZS03ZjVhLTliOGMtN2Q2ZTVmNGEzYjJj"
+        },
+        "creationDate": "2026-11-01T14:30:00Z",
+        "title": "Bump the build agent",
+        "description": "Bump the build agent.",
+        "sourceRefName": "refs/heads/chore/agent",
+        "targetRefName": "refs/heads/main",
+        "mergeStatus": "succeeded",
+        "isDraft": false,
+        "mergeId": "0f9e8d7c-6b5a-4938-a7b6-c5d4e3f2a1b0",
+        "lastMergeSourceCommit": {
+          "commitId": "3c4d5e6f708192a3b4c5d6e7f809102132435465",
+          "url": "https://dev.azure.com/contoso/b0a1c2d3-e4f5-4a6b-8c7d-9e0f1a2b3c4d/_apis/git/repositories/5a6b7c8d-9e0f-4a1b-8c2d-3e4f5a6b7c8d/commits/3c4d5e6f708192a3b4c5d6e7f809102132435465"
+        },
+        "lastMergeTargetCommit": {
+          "commitId": "1a2b3c4d5e6f708192a3b4c5d6e7f80910213243",
+          "url": "https://dev.azure.com/contoso/b0a1c2d3-e4f5-4a6b-8c7d-9e0f1a2b3c4d/_apis/git/repositories/5a6b7c8d-9e0f-4a1b-8c2d-3e4f5a6b7c8d/commits/1a2b3c4d5e6f708192a3b4c5d6e7f80910213243"
+        },
+        "reviewers": [
+          {
+            "displayName": "Sam Lee",
+            "url": "https://spsprodweu5.vssps.visualstudio.com/A1/_apis/Identities/1f2e3d4c-5b6a-4978-8a9b-0c1d2e3f4a5b",
+            "id": "1f2e3d4c-5b6a-4978-8a9b-0c1d2e3f4a5b",
+            "uniqueName": "sam@contoso.com",
+            "imageUrl": "https://dev.azure.com/contoso/_api/_common/identityImage?id=1f2e3d4c-5b6a-4978-8a9b-0c1d2e3f4a5b",
+            "descriptor": "aad.NmM4ZjFhMmItNGQzZS03ZjVhLTliOGMtN2Q2ZTVmNGEzYjJj",
+            "reviewerUrl": "https://spsprodweu5.vssps.visualstudio.com/A1/_apis/Identities/1f2e3d4c-5b6a-4978-8a9b-0c1d2e3f4a5b",
+            "vote": 0,
+            "hasDeclined": false,
+            "isFlagged": false,
+            "isRequired": true
+          }
+        ],
+        "url": "https://dev.azure.com/contoso/b0a1c2d3-e4f5-4a6b-8c7d-9e0f1a2b3c4d/_apis/git/repositories/5a6b7c8d-9e0f-4a1b-8c2d-3e4f5a6b7c8d/pullRequests/40",
+        "supportsIterations": true
+      }
+    },
+    {
+      "method": "GET",
+      "url": "https://dev.azure.com/contoso/Web/_apis/git/policy/configurations?repositoryId=5a6b7c8d-9e0f-4a1b-8c2d-3e4f5a6b7c8d&refName=refs%2Fheads%2Fmain&policyType=fa4e907d-c16b-4a4c-9dfa-4916e5d171ab&api-version=6.0-preview.1",
+      "status": 200,
+      "headers": [
+        [
+          "content-type",
+          "application/json; charset=utf-8; api-version=6.0"
+        ]
+      ],
+      "body": {
+        "count": 1,
+        "value": [
+          {
+            "isEnabled": true,
+            "isBlocking": true,
+            "type": {
+              "id": "fa4e907d-c16b-4a4c-9dfa-4916e5d171ab",
+              "url": "https://dev.azure.com/contoso/b0a1c2d3-e4f5-4a6b-8c7d-9e0f1a2b3c4d/_apis/policy/types/fa4e907d-c16b-4a4c-9dfa-4916e5d171ab",
+              "displayName": "Require a merge strategy"
+            },
+            "id": 3,
+            "settings": {
+              "scope": [
+                {
+                  "repositoryId": "5a6b7c8d-9e0f-4a1b-8c2d-3e4f5a6b7c8d",
+                  "refName": "refs/heads/main",
+                  "matchKind": "exact"
+                }
+              ],
+              "allowNoFastForward": false,
+              "allowSquash": true,
+              "allowRebase": false,
+              "allowRebaseMerge": false
+            }
+          }
+        ]
+      }
+    },
+    {
+      "method": "GET",
+      "url": "https://dev.azure.com/contoso/Web/_apis/policy/evaluations?artifactId=vstfs%3A%2F%2F%2FCodeReview%2FCodeReviewId%2Fb0a1c2d3-e4f5-4a6b-8c7d-9e0f1a2b3c4d%2F40&api-version=6.0-preview.1",
+      "status": 200,
+      "headers": [
+        [
+          "content-type",
+          "application/json; charset=utf-8; api-version=6.0"
+        ]
+      ],
+      "body": {
+        "count": 3,
+        "value": [
+          {
+            "configuration": {
+              "isEnabled": true,
+              "isBlocking": true,
+              "isDeleted": false,
+              "type": {
+                "id": "fa6e9c5c-8a4b-4f5e-9b8a-7c6d5e4f3a2b",
+                "url": "https://dev.azure.com/contoso/b0a1c2d3-e4f5-4a6b-8c7d-9e0f1a2b3c4d/_apis/policy/types/fa6e9c5c-8a4b-4f5e-9b8a-7c6d5e4f3a2b",
+                "displayName": "Minimum number of reviewers"
+              },
+              "id": 7,
+              "settings": {
+                "minimumApproverCount": 2
+              }
+            },
+            "artifactId": "vstfs:///CodeReview/CodeReviewId/x/y",
+            "evaluationId": "e1",
+            "startedDate": "2026-11-03T18:51:00.000Z",
+            "status": "queued"
+          },
+          {
+            "configuration": {
+              "isEnabled": true,
+              "isBlocking": true,
+              "isDeleted": false,
+              "type": {
+                "id": "c6a1889d-b943-4856-b76f-9e46bb6b0df2",
+                "url": "https://dev.azure.com/contoso/b0a1c2d3-e4f5-4a6b-8c7d-9e0f1a2b3c4d/_apis/policy/types/c6a1889d-b943-4856-b76f-9e46bb6b0df2",
+                "displayName": "Comment requirements"
+              },
+              "id": 7,
+              "settings": {
+                "scope": [
+                  {
+                    "repositoryId": "5a6b7c8d-9e0f-4a1b-8c2d-3e4f5a6b7c8d",
+                    "refName": "refs/heads/main",
+                    "matchKind": "exact"
+                  }
+                ]
+              }
+            },
+            "artifactId": "vstfs:///CodeReview/CodeReviewId/x/y",
+            "evaluationId": "e1",
+            "startedDate": "2026-11-03T18:51:00.000Z",
+            "status": "rejected"
+          },
+          {
+            "configuration": {
+              "isEnabled": true,
+              "isBlocking": false,
+              "isDeleted": false,
+              "type": {
+                "id": "40e92b44-2fe1-4dd6-b3d8-74a9c21d0c6e",
+                "url": "https://dev.azure.com/contoso/b0a1c2d3-e4f5-4a6b-8c7d-9e0f1a2b3c4d/_apis/policy/types/40e92b44-2fe1-4dd6-b3d8-74a9c21d0c6e",
+                "displayName": "Work item linking"
+              },
+              "id": 7,
+              "settings": {
+                "scope": [
+                  {
+                    "repositoryId": "5a6b7c8d-9e0f-4a1b-8c2d-3e4f5a6b7c8d",
+                    "refName": "refs/heads/main",
+                    "matchKind": "exact"
+                  }
+                ]
+              }
+            },
+            "artifactId": "vstfs:///CodeReview/CodeReviewId/x/y",
+            "evaluationId": "e1",
+            "startedDate": "2026-11-03T18:51:00.000Z",
+            "status": "queued"
+          }
+        ]
+      }
+    }
+  ],
+  "output": {
+    "ok": {
+      "base_sha": "1a2b3c4d5e6f708192a3b4c5d6e7f80910213243",
+      "body": "Bump the build agent.",
+      "fetch": {
+        "refspec": "refs/heads/chore/agent",
+        "sha": "3c4d5e6f708192a3b4c5d6e7f809102132435465",
+        "url": null
+      },
+      "merge_methods": [
+        "squash"
+      ],
+      "mergeability": {
+        "kind": "blocked",
+        "reason": "Waiting for: Minimum number of reviewers, Comment requirements."
+      },
+      "summary": {
+        "author": {
+          "avatar_url": null,
+          "login": "robin@contoso.com",
+          "name": "Robin Park"
+        },
+        "base": {
+          "branch": "main",
+          "repo": null,
+          "sha": "1a2b3c4d5e6f708192a3b4c5d6e7f80910213243"
+        },
+        "checks": null,
+        "created_at": "2026-11-01T14:30:00Z",
+        "draft": false,
+        "head": {
+          "branch": "chore/agent",
+          "repo": null,
+          "sha": "3c4d5e6f708192a3b4c5d6e7f809102132435465"
+        },
+        "number": 40,
+        "review": "review_required",
+        "state": "open",
+        "title": "Bump the build agent",
+        "updated_at": "2026-11-01T14:30:00Z",
+        "web_url": "https://dev.azure.com/contoso/Web/_git/app/pullrequest/40"
+      },
+      "verdicts": [
+        "comment",
+        "approve",
+        "request_changes"
+      ]
+    }
+  }
+}

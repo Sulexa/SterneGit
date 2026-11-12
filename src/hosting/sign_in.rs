@@ -33,7 +33,7 @@ use crate::{
         Account, AccountId, DeviceCode, DeviceFlow, Polled, SignInMethod, Token, Tokens, token_git_holds,
     },
     app::connectors::{Connectors, ServiceChoice, keep_account},
-    connect::{CallError, Draft, FieldKind, draft, identify},
+    connect::{CallError, Draft, Field, FieldKind, draft, identify},
     net::services::{ConnectorId, cancel_pair},
     ui::Look as _,
 };
@@ -104,11 +104,8 @@ impl SignIn {
             .as_ref()
             .map(|account| account.server.as_str().trim_end_matches('/').to_owned())
             .unwrap_or_default();
-        let server = cx.new(|cx| {
-            InputState::new(window, cx)
-                .placeholder("https://github.example.com")
-                .default_value(typed_server)
-        });
+        let example = services.get(chosen).map(example_address).unwrap_or_default();
+        let server = cx.new(|cx| InputState::new(window, cx).placeholder(example).default_value(typed_server));
         let typing = cx.subscribe(&server, |_, _, event, cx| {
             if matches!(event, InputEvent::Change) {
                 cx.notify();
@@ -172,9 +169,20 @@ impl SignIn {
         draft(choice.connector(), choice.service(), method, &self.typed_fields(cx))
     }
 
+    fn address_label(&self) -> Option<String> {
+        self.service().and_then(|choice| address_field(choice).map(|field| field.label.clone()))
+    }
+
     fn needs_server(&self) -> bool {
-        self.service()
-            .is_some_and(|choice| choice.service().fields.iter().any(|field| field.kind == FieldKind::Url))
+        self.address_label().is_some()
+    }
+
+    fn pick(&mut self, ix: usize, window: &mut Window, cx: &mut Context<Self>) {
+        self.chosen = ix;
+        self.problem = None;
+        let example = self.service().map(example_address).unwrap_or_default();
+        self.server.update(cx, |state, cx| state.set_placeholder(example, window, cx));
+        cx.notify();
     }
 
     fn choose(&mut self, method: SignInMethod, window: &mut Window, cx: &mut Context<Self>) {
@@ -187,7 +195,7 @@ impl SignIn {
         }
         self.step = match method {
             SignInMethod::PastedToken => {
-                let input = cx.new(|cx| InputState::new(window, cx).masked(true).placeholder("ghp_…"));
+                let input = cx.new(|cx| InputState::new(window, cx).masked(true));
                 input.update(cx, |state, cx| state.focus(window, cx));
                 Step::Token { input }
             }
@@ -395,12 +403,8 @@ impl SignIn {
             .menu(move |menu, _, _| {
                 services.iter().enumerate().fold(menu, |menu, (ix, choice)| {
                     let this = this.clone();
-                    menu.item(PopupMenuItem::new(service_name(choice)).on_click(move |_, _, cx| {
-                        let _ = this.update(cx, |this, cx| {
-                            this.chosen = ix;
-                            this.problem = None;
-                            cx.notify();
-                        });
+                    menu.item(PopupMenuItem::new(service_name(choice)).on_click(move |_, window, cx| {
+                        let _ = this.update(cx, |this, cx| this.pick(ix, window, cx));
                     }))
                 })
             });
@@ -442,9 +446,9 @@ impl SignIn {
         v_flex()
             .gap_4()
             .child(field(SERVICE, picker, None, cx))
-            .when(self.needs_server(), |this| {
+            .when_some(self.address_label(), |this, label| {
                 this.child(field(
-                    "Server address",
+                    label,
                     Input::new(&self.server),
                     Some(Note::Plain("The address you open in the browser".into())),
                     cx,
@@ -641,42 +645,54 @@ impl Render for SignIn {
 
 fn service_name(choice: &ServiceChoice) -> String {
     let service = choice.service();
-    match service.fields.is_empty() {
-        true => {
-            let host = service
-                .remotes
-                .iter()
-                .flat_map(|remote| &remote.hosts)
-                .find(|host| !host.contains('{'))
-                .cloned()
-                .unwrap_or_default();
-            format!("{} — {host}", service.label)
-        }
+    match service.id.contains('.') {
+        true => format!("{} — {}", service.label, service.id),
         false => service.label.clone(),
     }
 }
 
+fn address_field(choice: &ServiceChoice) -> Option<&Field> {
+    choice.service().fields.iter().find(|field| field.kind == FieldKind::Url)
+}
+
+fn example_address(choice: &ServiceChoice) -> String {
+    address_field(choice)
+        .and_then(|field| field.example.clone())
+        .unwrap_or_default()
+}
+
 fn token_about(sign_in: &SignIn, cx: &App) -> String {
-    let scopes = sign_in
-        .drafted(SignInMethod::PastedToken, cx)
-        .ok()
-        .and_then(|drafted| drafted.url("create_url").cloned())
-        .and_then(|url| scopes_asked(&url));
-    match scopes {
-        Some(scopes) => format!(
+    let drafted = sign_in.drafted(SignInMethod::PastedToken, cx).ok();
+    let asked = drafted
+        .as_ref()
+        .and_then(|drafted| drafted.url("create_url"))
+        .and_then(scopes_asked);
+    let listed = drafted.as_ref().and_then(|drafted| listed(&drafted.scopes));
+    match (asked, listed) {
+        (Some(scopes), _) => format!(
             "Create a classic token with the scopes {scopes}, then paste it here. SterneGit checks it before saving it."
         ),
-        None => "Create a token, then paste it here. SterneGit checks it before saving it.".to_owned(),
+        (None, Some(scopes)) => format!(
+            "Create a token with the scopes {scopes}, then paste it here. SterneGit checks it before saving it."
+        ),
+        (None, None) => "Create a token, then paste it here. SterneGit checks it before saving it.".to_owned(),
     }
 }
 
 fn scopes_asked(url: &Url) -> Option<String> {
     let (_, scopes) = url.query_pairs().find(|(name, _)| name == "scopes")?;
     let scopes: Vec<&str> = scopes.split(',').map(str::trim).filter(|scope| !scope.is_empty()).collect();
-    match scopes.as_slice() {
+    listed(&scopes)
+}
+
+fn listed(scopes: &[impl AsRef<str>]) -> Option<String> {
+    match scopes {
         [] => None,
-        [only] => Some((*only).to_owned()),
-        [first @ .., last] => Some(format!("{} and {last}", first.join(", "))),
+        [only] => Some(only.as_ref().to_owned()),
+        [first @ .., last] => {
+            let first: Vec<&str> = first.iter().map(AsRef::as_ref).collect();
+            Some(format!("{} and {}", first.join(", "), last.as_ref()))
+        }
     }
 }
 
@@ -719,12 +735,19 @@ pub(crate) fn open_sign_in(start: SignInStart, window: &mut Window, cx: &mut App
 mod tests {
     use url::Url;
 
-    use super::scopes_asked;
+    use super::{listed, scopes_asked};
 
     #[test]
     fn the_scopes_a_token_needs_are_read_from_its_creation_page() {
         let url = Url::parse("https://github.com/settings/tokens/new?scopes=repo,read:org,write:public_key,workflow&description=SterneGit").unwrap();
         assert_eq!(scopes_asked(&url).as_deref(), Some("repo, read:org, write:public_key and workflow"));
         assert_eq!(scopes_asked(&Url::parse("https://ghe.example/settings/tokens/new").unwrap()), None);
+    }
+
+    #[test]
+    fn scopes_the_manifest_lists_read_as_a_sentence() {
+        assert_eq!(listed(&["Code (Read & write)", "Project and Team (Read)"]).as_deref(), Some("Code (Read & write) and Project and Team (Read)"));
+        assert_eq!(listed(&["repo"]).as_deref(), Some("repo"));
+        assert_eq!(listed(&[] as &[&str]), None);
     }
 }

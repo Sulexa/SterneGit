@@ -16,8 +16,9 @@ Chosen on 2026-11-05. This is the reference for building connectors and drawing 
 | Screens | Connectors only supply data. SterneGit draws every screen, in the mockup first. |
 | Network | Only when a tab opens, after each fetch (every 5 minutes, on window return, when the network comes back, when a remote is added or moved, when an account that serves it signs in, Ctrl+Shift+R) and when the user acts. No new timers. |
 | v1 platform | GitHub: github.com, and Enterprise Server through a server address and a token. |
+| Second platform | Azure DevOps, built 2026-11-12: organizations on dev.azure.com and Azure DevOps Server collections, one account per organization or collection, signed in with a pasted token; Microsoft Entra ID's device flow joins once SterneGit's Entra app exists. Section 10. |
 | v1 features | Sign-in; who am I; browse, clone, create and publish repositories; SSH keys; pull requests (list, view, checks, create, check out, review with line comments, reply, resolve, merge). |
-| Accounts | Several, even two on one server. A repository finds its account from its remote URL; when two fit, SterneGit asks once per remote owner and remembers. |
+| Accounts | Several, even two on one server. A repository finds its account from its remote URL; when two fit, SterneGit asks once per remote owner and remembers. An account whose address has a path, such as an Azure DevOps organization, covers only the remotes under that path. |
 | Sign-in | Device flow by default; a pasted token; or the token Git Credential Manager holds, after the user agrees. |
 | Tokens | In the OS credential store, under SterneGit's own names. SterneGit is git's credential helper for the remotes its accounts cover. |
 | SSH | One ed25519 key per account, set per repository with `core.sshCommand`. `~/.ssh/config` is never edited. |
@@ -31,7 +32,7 @@ Chosen on 2026-11-05. This is the reference for building connectors and drawing 
 - **Account:** one identity on one server of one service.
 - **Forge:** a started connector bound to one account. Screens call it.
 - **Grant:** what the user approved for a connector: origins, remote hosts, sign-in URLs, features.
-- **Locator:** a repository's `owner` and `name` on a service. `owner` may hold slashes: `group/subgroup` on GitLab, `org/project` on Azure DevOps.
+- **Locator:** a repository's `owner` and `name` on a service. `owner` may hold slashes: `group/subgroup` on GitLab, `org/Project` on Azure DevOps, `tfs/DefaultCollection/Project` on Azure DevOps Server.
 - **Cassette:** recorded HTTP exchanges a connector can be replayed against.
 
 ## 1. Pieces and where they live
@@ -422,6 +423,7 @@ The engine maps the ABI onto it:
   - The dialog shows the user code and opens the verification page.
   - It polls on a timer inside the dialog's `Job`. That is the design's only timer, and it ends with the dialog.
   - `slow_down` adds 5 s to the polling interval; `expired_token` offers a new code.
+  - `access_denied`, and Microsoft Entra ID's `authorization_declined`, mean the user declined. Entra answers every poll with HTTP 400 and says why in the body.
   - The token is stored only after `account.who_am_i` succeeds with it.
 - **OAuth App, not GitHub App:**
   - App tokens see only the repositories where the app is installed.
@@ -436,6 +438,8 @@ The engine maps the ABI onto it:
   - `bad_refresh_token` or `invalid_grant` signs the account out;
   - only the main process renews, never the git credential helper.
 - **Pasted token:** validated by `account.who_am_i`. For Enterprise Server, the typed address also sets the allow-list.
+  - The address field takes its label and example from the service's `url` field: Server address, Organization address, Collection address.
+  - The dialog names the scopes a token needs: from the `scopes` query of `create_url`, which GitHub ticks on its page, or else from the sign-in's `scopes` in the manifest, since Azure DevOps can't tick scopes from a link.
 - **Git Credential Manager's token:**
   - Only after the user clicks "Use the token Git Credential Manager has for github.com".
   - Command: `git -c credential.interactive=false -c core.askPass= credential fill`, with `GCM_INTERACTIVE=never` and `GIT_TERMINAL_PROMPT=0`.
@@ -454,6 +458,7 @@ git -c credential.https://github.com/sternegit-org.helper=
 ```
 
 - **The empty value** resets the helper list under that prefix only, so other servers keep the user's helpers. This was verified with Git 2.35.1.
+- **An account on a server path,** such as `https://dev.azure.com/contoso`, answers only for remotes under that path (`Account::covers`). Its prefix copies the remote's own spelling of those segments, since git matches URL paths case-sensitively. Claims follow the same rule: a remote under no account's path is still claimed, with no account.
 - **`sternegit --git-credential <account> get`** prints `username=` (the service's `git_user`) and `password=`, or `quit=1` when there's no token. `store` and `erase` do nothing.
 - **Unattended fetches** (the timer and window return) add `--unattended` and `GCM_INTERACTIVE=never`.
 - **Cost:** about 150 ms per git network command on Windows.
@@ -594,11 +599,39 @@ One method per operation, each built on one private `ask(op, input)`.
 - **Mergeability:** `mergeable: null` is `Checking`, read again after the next fetch.
 - **Size:** about 1,300 lines, and 0.45–0.6 MB of wasm (estimated).
 
-## 10. Other platforms, checked on paper
+## 10. The Azure DevOps connector
+
+- **Built 2026-11-12:** `connectors/azure-devops/`, version 0.1.0, declaring `repositories`, `repositories.create`, `pulls`, `pulls.create` and `pulls.merge`. 33 cassettes, also replayed through the committed `dist/azure-devops.wasm` inside the sandbox by SterneGit's own tests; 354,657 B of wasm.
+- **Two services:**
+  - `dev.azure.com`: the Organization address, `https://dev.azure.com/contoso`, is the account's server. It claims `https://[org@]dev.azure.com/{org}/{project}/_git/{name}`, `git@ssh.dev.azure.com:v3/{org}/{project}/{name}` and `{org}@vs-ssh.visualstudio.com:v3/…`. Old `https://{org}.visualstudio.com` remotes are claimed only when the account's address is on that host.
+  - `server`: Azure DevOps Server 2020 or later, through its Collection address, `https://devops.example.com/tfs/DefaultCollection`. Pasted token only.
+- **One account per organization or collection:**
+  - Global PATs retire on 27 January 2027, and an organization-scoped PAT can't list the user's organizations.
+  - The user id is the collection path, lowercased and dotted, then the user's GUID: `contoso.<guid>`, `tfs.defaultcollection.<guid>`. One person in two organizations is two accounts.
+  - The owner is host-relative, `contoso/Web` or `tfs/DefaultCollection/Game`; the project is its last segment.
+- **Sign-in:**
+  - A pasted token is sent as Basic with an empty user. The dialog lists the scopes it needs from the manifest, Code (Read, write, & manage) and Project and Team (Read); creating repositories needs the first.
+  - Microsoft Entra ID's device flow (`login.microsoftonline.com/organizations`, scopes `499b84ac-1321-427f-aa17-267ca6975798/.default offline_access`, Bearer) joins once SterneGit's multi-tenant Entra app is registered with public client flows on. Personal Microsoft accounts can't use it, and an organization's Conditional Access may block it.
+  - No Git Credential Manager token: its Azure DevOps token lasts an hour, and SterneGit can't renew it.
+- **REST, `api-version=6.0`,** with `6.0-preview.1` for policies and pull request statuses, so Azure DevOps Server 2020 works. Every request carries `X-TFS-FedAuthRedirect: Suppress`.
+  - `_apis/connectionData` answers who am I. A 203 sign-in page or an anonymous descriptor means signed out.
+  - Projects are the owners, paged by `x-ms-continuationtoken`, each offering only its own visibility. Repositories are listed per project or collection and searched in the connector. Creating one reads the project's id first.
+  - Pull requests: list (`status` active or all, closed ones filtered in the connector, the cursor a skip count), the one for a branch, get, create and complete. Get reads the target branch's merge strategy policy and the policy evaluations of `vstfs:///CodeReview/CodeReviewId/{project id}/{number}` in parallel.
+  - Checks: commit statuses, the pull request's statuses (the latest per name) and its enabled policy evaluations, builds linked to their run.
+  - Conversation: general text threads only; a comment posts a new thread. Threads on lines wait for reviews (milestone 6).
+- **Mergeability:** not active is `Unknown`; then draft; then `mergeStatus` (conflicts, failure, rejected by policy, still merging); a completion already asked for (`completionQueueTime`) is `Checking`; a failed blocking build is `FailingChecks`; other blocking policies are `Blocked` with "Waiting for: Minimum number of reviewers."
+- **Merge methods** come from the merge strategy policy: no fast-forward, squash, rebase and semi-linear, and the older `useSquashMerge`. With no policy, all four.
+- **Merge** completes the pull request with `lastMergeSourceCommit` as the guard. A completed answer is `Merged { sha }`; anything else is `queued`. Azure DevOps then finishes on its side, so SterneGit says "Completing #N into main" and offers no Delete branch, since deleting the source branch could stop the merge.
+- **Creating** from a fork remote (`head_owner`) is `Unsupported`.
+- **Errors:** 401 and 203 become `SignedOut`; 403 `Forbidden`; 404 `NotFound`; 409 `Conflict`; 400 `Invalid`; 429, or 503 with `Retry-After`, `RateLimited`. The reason comes from `message`; an HTML body becomes "The server answered with a web page instead of data".
+- **SSH keys:** no public API, so the feature isn't declared. Azure DevOps takes RSA keys only.
+- **Live-checked** against a fake Azure DevOps Server on 127.0.0.1 whose remote URL `insteadOf` pointed git at a local bare repository, completing merges four seconds after they were asked for: sign-in through the dialog, the account row, the list, overview, checks, conversation, merge and squash merge, Completing, then `Checking` until the timer's next fetch read the pull request as merged.
+
+## 11. Other platforms, checked on paper
 
 | Protocol 1.0 | GitLab | Azure DevOps | Gitea |
 | --- | --- | --- | --- |
-| `RepoRef.owner` | group path, `a/b` | `org/project` | user or organization |
+| `RepoRef.owner` | group path, `a/b` | `org/Project`, host-relative | user or organization |
 | Pull request head | `refs/merge-requests/N/head` | the source branch at `lastMergeSourceCommit`, maybe in a fork (`FetchSpec.url`) | `refs/pull/N/head` |
 | Threads | discussions with `position`, built from `Line` and `PullDetails`; `line_code` in `extra` | `threadContext` sides map to `Line`; iteration ids go in `extra`, and four statuses count as resolved | resolvable review comments |
 | Review | draft notes, `bulk_publish`, `/approve`; no request changes in `verdicts` | a thread per draft, then a vote of 10 or −5; `Unfinished.posted` | GitHub-like |
@@ -608,7 +641,9 @@ One method per operation, each built on one private `ask(op, input)`.
 
 Gitea needs no SterneGit change and should be about 700–900 lines.
 
-## 11. Screens to draw, mockup first
+Azure DevOps is built (section 10). It needed four host changes: the server-path rule for accounts, the address field's label and example from the manifest, token scopes listed in the manifest, and a Completing notification for a queued merge. Testing it also found that the pull request view never read itself again after a fetch, which GitHub's `Checking` needed too.
+
+## 12. Screens to draw, mockup first
 
 | Screen | Data |
 | --- | --- |
@@ -625,7 +660,7 @@ Gitea needs no SterneGit change and should be about 700–900 lines.
 | Review in the comparison view | `Thread`s on their old and new lines, outdated, resolved, replies; drafts; submit with a `verdicts` choice and a body; `Unfinished` keeps unsent drafts |
 | Errors | Signed out → sign in again; `Forbidden` → the needed scope; `RateLimited` → when; `Invalid` → fields; `NetError` → message; `Stop` → the connector's last log lines |
 
-## 12. Testing
+## 13. Testing
 
 `cargo test` needs no network and no wasm target.
 
@@ -641,12 +676,12 @@ Gitea needs no SterneGit change and should be about 700–900 lines.
 - **Engine:**
   - fake connectors in WAT, with the `wat` crate as a dev-dependency, run against a fake `HostServices`;
   - they echo, send two requests before waiting, spin, hog memory, trap, pass wild pointers, import WASI, and get cancelled while waiting.
-- **Golden:** `connectors/github/tests/cassettes` replayed through the committed `dist/github.wasm`.
+- **Golden:** each connector's `tests/cassettes` replayed through its committed `dist/*.wasm`.
 - **Pins:** every `SHA256SUMS` matches its `dist/`.
 - **Credential helper:** a local 401 server, as in the host probe, checks the scoped settings.
 - **Comments:** `tests/no_comments.rs` also scans the Rust files under `connectors/`.
 
-## 13. Build plan
+## 14. Build plan
 
 1. **Host foundation, no UI:**
    - `settings/`;
@@ -669,16 +704,16 @@ Gitea needs no SterneGit change and should be about 700–900 lines.
 
    Built, with remote claims and a first GitHub connector (who-am-I) to pin. Approving, `seen` and claims are tested but have no caller until the screens of milestone 4.
 4. **Accounts and repositories,** mockup first (built 2026-11-06):
-   - the screens in section 11 up to SSH keys;
+   - the screens in section 12 up to SSH keys;
    - the device flow, which needs the OAuth App's client ID;
    - GitHub's who-am-I, repositories, creating and publishing, SSH keys and host keys.
 5. **Pull requests,** mockup first (built 2026-11-06): list, branch badges, details, checks, conversation and comments, fetching the head and diffing it locally, check out, create, merge, deleting the merged branch.
 6. **Reviews,** mockup first:
    - threads in the comparison view, which needs changes to the vendored diff component;
    - drafts, submit, reply, resolve.
-7. **Author kit and a second platform:** `docs/connectors/authoring.md`, `connectors/template/`, then a Gitea or GitLab connector that must need no SterneGit change.
+7. **Author kit and a second platform:** `docs/connectors/authoring.md`, `connectors/template/`, then a Gitea or GitLab connector that must need no SterneGit change. Azure DevOps came first instead, on 2026-11-12, with the host changes listed in section 11.
 
-## 14. Open items
+## 15. Open items
 
 - **Done 2026-11-06:** the SterneGit OAuth App is registered on GitHub with "Enable Device Flow" ticked, and its client ID is in `connector.json` (section 9). GitHub answered a code request and an `authorization_pending` poll for it. A full sign-in through the app, approved on github.com, is still to be done by hand.
 - **Done in milestone 4:** `Identity` carries the user's `id`, so account ids are `<connector>:<host>:<user id>`.
@@ -707,6 +742,9 @@ Gitea needs no SterneGit change and should be about 700–900 lines.
   - memory over three launches each, opening SterneGit's own repository (no remote, so no section): 149.8 MB of private bytes before, 149.4 MB after; a small repository with three pull requests listed: 138.8 MB;
   - the GitHub connector grew to 324,657 B of wasm with its eight pull request operations;
   - live-checked against a fake GitHub Enterprise Server on 127.0.0.1 whose remote URL `insteadOf` pointed git at a local bare repository: list, filter, badges, overview, checks, conversation and comment, file comparison, check out (same repository and fork), squash merge, deleting the merged branch, creating a pull request from an unpublished branch.
+- **Measured for Azure DevOps,** against 6d77593, both built with the crate in one codegen unit (45,836,800 B):
+  - +23,040 B (+0.05%) of exe for the server-path rule, the sign-in dialog reading its field and scopes from the manifest, the Completing notification, the merge title fix and the pull request view reading itself again after a fetch;
+  - the connector ships beside the exe: 354,657 B of wasm and its manifest.
 - **Later:**
   - avatars, fetched in batches through curl into a cache and drawn with `img(path)`;
   - libcurl at run time;

@@ -1,0 +1,51 @@
+{
+  "interface": { "abi": 1, "protocol": "1.0" },
+  "id": "azure-devops",
+  "name": "Azure DevOps",
+  "version": "0.1.0",
+  "module": "azure-devops.wasm",
+  "features": ["repositories", "repositories.create", "pulls", "pulls.create", "pulls.merge"],
+  "services": [
+    {
+      "id": "dev.azure.com",
+      "label": "Azure DevOps",
+      "git_user": "sternegit",
+      "fields": [
+        { "id": "organization", "label": "Organization address", "kind": "url", "example": "https://dev.azure.com/contoso" }
+      ],
+      "endpoints": { "api": "{organization}/" },
+      "token_endpoints": ["api"],
+      "remotes": [
+        { "hosts": ["{organization.host}"], "path": "{owner...}/_git/{name}" },
+        { "hosts": ["ssh.dev.azure.com", "vs-ssh.visualstudio.com"], "path": "v3/{organization}/{project}/{name}" }
+      ],
+      "sign_in": [
+        {
+          "method": "pasted_token",
+          "token": { "kind": "basic", "username": "" },
+          "create_url": "{organization}/_usersSettings/tokens",
+          "scopes": ["Code (Read, write, & manage)", "Project and Team (Read)"]
+        }
+      ]
+    },
+    {
+      "id": "server",
+      "label": "Azure DevOps Server",
+      "git_user": "sternegit",
+      "fields": [
+        { "id": "collection", "label": "Collection address", "kind": "url", "example": "https://devops.example.com/DefaultCollection" }
+      ],
+      "endpoints": { "api": "{collection}/" },
+      "token_endpoints": ["api"],
+      "remotes": [{ "hosts": ["{collection.host}"], "path": "{owner...}/_git/{name}" }],
+      "sign_in": [
+        {
+          "method": "pasted_token",
+          "token": { "kind": "basic", "username": "" },
+          "create_url": "{collection}/_usersSettings/tokens",
+          "scopes": ["Code (Read, write, & manage)", "Project and Team (Read)"]
+        }
+      ]
+    }
+  ]
+}

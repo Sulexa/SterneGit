@@ -27,7 +27,7 @@ pub(crate) use catalog::{Catalog, Connector, ConnectorFolders, Origin, Standing}
 pub(crate) use claims::Claim;
 pub(crate) use remote::Remote;
 pub(crate) use grant::Grant;
-pub(crate) use manifest::{FieldKind, Manifest, Service};
+pub(crate) use manifest::{Field, FieldKind, Manifest, Service};
 #[cfg(test)]
 pub(crate) use manifest::samples as manifest_samples;
 pub(crate) use sign_in::{Draft, draft, identify};

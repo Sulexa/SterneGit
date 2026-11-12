@@ -38,7 +38,7 @@ use crate::{
     repo::{
         commit_files::CommitFiles,
         patch_view::{PatchStats, parse_patch},
-        repository::{PullCheckOut, Repository},
+        repository::{PullCheckOut, Repository, RepositoryEvent},
     },
     ui::{
         self, Failure, FileView, FileViewToggle, Folded, Load, Look as _, counted, run_async_in_background,
@@ -129,7 +129,7 @@ pub(crate) struct PullView {
     folded: Folded<SharedString>,
     files_scroll: UniformListScrollHandle,
     scroll: ScrollHandle,
-    _subscriptions: [Subscription; 1],
+    _subscriptions: [Subscription; 2],
 }
 
 impl EventEmitter<PullViewEvent> for PullView {}
@@ -147,11 +147,18 @@ impl PullView {
                 .placeholder(COMMENT_PLACEHOLDER)
                 .rows(COMMENT_ROWS)
         });
-        let subscriptions = [cx.subscribe(&comment, |_, _, event, cx| {
-            if matches!(event, InputEvent::Change) {
-                cx.notify()
-            }
-        })];
+        let subscriptions = [
+            cx.subscribe(&comment, |_, _, event, cx| {
+                if matches!(event, InputEvent::Change) {
+                    cx.notify()
+                }
+            }),
+            cx.subscribe(&repository, |this, _, event, cx| {
+                if matches!(event, RepositoryEvent::Fetched) {
+                    this.reread(cx)
+                }
+            }),
+        ];
         let mut this = Self {
             hosting,
             repository,
@@ -372,11 +379,18 @@ impl PullView {
         open_merge_dialog(cx.entity(), self.hosting.forge.clone(), details, head, subjects, window, cx);
     }
 
-    pub(crate) fn merged(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn merged(&mut self, queued: bool, window: &mut Window, cx: &mut Context<Self>) {
         let summary = &self.summary;
-        let mut notification = Notification::success(format!("{} isn't needed any more.", summary.head.branch))
-            .title(format!("Merged #{} into {}", summary.number, summary.base.branch));
-        if self.from_this_repository() {
+        let mut notification = match queued {
+            true => Notification::info(format!(
+                "{} finishes the merge on its side. The pull request shows Merged after the next fetch.",
+                self.hosting.service
+            ))
+            .title(format!("Completing #{} into {}", summary.number, summary.base.branch)),
+            false => Notification::success(format!("{} isn't needed any more.", summary.head.branch))
+                .title(format!("Merged #{} into {}", summary.number, summary.base.branch)),
+        };
+        if !queued && self.from_this_repository() {
             let view = cx.entity().downgrade();
             notification = notification.action(move |_, _, cx| {
                 let view = view.clone();

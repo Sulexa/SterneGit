@@ -14,10 +14,16 @@ pub(crate) struct Pin {
     sums: &'static str,
 }
 
-pub(crate) const PINS: [Pin; 1] = [Pin {
-    id: "github",
-    sums: include_str!("../../connectors/github/dist/SHA256SUMS"),
-}];
+pub(crate) const PINS: [Pin; 2] = [
+    Pin {
+        id: "github",
+        sums: include_str!("../../connectors/github/dist/SHA256SUMS"),
+    },
+    Pin {
+        id: "azure-devops",
+        sums: include_str!("../../connectors/azure-devops/dist/SHA256SUMS"),
+    },
+];
 
 impl Pin {
     pub(crate) fn files(&self) -> Hashes {

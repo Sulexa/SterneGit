@@ -59,8 +59,11 @@ pub(crate) fn squash_title(title: &str, number: u64) -> String {
     format!("{title} (#{number})")
 }
 
-pub(crate) fn merge_title(number: u64, owner: &str, head: &str) -> String {
-    format!("Merge pull request #{number} from {owner}/{head}")
+pub(crate) fn merge_title(number: u64, owner: Option<&str>, head: &str) -> String {
+    match owner {
+        Some(owner) => format!("Merge pull request #{number} from {owner}/{head}"),
+        None => format!("Merge pull request #{number} from {head}"),
+    }
 }
 
 pub(crate) fn squash_message(subjects: &[String]) -> String {
@@ -74,14 +77,10 @@ pub(crate) fn squash_message(subjects: &[String]) -> String {
 impl MergeForm {
     fn fill(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let summary = &self.details.summary;
-        let owner = summary
-            .head
-            .repo
-            .as_ref()
-            .map_or_else(|| self.head.clone(), |repo| repo.owner.clone());
+        let owner = summary.head.repo.as_ref().map(|repo| repo.owner.as_str());
         let (title, message) = match self.method {
             MergeMethod::Squash => (squash_title(&summary.title, summary.number), squash_message(&self.subjects)),
-            _ => (merge_title(summary.number, &owner, &summary.head.branch), summary.title.clone()),
+            _ => (merge_title(summary.number, owner, &summary.head.branch), summary.title.clone()),
         };
         self.title.update(cx, |state, cx| state.set_value(title, window, cx));
         self.message.update(cx, |state, cx| state.set_value(message, window, cx));
@@ -117,9 +116,9 @@ impl MergeForm {
             let _ = this.update_in(cx, |this, window, cx| {
                 this.busy = None;
                 match merged {
-                    Ok(_) => {
+                    Ok(merged) => {
                         window.close_dialog(cx);
-                        view.update(cx, |view, cx| view.merged(window, cx));
+                        view.update(cx, |view, cx| view.merged(merged.queued, window, cx));
                     }
                     Err(error) => {
                         this.problem = Some(problem_of(&error, &account, cx));
@@ -266,9 +265,10 @@ mod tests {
     fn the_commit_words_are_filled_in_as_github_would() {
         assert_eq!(squash_title("Render side-by-side diffs", 12), "Render side-by-side diffs (#12)");
         assert_eq!(
-            merge_title(12, "sternegit-org", "feature/diff-view"),
+            merge_title(12, Some("sternegit-org"), "feature/diff-view"),
             "Merge pull request #12 from sternegit-org/feature/diff-view"
         );
+        assert_eq!(merge_title(1, None, "perf/levels"), "Merge pull request #1 from perf/levels");
         assert_eq!(
             squash_message(&["Add two".to_owned(), "Add a file".to_owned()]),
             "* Add two\n* Add a file"

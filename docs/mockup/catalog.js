@@ -1477,6 +1477,18 @@ const Catalog = (() => {
           variants: [
             ['Choose', () => bigDialog(C.SignInDialog({ step: 'choose' }), 440)],
             ['Choose, Enterprise Server', () => bigDialog(C.SignInDialog({ step: 'choose', enterprise: true }), 480)],
+            [
+              'Choose, Azure DevOps',
+              () =>
+                bigDialog(
+                  C.SignInDialog({
+                    step: 'choose',
+                    service: 'Azure DevOps',
+                    offer: { choice: 'Azure DevOps — dev.azure.com', field: { label: 'Organization address', value: '', example: 'https://dev.azure.com/contoso' }, methods: ['device', 'token'], host: 'dev.azure.com' },
+                  }),
+                  440,
+                ),
+            ],
             ['Browser: code', () => bigDialog(C.SignInDialog({ step: 'device' }), 320)],
             ['Browser: expired', () => bigDialog(C.SignInDialog({ step: 'expired' }), 320)],
             ['Browser: declined', () => bigDialog(C.SignInDialog({ step: 'denied' }), 320)],
