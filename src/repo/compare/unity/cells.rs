@@ -1,7 +1,7 @@
 use gpui_kit::{
     AnyElement, App, Hsla, IntoElement, ParentElement as _, Styled as _,
     assets::IconName,
-    component::{ActiveTheme as _, Icon, Sizable as _, h_flex},
+    component::{ActiveTheme as _, Icon, Sizable as _, h_flex, v_flex},
     div,
     prelude::FluentBuilder as _,
     px, rgba,
@@ -10,7 +10,7 @@ use gpui_kit::{
 use crate::{
     git::ChangeKind,
     repo::compare::Version,
-    ui::{Look as _, change_badge},
+    ui::{Look as _, change_badge, counted},
     unity::{Glyph, Reference, State, Value, hex_color, short_number},
 };
 
@@ -84,6 +84,12 @@ pub(crate) fn value_cell(value: &Value, other: Option<&Value>, version: Version,
     let differs = other.is_some_and(|other| other != value);
     match value {
         Value::Text(text) | Value::Number(text) => marked(text.clone(), differs && !text.is_empty(), version, cx),
+        Value::Long { start, more, .. } => v_flex()
+            .items_start()
+            .child(marked(format!("{start}…"), differs, version, cx))
+            .child(div().px(px(3.)).text_color(muted).child(format!("… {}", counted(*more, "more character", "more characters"))))
+            .into_any_element(),
+        Value::Data { .. } => marked(value.text(), differs, version, cx),
         Value::Flag(on) => {
             let theme = cx.theme();
             h_flex()

@@ -13,11 +13,11 @@ use gpui_kit::{
     px,
 };
 
-use super::{
-    details::{DetailsRow, MediaDetails, Version},
-    picture::{file_size, signed_size},
+use super::details::{DetailsRow, MediaDetails, Version};
+use crate::{
+    media::{file_size, signed_size},
+    ui::{Handler, Look as _},
 };
-use crate::ui::{Handler, Look as _};
 
 const NOTICE_WIDTH: f32 = 520.;
 const NOT_COMMITTED: &str = "Not committed yet";

@@ -13,6 +13,7 @@ mod file_menu;
 mod file_tree;
 mod history_list;
 mod hunk_actions;
+mod long_lines;
 mod merge_editor;
 mod merge_text;
 mod message_editor;

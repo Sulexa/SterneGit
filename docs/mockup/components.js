@@ -1310,6 +1310,8 @@ function unityValue(value, other) {
   if ('bool' in value) return `<span class="bool-value"><span class="tick${value.bool ? ' on' : ''}">${value.bool ? icon('check', 'xs') : ''}</span>${value.bool ? 'On' : 'Off'}</span>`;
   if (value.texture) return `<span class="texture-value"><span class="thumb checker">${pixelArt(value.art, value.palette, 4)}</span><span>${esc(value.texture)}</span></span>`;
   if (value.mono) return `<span class="val mono${differs(value, other) ? ' inline' : ''}">${esc(value.mono)}</span>`;
+  if (value.data) return `<span class="val${differs(value, other) ? ' inline' : ''}">${esc(value.data)} of data</span>`;
+  if (value.long) return `<span class="long-value"><span class="val${differs(value, other) ? ' inline' : ''}">${esc(value.long)}…</span><span class="muted">… ${thousands(value.more)} more characters</span></span>`;
   return esc(String(value));
 }
 

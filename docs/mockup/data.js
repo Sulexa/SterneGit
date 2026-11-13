@@ -1364,7 +1364,32 @@ const Sample = (() => {
     },
   };
 
-  const unity = { work: unityWork, prefabDiff, prefabYaml, menuDiff, levelDiff, materialDiff, jumpDiff, animatorDiff, brainDiff, slimeMetaDiff, guidDiff };
+  const fontDescription = 'Noto Sans SC ExtraBold, generated for every glyph the Chinese localization tables use, padding 9, atlas 4096 × 4096, render mode SDFAA, packing optimum, and kept as a static atlas so builds never rasterize at run time. Regenerate it from Window › TextMeshPro › Font Asset Creator after editing the table';
+  const longValues = {
+    name: 'Texture 2D',
+    props: [
+      ['Typelessdata', { data: '16.0 MB', digest: 'a3f1' }, { data: '16.0 MB', digest: '4b07' }],
+      ['Description', { long: fontDescription, more: 4700 }, { long: fontDescription, more: 4712 }],
+    ],
+  };
+  const longLine = {
+    path: 'Assets/Fonts/NotoSansSC/NotoSansSC-ExtraBold SDF.asset',
+    hunks: [
+      {
+        header: '@@ -26470,7 +26470,7 @@ Texture2D:',
+        lines: [
+          [' ', 26471, 26471, '  m_PlatformBlob: '],
+          [' ', 26472, 26472, '  image data: 16777216'],
+          ['-', 26473, null, '… 2,864,778 characters … 00000000000000000000000000000000000000000000000000000000000000000000000000a3f1c200000000000000000000000000000000000000000000000000000000000000000000000000 … 30,688,771 more characters'],
+          ['+', null, 26473, '… 2,864,778 characters … 000000000000000000000000000000000000000000000000000000000000000000000000004b07e900000000000000000000000000000000000000000000000000000000000000000000000000 … 30,688,771 more characters'],
+          [' ', 26474, 26474, '  m_StreamData:'],
+          [' ', 26475, 26475, '    serializedVersion: 2'],
+        ],
+      },
+    ],
+  };
+
+  const unity = { work: unityWork, prefabDiff, prefabYaml, menuDiff, levelDiff, materialDiff, jumpDiff, animatorDiff, brainDiff, slimeMetaDiff, guidDiff, longValues, longLine };
 
   const stoppedAt ={ id: '3f2a91c', subject: 'Show conflicted files in the changes list' };
 

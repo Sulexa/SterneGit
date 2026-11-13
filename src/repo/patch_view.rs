@@ -4,6 +4,7 @@ use gpui_kit::{
     div,
 };
 
+use super::long_lines::shown_lines;
 use crate::{
     git::{ChangeKind, FilePatch, Hunks},
     ui::{self, Load},
@@ -87,7 +88,7 @@ pub(crate) fn renamed_from(file: &DiffFile) -> Option<&SharedString> {
 }
 
 pub(crate) fn parse_patch(patch: &str) -> anyhow::Result<Vec<DiffFile>> {
-    DiffFile::parse(patch).map_err(|error| anyhow::anyhow!("{error}"))
+    DiffFile::parse(&shown_lines(patch)).map_err(|error| anyhow::anyhow!("{error}"))
 }
 
 pub(crate) struct WorkingPatch {

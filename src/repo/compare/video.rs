@@ -11,12 +11,11 @@ use gpui_kit::{
 use super::{
     Direction, PictureCompare, Pictures, Position,
     details::{DetailsRow, MediaDetails, Version, version_dot},
-    picture::{file_size, signed_size},
     transport::{Transport, clock},
 };
 use crate::{
     actions::{LoopChange, MEDIA_CONTEXT, PlayPause, SwitchVersion},
-    media::{FrameStream, Picture, Player, Region, Sound, VideoFacts, frame_at},
+    media::{FrameStream, Picture, Player, Region, Sound, VideoFacts, file_size, frame_at, signed_size},
     ui::{Job, Look as _, handler, run_in_background},
 };
 

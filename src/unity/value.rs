@@ -1,13 +1,18 @@
-use std::collections::HashMap;
+use std::{
+    collections::HashMap,
+    hash::{DefaultHasher, Hash as _, Hasher as _},
+};
 
 use super::{
     names::{file_name, file_stem, nicify},
     yaml::Node,
 };
+use crate::media::file_size;
 
 const AXES: [&str; 4] = ["x", "y", "z", "w"];
 const CHANNELS: [&str; 4] = ["r", "g", "b", "a"];
 const SAME_NUMBER: f64 = 1e-5;
+const LONGEST_VALUE_SHOWN: usize = 300;
 const BUILT_IN_EXTRA: &str = "0000000000000000e000000000000000";
 const BUILT_IN_DEFAULT: &str = "0000000000000000f000000000000000";
 const FLAG_PREFIXES: [&str; 25] = [
@@ -36,9 +41,22 @@ pub(crate) struct Reference {
     pub(crate) missing: bool,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct Digest(u64);
+
+impl Digest {
+    fn of(text: &str) -> Self {
+        let mut hasher = DefaultHasher::new();
+        text.hash(&mut hasher);
+        Self(hasher.finish())
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum Value {
     Text(String),
+    Long { start: String, more: usize, digest: Digest },
+    Data { bytes: usize, digest: Digest },
     Number(String),
     Flag(bool),
     Vector(Vec<(&'static str, String)>),
@@ -70,6 +88,8 @@ impl Value {
     pub(crate) fn text(&self) -> String {
         match self {
             Value::Text(text) | Value::Number(text) => text.clone(),
+            Value::Long { start, .. } => format!("{start}…"),
+            Value::Data { bytes, .. } => format!("{} of data", file_size(*bytes)),
             Value::Flag(on) => if *on { "On" } else { "Off" }.to_owned(),
             Value::Vector(axes) => axes
                 .iter()
@@ -380,6 +400,9 @@ fn leaf(key: &str, node: &Node, lookup: &Lookup) -> Option<Value> {
 }
 
 fn scalar(key: &str, text: &str) -> Value {
+    if let Some(long) = long_value(text) {
+        return long;
+    }
     let looks_numeric = text.parse::<f64>().is_ok();
     if (text == "0" || text == "1") && is_flag_name(key) {
         Value::Flag(text == "1")
@@ -388,6 +411,24 @@ fn scalar(key: &str, text: &str) -> Value {
     } else {
         Value::Text(text.to_owned())
     }
+}
+
+fn long_value(text: &str) -> Option<Value> {
+    if text.len() <= LONGEST_VALUE_SHOWN {
+        return None;
+    }
+    if text.len().is_multiple_of(2) && text.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return Some(Value::Data {
+            bytes: text.len() / 2,
+            digest: Digest::of(text),
+        });
+    }
+    let (end, _) = text.char_indices().nth(LONGEST_VALUE_SHOWN)?;
+    Some(Value::Long {
+        start: text[..end].to_owned(),
+        more: text[end..].chars().count(),
+        digest: Digest::of(text),
+    })
 }
 
 pub(crate) fn is_flag_name(key: &str) -> bool {
@@ -470,7 +511,7 @@ pub(crate) fn rotation_value(node: &Node) -> Option<Value> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Lookup, Sameness, Value, euler_degrees, fields, hex_color, is_flag_name};
+    use super::{LONGEST_VALUE_SHOWN, Lookup, Sameness, Value, euler_degrees, fields, hex_color, is_flag_name};
     use crate::unity::yaml::Node;
 
     fn map(entries: &[(&str, Node)]) -> Node {
@@ -479,6 +520,34 @@ mod tests {
 
     fn text(value: &str) -> Node {
         Node::Scalar(value.to_owned())
+    }
+
+    #[test]
+    fn long_hex_reads_as_data_compared_whole_and_shown_by_size() {
+        let data = |changed_at: usize| {
+            let hex: String = (0..4_096).map(|at| if at == changed_at { 'a' } else { '0' }).collect();
+            fields(&map(&[("_typelessdata", text(&hex))]), &[], &Lookup::default()).remove(0).value
+        };
+        let before = data(3_000);
+        assert!(matches!(before, Value::Data { bytes: 2_048, .. }));
+        assert_eq!(before.text(), "2.0 KB of data");
+        assert_eq!(before.same_as(&data(3_000)), Sameness::Equal);
+        assert_eq!(before.same_as(&data(3_001)), Sameness::Different);
+    }
+
+    #[test]
+    fn long_text_keeps_its_start_and_counts_the_rest() {
+        let long = |last: char| {
+            let words = format!("{}{last}", "é".repeat(LONGEST_VALUE_SHOWN + 4_699));
+            fields(&map(&[("m_Description", text(&words))]), &[], &Lookup::default()).remove(0).value
+        };
+        let before = long('a');
+        let Value::Long { start, more, .. } = &before else { panic!("{before:?}") };
+        assert_eq!(start.chars().count(), LONGEST_VALUE_SHOWN);
+        assert_eq!(*more, 4_700);
+        assert_eq!(before.same_as(&long('b')), Sameness::Different);
+        let short = "0".repeat(LONGEST_VALUE_SHOWN);
+        assert!(matches!(fields(&map(&[("m_Seed", text(&short))]), &[], &Lookup::default()).remove(0).value, Value::Number(_)));
     }
 
     #[test]

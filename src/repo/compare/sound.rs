@@ -15,12 +15,11 @@ use gpui_kit::{
 use super::{
     Direction, Position,
     details::{DetailsRow, MediaDetails, Version, VersionTag},
-    picture::{file_size, signed_size},
     transport::{Transport, clock},
 };
 use crate::{
     actions::{LoopChange, MEDIA_CONTEXT, PlayPause, SwitchVersion},
-    media::{Player, Region, Sound, audible_changes},
+    media::{Player, Region, Sound, audible_changes, file_size, signed_size},
     ui::{Look as _, ctrl_wheel_area, handler},
 };
 
