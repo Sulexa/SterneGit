@@ -3,3 +3,4 @@
 /.claude/worktrees/
 /connectors/*/target
 /dist
+/graphify-out/
