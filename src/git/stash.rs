@@ -8,7 +8,8 @@ use super::{
 };
 
 const STASH: &str = "refs/stash";
-const SET_ASIDE: &str = "Set aside by SterneGit until the cherry-pick or revert is done";
+const SET_ASIDE: &str = "Set aside by SterneGit until the merge, cherry-pick or revert is done";
+const SET_ASIDE_BY_EARLIER_VERSIONS: &str = "Set aside by SterneGit until the cherry-pick or revert is done";
 const STASH_LEFT_UNAPPLIED: [&str; 3] = [
     "conflicts in index",
     "could not restore untracked files",
@@ -104,7 +105,9 @@ impl Repo {
 
     pub(super) fn bring_back_set_aside(&self) -> Result<Carried> {
         let set_aside = self.latest_stash().is_some_and(|id| {
-            Commit::find(&self.local(), id).is_ok_and(|stash| stash.subject.ends_with(SET_ASIDE))
+            Commit::find(&self.local(), id).is_ok_and(|stash| {
+                [SET_ASIDE, SET_ASIDE_BY_EARLIER_VERSIONS].iter().any(|name| stash.subject.ends_with(name))
+            })
         });
         if set_aside {
             self.reapply_stash()

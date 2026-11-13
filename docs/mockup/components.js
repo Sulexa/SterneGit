@@ -184,19 +184,25 @@ const ConflictTexts = {
 const OperationTexts = {
   rebase: (op) => `Rebasing ${op.branch} onto ${op.onto}`,
   merge: (op) => `Merging ${op.from} into ${op.into}`,
+  squash: (op) => `Squashing ${op.from} into ${op.into}`,
+  'rebase-ff': (op) => `Rebasing ${op.from} onto ${op.into}`,
   'cherry-pick': (op) => `Cherry-picking onto ${op.onto}`,
   revert: (op) => `Reverting on ${op.branch}`,
-  abort: { rebase: 'Abort rebase', merge: 'Abort merge', 'cherry-pick': 'Abort cherry-pick', revert: 'Abort revert' },
+  abort: { rebase: 'Abort rebase', merge: 'Abort merge', squash: 'Abort squash', 'rebase-ff': 'Abort rebase', 'cherry-pick': 'Abort cherry-pick', revert: 'Abort revert' },
   abortTooltip: {
     rebase: 'Put the branch back where it was before the rebase',
     merge: 'Put the branch back where it was before the merge',
+    squash: 'Put the branch back where it was before the squash',
+    'rebase-ff': 'Put the branch back where it was before the rebase',
     'cherry-pick': 'Put the branch back where it was before the cherry-pick',
     revert: 'Put the branch back where it was before the revert',
   },
-  go: { rebase: 'Continue', merge: 'Commit merge', 'cherry-pick': 'Commit', revert: 'Commit revert' },
+  go: { rebase: 'Continue', merge: 'Commit merge', squash: 'Commit squash', 'rebase-ff': 'Continue', 'cherry-pick': 'Commit', revert: 'Commit revert' },
   goTooltip: {
     rebase: 'Commit the resolved changes and replay the next commits',
+    'rebase-ff': 'Commit the resolved changes and replay the next commits',
     merge: 'Commit the merge with its usual message',
+    squash: "Commit the squash with the subjects of the branch's commits as its message",
     'cherry-pick': "Commit the resolved changes with the picked commit's message and author",
     revert: 'Commit the resolved changes with the usual Revert message',
   },
@@ -405,6 +411,20 @@ const Texts = {
   forcePushed: (branch, upstream) => `Force pushed ${branch} to ${upstream}`,
   movedAgain: (upstream) => `${upstream} moved again since SterneGit fetched it, so nothing was overwritten. Push again to see what it has now.`,
   merge: (from, into) => `Merge ${from} into ${into}`,
+  mergeModes: {
+    'ff-if-possible': 'Fast-forward if possible',
+    'merge-commit': 'Always a merge commit',
+    'ff-only': 'Fast-forward only',
+    squash: 'Squash into one commit',
+    'rebase-ff': 'Rebase, then fast-forward',
+  },
+  fastForwarded: (into, from) => `Fast-forwarded ${into} to ${from}`,
+  mergedInto: (from, into) => `Merged ${from} into ${into}`,
+  squashedInto: (from, into) => `Squashed ${from} into one commit on ${into}`,
+  rebasedInto: (n, from, into) => `Rebased ${counted(n, 'commit', 'commits')} of ${from} onto ${into}`,
+  alreadyMerged: (into, from) => `${into} already has every commit of ${from}`,
+  cantFastForward: (into, from) => `${into} and ${from} have diverged, so ${into} can't fast-forward. Choose another way to merge them.`,
+  squashSubject: (from) => `Squashed branch '${from}'`,
   rebase: (branch, onto) => `Rebase ${branch} onto ${onto}`,
   branchHere: 'Create branch here…',
   applyStash: (name) => `Apply ${name}`,
@@ -1443,7 +1463,14 @@ function remoteParts(name) {
   return { remote, branch: rest.join('/') };
 }
 
-function branchMenuItems({ label, current, mode = 'merge', pull }) {
+const MergeModes = [['ff-if-possible', 'merge-commit', 'ff-only'], ['squash', 'rebase-ff']];
+
+function mergeModeItems(merge) {
+  const item = (mode) => [Texts.mergeModes[mode], ''];
+  return { items: menuGroups(MergeModes.map((group) => group.map(item))), open: Boolean(merge), hot: merge && Texts.mergeModes[merge] };
+}
+
+function branchMenuItems({ label, current, mode = 'merge', pull, merge }) {
   const remote = label.kind === 'remote' && remoteParts(label.name);
   const checkedOut = Boolean(label.head);
   const elsewhere = label.worktree;
@@ -1453,7 +1480,7 @@ function branchMenuItems({ label, current, mode = 'merge', pull }) {
     !checkedOut && [item(elsewhere ? WorktreeTexts.openWorktree(elsewhere) : Texts.checkOut(remote ? remote.branch : label.name))],
     !remote && [item(checkedOut ? Texts.pullWithMode(pullMode(mode).label) : Texts.pullFastForward), item(Texts.push)],
     pull && [item(pull === 'create' ? PullTexts.createItem : PullTexts.showItem(pull.number))],
-    current && !checkedOut && [item(Texts.merge(label.name, current)), item(Texts.rebase(current, label.name))],
+    current && !checkedOut && [[Texts.merge(label.name, current), '', mergeModeItems(merge)], item(Texts.rebase(current, label.name))],
     [item(Texts.branchHere), item(taken ? WorktreeTexts.newFrom(label.name) : WorktreeTexts.newFor(remote ? remote.branch : label.name))],
     !checkedOut && !elsewhere && [item(remote ? Texts.deleteRemoteBranch(remote.branch, remote.remote) : Texts.deleteBranch(label.name))],
   ].filter(Boolean);
@@ -3165,8 +3192,8 @@ const C = {
     );
   },
 
-  BranchMenu({ label, current, mode, left = 0, top = 0, hot, pull }) {
-    return C.Menu({ items: branchMenuItems({ label, current, mode, pull }), left, top, hot, name: 'BranchMenu' });
+  BranchMenu({ label, current, mode, left = 0, top = 0, hot, pull, merge }) {
+    return C.Menu({ items: branchMenuItems({ label, current, mode, pull, merge }), left, top, hot, name: 'BranchMenu' });
   },
 
   WorktreeMenu({ tree, here = false, left = 0, top = 0, hot }) {

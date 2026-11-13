@@ -7,11 +7,12 @@ use super::{
     Carried, Repo,
     command::{Exit, run},
     history::{Commit, short_id},
-    merge::Ran,
+    merge::{COMMIT_SQUASH, DROP_SQUASH, Ran, SQUASH_MESSAGE},
     refs::{RefKind, RefLabel, read_labels},
 };
 
 const REBASE_FOLDERS: [&str; 2] = ["rebase-merge", "rebase-apply"];
+const REPLAY: &str = "sternegit-replay";
 const CHERRY_PICK_HEAD: &str = "CHERRY_PICK_HEAD";
 const REVERT_HEAD: &str = "REVERT_HEAD";
 const BRANCHES: &str = "refs/heads/";
@@ -25,8 +26,16 @@ const LONGEST_SEQUENCE: usize = 10_000;
 pub(crate) enum Underway {
     Rebase(Rebasing),
     Merge(Merging),
+    Squash(Merging),
     CherryPick(Picking),
+    Replay(Replay),
     Revert(Picking),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub(crate) struct Replay {
+    pub(crate) from: String,
+    pub(crate) picking: Picking,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -74,18 +83,24 @@ impl Underway {
     fn command(&self) -> &'static str {
         match self {
             Underway::Rebase(_) => "rebase",
-            Underway::Merge(_) => "merge",
-            Underway::CherryPick(_) => "cherry-pick",
+            Underway::Merge(_) | Underway::Squash(_) => "merge",
+            Underway::CherryPick(_) | Underway::Replay(_) => "cherry-pick",
             Underway::Revert(_) => "revert",
         }
     }
 
-    fn finish_args(&self) -> [&'static str; 2] {
-        [self.command(), "--continue"]
+    fn finish_args(&self) -> Vec<&'static str> {
+        match self {
+            Underway::Squash(_) => COMMIT_SQUASH.to_vec(),
+            _ => vec![self.command(), "--continue"],
+        }
     }
 
-    fn abort_args(&self) -> [&'static str; 2] {
-        [self.command(), "--abort"]
+    fn abort_args(&self) -> Vec<&'static str> {
+        match self {
+            Underway::Squash(_) => DROP_SQUASH.to_vec(),
+            _ => vec![self.command(), "--abort"],
+        }
     }
 
     fn skip_args(&self) -> [&'static str; 2] {
@@ -93,7 +108,11 @@ impl Underway {
     }
 
     fn picks(&self) -> bool {
-        matches!(self, Underway::CherryPick(_) | Underway::Revert(_))
+        matches!(self, Underway::CherryPick(_) | Underway::Replay(_) | Underway::Revert(_))
+    }
+
+    fn sets_aside(&self) -> bool {
+        self.picks() || matches!(self, Underway::Squash(_))
     }
 }
 
@@ -116,8 +135,16 @@ impl Repo {
                 Ran::Through => self.done_with(&underway, before).map(Continued::Emptied),
                 Ran::Stopped => Ok(Continued::StoppedAgain),
             },
+            Err(_) if matches!(underway, Underway::Squash(_)) && self.nothing_staged() => {
+                run(&self.location, &DROP_SQUASH, Exit::Success)?;
+                self.done_with(&underway, before).map(Continued::Emptied)
+            }
             Err(error) => Err(error),
         }
+    }
+
+    fn nothing_staged(&self) -> bool {
+        self.status().is_ok_and(|changes| changes.staged.is_empty())
     }
 
     pub(crate) fn abort_underway(&self) -> Result<Carried> {
@@ -142,7 +169,8 @@ impl Repo {
     }
 
     fn done_with(&self, underway: &Underway, before: Option<ObjectId>) -> Result<Carried> {
-        if underway.picks() {
+        forget_replay(&self.local());
+        if underway.sets_aside() {
             self.bring_back_set_aside()
         } else {
             Ok(self.carried_since(before))
@@ -151,19 +179,54 @@ impl Repo {
 }
 
 pub(super) fn underway_in(repo: &gix::Repository) -> Option<Underway> {
-    match repo.state()? {
+    let Some(state) = repo.state() else {
+        return squashing(repo).map(Underway::Squash);
+    };
+    match state {
         InProgress::Rebase | InProgress::RebaseInteractive | InProgress::ApplyMailboxRebase => {
             rebasing(repo).map(Underway::Rebase)
         }
         InProgress::Merge => merging(repo).map(Underway::Merge),
-        InProgress::CherryPick | InProgress::CherryPickSequence => {
-            picking(repo, CHERRY_PICK_HEAD).map(Underway::CherryPick)
-        }
+        InProgress::CherryPick | InProgress::CherryPickSequence => cherry_picking(repo),
         InProgress::Revert | InProgress::RevertSequence => {
             picking(repo, REVERT_HEAD).map(Underway::Revert)
         }
         _ => None,
     }
+}
+
+pub(super) fn remember_replay(repo: &gix::Repository, from: &str, oldest_first: &[ObjectId]) -> Result<()> {
+    let ids: String = oldest_first.iter().map(|id| format!("{id}\n")).collect();
+    std::fs::write(repo.git_dir().join(REPLAY), format!("{from}\n{ids}"))?;
+    Ok(())
+}
+
+pub(super) fn forget_replay(repo: &gix::Repository) {
+    let _ = std::fs::remove_file(repo.git_dir().join(REPLAY));
+}
+
+fn cherry_picking(repo: &gix::Repository) -> Option<Underway> {
+    let picked = read_trimmed(&repo.git_dir().join(CHERRY_PICK_HEAD))?;
+    let picking = picking(repo, CHERRY_PICK_HEAD)?;
+    Some(match replayed_from(repo, &picked) {
+        Some(from) => Underway::Replay(Replay { from, picking }),
+        None => Underway::CherryPick(picking),
+    })
+}
+
+fn replayed_from(repo: &gix::Repository, picked: &str) -> Option<String> {
+    let replay = std::fs::read_to_string(repo.git_dir().join(REPLAY)).ok()?;
+    let mut lines = replay.lines().map(str::trim);
+    let from = lines.next()?;
+    lines.any(|id| id == picked).then(|| from.to_owned())
+}
+
+fn squashing(repo: &gix::Repository) -> Option<Merging> {
+    let message = read_trimmed(&repo.git_dir().join(SQUASH_MESSAGE))?;
+    Some(Merging {
+        from: quoted_name(&message).unwrap_or_default(),
+        into: head_branch(repo),
+    })
 }
 
 fn picking(repo: &gix::Repository, head_file: &str) -> Option<Picking> {
@@ -332,7 +395,7 @@ mod tests {
     use anyhow::Result;
 
     use super::{Continued, Merging, Rebasing, Replaying, Underway, last_replayed, quoted_name};
-    use crate::git::{Carried, Rebased, scratch::ScratchRepo};
+    use crate::git::{Carried, MergeMode, Rebased, scratch::ScratchRepo};
 
     fn diverged(label: &str) -> Result<ScratchRepo> {
         let scratch = ScratchRepo::new(label)?;
@@ -433,7 +496,7 @@ mod tests {
     fn a_stopped_merge_names_what_comes_in() -> Result<()> {
         let scratch = diverged("underway-merge")?;
         let (repo, _) = scratch.open()?;
-        repo.merge("main")?;
+        repo.merge("main", MergeMode::FastForwardIfPossible)?;
         assert_eq!(
             repo.underway(),
             Some(Underway::Merge(Merging {

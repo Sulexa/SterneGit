@@ -14,7 +14,7 @@ use super::{
 use crate::{
     accounts,
     git::{
-        self, Attendance, Behind, CheckedOut, FileChange, History, PartAction, PullMode,
+        self, Attendance, Behind, CheckedOut, FileChange, History, MergeMode, PartAction, PullMode,
         PullSource, RefLabel, RemoteBranch, Repo, ResetMode, Scope, Side, Stash, Underway,
         Version, WorkingChanges, WorktreeChanges, WorktreeStart, changes_elsewhere, short_id,
     },
@@ -657,7 +657,7 @@ impl Repository {
         );
     }
 
-    pub(crate) fn merge(&mut self, label: RefLabel, cx: &mut Context<Self>) {
+    pub(crate) fn merge(&mut self, label: RefLabel, mode: MergeMode, cx: &mut Context<Self>) {
         let Some((into, revision)) = self.checked_out_and_revision(&label) else {
             return;
         };
@@ -666,7 +666,7 @@ impl Repository {
             None,
             operation::merge_failed(&from, &into),
             move |repo| {
-                repo.merge(&revision)
+                repo.merge(&revision, mode)
                     .map(|merged| operation::merged(&from, &into, merged))
             },
             cx,

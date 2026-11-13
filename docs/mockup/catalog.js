@@ -1,7 +1,7 @@
 const Catalog = (() => {
   const { history, tracked, stashed, collapsed, changes, partlyStaged, commitDetails, commitFileDiff, fileHistory, fileDiff, stagedHunkDiff, selectedLines, tabs } = Sample;
   const { slimeDiff, crownIcon, introDiff, themeDiff, modelDiff } = Sample;
-  const { rebase, merge, rebaseChanges, rebaseOneLeft, rebaseResolved, statusConflicts, slimeConflict } = Sample;
+  const { rebase, merge, squash, rebaseFastForward, rebaseChanges, rebaseOneLeft, rebaseResolved, statusConflicts, slimeConflict } = Sample;
   const { statusMerged, unity } = Sample;
   const { pickedLine, pickedApart, pickedHead } = Sample;
   const picks = (pick) => pick.rows.map(commit);
@@ -507,13 +507,15 @@ const Catalog = (() => {
           name: 'OperationBar',
           code: 'repo::operation_bar::OperationBar',
           source: 'src/repo/operation_bar.rs',
-          about: 'A 40 px bar under the RepoToolbar, only while a rebase, a merge, a cherry-pick or a revert waits, whether SterneGit or a terminal started it. It names the branches and, for a rebase, which commit of how many stopped; for a cherry-pick or a revert, which commit. While files conflict it is tinted yellow and counts them in magenta, and Continue or Commit merge stays disabled; once none are left it turns green. Abort puts the branch back where it was and brings back the changes stashed out of the way. While one of the two runs it spins and the other waits.',
+          about: 'A 40 px bar under the RepoToolbar, only while a rebase, a merge, a squash, a cherry-pick or a revert waits, whether SterneGit or a terminal started it. It names the branches and, for a rebase or a Rebase, then fast-forward, which commit of how many stopped; for a cherry-pick or a revert, which commit. While files conflict it is tinted yellow and counts them in magenta, and Continue or Commit merge stays disabled; once none are left it turns green. Abort puts the branch back where it was and brings back the changes stashed out of the way. While one of the two runs it spins and the other waits.',
           variants: [
             ['Rebase stopped', () => C.OperationBar({ operation: rebase, conflicts: 2 }), { w: 940 }],
             ['Rebase ready to continue', () => C.OperationBar({ operation: rebase }), { w: 940 }],
             ['Continuing', () => C.OperationBar({ operation: rebase, running: 'continue' }), { w: 940 }],
             ['Merge stopped', () => C.OperationBar({ operation: merge, conflicts: 1 }), { w: 940 }],
             ['Merge ready to commit', () => C.OperationBar({ operation: merge }), { w: 940 }],
+            ['Squash stopped', () => C.OperationBar({ operation: squash, conflicts: 2 }), { w: 940 }],
+            ['Rebase, then fast-forward stopped', () => C.OperationBar({ operation: rebaseFastForward, conflicts: 2 }), { w: 940 }],
             ['Cherry-pick stopped', () => C.OperationBar({ operation: { kind: 'cherry-pick', onto: 'main', commit: commit(4) }, conflicts: 1 }), { w: 940 }],
             ['Revert stopped', () => C.OperationBar({ operation: { kind: 'revert', branch: 'main', commit: commit(1) }, conflicts: 1 }), { w: 940 }],
             ['Cherry-pick of 3 stopped at the second', () => C.OperationBar({ operation: { kind: 'cherry-pick', onto: 'main', step: 2, total: 3, commit: commit(4) }, conflicts: 1 }), { w: 940 }],
@@ -650,6 +652,7 @@ const Catalog = (() => {
           about: 'The right-click menu of a local or remote branch, in the RefsList or on its badge in a CommitRow, in groups: Check out; Pull and Push; Merge and Rebase with the checked-out branch; Create branch here… and New worktree for … (New worktree from … when the branch is checked out somewhere); Delete…. Items that cannot apply are left out: the checked-out branch has no Check out, Merge, Rebase or Delete, a remote branch has no Pull or Push, and a detached HEAD has no Merge or Rebase. Every item is disabled while Git writes; Pull and Push spin the header\'s button while they run. Check out on a remote branch switches to the local branch of the same name, or makes one that tracks it. Double-clicking the branch, in the RefsList or on its badge in a CommitRow, runs Check out without opening the menu.',
           variants: [
             ['Another local branch', () => menuFrame(C.BranchMenu({ label: ref('feature/blame'), current: 'main' }), 280)],
+            ['Merge submenu open', () => menuFrame(C.BranchMenu({ label: ref('feature/blame'), current: 'main', hot: Texts.merge('feature/blame', 'main'), merge: 'merge-commit' }), 520)],
             ['Checked-out branch', () => menuFrame(C.BranchMenu({ label: ref('main'), current: 'main' }), 280)],
             ['Remote branch', () => menuFrame(C.BranchMenu({ label: ref('origin/feature/diff-view'), current: 'main' }), 340)],
             ['Detached HEAD', () => menuFrame(C.BranchMenu({ label: ref('feature/blame') }), 280)],

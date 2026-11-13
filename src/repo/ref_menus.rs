@@ -19,7 +19,7 @@ impl RefMenus {
             (RefKind::LocalBranch | RefKind::RemoteBranch, Some(menu), _) => {
                 let menu = menu.clone();
                 element
-                    .context_menu(move |popup, _, _| menu.build(popup, &right_clicked))
+                    .context_menu(move |popup, window, cx| menu.build(popup, &right_clicked, window, cx))
                     .into_any_element()
             }
             (RefKind::Tag, _, Some(menu)) => {

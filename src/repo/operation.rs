@@ -3,10 +3,10 @@ use gpui_kit::SharedString;
 use crate::{
     git::{
         Behind, Carried, CaughtUp, CheckedOut, Continued, FolderLeft, Merged, Picked, Picking,
-        Pulled, Pushed, Rebased, RefLabel, Refusal, RemoteBranch, ResetMode, TagPushed, Tracking,
-        Underway,
+        Pulled, Pushed, Rebased, RefLabel, Refusal, RemoteBranch, Replay, ResetMode, TagPushed,
+        Tracking, Underway,
     },
-    ui::{Failure, thousands},
+    ui::{Failure, counted, thousands},
 };
 
 const DIVERGED_ADVICE: &str = "Choose Fast-forward if possible or Rebase in the Pull menu.";
@@ -187,8 +187,13 @@ pub(crate) fn merged(from: &str, into: &str, (merged, carried): (Merged, Carried
     let done = match merged {
         Merged::Stopped => return Outcome::Stopped,
         Merged::UpToDate => format!("{into} already has every commit of {from}"),
+        Merged::NothingNew => format!("{into} already has the changes of {from}, so nothing was added"),
         Merged::FastForwarded => format!("Fast-forwarded {into} to {from}"),
         Merged::WithMergeCommit => format!("Merged {from} into {into}"),
+        Merged::Squashed => format!("Squashed {from} into one commit on {into}"),
+        Merged::Replayed(count) => {
+            format!("Rebased {} of {from} onto {into}", counted(count, "commit", "commits"))
+        }
     };
     put_back(done.into(), &format!("the merged {into}"), carried)
 }
@@ -290,6 +295,25 @@ pub(crate) fn continued(underway: &Underway, continued: Continued) -> Outcome {
             &merging.into,
             (Merged::WithMergeCommit, carried),
         ),
+        Underway::Squash(merging) if merging.from.is_empty() => put_back(
+            format!("Committed the squash on {}", merging.into).into(),
+            &format!("the updated {}", merging.into),
+            carried,
+        ),
+        Underway::Squash(merging) => {
+            let squashed = match picked {
+                Picked::Committed => Merged::Squashed,
+                _ => Merged::NothingNew,
+            };
+            merged(&merging.from, &merging.into, (squashed, carried))
+        }
+        Underway::Replay(Replay { from, picking }) => {
+            let replayed = match picked {
+                Picked::Committed => Merged::Replayed(picking.place.map_or(1, |place| place.of)),
+                _ => Merged::NothingNew,
+            };
+            merged(from, &picking.branch, (replayed, carried))
+        }
         Underway::CherryPick(Picking { place: Some(place), branch, .. }) => {
             cherry_picked_several(place.of, branch, (picked, carried))
         }
@@ -316,7 +340,7 @@ pub(crate) fn finish_failed(underway: &Underway, finish: Finish) -> SharedString
     let (what, _) = what_is_underway(underway);
     match (underway, finish) {
         (Underway::Merge(_), Finish::Continue) => "Couldn't commit the merge".into(),
-        (Underway::CherryPick(_) | Underway::Revert(_), Finish::Continue) => {
+        (Underway::Squash(_) | Underway::CherryPick(_) | Underway::Revert(_), Finish::Continue) => {
             format!("Couldn't commit the {what}").into()
         }
         (_, Finish::Continue) => format!("Couldn't continue the {what}").into(),
@@ -332,6 +356,8 @@ fn what_is_underway(underway: &Underway) -> (&'static str, &str) {
     match underway {
         Underway::Rebase(rebasing) => ("rebase", &rebasing.branch),
         Underway::Merge(merging) => ("merge", &merging.into),
+        Underway::Squash(merging) => ("squash", &merging.into),
+        Underway::Replay(replay) => ("rebase", &replay.picking.branch),
         Underway::CherryPick(picking) => ("cherry-pick", &picking.branch),
         Underway::Revert(picking) => ("revert", &picking.branch),
     }
@@ -723,6 +749,31 @@ mod tests {
             done("main already has every commit of feature/blame")
         );
         assert_eq!(merged_along(Merged::Stopped), Outcome::Stopped);
+        assert_eq!(
+            merged_along(Merged::Squashed),
+            done("Squashed feature/blame into one commit on main")
+        );
+        assert_eq!(
+            merged_along(Merged::Replayed(1)),
+            done("Rebased 1 commit of feature/blame onto main")
+        );
+        assert_eq!(
+            merged_along(Merged::Replayed(3)),
+            done("Rebased 3 commits of feature/blame onto main")
+        );
+        assert_eq!(
+            merged_along(Merged::NothingNew),
+            done("main already has the changes of feature/blame, so nothing was added")
+        );
+        let refused = anyhow::Error::from(Refusal::MergeCantFastForward(Tracking {
+            branch: "main".into(),
+            upstream: "feature/blame".into(),
+        }));
+        assert_eq!(
+            failure(&refused).message(),
+            "main and feature/blame have diverged, so main can't fast-forward. \
+             Choose another way to merge them."
+        );
         assert_eq!(
             rebased("main", "feature/blame", (Rebased::Replayed, Carried::Along)),
             done("Rebased main onto feature/blame")

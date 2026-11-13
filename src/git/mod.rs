@@ -62,7 +62,7 @@ pub(crate) use hunks::{Hunks, LineAt, LineSide, LineSpan, Part, PartAction};
 pub(crate) use index::Scope;
 pub(crate) use lfs::FileVersion;
 pub(crate) use markers::{Marked, Piece, has_markers, split_conflicts};
-pub(crate) use merge::{Merged, Rebased};
+pub(crate) use merge::{MergeMode, Merged, Rebased};
 pub(crate) use patch::{Baseline, FilePatch, Whitespace};
 pub(crate) use pick::Picked;
 pub(crate) use pull_head::{BranchSpan, NamedRemote, PullSource, fork_branch_name};
@@ -77,7 +77,7 @@ pub(crate) use squash::Line;
 pub(crate) use stash::{Carried, Stash};
 pub(crate) use status::{ChangeKind, FileChange, Side, WorkingChanges};
 pub(crate) use tag::{TagPushed, new_tag_name};
-pub(crate) use underway::{Continued, Picking, Rebasing, Underway};
+pub(crate) use underway::{Continued, Picking, Rebasing, Replay, Underway};
 #[cfg(test)]
 pub(crate) use underway::{Merging, Place, Replaying};
 pub(crate) use version::{Conflicted, Revision, Version};

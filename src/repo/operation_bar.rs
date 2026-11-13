@@ -54,6 +54,26 @@ pub(crate) fn wording(underway: &Underway) -> Wording {
             finish: "Commit merge",
             finish_tooltip: "Commit the merge with its usual message",
         },
+        Underway::Squash(merging) => Wording {
+            title: match merging.from.is_empty() {
+                true => format!("Squashing into {}", merging.into),
+                false => format!("Squashing {} into {}", merging.from, merging.into),
+            }
+            .into(),
+            step: None,
+            abort: "Abort squash",
+            abort_tooltip: "Put the branch back where it was before the squash",
+            finish: "Commit squash",
+            finish_tooltip: "Commit the squash with the subjects of the branch's commits as its message",
+        },
+        Underway::Replay(replay) => Wording {
+            title: format!("Rebasing {} onto {}", replay.from, replay.picking.branch).into(),
+            step: Some(picked(&replay.picking)),
+            abort: "Abort rebase",
+            abort_tooltip: "Put the branch back where it was before the rebase",
+            finish: "Continue",
+            finish_tooltip: "Commit the resolved changes and replay the next commits",
+        },
         Underway::CherryPick(picking) => Wording {
             title: format!("Cherry-picking onto {}", picking.branch).into(),
             step: Some(picked(picking)),
@@ -225,7 +245,7 @@ impl RenderOnce for OperationBar {
 #[cfg(test)]
 mod tests {
     use super::{Step, waiting_for, wording};
-    use crate::git::{Merging, Picking, Rebasing, Replaying, Underway};
+    use crate::git::{Merging, Picking, Rebasing, Replay, Replaying, Underway};
 
     #[test]
     fn a_rebase_says_which_commit_of_how_many_stopped() {
@@ -296,5 +316,34 @@ mod tests {
         };
         let position = wording(&Underway::CherryPick(several)).step.and_then(|step| step.position);
         assert_eq!(position.as_deref(), Some("Commit 2 of 3"));
+    }
+
+    #[test]
+    fn a_squash_and_a_rebase_then_fast_forward_read_as_the_merge_mode_chosen() {
+        let squash = |from: &str| {
+            wording(&Underway::Squash(Merging {
+                from: from.into(),
+                into: "main".into(),
+            }))
+        };
+        let words = squash("feature/blame");
+        assert_eq!(words.title, "Squashing feature/blame into main");
+        assert_eq!((words.abort, words.finish), ("Abort squash", "Commit squash"));
+        assert_eq!(squash("").title, "Squashing into main");
+        let replay = Underway::Replay(Replay {
+            from: "feature/blame".into(),
+            picking: Picking {
+                branch: "main".into(),
+                commit: Replaying {
+                    id: "e3779b1".into(),
+                    subject: "Parse git diff output into hunks".into(),
+                },
+                place: None,
+            },
+        });
+        let words = wording(&replay);
+        assert_eq!(words.title, "Rebasing feature/blame onto main");
+        assert_eq!(words.step.map(|step| step.id), Some("e3779b1".into()));
+        assert_eq!((words.abort, words.finish), ("Abort rebase", "Continue"));
     }
 }

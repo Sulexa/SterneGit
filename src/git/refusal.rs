@@ -20,6 +20,7 @@ pub(crate) enum Refusal {
     NoRemoteToPushTo { branch: String },
     Diverged(Tracking),
     CantFastForward(Tracking),
+    MergeCantFastForward(Tracking),
     RemoteAhead(Tracking),
     UpstreamMoved(Tracking),
     ChangesInTheWay,
@@ -48,6 +49,10 @@ impl fmt::Display for Refusal {
             Refusal::CantFastForward(Tracking { branch, upstream }) => write!(
                 f,
                 "{branch} and {upstream} have diverged, so {branch} can't fast-forward. Check it out to merge or rebase."
+            ),
+            Refusal::MergeCantFastForward(Tracking { branch, upstream }) => write!(
+                f,
+                "{branch} and {upstream} have diverged, so {branch} can't fast-forward. Choose another way to merge them."
             ),
             Refusal::RemoteAhead(Tracking { branch, upstream }) => write!(
                 f,

@@ -1420,6 +1420,9 @@ const Sample = (() => {
 
   const rebase = { kind: 'rebase', branch: 'main', onto: 'origin/main', step: 2, total: 3, commit: stoppedAt };
   const merge = { kind: 'merge', from: 'feature/blame', into: 'main' };
+  const squash = { kind: 'squash', from: 'feature/blame', into: 'main' };
+  const blameOnly = history.commits[history.refs.find((label) => label.name === 'feature/blame').row];
+  const rebaseFastForward = { kind: 'rebase-ff', from: 'feature/blame', into: 'main', commit: { id: blameOnly.id, subject: blameOnly.subject } };
   const starfallMerge = { kind: 'merge', from: 'main', into: 'feature/slime-crown' };
 
   const statusFile = { kind: 'U', path: 'src/git/status.rs' };
@@ -1761,7 +1764,7 @@ const Sample = (() => {
     pickedLine, pickedApart, pickedHead,
     starfall, assets, slimeDiff, crownIcon, introDiff, themeDiff, modelDiff,
     unity,
-    rebasing, rebase, merge, starfallMerge, rebaseChanges, rebaseOneLeft, rebaseResolved, statusConflicts, statusMerged, slimeConflict, starfallConflicts,
+    rebasing, rebase, merge, squash, rebaseFastForward, starfallMerge, rebaseChanges, rebaseOneLeft, rebaseResolved, statusConflicts, statusMerged, slimeConflict, starfallConflicts,
     hosting,
     pulls,
     worktrees,

@@ -1,5 +1,5 @@
 use gpui_kit::{
-    App, Entity, SharedString, Window,
+    App, Context, Entity, SharedString, Window,
     component::{
         WindowExt as _,
         button::ButtonVariant,
@@ -11,7 +11,7 @@ use std::sync::Arc;
 
 use super::{pulls::PullMarks, repository::Repository, toolbar::mode_label};
 use crate::{
-    git::{HISTORY_LIMIT, History, PullMode, RefKind, RefLabel, RemoteBranch},
+    git::{HISTORY_LIMIT, History, MergeMode, PullMode, RefKind, RefLabel, RemoteBranch},
     ui::{Handler, handler, thousands},
 };
 
@@ -26,7 +26,7 @@ pub(crate) enum BranchAction {
     CheckOut,
     Pull,
     Push,
-    Merge,
+    Merge(MergeMode),
     Rebase,
     BranchHere,
     NewWorktree,
@@ -35,6 +35,22 @@ pub(crate) enum BranchAction {
     Delete,
     ShowPull(u64),
     CreatePull,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Entry {
+    Action(BranchAction),
+    MergeModes,
+}
+
+pub(crate) fn merge_mode_label(mode: MergeMode) -> &'static str {
+    match mode {
+        MergeMode::FastForwardIfPossible => "Fast-forward if possible",
+        MergeMode::MergeCommit => "Always a merge commit",
+        MergeMode::FastForwardOnly => "Fast-forward only",
+        MergeMode::Squash => "Squash into one commit",
+        MergeMode::RebaseThenFastForward => "Rebase, then fast-forward",
+    }
 }
 
 #[derive(Clone, Default)]
@@ -101,19 +117,41 @@ impl BranchMenu {
         self
     }
 
-    pub(crate) fn build(&self, menu: PopupMenu, label: &RefLabel) -> PopupMenu {
-        self.offered(label)
-            .into_iter()
-            .enumerate()
-            .fold(menu, |menu, (ix, group)| {
-                let menu = if ix > 0 { menu.separator() } else { menu };
-                group
-                    .into_iter()
-                    .fold(menu, |menu, action| menu.item(self.item(action, label)))
-            })
+    pub(crate) fn build(
+        &self,
+        menu: PopupMenu,
+        label: &RefLabel,
+        window: &mut Window,
+        cx: &mut Context<PopupMenu>,
+    ) -> PopupMenu {
+        let mut menu = menu;
+        for (ix, group) in self.offered(label).into_iter().enumerate() {
+            if ix > 0 {
+                menu = menu.separator();
+            }
+            for entry in group {
+                menu = match entry {
+                    Entry::Action(action) => menu.item(self.item(action, label)),
+                    Entry::MergeModes => {
+                        let modes = self.clone();
+                        let merged = label.clone();
+                        menu.submenu(self.merge_text(label), window, cx, move |submenu, _, _| {
+                            modes.merge_modes(submenu, &merged)
+                        })
+                    }
+                };
+            }
+        }
+        menu
     }
 
-    fn offered(&self, label: &RefLabel) -> Vec<Vec<BranchAction>> {
+    fn merge_modes(&self, submenu: PopupMenu, label: &RefLabel) -> PopupMenu {
+        let add = |submenu: PopupMenu, mode| submenu.item(self.item(BranchAction::Merge(mode), label));
+        let keeping = MergeMode::KEEPING_COMMITS.into_iter().fold(submenu, add);
+        MergeMode::MAKING_COMMITS.into_iter().fold(keeping.separator(), add)
+    }
+
+    fn offered(&self, label: &RefLabel) -> Vec<Vec<Entry>> {
         use BranchAction::*;
         let checked_out = label.is_head;
         let local = label.kind == RefKind::LocalBranch;
@@ -123,21 +161,27 @@ impl BranchMenu {
             true => NewWorktreeFrom,
             false => NewWorktree,
         };
+        let actions = |actions: &[BranchAction]| actions.iter().copied().map(Entry::Action).collect();
         [
-            label.can_be_checked_out().then(|| vec![CheckOut]),
-            elsewhere.then(|| vec![OpenWorktree]),
-            local.then(|| vec![Pull, Push]),
+            label.can_be_checked_out().then(|| actions(&[CheckOut])),
+            elsewhere.then(|| actions(&[OpenWorktree])),
+            local.then(|| actions(&[Pull, Push])),
             self.pulls
                 .as_ref()
                 .and_then(|offers| offers.offered(label))
-                .map(|action| vec![action]),
-            another_branch_is_checked_out.then(|| vec![Merge, Rebase]),
-            Some(vec![BranchHere, worktree]),
-            (!checked_out && !elsewhere).then(|| vec![Delete]),
+                .map(|action| actions(&[action])),
+            another_branch_is_checked_out.then(|| vec![Entry::MergeModes, Entry::Action(Rebase)]),
+            Some(actions(&[BranchHere, worktree])),
+            (!checked_out && !elsewhere).then(|| actions(&[Delete])),
         ]
         .into_iter()
         .flatten()
         .collect()
+    }
+
+    fn merge_text(&self, label: &RefLabel) -> String {
+        let checked_out = self.checked_out.as_deref().unwrap_or_default();
+        format!("Merge {} into {checked_out}", label.name)
     }
 
     fn is_checked_out_anywhere(&self, label: &RefLabel) -> bool {
@@ -157,7 +201,7 @@ impl BranchMenu {
             }
             BranchAction::Pull => PULL_FAST_FORWARD_ONLY.to_owned(),
             BranchAction::Push => PUSH.to_owned(),
-            BranchAction::Merge => format!("Merge {} into {checked_out}", label.name),
+            BranchAction::Merge(mode) => merge_mode_label(mode).to_owned(),
             BranchAction::Rebase => format!("Rebase {checked_out} onto {}", label.name),
             BranchAction::BranchHere => BRANCH_HERE.to_owned(),
             BranchAction::NewWorktree => format!("New worktree for {}…", label.local_name()),
@@ -259,9 +303,9 @@ pub(crate) fn confirm_delete(
 mod tests {
     use std::sync::Arc;
 
-    use super::{BranchAction::*, BranchMenu, PullOffers, what_deleting_loses};
+    use super::{BranchAction, BranchAction::*, BranchMenu, Entry, PullOffers, what_deleting_loses};
     use crate::{
-        git::{PullMode, RefKind, RefLabel, fixtures::id},
+        git::{MergeMode, PullMode, RefKind, RefLabel, fixtures::id},
         repo::{pulls::PullMarks, worktree_dialog::taken_by},
         ui::PullMark,
     };
@@ -288,10 +332,45 @@ mod tests {
             .map(|group| {
                 group
                     .into_iter()
-                    .map(|action| menu.text(action, label))
+                    .map(|entry| match entry {
+                        Entry::Action(action) => menu.text(action, label),
+                        Entry::MergeModes => menu.merge_text(label),
+                    })
                     .collect()
             })
             .collect()
+    }
+
+    fn actions(menu: &BranchMenu, label: &RefLabel) -> Vec<Vec<BranchAction>> {
+        menu.offered(label)
+            .into_iter()
+            .map(|group| {
+                group
+                    .into_iter()
+                    .filter_map(|entry| match entry {
+                        Entry::Action(action) => Some(action),
+                        Entry::MergeModes => None,
+                    })
+                    .collect()
+            })
+            .collect()
+    }
+
+    #[test]
+    fn merge_opens_the_modes_that_keep_the_commits_then_those_that_make_new_ones() {
+        let blame = label("feature/blame", RefKind::LocalBranch, false);
+        assert_eq!(texts(&on_main(), &blame)[2][0], "Merge feature/blame into main");
+        let shown = |modes: &[MergeMode]| -> Vec<String> {
+            modes.iter().map(|mode| on_main().text(Merge(*mode), &blame)).collect()
+        };
+        assert_eq!(
+            shown(&MergeMode::KEEPING_COMMITS),
+            ["Fast-forward if possible", "Always a merge commit", "Fast-forward only"]
+        );
+        assert_eq!(
+            shown(&MergeMode::MAKING_COMMITS),
+            ["Squash into one commit", "Rebase, then fast-forward"]
+        );
     }
 
     #[test]
@@ -326,15 +405,15 @@ mod tests {
         let tabs = label("topic/tabs", RefKind::RemoteBranch, false);
         assert!(texts(&menu, &tabs).contains(&vec!["Create pull request…".to_owned()]));
         let main = label("origin/main", RefKind::RemoteBranch, false);
-        assert!(!menu.offered(&main).iter().flatten().any(|action| *action == CreatePull));
-        assert!(!on_main().offered(&tabs).iter().flatten().any(|action| *action == CreatePull));
+        assert!(!actions(&menu, &main).iter().flatten().any(|action| *action == CreatePull));
+        assert!(!actions(&on_main(), &tabs).iter().flatten().any(|action| *action == CreatePull));
     }
 
     #[test]
     fn the_checked_out_branch_pulls_with_the_chosen_mode_and_cannot_be_deleted() {
         let main = label("main", RefKind::LocalBranch, true);
         assert_eq!(
-            on_main().offered(&main),
+            actions(&on_main(), &main),
             [vec![Pull, Push], vec![BranchHere, NewWorktreeFrom]]
         );
         let rebasing = BranchMenu::new(Some("main".into()), PullMode::Rebase, false);
@@ -363,7 +442,7 @@ mod tests {
         let detached = BranchMenu::new(None, PullMode::FastForwardIfPossible, false);
         let blame = label("feature/blame", RefKind::LocalBranch, false);
         assert_eq!(
-            detached.offered(&blame),
+            actions(&detached, &blame),
             [
                 vec![CheckOut],
                 vec![Pull, Push],
@@ -399,16 +478,16 @@ mod tests {
         assert_eq!(texts(&on_main(), &main)[1], ["Create branch here…", "New worktree from main…"]);
         let origin_main = label("origin/main", RefKind::RemoteBranch, false);
         assert_eq!(
-            on_main().text(on_main().offered(&origin_main)[2][1], &origin_main),
+            on_main().text(actions(&on_main(), &origin_main)[2][1], &origin_main),
             "New worktree from origin/main…"
         );
         let origin_blame = label("origin/feature/blame", RefKind::RemoteBranch, false);
         let blame_elsewhere = on_main().checked_out_elsewhere(["feature/blame".into()]);
         assert_eq!(
-            blame_elsewhere.offered(&origin_blame)[2],
+            actions(&blame_elsewhere, &origin_blame)[2],
             [BranchHere, NewWorktreeFrom]
         );
-        assert_eq!(on_main().offered(&origin_blame)[2], [BranchHere, NewWorktree]);
+        assert_eq!(actions(&on_main(), &origin_blame)[2], [BranchHere, NewWorktree]);
     }
 
     #[test]
@@ -427,7 +506,7 @@ mod tests {
         ];
         let menu = on_main().checked_out_elsewhere(["topic".into()]);
         for branch in &refs {
-            let offers_new_branch = menu.offered(branch).iter().flatten().any(|action| *action == NewWorktreeFrom);
+            let offers_new_branch = actions(&menu, branch).iter().flatten().any(|action| *action == NewWorktreeFrom);
             assert_eq!(offers_new_branch, taken_by(&refs, branch).is_some(), "{}", branch.name);
         }
     }

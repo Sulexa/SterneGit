@@ -91,8 +91,25 @@ const Screens = (() => {
 
   const gameTabs = [...tabs, { name: starfall.name, state: 'ready' }];
 
-  const { rebasing, rebase, starfallMerge, rebaseChanges, rebaseResolved, statusConflicts, statusMerged, slimeConflict, starfallConflicts } = Sample;
+  const { rebasing, rebase, squash, rebaseFastForward, starfallMerge, rebaseChanges, rebaseResolved, statusConflicts, statusMerged, slimeConflict, starfallConflicts } = Sample;
   const busyDuringOperation = ['pull', 'push', 'stash', 'pop'];
+
+  const mergeStopped = (operation, incoming) =>
+    C.SterneGit({
+      topBar: topBar(),
+      tabStrip: tabStrip(),
+      body: C.RepoView({
+        toolbar: C.RepoToolbar({ unavailable: busyDuringOperation }),
+        operation: C.OperationBar({ operation, conflicts: rebaseChanges.conflicted.length }),
+        expanded: true,
+        left: C.RefsList({ refs: history.refs, selectedRow: null, collapsed }),
+        middle: C.FileDiffPanel({ diff: { ...statusConflicts, labels: { current: 'HEAD', incoming } }, expanded: true, filePosition: [1, 2] }),
+        right: C.ChangesList({ changes: rebaseChanges, open: { side: 'conflicted', path: statusConflicts.change.path }, operation }),
+        status: C.RepoStatusBar({ summary: historySummary(history) }),
+      }),
+    });
+
+  const notice = (kind, message, title) => `<div class="toasts">${C.Notification({ kind, message, title })}</div>`;
 
   const rebaseView = ({ middle, changes, open, conflicts, expanded = false }) =>
     C.SterneGit({
@@ -295,7 +312,7 @@ const Screens = (() => {
     {
       id: 'commit-menu-other-branch',
       title: 'Right-click on a commit of another branch',
-      about: "On a commit that main doesn't hold, Revert gives way to Cherry-pick onto main, which copies the commit onto main as a new commit with the same message and author. A merge has no Cherry-pick. Git refuses to cherry-pick or revert over staged changes or over changes to the files it touches, so SterneGit stashes the uncommitted changes first and brings them back after. When a cherry-pick or a revert conflicts, the OperationBar shows it as for a merge: the conflicted files open in the MergeEditor, then Commit finishes it, or Abort puts main back. Meanwhile the changes wait in a stash named Set aside by SterneGit until the cherry-pick or revert is done, which Commit and Abort bring back. A commit whose changes main already has, or a resolution that leaves main as it was, adds nothing: the notification says main already has the changes. With a detached HEAD the menu says HEAD where it says main here.",
+      about: "On a commit that main doesn't hold, Revert gives way to Cherry-pick onto main, which copies the commit onto main as a new commit with the same message and author. A merge has no Cherry-pick. Git refuses to cherry-pick or revert over staged changes or over changes to the files it touches, so SterneGit stashes the uncommitted changes first and brings them back after. When a cherry-pick or a revert conflicts, the OperationBar shows it as for a merge: the conflicted files open in the MergeEditor, then Commit finishes it, or Abort puts main back. Meanwhile the changes wait in a stash named Set aside by SterneGit until the merge, cherry-pick or revert is done, which Commit and Abort bring back. A commit whose changes main already has, or a resolution that leaves main as it was, adds nothing: the notification says main already has the changes. With a detached HEAD the menu says HEAD where it says main here.",
       source: 'src/repo/commit_menu.rs',
       render: () =>
         C.SterneGit({
@@ -914,14 +931,27 @@ const Screens = (() => {
     {
       id: 'branch-menu',
       title: 'Right-click on a branch',
-      about: "A right-click on a branch, in the left list or on its badge in the graph, opens its menu where the pointer is, without selecting its commit. Here feature/blame is not checked out, so it offers Check out, Pull, Push, Merge it into main or Rebase main onto it, Create branch here…, New worktree for feature/blame… and Delete…. Pull is fast-forward only, because Git can't merge into or rebase a branch that isn't checked out. The checked-out branch offers Pull with the header's pull mode, Push, Create branch here… and New worktree from main…. A remote branch offers Check out, Merge, Rebase, Create branch here…, New worktree for … and Delete from its remote. With a detached HEAD there is no Merge or Rebase. Folders have no menu, and a tag has its own; a badge that holds a branch and its upstream opens the menu of the local branch. Each action runs like the header buttons: one Git write at a time, then a notification; Pull and Push spin the header's button while they run. A double-click on a branch, in the left list or on its badge in the graph, checks it out straight away; it does nothing on the checked-out branch, on a tag, or while Git writes.",
+      about: "A right-click on a branch, in the left list or on its badge in the graph, opens its menu where the pointer is, without selecting its commit. Here feature/blame is not checked out, so it offers Check out, Pull, Push, Merge it into main (a submenu that picks how, next screen) or Rebase main onto it, Create branch here…, New worktree for feature/blame… and Delete…. Pull is fast-forward only, because Git can't merge into or rebase a branch that isn't checked out. The checked-out branch offers Pull with the header's pull mode, Push, Create branch here… and New worktree from main…. A remote branch offers Check out, Merge, Rebase, Create branch here…, New worktree for … and Delete from its remote. With a detached HEAD there is no Merge or Rebase. Folders have no menu, and a tag has its own; a badge that holds a branch and its upstream opens the menu of the local branch. Each action runs like the header buttons: one Git write at a time, then a notification; Pull and Push spin the header's button while they run. A double-click on a branch, in the left list or on its badge in the graph, checks it out straight away; it does nothing on the checked-out branch, on a tag, or while Git writes.",
       source: 'src/repo/branch_menu.rs',
       render: () =>
         C.SterneGit({
           topBar: topBar(),
           tabStrip: tabStrip(),
           body: commitSelected(),
-          overlays: C.BranchMenu({ label: ref('feature/blame'), current: history.head, left: 92, top: 188, hot: Texts.merge('feature/blame', history.head) }),
+          overlays: C.BranchMenu({ label: ref('feature/blame'), current: history.head, left: 92, top: 188, hot: Texts.checkOut('feature/blame') }),
+        }),
+    },
+    {
+      id: 'merge-modes',
+      title: 'Merge a branch: pick how',
+      about: "Merge feature/blame into main opens a submenu that picks how, each time: nothing is remembered. Fast-forward if possible does what Git does on its own: it moves main to feature/blame when main has no commit of its own, and adds a merge commit otherwise. Always a merge commit adds one even when main could fast-forward, so the branch stays visible in the graph. Fast-forward only moves main to feature/blame, or refuses and changes nothing. Squash into one commit makes one new commit on main with every change of feature/blame; its message is Squashed branch 'feature/blame', then the subject of each of its commits, oldest first, and feature/blame's own commits don't join main's history. Rebase, then fast-forward replays feature/blame's commits on top of main, as Rebase does, leaving out merges and commits main already has, then moves main to the last one, so main stays a straight line; feature/blame itself stays where it was. When main has no commit of its own, it simply fast-forwards. Every mode commits straight away with Git's usual message, which Edit message can change afterwards, and stashes the uncommitted changes in the way and brings them back, as Merge always did. A remote branch has the same submenu. While Git writes, Merge is disabled with the rest of the menu.",
+      source: 'src/repo/branch_menu.rs',
+      render: () =>
+        C.SterneGit({
+          topBar: topBar(),
+          tabStrip: tabStrip(),
+          body: commitSelected(),
+          overlays: C.BranchMenu({ label: ref('feature/blame'), current: history.head, left: 92, top: 188, hot: Texts.merge('feature/blame', history.head), merge: 'merge-commit' }),
         }),
     },
     {
@@ -1018,15 +1048,55 @@ const Screens = (() => {
     {
       id: 'merged',
       title: 'Branch merged',
-      about: 'Check out, Merge, Rebase and Delete say what they did in a notification. A merge or a rebase that stops on a conflict shows the OperationBar instead, until it is finished or aborted.',
+      about: "Check out, Merge, Rebase and Delete say what they did in a notification. A merge says what its mode did: Fast-forwarded main to feature/blame, Merged feature/blame into main, Squashed feature/blame into one commit on main, or Rebased 1 commit of feature/blame onto main; when there was nothing to bring in, whatever the mode, main already has every commit of feature/blame; and when Squash or Rebase, then fast-forward finds that main already has the changes of every commit, main already has the changes of feature/blame, so nothing was added. A merge or a rebase that stops on a conflict shows the OperationBar instead, until it is finished or aborted.",
       source: 'src/repo/operation.rs',
       render: () =>
         C.SterneGit({
           topBar: topBar(),
           tabStrip: tabStrip(),
           body: commitSelected(),
-          overlays: `<div class="toasts">${C.Notification({ kind: 'success', message: 'Merged feature/blame into main' })}</div>`,
+          overlays: notice('success', Texts.mergedInto('feature/blame', history.head)),
         }),
+    },
+    {
+      id: 'merge-squashed',
+      title: 'Branch squashed',
+      about: "Squash into one commit says Squashed feature/blame into one commit on main. The new commit names you as author and committer, now; its message is Squashed branch 'feature/blame', a blank line, then one line per commit of feature/blame that main didn't have, oldest first and merges left out, such as * Parse git diff output into hunks. feature/blame keeps its commits, so Delete… still counts them as lost: Git can't tell that main has their changes.",
+      source: 'src/repo/operation.rs',
+      render: () =>
+        C.SterneGit({
+          topBar: topBar(),
+          tabStrip: tabStrip(),
+          body: commitSelected(),
+          overlays: notice('success', Texts.squashedInto('feature/blame', history.head)),
+        }),
+    },
+    {
+      id: 'merge-ff-refused',
+      title: "Fast-forward only can't",
+      about: "Fast-forward only refuses when main has commits of its own: Git would need a merge commit or a rebase to bring feature/blame in. Nothing changes, and the error says to pick another mode. The other modes never refuse for this reason.",
+      source: 'src/repo/operation.rs',
+      render: () =>
+        C.SterneGit({
+          topBar: topBar(),
+          tabStrip: tabStrip(),
+          body: commitSelected(),
+          overlays: notice('error', Texts.cantFastForward(history.head, 'feature/blame'), `Couldn't merge feature/blame into ${history.head}`),
+        }),
+    },
+    {
+      id: 'squash-stopped',
+      title: 'Squash stopped on a conflict',
+      about: "A squash that conflicts stops like a merge: the OperationBar says Squashing feature/blame into main, the conflicted files open in the MergeEditor with feature/blame as the incoming side, and the commit form stays hidden. Commit squash commits the resolved changes as the one squash commit, with the same message as when nothing conflicts. Abort squash puts main and the working files back as they were, and brings back the uncommitted changes that were stashed.",
+      source: 'src/repo/operation_bar.rs',
+      render: () => mergeStopped(squash, 'feature/blame'),
+    },
+    {
+      id: 'rebase-ff-stopped',
+      title: 'Rebase, then fast-forward stopped',
+      about: "Rebase, then fast-forward stops on the first commit of feature/blame that conflicts, as Rebase does: the OperationBar says Rebasing feature/blame onto main, which commit stopped and, with more than one, Commit 2 of 3. Continue commits the resolved changes with that commit's message and author, then replays the rest; when the last one is in, main is where the replayed commits end and a notification says Rebased 1 commit of feature/blame onto main. Abort rebase puts main back where it was and brings back the stashed changes. Unlike Rebase in the menu, main stays checked out throughout, so the head pill keeps reading main.",
+      source: 'src/repo/operation_bar.rs',
+      render: () => mergeStopped(rebaseFastForward, `${rebaseFastForward.commit.id} (${rebaseFastForward.commit.subject})`),
     },
     {
       id: 'checked-out-stash-kept',

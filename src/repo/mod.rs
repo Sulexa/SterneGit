@@ -1680,8 +1680,8 @@ impl RepoView {
             BranchAction::Push => {
                 repository.update(cx, |repository, cx| repository.push_branch(label, cx))
             }
-            BranchAction::Merge => {
-                repository.update(cx, |repository, cx| repository.merge(label, cx))
+            BranchAction::Merge(mode) => {
+                repository.update(cx, |repository, cx| repository.merge(label, mode, cx))
             }
             BranchAction::Rebase => {
                 repository.update(cx, |repository, cx| repository.rebase_onto(label, cx))
