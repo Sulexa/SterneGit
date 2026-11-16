@@ -503,7 +503,7 @@ const Screens = (() => {
     {
       id: 'uncommitted',
       title: 'Uncommitted changes',
-      about: 'The Uncommitted changes row is selected. The right pane starts with the commit message, its description and the Commit button, then the number of changed files with the list and tree buttons, then the staged files, then the unstaged files at the bottom. Each file has a button that moves it to the other list. Commit stays disabled until there is a message and at least one staged file.',
+      about: 'The Uncommitted changes row is selected. The right pane starts with the commit message, its description and the Commit button, then the files bar: the number of changed files, Stage all, Unstage all and Discard, then the list and tree buttons. The bar sits right under the form, so its buttons stay in the same place whatever the window height or the number of files. Below it come the staged files, only as tall as they need (40 % of the pane at most), then the unstaged files, which take the rest. Each file has a button that moves it to the other list. Commit stays disabled until there is a message and at least one staged file.',
       source: 'src/repo/changes_list.rs',
       render: () =>
         C.SterneGit({
@@ -527,14 +527,14 @@ const Screens = (() => {
     {
       id: 'changes-tree',
       title: 'Uncommitted changes as a tree',
-      about: 'The same switch sits between the commit form and the file lists, beside the number of changed files. In a tree, the staged and the unstaged files each get their own folders, and a folder row ends with a + or − that moves every file under it to the other list. Here patch.rs is open in the middle pane and highlighted in its folder.',
+      about: 'The same switch sits between the commit form and the file lists, beside the number of changed files. In a tree, the staged and the unstaged files each get their own folders, and a folder row ends with a + or − that moves every file under it to the other list; hovering an unstaged folder also shows ↶ to discard it. Here patch.rs is open in the middle pane and highlighted in its folder.',
       source: 'src/repo/changes_list.rs',
       render: () => C.SterneGit({ topBar: topBar(), tabStrip: tabStrip(), body: fileComparison('split', { view: 'tree' }) }),
     },
     {
       id: 'file-menu',
       title: 'Right-click on a changed file',
-      about: 'A right-click on a file in the changes list opens its menu where the pointer is: move it to the other list, discard its unstaged changes (Delete file… when Git does not track it), see its history, open it with its default app, show it in the file manager or copy its full path. A staged or conflicted file has no Discard; a file that is new or untracked has no history yet; a deleted one has nothing to open or show.',
+      about: 'A right-click on a file in the changes list opens its menu where the pointer is: move it to the other list, discard its unstaged changes (Delete file… when Git does not track it), see its history, open it with its default app, show it in the file manager or copy its full path. A staged file has Discard all changes… instead, which also throws away its staged changes; a conflicted file has no Discard; a file that is new or untracked has no history yet; a deleted one has nothing to open or show.',
       source: 'src/repo/changes_list.rs',
       render: () =>
         C.SterneGit({
@@ -616,6 +616,47 @@ const Screens = (() => {
           overlays: C.DiscardDialog({ change: firstUnstaged }),
         }),
     },
+    ...(() => {
+      const withChanges = (right, overlays) => C.SterneGit({ topBar: topBar(), tabStrip: tabStrip(), body: repo({ wipSelected: true, right }), overlays });
+      const list = (extra = {}) => C.ChangesList({ changes, ...extra });
+      return [
+        {
+          id: 'discard-menu',
+          title: 'Discard menu',
+          about: 'Discard in the files bar opens three ways to throw changes away, each saying what it keeps: Discard unstaged changes leaves the staged ones as they are; Discard all changes puts every file back as it was in the last commit, staged ones too; Delete untracked files deletes only the files Git does not track yet. Each asks first, and an entry with nothing to act on is disabled. Discard is hidden while a rebase or a merge waits: the OperationBar aborts it.',
+          source: 'src/repo/changes_list.rs',
+          render: () => withChanges(list({ discard: { hot: DiscardTexts.everything(6) } })),
+        },
+        {
+          id: 'discard-everything',
+          title: 'Discard all changes',
+          about: 'Discard all changes counts what happens: files that go back to the last commit and new files that are deleted, a staged new file included. Stash instead puts everything in a stash, untracked files included, so the tree is clean and Pop brings it back. Discard unstaged changes and Delete untracked files ask the same question as discarding several picked files.',
+          source: 'src/repo/discard_dialog.rs',
+          render: () => withChanges(list(), C.DiscardAllDialog({ changes })),
+        },
+        {
+          id: 'discard-row',
+          title: 'Discard a file from its row',
+          about: 'Hovering an unstaged file shows ↶ beside its +: Discard changes…, or Delete file… when Git does not track it, with the same question as the right-click menu. It is hidden otherwise, so each row keeps one visible button. Staged and conflicted files have none.',
+          source: 'src/repo/changes_list.rs',
+          render: () => withChanges(list({ hovered: { side: 'unstaged', path: changes.unstaged[1].path } })),
+        },
+        {
+          id: 'discard-folder',
+          title: 'Discard a folder',
+          about: 'In the tree, hovering an unstaged folder shows ↶ beside its +: Discard folder… throws away the unstaged changes of every file under it, after the question that counts them and the untracked files it deletes.',
+          source: 'src/repo/changes_list.rs',
+          render: () => withChanges(list({ view: 'tree', hovered: { side: 'unstaged', folder: 'src/git' } })),
+        },
+        {
+          id: 'discard-staged',
+          title: 'Discard a staged file',
+          about: 'A staged file has Discard all changes… in its menu (Discard all changes to 2 files… for picked ones): the file goes back to how it was in the last commit, its staged and unstaged changes both thrown away, after a question; a staged new file is deleted. Here patch.rs is partly staged, so it leaves both lists.',
+          source: 'src/repo/changes_list.rs',
+          render: () => withChanges(list({ changes: partlyStaged, pointed: { side: 'staged', path: 'src/git/patch.rs', left: 168, top: 16, hot: DiscardTexts.stagedFile } })),
+        },
+      ];
+    })(),
     {
       id: 'file-split',
       title: 'File comparison — Split',

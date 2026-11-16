@@ -642,11 +642,32 @@
 }
 
 .change-section + .change-section { border-top: 1px solid var(--border); }
+.change-section.fit { flex: 0 1 auto; max-height: 40%; }
+.change-section:has(.menu),
+.change-section:has(.menu) > .fill { position: relative; z-index: 2; overflow: visible; }
 
 .changes-bar {
   flex: none;
   border-bottom: 1px solid var(--border);
 }
+
+.changes-actions {
+  flex: none;
+  display: flex;
+  gap: 2px;
+  padding-right: 6px;
+  margin-right: 2px;
+  border-right: 1px solid var(--border);
+}
+
+.discard-button { position: relative; display: flex; }
+.discard-button > .btn { gap: 4px; }
+.discard-button > .menu { min-width: 300px; }
+.menu > .item.disabled { opacity: 0.5; }
+
+.row-discard { display: flex; visibility: hidden; }
+.list-row:hover .row-discard,
+.list-row.hot .row-discard { visibility: visible; }
 
 .file-view-toggle {
   flex: none;

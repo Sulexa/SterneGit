@@ -7,6 +7,7 @@ mod commit_form;
 mod commit_menu;
 mod commit_panel;
 mod compare;
+mod discard_dialog;
 mod file_diff_panel;
 mod file_history;
 mod file_menu;
@@ -53,7 +54,7 @@ use gpui_kit::{
     SharedString, Subscription, Task, UniformListScrollHandle, Window,
     component::{
         WindowExt as _,
-        button::{Button, ButtonVariant},
+        button::Button,
         diff::DiffFile,
         notification::Notification,
         resizable::{h_resizable, resizable_panel},
@@ -95,7 +96,8 @@ use tag_menu::{
 };
 use stash_menu::{StashAction, StashMenu};
 use branch_menu::{BranchAction, BranchMenu, PullOffers, confirm_delete};
-use changes_list::{ChangesList, SideFolds, SideScrolls, discard_question};
+use changes_list::{ChangesList, SideFolds, SideScrolls};
+use discard_dialog::{Discarded, confirm_discard, confirm_discard_all};
 use commit_form::CommitForm;
 use commit_panel::{CommitPanel, OpenCommitFile, ShowFileHistory, copy_commit_hash};
 use compare::{Direction, FilePlace, Position};
@@ -1513,25 +1515,20 @@ impl RepoView {
     fn confirm_discard(
         &mut self,
         changes: Vec<FileChange>,
+        discarded: Discarded,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         let repository = self.working().repository.clone();
-        let question = discard_question(&changes);
-        window.open_alert_dialog(cx, move |alert, _, _| {
-            let repository = repository.clone();
-            let changes = changes.clone();
-            alert
-                .confirm()
-                .title(question.title.clone())
-                .description(question.description.clone())
-                .ok_text(question.confirm)
-                .ok_variant(ButtonVariant::Danger)
-                .on_ok(move |_, _, cx| {
-                    repository.update(cx, |repository, cx| repository.discard(changes.clone(), cx));
-                    true
-                })
-        });
+        confirm_discard(repository, changes, discarded, window, cx);
+    }
+
+    fn confirm_discard_all(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let repository = self.working().repository.clone();
+        let Some(changes) = repository.read(cx).changes().cloned() else {
+            return;
+        };
+        confirm_discard_all(repository, &changes, window, cx);
     }
 
     fn run(&mut self, operation: Operation, window: &mut Window, cx: &mut Context<Self>) {
@@ -1953,7 +1950,7 @@ impl RepoView {
         )
         .header(header)
         .root(repository.repo().map(|repo| Arc::from(repo.location())))
-        .form_hidden(repository.underway().is_some())
+        .underway(repository.underway().is_some())
         .picked(working.picked.current(open.as_ref()))
         .open(open)
         .writing(repository.is_writing())
@@ -1969,8 +1966,12 @@ impl RepoView {
             this.pick_changes(picked.clone(), cx)
         }))
         .on_discard(cx.listener(|this, changes: &Vec<FileChange>, window, cx| {
-            this.confirm_discard(changes.clone(), window, cx)
+            this.confirm_discard(changes.clone(), Discarded::Unstaged, window, cx)
         }))
+        .on_discard_to_last_commit(cx.listener(|this, changes: &Vec<FileChange>, window, cx| {
+            this.confirm_discard(changes.clone(), Discarded::ToLastCommit, window, cx)
+        }))
+        .on_discard_all(cx.listener(|this, _: &(), window, cx| this.confirm_discard_all(window, cx)))
         .on_history(cx.listener(|this, change: &FileChange, window, cx| {
             this.open_working_file_history(change.clone(), window, cx)
         }))

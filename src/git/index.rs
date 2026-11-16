@@ -60,6 +60,25 @@ impl Repo {
         self.update_index(&["checkout", "--quiet"], Some(names), None)
     }
 
+    pub(crate) fn discard_to_last_commit(&self, changes: &[FileChange]) -> Result<()> {
+        let (untracked, tracked): (Vec<_>, Vec<_>) = changes
+            .iter()
+            .flat_map(FileChange::together)
+            .partition(|change| change.kind == ChangeKind::Untracked);
+        for change in untracked {
+            std::fs::remove_file(self.location.join(change.exact_path()))?;
+        }
+        if tracked.is_empty() {
+            return Ok(());
+        }
+        let names = nul_separated(tracked.into_iter().flat_map(FileChange::names_as_git_wrote_them));
+        if self.local().head_id().is_ok() {
+            self.update_index(&["restore", "--source=HEAD", "--staged", "--worktree"], Some(names), None)
+        } else {
+            self.update_index(&["rm", "--force", "--quiet"], Some(names), None)
+        }
+    }
+
     pub(crate) fn resolve(&self, change: &FileChange, text: &[u8]) -> Result<()> {
         std::fs::write(self.location.join(change.exact_path()), text)?;
         self.stage(&Scope::Files(vec![change.clone()]))
@@ -227,6 +246,89 @@ mod tests {
         );
         repo.unstage(&Scope::Files(vec![modified]))?;
         assert!(repo.status()?.staged.is_empty(), "after the first commit");
+        Ok(())
+    }
+
+    fn read(scratch: &ScratchRepo, name: &str) -> Result<String> {
+        Ok(std::fs::read_to_string(scratch.dir.join(name))?)
+    }
+
+    #[test]
+    fn a_staged_file_goes_back_to_the_last_commit_with_its_unstaged_changes() -> Result<()> {
+        let scratch = ScratchRepo::new("discard-staged")?;
+        scratch.write("kept.txt", "one\n")?;
+        scratch.write("other.txt", "one\n")?;
+        scratch.git(&["add", "kept.txt", "other.txt"])?;
+        scratch.commit("first")?;
+        scratch.write("kept.txt", "one\ntwo\n")?;
+        scratch.write("other.txt", "one\ntwo\n")?;
+        scratch.git(&["add", "kept.txt", "other.txt"])?;
+        scratch.write("kept.txt", "one\ntwo\nthree\n")?;
+        let (repo, _) = scratch.open()?;
+        let kept = repo.status()?.staged.into_iter().find(|change| &*change.path == "kept.txt");
+        repo.discard_to_last_commit(&[kept.expect("kept.txt is staged")])?;
+        let status = repo.status()?;
+        assert_eq!(read(&scratch, "kept.txt")?, "one\n");
+        assert!(status.unstaged.is_empty());
+        assert_eq!(status.staged.iter().map(|change| &*change.path).collect::<Vec<_>>(), ["other.txt"]);
+        Ok(())
+    }
+
+    #[test]
+    fn a_staged_new_file_and_a_rename_are_undone() -> Result<()> {
+        let scratch = ScratchRepo::new("discard-new-and-renamed")?;
+        scratch.write("old.txt", "one\ntwo\nthree\nfour\n")?;
+        scratch.git(&["add", "old.txt"])?;
+        scratch.commit("first")?;
+        scratch.git(&["mv", "old.txt", "new.txt"])?;
+        scratch.write("fresh.txt", "new\n")?;
+        scratch.git(&["add", "fresh.txt"])?;
+        let (repo, _) = scratch.open()?;
+        let staged = repo.status()?.staged;
+        assert!(staged.iter().any(|change| change.kind == ChangeKind::Renamed));
+        repo.discard_to_last_commit(&staged)?;
+        assert!(repo.status()?.is_empty());
+        assert_eq!(read(&scratch, "old.txt")?, "one\ntwo\nthree\nfour\n");
+        assert!(!scratch.dir.join("new.txt").exists());
+        assert!(!scratch.dir.join("fresh.txt").exists());
+        Ok(())
+    }
+
+    #[test]
+    fn every_change_goes_back_to_the_last_commit_and_untracked_files_are_deleted() -> Result<()> {
+        let scratch = ScratchRepo::new("discard-everything")?;
+        scratch.write("a.txt", "one\n")?;
+        scratch.write("b.txt", "one\n")?;
+        scratch.git(&["add", "a.txt", "b.txt"])?;
+        scratch.commit("first")?;
+        scratch.write("a.txt", "one\nstaged\n")?;
+        scratch.git(&["add", "a.txt"])?;
+        scratch.write("a.txt", "one\nstaged\nunstaged\n")?;
+        std::fs::remove_file(scratch.dir.join("b.txt"))?;
+        scratch.write("loose.txt", "new\n")?;
+        let (repo, _) = scratch.open()?;
+        let status = repo.status()?;
+        let everything: Vec<_> = status.staged.iter().chain(&status.unstaged).cloned().collect();
+        repo.discard_to_last_commit(&everything)?;
+        assert!(repo.status()?.is_empty());
+        assert_eq!(read(&scratch, "a.txt")?, "one\n");
+        assert_eq!(read(&scratch, "b.txt")?, "one\n");
+        assert!(!scratch.dir.join("loose.txt").exists());
+        Ok(())
+    }
+
+    #[test]
+    fn before_the_first_commit_staged_files_are_deleted() -> Result<()> {
+        let scratch = ScratchRepo::new("discard-unborn")?;
+        scratch.write("a.txt", "one\n")?;
+        scratch.git(&["add", "a.txt"])?;
+        scratch.write("a.txt", "one\ntwo\n")?;
+        let (repo, _) = scratch.open()?;
+        let status = repo.status()?;
+        let everything: Vec<_> = status.staged.iter().chain(&status.unstaged).cloned().collect();
+        repo.discard_to_last_commit(&everything)?;
+        assert!(repo.status()?.is_empty());
+        assert!(!scratch.dir.join("a.txt").exists());
         Ok(())
     }
 }

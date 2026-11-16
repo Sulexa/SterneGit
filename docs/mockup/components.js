@@ -181,6 +181,36 @@ const ConflictTexts = {
   keepTooltip: { current: 'Stage the current version of the file', incoming: 'Stage the incoming version of the file' },
 };
 
+const DiscardTexts = {
+  button: 'Discard',
+  tooltip: 'Throw changes away',
+  heading: 'Throw changes away',
+  unstaged: (n) => `Discard unstaged changes (${n})…`,
+  unstagedAbout: 'Staged changes stay as they are',
+  everything: (n) => `Discard all changes (${n})…`,
+  everythingAbout: 'Every file goes back to the last commit, staged ones too',
+  untracked: (n) => `Delete untracked files (${n})…`,
+  untrackedAbout: 'Only the files Git does not track yet',
+  file: 'Discard changes…',
+  untrackedFile: 'Delete file…',
+  folder: 'Discard folder…',
+  stagedFile: 'Discard all changes…',
+  stagedFiles: (n) => `Discard all changes to ${n} files…`,
+  stagedTitle: (name) => `Discard all changes to ${name}?`,
+  stagedDescription: (path, added) =>
+    added
+      ? `${path} is new, so it is deleted, staged changes included. Git keeps no copy of it, so this can't be undone.`
+      : `${path} goes back to how it was in the last commit: its staged and unstaged changes are thrown away. Git keeps no copy of them, so this can't be undone.`,
+  everythingTitle: (n) => (n === 1 ? 'Discard the one changed file?' : `Discard all ${n} changed files?`),
+  everythingDescription: (back, created) => {
+    const gone = counted(back, 'file goes back to how it was in the last commit', 'files go back to how they were in the last commit');
+    const deleted = counted(created, 'new file is', 'new files are');
+    const what = !created ? `${gone}, staged changes included.` : !back ? `${deleted} deleted, staged ones included.` : `${gone}, staged changes included, and ${deleted} deleted.`;
+    return `${what} Git keeps no copy of them, so this can't be undone. Stash instead puts everything aside, where Pop brings it back.`;
+  },
+  stashInstead: 'Stash instead',
+};
+
 const OperationTexts = {
   rebase: (op) => `Rebasing ${op.branch} onto ${op.onto}`,
   merge: (op) => `Merging ${op.from} into ${op.into}`,
@@ -1429,9 +1459,23 @@ const menuGroups = (groups) => groups.map((group) => group.filter(Boolean)).filt
 
 const placeItems = (kind) => [kind !== 'D' && [Texts.openFile, ''], kind !== 'D' && [Texts.showInFolder, ''], [Texts.copyPath, '']];
 
+function discardMenuItems(changes) {
+  const paths = new Set([...changes.staged, ...changes.unstaged].map((change) => change.path));
+  const untracked = changes.unstaged.filter((change) => change.kind === '?').length;
+  return [
+    { icon: 'undo-2', label: DiscardTexts.unstaged(changes.unstaged.length), about: DiscardTexts.unstagedAbout, off: !changes.unstaged.length },
+    { icon: 'undo-2', label: DiscardTexts.everything(paths.size), about: DiscardTexts.everythingAbout, off: !paths.size },
+    '-',
+    { icon: 'trash-2', label: DiscardTexts.untracked(untracked), about: DiscardTexts.untrackedAbout, off: !untracked },
+  ];
+}
+
 function fileMenuItems({ change, side }) {
   const labels = SideLabels[side];
-  const discard = labels.discards && change.kind !== 'U' && [change.kind === '?' ? 'Delete file…' : 'Discard changes…', ''];
+  const discard =
+    labels.discards && change.kind !== 'U'
+      ? [change.kind === '?' ? 'Delete file…' : 'Discard changes…', '']
+      : side === 'staged' && [DiscardTexts.stagedFile, ''];
   const committed = change.kind !== '?' && change.kind !== 'A' && [Texts.fileHistory, ''];
   const move = labels.fileTooltip && [labels.fileTooltip, ''];
   return menuGroups([[move, discard], [committed], placeItems(change.kind)]);
@@ -1441,7 +1485,7 @@ function pickedMenuItems({ files, side }) {
   const labels = SideLabels[side];
   const n = files.length;
   const untracked = files.every((change) => change.kind === '?');
-  const discard = labels.discards && [untracked ? Texts.deleteFiles(n) : Texts.discardFiles(n), ''];
+  const discard = labels.discards ? [untracked ? Texts.deleteFiles(n) : Texts.discardFiles(n), ''] : side === 'staged' && [DiscardTexts.stagedFiles(n), ''];
   const open = files.every((change) => change.kind !== 'D') && [Texts.openFiles(n), ''];
   return menuGroups([[[Texts.moveFiles(labels.verb, n), ''], discard], [open, [Texts.copyPaths(n), '']]]);
 }
@@ -2040,9 +2084,9 @@ const C = {
     return `<div data-c="FileViewToggle" class="file-view-toggle">${list}${tree}</div>`;
   },
 
-  FolderRow({ name, depth = 0, open = true, trailing = '' }) {
+  FolderRow({ name, depth = 0, open = true, trailing = '', hot = false }) {
     const content = `<div class="h fill tree-row" style="padding-left:${depth * TreeIndent}px">${twisty(open)}${icon('folder', 'sm', 'var(--muted)')}<div class="fill ellipsis sm">${esc(name)}</div></div>${trailing}`;
-    return C.ListRow({ content, extraClass: 'folder-row', name: 'FolderRow' });
+    return C.ListRow({ content, extraClass: `folder-row${hot ? ' hot' : ''}`, name: 'FolderRow' });
   },
 
   CommitPanel({ commit, details, state = 'ready', reason = '', open, view = 'list', collapsed, pointed, pointing = false, edit }) {
@@ -2123,14 +2167,14 @@ const C = {
     );
   },
 
-  FileRow({ kind, path, depth, selected = false, trailing = '', name = 'FileRow', tag = '' }) {
+  FileRow({ kind, path, depth, selected = false, trailing = '', name = 'FileRow', tag = '', hot = false }) {
     const [file, folder] = splitPath(path);
     const place =
       depth === undefined
         ? C.ChangeBadge({ kind }) +
           `<div class="path"><div class="none ellipsis sm" style="max-width:100%">${esc(file)}</div>${tag}${folder ? `<div class="ellipsis xs muted">${esc(folder)}</div>` : ''}</div>`
         : `<div class="h fill tree-row" style="padding-left:${depth * TreeIndent}px">${twisty(null)}${C.ChangeBadge({ kind })}<div class="${tag ? 'none' : 'fill'} ellipsis sm">${esc(file)}</div>${tag}</div>`;
-    return C.ListRow({ content: place + trailing, selected, extraClass: 'file-row', name, base: name === 'FileRow' ? 'ListRow' : 'FileRow' });
+    return C.ListRow({ content: place + trailing, selected, extraClass: `file-row${hot ? ' hot' : ''}`, name, base: name === 'FileRow' ? 'ListRow' : 'FileRow' });
   },
 
   CommitFileRow({ file, depth, selected = false, menu = '' }) {
@@ -2154,14 +2198,45 @@ const C = {
     return `<div data-c="CommitFiles" class="commit-files">${rows}</div>`;
   },
 
-  ChangeRow({ change, side, depth, selected = false, writing = false, menu = '' }) {
+  ChangeRow({ change, side, depth, selected = false, writing = false, menu = '', hot = false }) {
     const labels = SideLabels[side];
     const move = labels.fileTooltip ? C.Button({ icon: labels.icon, variant: 'ghost', disabled: writing, tooltip: labels.fileTooltip }) : '';
-    const trailing = move + menu;
+    const thrown = labels.discards ? C.RowDiscard({ tooltip: change.kind === '?' ? DiscardTexts.untrackedFile : DiscardTexts.file, writing }) : '';
+    const trailing = thrown + move + menu;
     const file = splitPath(change.path)[0];
     const meta = change.meta ? `<span class="meta-chip" title="${esc(Texts.metaWith(file))}">meta</span>` : '';
     const warning = change.warning ? `<span class="row-warn" title="${esc(change.warning)}">${icon('triangle-alert', 'xs')}</span>` : '';
-    return C.FileRow({ kind: change.kind, path: change.path, depth, selected, trailing, name: 'ChangeRow', tag: meta + warning });
+    return C.FileRow({ kind: change.kind, path: change.path, depth, selected, trailing, name: 'ChangeRow', tag: meta + warning, hot });
+  },
+
+  RowDiscard({ tooltip, writing = false }) {
+    return `<span data-c="RowDiscard" class="row-discard">${C.Button({ icon: 'undo-2', variant: 'ghost', disabled: writing, tooltip })}</span>`;
+  },
+
+  DiscardButton({ open = false, disabled = false, menu = '' }) {
+    const classes = ['btn', 'ghost', 'xs', open && 'selected', disabled && 'disabled'].filter(Boolean).join(' ');
+    const button = `<span data-c="Button" class="${classes}" title="${esc(DiscardTexts.tooltip)}">${icon('undo-2', 'xs')}<span>${esc(DiscardTexts.button)}</span>${icon('chevron-down', 'xs')}</span>`;
+    return `<span data-c="DiscardButton" class="discard-button">${button}${menu}</span>`;
+  },
+
+  DiscardMenu({ changes, hot, right = 0, top = 28, left }) {
+    const place = left === undefined ? `right:${right}px;top:${top}px` : `left:${left}px;top:${top}px`;
+    const rows = discardMenuItems(changes)
+      .map((item) =>
+        item === '-'
+          ? '<div class="separator"></div>'
+          : `<div class="item${item.label === hot ? ' hot' : ''}${item.off ? ' disabled' : ''}"><span class="check">${icon(item.icon, 'sm', 'var(--muted)')}</span><span class="v label"><span>${esc(item.label)}</span><span class="about">${esc(item.about)}</span></span></div>`,
+      )
+      .join('');
+    return `<div data-c="DiscardMenu" data-base="PopupMenu" class="menu choices sm" style="${place}">${rows}</div>`;
+  },
+
+  DiscardAllDialog({ changes }) {
+    const all = [...changes.staged, ...changes.unstaged];
+    const paths = new Set(all.map((change) => change.path));
+    const created = new Set(all.filter((change) => change.kind === '?' || change.kind === 'A').map((change) => change.path)).size;
+    const buttons = C.Button({ label: 'Cancel', size: 'md' }) + C.Button({ label: DiscardTexts.stashInstead, icon: 'archive', size: 'md' }) + C.Button({ label: 'Discard', variant: 'danger', size: 'md' });
+    return `<div class="overlay"><div data-c="DiscardAllDialog" data-base="AlertDialog" class="dialog wide"><div class="base semibold">${esc(DiscardTexts.everythingTitle(paths.size))}</div><div class="sm muted">${esc(DiscardTexts.everythingDescription(paths.size - created, created))}</div><div class="footer">${buttons}</div></div></div>`;
   },
 
   CommitForm({ message = '', description = '', focus, staged = 0, committing = false, writing = false, failure }) {
@@ -2178,7 +2253,7 @@ const C = {
     );
   },
 
-  ChangesList({ changes, open, picked, pointed, draft = {}, committing = false, writing = false, failure, view = 'list', collapsed = [], operation, worktree }) {
+  ChangesList({ changes, open, picked, pointed, draft = {}, committing = false, writing = false, failure, view = 'list', collapsed = [], operation, worktree, discard, hovered }) {
     if (!changes) return `<div data-c="ChangesList" class="changes">${C.Loading({ message: Texts.readingChanges })}</div>`;
     const busy = writing || committing;
     const form = (worktree ? C.WorktreeBar({ tree: worktree }) : '') + (operation ? '' : C.CommitForm({ ...draft, staged: changes.staged.length, committing, writing, failure }));
@@ -2187,13 +2262,15 @@ const C = {
       return `<div data-c="ChangesList" class="changes">${form}<div class="fill v">${C.Hint({ message: Texts.noChanges })}</div></div>`;
     }
     const changed = new Set([...conflicted, ...changes.staged, ...changes.unstaged].map((change) => change.path)).size;
-    const bar = `<div class="changes-bar">${C.SectionHeader({ title: counted(changed, 'changed file', 'changed files'), action: C.FileViewToggle({ view }) })}</div>`;
+    const allButton = (side) => C.Button({ label: SideLabels[side].all, icon: SideLabels[side].icon, variant: 'ghost', disabled: busy || !changes[side].length });
+    const discardButton = operation ? '' : C.DiscardButton({ open: !!discard, disabled: busy, menu: discard ? C.DiscardMenu({ changes, hot: discard.hot }) : '' });
+    const actions = `<div class="changes-actions">${allButton('unstaged')}${allButton('staged')}${discardButton}</div>`;
+    const bar = `<div class="changes-bar">${C.SectionHeader({ title: counted(changed, 'changed file', 'changed files'), action: actions + C.FileViewToggle({ view }) })}</div>`;
     const foldedIn = (side) => new Set(collapsed.filter((key) => key.startsWith(`${side}:`)).map((key) => key.slice(side.length + 1)));
     const section = (side, empty) => {
       const files = changes[side];
       const labels = SideLabels[side];
-      const action = labels.all ? C.Button({ label: labels.all, icon: labels.icon, variant: 'ghost', disabled: busy || !files.length }) : '';
-      const head = C.SectionHeader({ title: `${labels.files} (${thousands(files.length)})`, action });
+      const head = C.SectionHeader({ title: `${labels.files} (${thousands(files.length)})` });
       const at = (place, change) => !!place && place.side === side && place.path === change.path;
       const pickedHere = picked && picked.side === side ? files.filter((change) => picked.paths.includes(change.path)) : [];
       const isPicked = (change) => (picked ? pickedHere.includes(change) : at(open, change));
@@ -2204,16 +2281,25 @@ const C = {
           depth,
           writing: busy,
           selected: isPicked(change),
+          hot: at(hovered, change),
           menu: at(pointed, change) ? C.FileMenu({ change, side, picked: isPicked(change) ? pickedHere : [], left: pointed.left, top: pointed.top, hot: pointed.hot }) : '',
         });
+      const folderDiscard = labels.discards ? C.RowDiscard({ tooltip: DiscardTexts.folder, writing: busy }) : '';
       const folder = (node, depth, open) =>
-        C.FolderRow({ name: node.name, depth, open, trailing: C.Button({ icon: labels.icon, variant: 'ghost', disabled: busy, tooltip: labels.folderTooltip }) });
+        C.FolderRow({
+          name: node.name,
+          depth,
+          open,
+          hot: !!hovered && hovered.side === side && hovered.folder === node.name,
+          trailing: folderDiscard + C.Button({ icon: labels.icon, variant: 'ghost', disabled: busy, tooltip: labels.folderTooltip }),
+        });
       const rows =
         view === 'tree'
           ? fileTreeRows(fileTree(files), { collapsed: foldedIn(side), file: row, folder })
           : files.map((change) => row(change)).join('');
       const body = files.length ? `<div class="fill">${rows}</div>` : C.Hint({ message: empty });
-      return `<div class="change-section${side === 'conflicted' ? ' conflicts' : ''}">${head}${body}</div>`;
+      const kind = side === 'conflicted' ? ' conflicts' : side === 'staged' ? ' fit' : '';
+      return `<div class="change-section${kind}">${head}${body}</div>`;
     };
     const conflicts = conflicted.length ? section('conflicted') : '';
     return `<div data-c="ChangesList" class="changes">${form}${bar}${conflicts}${section('staged', Texts.nothingStaged)}${section('unstaged', Texts.nothingUnstaged)}</div>`;
@@ -3396,9 +3482,10 @@ const C = {
     return `<div class="overlay"><div data-c="${name}"${base} class="dialog"><div class="base semibold">${esc(title)}</div><div class="sm muted">${esc(description)}</div><div class="footer">${buttons}</div></div></div>`;
   },
 
-  DiscardDialog({ change, changes = [] }) {
+  DiscardDialog({ change, changes = [], staged = false }) {
     if (changes.length > 1) return C.AlertDialog(discardFilesQuestion(changes));
     const [name] = splitPath(change.path);
+    if (staged) return C.AlertDialog({ title: DiscardTexts.stagedTitle(name), description: DiscardTexts.stagedDescription(change.path, change.kind === 'A'), confirm: 'Discard' });
     const untracked = change.kind === '?';
     return C.AlertDialog({
       title: untracked ? Texts.deleteTitle(name) : Texts.discardTitle(name),

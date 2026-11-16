@@ -14,7 +14,8 @@ const Catalog = (() => {
   const row = 736;
   const lanes = (graph, extra = {}) => () => C.GraphCell({ graph, ...extra });
   const menuFrame = (menu, width = 240) => `<div style="position:relative;width:${width}px;height:${(menu.match(/class="item/g).length + 1) * 28 + 8}px">${menu}</div>`;
-  const dialogFrame = (dialog) => `<div style="position:relative;width:520px;height:260px" class="mk-dialog-frame">${dialog}</div>`;
+  const discardFrame = (menu) => `<div style="position:relative;width:320px;height:170px">${menu}</div>`;
+  const dialogFrame = (dialog) =>`<div style="position:relative;width:520px;height:260px" class="mk-dialog-frame">${dialog}</div>`;
   const tallDialogFrame = (dialog) => `<div style="position:relative;width:520px;height:300px" class="mk-dialog-frame">${dialog}</div>`;
   const bigDialog = (dialog, height, width = 560) => `<div style="position:relative;width:${width}px;height:${height}px" class="mk-dialog-frame">${dialog}</div>`;
   const hunkFrame = (actions) => `<div class="diff" style="width:560px;flex:none"><div class="diff-line hunk"><span class="text">${esc(fileDiff.hunks[0].header)}</span>${actions}</div></div>`;
@@ -260,6 +261,7 @@ const Catalog = (() => {
             ['Two folders in one row', () => C.FolderRow({ name: 'src/repo' }), { w: 480 }],
             ['Inside a folder', () => C.FolderRow({ name: 'repo', depth: 1 }), { w: 480 }],
             ['With an action', () => C.FolderRow({ name: 'src/git', trailing: C.Button({ icon: 'plus', variant: 'ghost', tooltip: 'Stage folder' }) }), { w: 480 }],
+            ['Unstaged, hovered', () => C.FolderRow({ name: 'src/git', hot: true, trailing: C.RowDiscard({ tooltip: DiscardTexts.folder }) + C.Button({ icon: 'plus', variant: 'ghost', tooltip: 'Stage folder' }) }), { w: 480 }],
           ],
         },
         {
@@ -900,9 +902,10 @@ const Catalog = (() => {
           name: 'ChangesList',
           code: 'repo::changes_list::ChangesList',
           source: 'src/repo/changes_list.rs',
-          about: 'The CommitForm on top, then the number of changed files with the FileViewToggle, then the staged files, then the unstaged files at the bottom. The two lists share the space below equally and each has a Stage all / Unstage all action. As a tree, each list has its own folders, which stay folded while the changes are read again, and a folder row moves every file under it to the other list. A failed git add / reset / commit shows in red under the Commit button. While files conflict they get a Conflicts section of their own on top, as tall as its rows, with no button to move them: Mark resolved in the FileBar does that. While a rebase or a merge waits, the CommitForm is hidden, because the OperationBar finishes it.',
+          about: 'The CommitForm on top, then the files bar: the number of changed files, Stage all, Unstage all, the DiscardButton and the FileViewToggle, so the actions on every file stay right under the form. Then the staged files, only as tall as their rows up to 40 % of the pane, then the unstaged files, which take the rest. As a tree, each list has its own folders, which stay folded while the changes are read again, and a folder row moves every file under it to the other list. A failed git add / reset / commit shows in red under the Commit button. While files conflict they get a Conflicts section of their own on top, as tall as its rows, with no button to move them: Mark resolved in the FileBar does that. While a rebase or a merge waits, the CommitForm and the DiscardButton are hidden, because the OperationBar finishes or aborts it.',
           variants: [
             ['With files', () => C.ChangesList({ changes, open: { side: 'unstaged', path: 'src/git/patch.rs' } }), { w: 480, h: 640 }],
+            ['Discard menu open', () => C.ChangesList({ changes, discard: {} }), { w: 480, h: 640 }],
             ['As a tree', () => C.ChangesList({ changes, open: { side: 'unstaged', path: 'src/git/patch.rs' }, view: 'tree' }), { w: 480, h: 680 }],
             ['As a tree, a folder folded', () => C.ChangesList({ changes, view: 'tree', collapsed: ['unstaged:src/git'] }), { w: 480, h: 600 }],
             ['Ready to commit', () => C.ChangesList({ changes, draft: { ...Sample.draft, focus: 'message' } }), { w: 480, h: 640 }],
@@ -934,10 +937,12 @@ const Catalog = (() => {
           name: 'ChangeRow',
           code: 'repo::changes_list::change_row',
           source: 'src/repo/changes_list.rs',
-          about: 'A FileRow with a + or − that moves the file to the other list; a conflicted file has none. A click opens it, Ctrl+click and Shift+click add it or a run of files to the pick, which is highlighted like the open file. A right-click opens its FileMenu, for every picked file when it is one of them.',
+          about: 'A FileRow with a + or − that moves the file to the other list; a conflicted file has none. An unstaged file also has a RowDiscard, shown while the pointer is on the row. A click opens it, Ctrl+click and Shift+click add it or a run of files to the pick, which is highlighted like the open file. A right-click opens its FileMenu, for every picked file when it is one of them.',
           variants: [
             ['Unstaged', () => C.ChangeRow({ change: changes.unstaged[0], side: 'unstaged' }), { w: 480 }],
             ['Open or picked', () => C.ChangeRow({ change: changes.unstaged[1], side: 'unstaged', selected: true }), { w: 480 }],
+            ['Hovered', () => C.ChangeRow({ change: changes.unstaged[1], side: 'unstaged', hot: true }), { w: 480 }],
+            ['Untracked, hovered', () => C.ChangeRow({ change: changes.unstaged[3], side: 'unstaged', hot: true }), { w: 480 }],
             ['In a tree', () => C.ChangeRow({ change: changes.unstaged[1], side: 'unstaged', depth: 1 }), { w: 480 }],
             ['Staged', () => C.ChangeRow({ change: changes.staged[0], side: 'staged' }), { w: 480 }],
             ['Conflicted', () => C.ChangeRow({ change: statusConflicts.change, side: 'conflicted' }), { w: 480 }],
@@ -949,7 +954,7 @@ const Catalog = (() => {
           name: 'FileMenu',
           code: 'repo::changes_list::RowActions::menu',
           source: 'src/repo/changes_list.rs',
-          about: 'The right-click menu of a changed file. Stage or Unstage, then Discard changes… for an unstaged file (Delete file… for an untracked one, nothing for a conflicted one), which asks first in a DiscardDialog. File history opens the FileHistoryList with its newest commit selected; a new or untracked file has none. Open file uses the default app, Show in folder the file manager; a deleted file has neither. Copy path copies the full path and says so in a notification.',
+          about: 'The right-click menu of a changed file. Stage or Unstage, then Discard changes… for an unstaged file (Delete file… for an untracked one, Discard all changes… for a staged one, nothing for a conflicted one), which asks first in a DiscardDialog. File history opens the FileHistoryList with its newest commit selected; a new or untracked file has none. Open file uses the default app, Show in folder the file manager; a deleted file has neither. Copy path copies the full path and says so in a notification.',
           variants: [
             ['Unstaged, modified', () => menuFrame(C.FileMenu({ change: changes.unstaged[0], side: 'unstaged' }))],
             ['Unstaged, untracked', () => menuFrame(C.FileMenu({ change: changes.unstaged[3], side: 'unstaged' }))],
@@ -961,16 +966,59 @@ const Catalog = (() => {
           ],
         },
         {
-          name: 'DiscardDialog',
-          code: 'repo::RepoView::confirm_discard',
+          name: 'RowDiscard',
+          code: 'repo::changes_list::row_discard',
           source: 'src/repo/changes_list.rs',
-          about: 'An AlertDialog that names the file and says the changes cannot come back. Discard checks the file out of the index, so it goes back to how it is staged, or to the last commit when nothing of it is staged; Delete removes an untracked file. Cancel or Esc does nothing.',
+          about: 'A ghost ↶ button before the + of an unstaged file or folder, shown only while the pointer is on the row, so the list keeps one visible button per row. On a file it is Discard changes…, or Delete file… when Git does not track it; on a folder, Discard folder…, for every unstaged file under it. Each asks first in a DiscardDialog. Disabled while Git writes.',
+          variants: [
+            ['File', () => C.ChangeRow({ change: changes.unstaged[1], side: 'unstaged', hot: true }), { w: 480 }],
+            ['Untracked file', () => C.ChangeRow({ change: changes.unstaged[3], side: 'unstaged', hot: true }), { w: 480 }],
+            ['Folder', () => C.FolderRow({ name: 'src/git', hot: true, trailing: C.RowDiscard({ tooltip: DiscardTexts.folder }) + C.Button({ icon: 'plus', variant: 'ghost', tooltip: 'Stage folder' }) }), { w: 480 }],
+          ],
+        },
+        {
+          name: 'DiscardButton',
+          code: 'repo::changes_list::ChangesList::discard_button',
+          source: 'src/repo/changes_list.rs',
+          about: 'A ghost xsmall button with ↶, Discard and a ▾ in the files bar of the ChangesList, after Stage all and Unstage all. A click opens the DiscardMenu under it, aligned on its right edge. Disabled while Git writes; hidden while a rebase or a merge waits.',
+          variants: [
+            ['Closed', () => C.DiscardButton({})],
+            ['Disabled', () => C.DiscardButton({ disabled: true })],
+            ['Open', () => `<div style="position:relative;width:320px;height:200px;display:flex;justify-content:flex-end">${C.DiscardButton({ open: true, menu: C.DiscardMenu({ changes }) })}</div>`, { w: 340 }],
+          ],
+        },
+        {
+          name: 'DiscardMenu',
+          code: 'repo::changes_list::discard_menu',
+          source: 'src/repo/changes_list.rs',
+          about: 'The menu of the DiscardButton: each entry on two lines, what it does and what it keeps. Discard unstaged changes (n)… asks the DiscardDialog for every unstaged file; Discard all changes (n)… asks the DiscardAllDialog; Delete untracked files (n)… asks the DiscardDialog for the untracked files only. The counts are files; an entry with none is disabled.',
+          variants: [
+            ['Unstaged and staged changes', () => discardFrame(C.DiscardMenu({ changes, left: 0, top: 0 }))],
+            ['Everything staged', () => discardFrame(C.DiscardMenu({ changes: { unstaged: [], staged: [...changes.staged, ...changes.unstaged] }, left: 0, top: 0 }))],
+          ],
+        },
+        {
+          name: 'DiscardDialog',
+          code: 'repo::discard_dialog::confirm_discard',
+          source: 'src/repo/discard_dialog.rs',
+          about: 'An AlertDialog that names the file and says the changes cannot come back. Discard checks the file out of the index, so it goes back to how it is staged, or to the last commit when nothing of it is staged; Delete removes an untracked file. From a staged file it asks about all its changes: the file goes back to the last commit, and a staged new file is deleted. Cancel or Esc does nothing.',
           variants: [
             ['Tracked file', () => dialogFrame(C.DiscardDialog({ change: changes.unstaged[0] }))],
             ['Untracked file', () => dialogFrame(C.DiscardDialog({ change: changes.unstaged[3] }))],
+            ['Staged file', () => dialogFrame(C.DiscardDialog({ change: { kind: 'M', path: 'src/git/patch.rs' }, staged: true }))],
             ['Tracked files', () => dialogFrame(C.DiscardDialog({ changes: changes.unstaged.slice(0, 3) }))],
             ['Tracked and untracked files', () => dialogFrame(C.DiscardDialog({ changes: changes.unstaged.slice(1) }))],
             ['Untracked files', () => dialogFrame(C.DiscardDialog({ changes: ['a.md', 'b.md', 'c.md'].map((path) => ({ kind: '?', path })) }))],
+          ],
+        },
+        {
+          name: 'DiscardAllDialog',
+          code: 'repo::discard_dialog::confirm_discard_all',
+          source: 'src/repo/discard_dialog.rs',
+          about: 'The question before Discard all changes. It counts the files that go back to the last commit and the new files that are deleted, staged ones included; a staged new file changed again still counts as new. Discard restores every changed file from HEAD, index and work tree (git rm before the first commit), and deletes the untracked files; Stash instead runs the same stash as the toolbar, untracked files included, so Pop brings everything back; Cancel or Esc does nothing.',
+          variants: [
+            ['Staged and unstaged changes', () => dialogFrame(C.DiscardAllDialog({ changes }))],
+            ['Only tracked changes', () => dialogFrame(C.DiscardAllDialog({ changes: { staged: [], unstaged: changes.unstaged.slice(0, 3) } }))],
           ],
         },
         {

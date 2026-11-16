@@ -437,6 +437,10 @@ impl Repository {
         self.write_to(move |repo| repo.discard(&changes), cx);
     }
 
+    pub(crate) fn discard_to_last_commit(&mut self, changes: Vec<FileChange>, cx: &mut Context<Self>) {
+        self.write_to(move |repo| repo.discard_to_last_commit(&changes), cx);
+    }
+
     fn write_to(
         &mut self,
         work: impl FnOnce(&Repo) -> anyhow::Result<()> + Send + 'static,
