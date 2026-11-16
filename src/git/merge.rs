@@ -425,8 +425,10 @@ mod tests {
     #[test]
     fn a_squash_whose_changes_main_already_has_adds_nothing() -> Result<()> {
         let scratch = topic_ahead("merge-squash-nothing")?;
-        commit_file(&scratch, "a.txt", "a\n")?;
-        commit_file(&scratch, "b.txt", "b\n")?;
+        scratch.write("a.txt", "a\n")?;
+        scratch.write("b.txt", "b\n")?;
+        scratch.git(&["add", "a.txt", "b.txt"])?;
+        scratch.commit("a and b at once")?;
         let before = scratch.head()?;
         let (repo, _) = scratch.open()?;
         assert_eq!(repo.merge("topic", MergeMode::Squash)?, (Merged::NothingNew, Carried::Along));
