@@ -677,7 +677,9 @@
   border-bottom: 1px solid var(--border);
 }
 
-.commit-form > .btn { width: 100%; }
+.commit-form > .commit-row { gap: 12px; }
+.commit-form > .commit-row > .btn { flex: 1; }
+.commit-form > .edit-warn { gap: 6px; color: var(--yellow); }
 .commit-form > .failure { color: var(--red); }
 
 .change-section {

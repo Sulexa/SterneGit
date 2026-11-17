@@ -11,7 +11,7 @@ use gpui_kit::{
 
 use super::repository::Repository;
 use crate::{
-    git::{Behind, Tracking},
+    git::{Behind, Rewritten, Tracking},
     ui::counted,
 };
 
@@ -34,7 +34,7 @@ struct BehindQuestion {
 }
 
 fn behind_question(behind: &Behind) -> BehindQuestion {
-    if behind.rewritten {
+    if behind.rewritten != Rewritten::No {
         return rewritten_question(behind);
     }
     let Behind {
@@ -77,24 +77,38 @@ fn behind_question(behind: &Behind) -> BehindQuestion {
 
 fn rewritten_question(behind: &Behind) -> BehindQuestion {
     let Tracking { branch, upstream } = &behind.tracking;
-    let (versions, them) = match behind.theirs {
-        1 => (
+    let same_changes = behind.rewritten == Rewritten::WithTheSameChanges;
+    let (versions, them) = match (same_changes, behind.theirs) {
+        (true, 1) => (
             format!(
                 "The commit {upstream} has and {branch} doesn't makes the same changes as one of {branch}'s: it was rewritten after it was pushed, with a new message or a rebase."
             ),
             "it",
         ),
-        theirs => (
+        (true, theirs) => (
             format!(
                 "The {theirs} commits {upstream} has and {branch} doesn't make the same changes as commits of {branch}: they were rewritten after they were pushed, with a new message or a rebase."
             ),
             "them",
         ),
+        (false, 1) => (
+            format!(
+                "The commit {upstream} has and {branch} doesn't was on {branch} before: it was amended, rebased or reset away after it was pushed."
+            ),
+            "it",
+        ),
+        (false, theirs) => (
+            format!(
+                "The {theirs} commits {upstream} has and {branch} doesn't were on {branch} before: they were amended, rebased or reset away after they were pushed."
+            ),
+            "them",
+        ),
     };
+    let kept = if same_changes { ", so no change is lost" } else { "" };
     BehindQuestion {
         title: format!("{upstream} has older versions of {branch}'s commits"),
         description: format!(
-            "{versions} Force push replaces {them} on {upstream} with {branch}'s versions, so no change is lost. Pulling would bring the old versions back beside the new ones."
+            "{versions} Force push replaces {them} on {upstream} with {branch}'s versions{kept}. Pulling would bring the old versions back beside the new ones."
         ),
         primary: Some(Primary::ForcePush),
     }
@@ -157,7 +171,7 @@ pub(crate) fn open_behind_dialog(
 #[cfg(test)]
 mod tests {
     use super::{BehindQuestion, PULL, PULL_AND_PUSH, Primary, behind_question};
-    use crate::git::{Behind, Tracking, fixtures::id};
+    use crate::git::{Behind, Rewritten, Tracking, fixtures::id};
 
     fn behind(branch: &str, theirs: usize, ours: usize, checked_out: bool) -> Behind {
         Behind {
@@ -169,7 +183,7 @@ mod tests {
             ours,
             checked_out,
             upstream_at: id(1),
-            rewritten: false,
+            rewritten: Rewritten::No,
         }
     }
 
@@ -191,7 +205,7 @@ mod tests {
     #[test]
     fn commits_rewritten_since_they_were_pushed_offer_only_force_push() {
         let rewritten = |theirs| Behind {
-            rewritten: true,
+            rewritten: Rewritten::WithTheSameChanges,
             ..behind("main", theirs, theirs, true)
         };
         assert_eq!(
@@ -211,6 +225,33 @@ mod tests {
             "The commit origin/main has and main doesn't makes the same changes as one of main's: \
              it was rewritten after it was pushed, with a new message or a rebase. \
              Force push replaces it on origin/main with main's versions, so no change is lost. \
+             Pulling would bring the old versions back beside the new ones."
+        );
+    }
+
+    #[test]
+    fn commits_amended_since_they_were_pushed_offer_only_force_push_without_promising_their_changes() {
+        let amended = |theirs| Behind {
+            rewritten: Rewritten::OnceOnTheBranch,
+            ..behind("main", theirs, 1, true)
+        };
+        assert_eq!(
+            behind_question(&amended(1)),
+            BehindQuestion {
+                title: "origin/main has older versions of main's commits".into(),
+                description: "The commit origin/main has and main doesn't was on main before: \
+                              it was amended, rebased or reset away after it was pushed. \
+                              Force push replaces it on origin/main with main's versions. \
+                              Pulling would bring the old versions back beside the new ones."
+                    .into(),
+                primary: Some(Primary::ForcePush),
+            }
+        );
+        assert_eq!(
+            behind_question(&amended(3)).description,
+            "The 3 commits origin/main has and main doesn't were on main before: \
+             they were amended, rebased or reset away after they were pushed. \
+             Force push replaces them on origin/main with main's versions. \
              Pulling would bring the old versions back beside the new ones."
         );
     }

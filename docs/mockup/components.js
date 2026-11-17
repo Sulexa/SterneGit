@@ -418,6 +418,14 @@ const Texts = {
   commitDescription: 'Description',
   committing: 'Committing…',
   commitTooltip: 'Commit the staged files  Ctrl+Enter',
+  amend: 'Amend',
+  amendTooltip: 'Change the last commit instead of adding one: its message, and the staged files',
+  nothingToAmend: 'No commit to amend yet',
+  amendLast: 'Amend last commit',
+  amendWith: (staged) => `Amend with ${counted(staged, 'file', 'files')}`,
+  amending: 'Amending…',
+  amendButtonTooltip: 'Amend the last commit  Ctrl+Enter',
+  amendPushed: (remotes) => `${listed(remotes)} already ${remotes.length > 1 ? 'have' : 'has'} the last commit: the next push needs Force push.`,
   nothingStaged: 'Stage files to commit them.',
   nothingUnstaged: 'Every change is staged.',
   listView: 'Show files as a list',
@@ -453,8 +461,12 @@ const Texts = {
     theirs === 1
       ? `The commit ${upstream} has and ${branch} doesn't makes the same changes as one of ${branch}'s: it was rewritten after it was pushed, with a new message or a rebase.`
       : `The ${theirs} commits ${upstream} has and ${branch} doesn't make the same changes as commits of ${branch}: they were rewritten after they were pushed, with a new message or a rebase.`,
-  behindRewrittenForce: (branch, upstream, theirs) =>
-    `Force push replaces ${theirs === 1 ? 'it' : 'them'} on ${upstream} with ${branch}'s versions, so no change is lost. Pulling would bring the old versions back beside the new ones.`,
+  behindAmended: (branch, upstream, theirs) =>
+    theirs === 1
+      ? `The commit ${upstream} has and ${branch} doesn't was on ${branch} before: it was amended, rebased or reset away after it was pushed.`
+      : `The ${theirs} commits ${upstream} has and ${branch} doesn't were on ${branch} before: they were amended, rebased or reset away after they were pushed.`,
+  behindRewrittenForce: (branch, upstream, theirs, sameChanges) =>
+    `Force push replaces ${theirs === 1 ? 'it' : 'them'} on ${upstream} with ${branch}'s versions${sameChanges ? ', so no change is lost' : ''}. Pulling would bring the old versions back beside the new ones.`,
   pullAndPush: 'Pull and push',
   pullOnly: 'Pull',
   forcePush: 'Force push',
@@ -2320,15 +2332,23 @@ const C = {
     return `<div class="overlay"><div data-c="DiscardAllDialog" data-base="AlertDialog" class="dialog wide"><div class="base semibold">${esc(DiscardTexts.everythingTitle(paths.size))}</div><div class="sm muted">${esc(DiscardTexts.everythingDescription(paths.size - created, created))}</div><div class="footer">${buttons}</div></div></div>`;
   },
 
-  CommitForm({ message = '', description = '', focus, staged = 0, committing = false, writing = false, failure }) {
+  CommitForm({ message = '', description = '', focus, staged = 0, committing = false, writing = false, failure, amend, noCommit = false }) {
     const busy = committing || writing;
-    const ready = !busy && staged > 0 && message.trim() !== '';
-    const label = committing ? Texts.committing : staged ? `Commit ${counted(staged, 'file', 'files')}` : 'Commit';
+    const changed = !amend || staged > 0 || message.trim() !== amend.last.subject || description.trim() !== amend.last.description;
+    const ready = !busy && (staged > 0 || !!amend) && message.trim() !== '' && changed;
+    const label = amend
+      ? committing ? Texts.amending : staged ? Texts.amendWith(staged) : Texts.amendLast
+      : committing ? Texts.committing : staged ? `Commit ${counted(staged, 'file', 'files')}` : 'Commit';
+    const remotes = (amend && amend.remotes) || [];
+    const warn = remotes.length ? `<div class="h xs edit-warn">${icon('triangle-alert', 'xs')}<span>${esc(Texts.amendPushed(remotes))}</span></div>` : '';
+    const box = C.Checkbox({ label: Texts.amend, checked: !!amend, disabled: committing || noCommit, tooltip: noCommit ? Texts.nothingToAmend : Texts.amendTooltip });
+    const button = C.Button({ label, variant: 'primary', size: 'md', disabled: !ready && !committing, loading: committing, tooltip: amend ? Texts.amendButtonTooltip : Texts.commitTooltip });
     return (
       `<div data-c="CommitForm" class="commit-form">` +
       C.Input({ value: message, placeholder: Texts.commitMessage, focused: focus === 'message', disabled: committing }) +
       C.Input({ value: description, placeholder: Texts.commitDescription, lines: 4, focused: focus === 'description', disabled: committing }) +
-      C.Button({ label, variant: 'primary', size: 'md', disabled: !ready && !committing, loading: committing, tooltip: Texts.commitTooltip }) +
+      warn +
+      `<div class="h commit-row">${box}${button}</div>` +
       (failure ? `<div class="failure xs">${esc(failure)}</div>` : '') +
       `</div>`
     );
@@ -3531,7 +3551,9 @@ const C = {
 
   BehindDialog({ branch, upstream, theirs, ours, checkedOut = true, rewritten = false }) {
     if (rewritten) {
-      const description = [Texts.behindRewritten(branch, upstream, theirs), Texts.behindRewrittenForce(branch, upstream, theirs)].join(' ');
+      const sameChanges = rewritten !== 'amended';
+      const versions = sameChanges ? Texts.behindRewritten(branch, upstream, theirs) : Texts.behindAmended(branch, upstream, theirs);
+      const description = [versions, Texts.behindRewrittenForce(branch, upstream, theirs, sameChanges)].join(' ');
       const buttons = C.Button({ label: 'Cancel', size: 'md' }) + C.Button({ label: Texts.forcePush, variant: 'primary', size: 'md' });
       return `<div class="overlay"><div data-c="BehindDialog" data-base="AlertDialog" class="dialog"><div class="base semibold">${esc(Texts.behindRewrittenTitle(branch, upstream))}</div><div class="sm muted">${esc(description)}</div><div class="footer stretch">${buttons}</div></div></div>`;
     }

@@ -50,7 +50,7 @@ pub(crate) use access::{Access, Attendance, CredentialScope, GIT_CREDENTIAL_FLAG
 pub(crate) use branch::{CheckedOut, NameProblem, new_branch_name};
 pub(crate) use clone::{CloneRequest, Progress, Stop, add_remote, clone, init, is_empty_or_missing};
 pub(crate) use command::without_console_window;
-pub(crate) use commit::commit_message;
+pub(crate) use commit::{CommitMode, commit_message};
 pub(crate) use credential::{CredentialAnswer, CredentialRequest};
 pub(crate) use facts::DifftoolTarget;
 pub(crate) use file_history::{FileCommit, LineCounts};
@@ -69,7 +69,7 @@ pub(crate) use pull_head::{BranchSpan, NamedRemote, PullSource, fork_branch_name
 pub(crate) use pull_mode::PullMode;
 pub(crate) use refs::{AheadBehind, RefDigest, RefKind, RefLabel, RemoteBranch, ShownRef};
 pub(crate) use refusal::{Refusal, Tracking};
-pub(crate) use remote::{Behind, CaughtUp, Pulled, Pushed};
+pub(crate) use remote::{Behind, CaughtUp, Pulled, Pushed, Rewritten};
 pub(crate) use reach::Held;
 pub(crate) use reset::ResetMode;
 pub(crate) use reword::RewordScope;

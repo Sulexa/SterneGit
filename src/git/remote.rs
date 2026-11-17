@@ -5,7 +5,7 @@ use gix::{ObjectId, refs::FullName, remote::Direction};
 
 use super::{
     Carried, PullMode, Refusal, Repo, Tracking,
-    command::{Exit, run_text, run_with_access},
+    command::{Exit, run_text, run_with_access, run_with_input},
     merge::{AUTOSTASH, Ran},
     text::decode,
 };
@@ -54,7 +54,14 @@ pub(crate) struct Behind {
     pub(crate) ours: usize,
     pub(crate) checked_out: bool,
     pub(crate) upstream_at: ObjectId,
-    pub(crate) rewritten: bool,
+    pub(crate) rewritten: Rewritten,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Rewritten {
+    No,
+    WithTheSameChanges,
+    OnceOnTheBranch,
 }
 
 impl Behind {
@@ -256,14 +263,39 @@ impl Repo {
             &["rev-list", "--right-only", "--cherry-pick", "--count", &range],
             Exit::Success,
         )?;
+        let rewritten = if without_a_copy.trim() == "0" {
+            Rewritten::WithTheSameChanges
+        } else if self.once_held(&local, &upstream.reference)? {
+            Rewritten::OnceOnTheBranch
+        } else {
+            Rewritten::No
+        };
         Ok(Pushed::Behind(Behind {
             tracking: upstream.tracking,
             theirs,
             ours,
             checked_out: repo.head_name()? == Some(local),
             upstream_at,
-            rewritten: without_a_copy.trim() == "0",
+            rewritten,
         }))
+    }
+
+    fn once_held(&self, branch: &FullName, upstream: &FullName) -> Result<bool> {
+        let branch = branch.as_bstr().to_string();
+        let upstream = upstream.as_bstr().to_string();
+        let former_tips = run_text(
+            &self.location,
+            &["reflog", "show", "--format=%H", &branch],
+            Exit::Success,
+        )
+        .unwrap_or_default();
+        let hidden: String = former_tips.lines().map(|tip| format!("^{tip}\n")).collect();
+        let never_held = run_with_input(
+            &self.location,
+            &["rev-list", "--count", "--stdin", &upstream, &format!("^{branch}")],
+            hidden.as_bytes(),
+        )?;
+        Ok(decode(&never_held).trim() == "0")
     }
 
     fn configured_upstream(&self, branch: &str) -> Result<Option<ConfiguredUpstream>> {
@@ -411,8 +443,8 @@ mod tests {
     use anyhow::Result;
     use gix::ObjectId;
 
-    use super::{Behind, CaughtUp, Fetched, Pulled, Pushed};
-    use crate::git::{Carried, PullMode, Refusal, Tracking, scratch::ScratchRepo};
+    use super::{Behind, CaughtUp, Fetched, Pulled, Pushed, Rewritten};
+    use crate::git::{Carried, CommitMode, PullMode, Refusal, Tracking, scratch::ScratchRepo};
 
     struct Shared {
         origin: ScratchRepo,
@@ -722,7 +754,28 @@ mod tests {
         let first = ObjectId::from_hex(first.trim().as_bytes())?;
         shared.ours.open()?.0.reword(first, "Add a")?;
         let behind = shared.behind()?;
-        assert_eq!((behind.theirs, behind.ours, behind.rewritten), (2, 2, true));
+        assert_eq!(
+            (behind.theirs, behind.ours, behind.rewritten),
+            (2, 2, Rewritten::WithTheSameChanges)
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn a_push_after_amending_a_pushed_commit_with_more_files_knows_it_was_rewritten() -> Result<()> {
+        let shared = Shared::new("push-amended")?;
+        shared.ours.write("a.txt", "a")?;
+        shared.ours.git(&["add", "a.txt"])?;
+        shared.ours.git(&["commit", "--quiet", "-m", "Add a"])?;
+        shared.ours.git(&["push", "--quiet"])?;
+        shared.ours.write("b.txt", "b")?;
+        shared.ours.git(&["add", "b.txt"])?;
+        shared.ours.open()?.0.commit("Add a and b\n", CommitMode::AmendLast)?;
+        let behind = shared.behind()?;
+        assert_eq!(
+            (behind.theirs, behind.ours, behind.rewritten),
+            (1, 1, Rewritten::OnceOnTheBranch)
+        );
         Ok(())
     }
 
@@ -730,7 +783,7 @@ mod tests {
     fn new_commits_on_the_upstream_are_not_taken_for_rewritten_ones() -> Result<()> {
         let shared = Shared::new("push-not-rewritten")?;
         shared.both_change("shared.txt")?;
-        assert!(!shared.behind()?.rewritten);
+        assert_eq!(shared.behind()?.rewritten, Rewritten::No);
         Ok(())
     }
 

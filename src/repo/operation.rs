@@ -512,7 +512,7 @@ mod tests {
     use crate::git::{
         Behind, Carried, CaughtUp, CheckedOut, Continued, FolderLeft, Merged, Merging, Picked,
         Picking, Pulled, Pushed, Rebased, Rebasing, RefKind, RefLabel, Refusal, Replaying,
-        Tracking, Underway, fixtures::id,
+        Rewritten, Tracking, Underway, fixtures::id,
     };
 
     #[test]
@@ -656,7 +656,7 @@ mod tests {
             ours: 1,
             checked_out: true,
             upstream_at: id(1),
-            rewritten: false,
+            rewritten: Rewritten::No,
         }
     }
 

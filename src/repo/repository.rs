@@ -14,9 +14,10 @@ use super::{
 use crate::{
     accounts,
     git::{
-        self, Attendance, Behind, CheckedOut, FileChange, History, MergeMode, PartAction, PullMode,
-        PullSource, RefLabel, RemoteBranch, Repo, ResetMode, Scope, Side, Stash, Underway,
-        Version, WorkingChanges, WorktreeChanges, WorktreeStart, changes_elsewhere, short_id,
+        self, Attendance, Behind, CheckedOut, CommitMode, FileChange, History, MergeMode,
+        PartAction, PullMode, PullSource, RefLabel, RemoteBranch, Repo, ResetMode, Scope, Side,
+        Stash, Underway, Version, WorkingChanges, WorktreeChanges, WorktreeStart,
+        changes_elsewhere, short_id,
     },
     ui::{Failure, Job, Load, run_in_background},
 };
@@ -252,6 +253,10 @@ impl Repository {
             .map_or(0, |changes| changes.staged.len())
     }
 
+    pub(crate) fn head_commit(&self) -> Option<ObjectId> {
+        self.changes.as_ref()?.head
+    }
+
     pub(crate) fn write_failure(&self) -> Option<&Failure> {
         self.write_failure.as_ref()
     }
@@ -470,8 +475,8 @@ impl Repository {
         cx.notify();
     }
 
-    pub(crate) fn commit(&mut self, message: String, cx: &mut Context<Self>) {
-        if self.write.is_running() || self.staged_count() == 0 {
+    pub(crate) fn commit(&mut self, message: String, mode: CommitMode, cx: &mut Context<Self>) {
+        if self.write.is_running() || (mode == CommitMode::New && self.staged_count() == 0) {
             return;
         }
         let Some(repo) = self.repo().cloned() else {
@@ -482,7 +487,7 @@ impl Repository {
         self.status_read.cancel();
         let task = run_in_background(
             cx,
-            move || repo.commit(&message),
+            move || repo.commit(&message, mode),
             |this, result, cx| {
                 this.write.finish();
                 this.committing = false;

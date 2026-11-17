@@ -556,6 +556,39 @@ const Screens = (() => {
         }),
     },
     {
+      id: 'amend',
+      title: 'Uncommitted changes — amending the last commit',
+      about: "Ticking Amend, left of the button, fills the message and the description with the last commit's, here main's newest one, ready to edit; unticking it brings back what was typed before. The button then reads Amend with 2 files: git commit --amend replaces the last commit with one holding its files plus the staged ones, under the message in the fields, keeping its author and date. The new commit gets a new hash and main moves to it. origin/main already has the last commit, so a yellow line says the next push needs Force push, and the push question offers it first. Ctrl+Enter amends from either field; after amending, Amend unticks and both fields empty. Amend is disabled before the first commit, and hidden with the whole form while a rebase or a merge waits.",
+      source: 'src/repo/commit_form.rs',
+      render: () =>
+        C.SterneGit({
+          topBar: topBar(),
+          tabStrip: tabStrip(),
+          body: repo({
+            wipSelected: true,
+            right: C.ChangesList({ changes, draft: { message: Sample.lastCommit.subject, description: Sample.lastCommit.description, focus: 'description', amend: { last: Sample.lastCommit, remotes: ['origin/main'] } } }),
+          }),
+        }),
+    },
+    {
+      id: 'amend-message-only',
+      title: 'Amending only the message',
+      about: 'With nothing staged, Amend still changes the message alone: the button reads Amend last commit and stays disabled until the message or the description differs from the last commit\'s. Here a word is added to the subject; the files of the commit stay as they are.',
+      source: 'src/repo/commit_form.rs',
+      render: () =>
+        C.SterneGit({
+          topBar: topBar(),
+          tabStrip: tabStrip(),
+          body: repo({
+            wipSelected: true,
+            right: C.ChangesList({
+              changes: { unstaged: changes.unstaged, staged: [] },
+              draft: { message: 'Show, stage and unstage the uncommitted changes', description: Sample.lastCommit.description, focus: 'message', amend: { last: Sample.lastCommit, remotes: ['origin/main'] } },
+            }),
+          }),
+        }),
+    },
+    {
       id: 'changes-tree',
       title: 'Uncommitted changes as a tree',
       about: 'The same switch sits between the commit form and the file lists, beside the number of changed files. In a tree, the staged and the unstaged files each get their own folders, and a folder row ends with a + or − that moves every file under it to the other list; hovering an unstaged folder also shows ↶ to discard it. Here patch.rs is open in the middle pane and highlighted in its folder.',
@@ -1012,7 +1045,7 @@ const Screens = (() => {
     {
       id: 'push-rewritten',
       title: 'Header — push after rewriting pushed commits',
-      about: "When every commit origin/main has and main doesn't makes the same changes as one of main's, those commits are older versions: main rewrote them after they were pushed, with Edit message or a rebase. SterneGit checks it with git rev-list --cherry-pick right after counting. The question then says so and offers only Cancel and Force push, which is the primary button and what Enter picks: pulling would bring the old versions back beside the new ones, so Pull and push is left out. Force push keeps its lease on the counted upstream commit, so it still overwrites nothing someone pushed in between. A rewritten merge has no equivalent by Git's rules, so when the old versions include a merge the usual question shows.",
+      about: "When every commit origin/main has and main doesn't makes the same changes as one of main's, those commits are older versions: main rewrote them after they were pushed, with Edit message or a rebase. SterneGit checks it with git rev-list --cherry-pick right after counting. The question then says so and offers only Cancel and Force push, which is the primary button and what Enter picks: pulling would bring the old versions back beside the new ones, so Pull and push is left out. Force push keeps its lease on the counted upstream commit, so it still overwrites nothing someone pushed in between. A rewritten merge has no equivalent by Git's rules, so when the old versions include a merge the usual question shows. Amending a pushed commit with more files leaves no equivalent either; SterneGit then checks that every commit origin/main has and main doesn't was on main before, in main's reflog. If so, the same two buttons show, and the text says the commits were amended, rebased or reset away, without promising that no change is lost.",
       source: 'src/repo/behind_dialog.rs',
       render: () =>
         C.SterneGit({

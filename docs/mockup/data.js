@@ -495,6 +495,11 @@ const Sample = (() => {
 
   const selectedLines = { hunk: 0, from: 3, to: 5 };
 
+  const lastCommit = {
+    subject: commits[0].subject,
+    description: 'The right pane lists staged and unstaged files apart.\nEach file has a button that moves it to the other list.',
+  };
+
   const draft = {
     message: 'Show conflicted files in the changes list',
     description: 'git status marks them UU. The list gives them a U badge\nand the comparison shows the file with its markers.',
@@ -1760,7 +1765,7 @@ const Sample = (() => {
   const pulls = { list: pullList, badges: pullBadges, pulled, shown: shownPull, details: pullDetails, failing: failingPull, failingDetails, fork: forkPull, forkDetails, mergedSha: '5d1c2e9' };
 
   return {
-    history, tracked, stashed, collapsed, changes, partlyStaged, draft, commitDetails, commitFileDiff, fileHistory, fileDiff, stagedHunkDiff, partlyStagedDiff, selectedLines, tabs,
+    history, tracked, stashed, collapsed, changes, partlyStaged, draft, lastCommit, commitDetails, commitFileDiff, fileHistory, fileDiff, stagedHunkDiff, partlyStagedDiff, selectedLines, tabs,
     pickedLine, pickedApart, pickedHead,
     starfall, assets, slimeDiff, crownIcon, introDiff, themeDiff, modelDiff,
     unity,
