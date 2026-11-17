@@ -226,6 +226,13 @@ const Screens = (() => {
       render: () => C.SterneGit({ topBar: topBar(), tabStrip: tabStrip(), body: commitSelected() }),
     },
     {
+      id: 'history-light',
+      title: 'History — light theme',
+      about: 'The same screen in the light theme, Neige: snow white panes, pale blue-grey bars, near-black text and the bullfinch grey for what is secondary. The picked rows are tinted bullfinch rose, as in the dark theme, Ardoise; lane, ref and file colors are darker so they read on white.',
+      source: 'src/repo/mod.rs',
+      render: () => C.SterneGit({ topBar: topBar(), tabStrip: tabStrip(), body: commitSelected(), light: true }),
+    },
+    {
       id: 'ahead-behind',
       title: 'Branches apart from their upstream',
       about: 'A local branch whose upstream is on another commit says how far apart they are, at the right of its row in the left pane: ↓ and the number of upstream commits the branch lacks, which Pull brings in, then ↑ and the number of its own commits the upstream lacks, which Push sends. A side with nothing to count is left out. A branch level with its upstream, without one, or whose upstream is gone shows nothing, and neither do remote branches and tags. Hovering the numbers says it in words, naming the upstream. The upstream is counted as the last fetch left it, so the numbers move with each fetch, pull, push and commit. Here main has two commits that origin/main lacks, and a fetch brought origin/feature/diff-view a commit that feature/diff-view lacks.',
@@ -536,6 +543,19 @@ const Screens = (() => {
         }),
     },
     {
+      id: 'commit-ready-light',
+      title: 'Uncommitted changes — ready to commit, light theme',
+      about: 'In the light theme the main button is near-black, like the bullfinch cap, and the focused field is ringed in rose. In the dark theme the main button is rose itself.',
+      source: 'src/repo/changes_list.rs',
+      render: () =>
+        C.SterneGit({
+          topBar: topBar(),
+          tabStrip: tabStrip(),
+          body: repo({ wipSelected: true, right: C.ChangesList({ changes, draft: { ...draft, focus: 'description' } }) }),
+          light: true,
+        }),
+    },
+    {
       id: 'changes-tree',
       title: 'Uncommitted changes as a tree',
       about: 'The same switch sits between the commit form and the file lists, beside the number of changed files. In a tree, the staged and the unstaged files each get their own folders, and a folder row ends with a + or − that moves every file under it to the other list; hovering an unstaged folder also shows ↶ to discard it. Here patch.rs is open in the middle pane and highlighted in its folder.',
@@ -674,6 +694,13 @@ const Screens = (() => {
       about: "A file was clicked in the changes list. The middle pane swaps the graph for a side-by-side comparison, and the refs pane steps aside to give it room; Esc or × brings both back. One bar names the file and holds everything that acts on it: Split or Unified, the change count with ↑ and ↓ (Alt+Up, Alt+Down), the view options, Stage, the button that gives the comparison the whole window, and ×. A row above the columns names the two sides: Before, HEAD (Staged once part of the file is staged), and After, Working copy. A changed line has a red or green bar beside a number of the same color, and its changed words are highlighted; a line that exists on one side only leaves a hatched gap on the other. Long lines run past the edge: each column has a horizontal scrollbar, both columns move together and the line numbers stay in place. The whole file is there, and it opens on its first change rather than at line 1: the view starts four lines above that change's hunk, so the change sits near the top with what comes before it just above. ↑ and ↓ bring the other changes to the same place. A thin grey row above each hunk holds Discard hunk and Stage hunk. The strip at the right edge is the whole file: it marks where the changes sit and what part of the file is in view; a click on a mark goes there.",
       source: 'src/repo/file_diff_panel.rs',
       render: () => C.SterneGit({ topBar: topBar(), tabStrip: tabStrip(), body: fileComparison('split') }),
+    },
+    {
+      id: 'file-split-light',
+      title: 'File comparison — Split, light theme',
+      about: 'The comparison in the light theme. Added and removed lines keep their green and red tints; the syntax colors are deeper versions of the dark ones, so keywords, types, strings, functions and numbers read on white.',
+      source: 'src/repo/file_diff_panel.rs',
+      render: () => C.SterneGit({ topBar: topBar(), tabStrip: tabStrip(), body: fileComparison('split'), light: true }),
     },
     {
       id: 'file-unified',
@@ -1383,13 +1410,14 @@ const Screens = (() => {
       const { accounts, serverKeys, connectors, gitlabUpdate, owners, repositories } = Sample.hosting;
       const [personal, work, enterprise] = accounts;
       const settingsTabs = [...tabs, { name: HostTexts.settings, icon: 'settings' }];
-      const settings = (page, content, overlays = '', zoom = 100, update) =>
+      const settings = (page, content, overlays = '', zoom = 100, update, light = false) =>
         C.SterneGit({
           topBar: C.TopBar(update ? { update: { state: 'ready', version: update } } : {}),
           tabStrip: C.TabStrip({ tabs: settingsTabs, active: settingsTabs.length - 1 }),
           body: C.SettingsTab({ page, content, nav: { accounts: accounts.length, waiting: 1, zoom, update } }),
           overlays,
           zoom,
+          light,
         });
       const accountsPage = () => C.AccountsPage({ accounts });
       const personalPage = (account = personal) => C.AccountPage({ account, keys: serverKeys.filter((key) => account.key || !key.sternegit) });
@@ -1532,9 +1560,16 @@ const Screens = (() => {
         {
           id: 'settings-interface',
           title: 'Settings — interface',
-          about: "Interface is the third page of Settings. Zoom scales the whole window, like a browser's zoom: text, rows, icons, menus, dialogs and the top bar, with crisp text at every size. − and + step through 50, 67, 75, 80, 90, 100, 110, 125, 150, 175 and 200 %; each end turns its button off. Reset goes back to 100 % and is off there. SterneGit saves the zoom in %APPDATA%\\SterneGit\\settings.json and opens at it next time.",
+          about: "Interface is the third page of Settings. Theme picks Dark, the slate theme every screen of this mockup shows, or Light, the snow theme; the whole window switches at once, without a restart. Zoom scales the whole window, like a browser's zoom: text, rows, icons, menus, dialogs and the top bar, with crisp text at every size. − and + step through 50, 67, 75, 80, 90, 100, 110, 125, 150, 175 and 200 %; each end turns its button off. Reset goes back to 100 % and is off there. SterneGit saves both in %APPDATA%\\SterneGit\\settings.json and opens with them next time.",
           source: 'src/hosting/interface_page.rs',
           render: () => settings('interface', C.InterfacePage({ zoom: 100 })),
+        },
+        {
+          id: 'settings-interface-light',
+          title: 'Settings — interface, light theme picked',
+          about: 'Light was just clicked: the window is already in the light theme, and Light is the picked half of the switch.',
+          source: 'src/hosting/interface_page.rs',
+          render: () => settings('interface', C.InterfacePage({ zoom: 100, theme: 'light' }), '', 100, undefined, true),
         },
         {
           id: 'settings-interface-zoomed',

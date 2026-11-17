@@ -58,7 +58,8 @@ const Viewer = (() => {
         .join('');
       return `<a class="${route.startsWith(`components/${group.key}`) ? 'active' : ''}" href="#/components/${group.key}">${group.title}</a>${items}`;
     }).join('');
-    return `<a class="mk-brand" href="#/">SterneGit mockup</a><a class="${route === '' ? 'active' : ''}" href="#/">Overview</a><h2>Screens</h2>${screens}<h2>Components</h2>${groups}`;
+    const theme = `<div class="mk-zoom mk-theme"><button data-theme="dark" class="${state.light ? '' : 'on'}">Dark</button><button data-theme="light" class="${state.light ? 'on' : ''}">Light</button></div>`;
+    return `<a class="mk-brand" href="#/">SterneGit mockup</a>${theme}<a class="${route === '' ? 'active' : ''}" href="#/">Overview</a><h2>Screens</h2>${screens}<h2>Components</h2>${groups}`;
   };
 
   const scaled = (html, scale, w = WINDOW.w, h = WINDOW.h) =>
@@ -95,7 +96,7 @@ const Viewer = (() => {
   };
 
   const special = (kind) => {
-    const root = getComputedStyle(document.documentElement);
+    const root = getComputedStyle(document.getElementById('mk-main'));
     const swatch = (name, label = `--${name}`) =>
       `<div class="mk-swatch"><div class="mk-swatch-color" style="background:var(--${name})"></div><div><div class="mk-swatch-name">${label}</div><code>${root.getPropertyValue(`--${name}`).trim()}</code></div></div>`;
     if (kind === 'colors') return `<div class="mk-swatches">${ThemeTokens.map((name) => swatch(name)).join('')}</div><h4>Base colors</h4><div class="mk-swatches">${BaseColors.map((name) => swatch(name)).join('')}</div>`;
@@ -151,7 +152,7 @@ const Viewer = (() => {
     return `<header class="mk-head"><h1>${group.title}</h1><p>${group.about}</p></header>${group.items.map(componentSection).join('')}`;
   };
 
-  const state = { outline: false, zoom: 'fit' };
+  const state = { outline: false, zoom: 'fit', light: false };
 
   const fit = () => {
     const stage = document.getElementById('mk-stage');
@@ -230,6 +231,7 @@ const Viewer = (() => {
     tag.style.display = 'none';
     const raw = kind === 'raw' && Screens.find((screen) => screen.id === id);
     document.body.classList.toggle('mk-raw', !!raw);
+    main.classList.toggle('light', raw ? name === 'light' : state.light);
     main.innerHTML = raw ? raw.html : kind === 'screen' ? screenPage(id) : kind === 'components' ? groupPage(id) : overview();
     const section = name && document.getElementById(`c-${name}`);
     if (section) section.scrollIntoView();
@@ -259,6 +261,12 @@ const Viewer = (() => {
   const start = () => {
     document.body.appendChild(tag);
     document.getElementById('mk-main').addEventListener('click', fold);
+    document.getElementById('mk-nav').addEventListener('click', (event) => {
+      const button = event.target.closest('[data-theme]');
+      if (!button) return;
+      state.light = button.dataset.theme === 'light';
+      render();
+    });
     window.addEventListener('hashchange', render);
     window.addEventListener('resize', fit);
     window.addEventListener('keydown', (event) => {

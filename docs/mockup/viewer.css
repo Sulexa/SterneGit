@@ -117,6 +117,9 @@ body.mk-raw #mk-main { padding: 0; }
 .mk-zoom button:last-child { border-radius: 0 6px 6px 0; border-left: none; }
 .mk-zoom button.on { background: #1e3a8a; color: #fff; }
 
+.mk-theme { display: flex; margin: 0 8px 8px; }
+.mk-theme button { flex: 1; }
+
 .mk-pager {
   display: flex;
   justify-content: space-between;

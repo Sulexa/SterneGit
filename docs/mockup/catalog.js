@@ -422,7 +422,7 @@ const Catalog = (() => {
           name: 'AppLogo',
           code: 'app::logo::logo',
           source: 'src/app/logo/mod.rs',
-          about: 'A common tern\'s head in profile, drawn pixel by pixel on a 16 × 16 grid: black cap, orange bill with a black tip, shaded nape. The top bar paints it cell by cell, snapped to device pixels; the build turns the same grid into the Windows icon of the exe, its window and its taskbar button, at 16, 32, 48 and 256 px. Every size is a whole multiple of the grid, so each stays sharp.',
+          about: 'A Eurasian bullfinch seen from the front, the whole bird, drawn pixel by pixel on a 16 × 16 grid with nothing behind it: black cap and eyes, short dark bill, rose cheeks and breast, grey shoulders, black wings with a white touch, white belly, pinkish legs and a black tail. The top bar paints it cell by cell, snapped to device pixels; the build turns the same grid into the Windows icon of the exe, its window and its taskbar button, at 16, 32, 48 and 256 px. Every size is a whole multiple of the grid, so each stays sharp.',
           variants: [
             ['16 px, top bar', () => C.AppLogo()],
             ['32 px', () => C.AppLogo({ size: 32 })],
@@ -1420,9 +1420,10 @@ const Catalog = (() => {
           name: 'InterfacePage',
           code: 'hosting::interface_page::SettingsTab::interface_page',
           source: 'src/hosting/interface_page.rs',
-          about: 'How SterneGit draws its window: for now the zoom of the whole window, with what Ctrl + mouse wheel does.',
+          about: 'How SterneGit draws its window: the theme, dark or light, then the zoom of the whole window, with what Ctrl + mouse wheel does.',
           variants: [
-            ['100 %', () => C.InterfacePage({ zoom: 100 }), { w: 816 }],
+            ['Dark, 100 %', () => C.InterfacePage({ zoom: 100 }), { w: 816 }],
+            ['Light picked', () => C.InterfacePage({ zoom: 100, theme: 'light' }), { w: 816 }],
             ['125 %', () => C.InterfacePage({ zoom: 125 }), { w: 816 }],
           ],
         },
@@ -1440,6 +1441,16 @@ const Catalog = (() => {
             ['Check failed', () => C.UpdatesPage({ status: 'failed', why: 'The server took too long to answer' }), { w: 816 }],
             ['Portable, read-only folder', () => C.UpdatesPage({ installation: 'portable', folder: 'D:\\Tools\\SterneGit', status: 'read-only' }), { w: 816 }],
             ['Built on this computer', () => C.UpdatesPage({ installation: 'built' }), { w: 816 }],
+          ],
+        },
+        {
+          name: 'ThemePicker',
+          code: 'hosting::interface_page::theme_picker',
+          source: 'src/hosting/interface_page.rs',
+          about: 'Dark or Light, as two halves of one switch; the picked half is tinted rose. A click switches the whole window at once and saves the choice.',
+          variants: [
+            ['Dark', () => C.ThemePicker({ theme: 'dark' })],
+            ['Light', () => C.ThemePicker({ theme: 'light' })],
           ],
         },
         {

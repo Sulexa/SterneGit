@@ -10,7 +10,7 @@ use gpui_kit::{
     Subscription, Task, Window,
     assets::IconName,
     component::{
-        ActiveTheme as _, Sizable as _, Theme, ThemeMode, WindowExt as _,
+        ActiveTheme as _, Sizable as _, WindowExt as _,
         button::{Button, ButtonVariants as _},
         h_flex,
         menu::AppMenuBar,
@@ -103,7 +103,6 @@ pub(crate) struct SterneGit {
 
 impl SterneGit {
     pub(crate) fn new(path: Option<PathBuf>, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        Theme::change(ThemeMode::Dark, Some(window), cx);
         apply_zoom(window, cx);
         let menu_bar = draws_its_own_menu_bar(cx).then(|| AppMenuBar::new(cx));
         let poll = cx.spawn(async move |this, cx| {

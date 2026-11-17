@@ -7,6 +7,8 @@ const IconPaths = {
   'rows-2': '<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 12h18"/>',
   plus: '<path d="M5 12h14"/><path d="M12 5v14"/>',
   minus: '<path d="M5 12h14"/>',
+  moon: '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>',
+  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/>',
   monitor: '<rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/>',
   close: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
   'undo-2': '<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11"/>',
@@ -632,6 +634,10 @@ const HostTexts = {
   connectors: 'Connectors',
   interface: 'Interface',
   interfaceAbout: 'How SterneGit draws its window on this computer.',
+  theme: 'Theme',
+  themeAbout: 'Dark slate or light snow, for the whole window: lists, the commit graph, comparisons, menus and dialogs. Whatever is picked stays bullfinch rose in both.',
+  dark: 'Dark',
+  light: 'Light',
   zoom: 'Zoom',
   zoomAbout: 'Makes everything in the window bigger or smaller. Hold Ctrl and turn the mouse wheel to zoom from anywhere; over a picture or a sound being compared, the wheel zooms that instead.',
   zoomOut: 'Zoom out  Ctrl+-',
@@ -3688,10 +3694,16 @@ const C = {
     return `<div data-c="ZoomStepper" class="zoom-stepper">${out}<span class="sm percent">${thousands(percent)} %</span>${into}</div>`;
   },
 
-  InterfacePage({ zoom = 100 }) {
+  ThemePicker({ theme = 'dark' }) {
+    const choice = (key, iconName) => C.Button({ label: HostTexts[key], icon: iconName, size: 'sm', variant: 'ghost', selected: theme === key });
+    return `<div data-c="ThemePicker" class="theme-picker">${choice('dark', 'moon')}${choice('light', 'sun')}</div>`;
+  },
+
+  InterfacePage({ zoom = 100, theme = 'dark' }) {
+    const setting = (title, about, control) => `<div class="row"><div class="v fill" style="gap:2px"><span class="sm medium">${esc(title)}</span><span class="xs muted">${esc(about)}</span></div>${control}</div>`;
     const reset = C.Button({ label: HostTexts.resetZoom, size: 'sm', variant: 'ghost', tooltip: HostTexts.resetZoomTip, disabled: zoom === 100 });
-    const row = `<div class="row"><div class="v fill" style="gap:2px"><span class="sm medium">${esc(HostTexts.zoom)}</span><span class="xs muted">${esc(HostTexts.zoomAbout)}</span></div>${C.ZoomStepper({ percent: zoom })}${reset}</div>`;
-    return `<div data-c="InterfacePage" class="v page">${C.PageHeader({ title: HostTexts.interface, about: HostTexts.interfaceAbout })}${C.GroupBox({ rows: [row] })}</div>`;
+    const rows = [setting(HostTexts.theme, HostTexts.themeAbout, C.ThemePicker({ theme })), setting(HostTexts.zoom, HostTexts.zoomAbout, C.ZoomStepper({ percent: zoom }) + reset)];
+    return `<div data-c="InterfacePage" class="v page">${C.PageHeader({ title: HostTexts.interface, about: HostTexts.interfaceAbout })}${C.GroupBox({ rows })}</div>`;
   },
 
   AccountRow({ account, hot = false }) {
@@ -4090,8 +4102,8 @@ const C = {
     return dialogShell({ name: 'MergePullDialog', title: PullTexts.mergeTitle(pull.number), description: PullTexts.mergeAbout(pull.head, pull.base, details.headSha), body: `<div class="form">${methodField}${words}</div>${failure}`, buttons, size: 'wider' });
   },
 
-  SterneGit({ topBar, tabStrip = '', body, overlays = '', zoom = 100 }) {
+  SterneGit({ topBar, tabStrip = '', body, overlays = '', zoom = 100, light = false }) {
     const zoomed = zoom === 100 ? '' : ` style="zoom:${zoom / 100};width:${144000 / zoom}px;height:${90000 / zoom}px"`;
-    return `<div data-c="SterneGit" class="fg fg-window"${zoomed}>${topBar}${tabStrip}<div class="fill v">${body}</div>${overlays}</div>`;
+    return `<div data-c="SterneGit" class="fg fg-window${light ? ' light' : ''}"${zoomed}>${topBar}${tabStrip}<div class="fill v">${body}</div>${overlays}</div>`;
   },
 };

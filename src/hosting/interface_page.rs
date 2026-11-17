@@ -1,12 +1,14 @@
 use gpui_kit::{
-    AnyElement, Context, IntoElement, ParentElement as _, Styled as _,
+    AnyElement, App, Context, IntoElement, ParentElement as _, Styled as _,
     assets::IconName,
     component::{
-        ActiveTheme as _, Disableable as _, Sizable as _, StyledExt as _,
+        ActiveTheme as _, Disableable as _, Selectable as _, Sizable as _, StyledExt as _, ThemeMode,
         button::{Button, ButtonVariants as _},
         h_flex, v_flex,
     },
-    div, px,
+    div,
+    prelude::FluentBuilder as _,
+    px,
 };
 
 use super::{
@@ -15,12 +17,20 @@ use super::{
 };
 use crate::{
     actions::{ResetZoom, WINDOW_CONTEXT, ZoomIn, ZoomOut},
-    app::zoom::{Zoom, current_zoom, reset_zoom, zoom_in, zoom_out},
+    app::{
+        theme::{current_theme, switch_theme},
+        zoom::{Zoom, current_zoom, reset_zoom, zoom_in, zoom_out},
+    },
     ui::Look as _,
 };
 
 const INTERFACE: &str = "Interface";
 const INTERFACE_ABOUT: &str = "How SterneGit draws its window on this computer.";
+const THEME: &str = "Theme";
+const THEME_ABOUT: &str = "Dark slate or light snow, for the whole window: lists, the commit graph, comparisons, \
+     menus and dialogs. Whatever is picked stays bullfinch rose in both.";
+const DARK: &str = "Dark";
+const LIGHT: &str = "Light";
 const ZOOM: &str = "Zoom";
 const ZOOM_ABOUT: &str = "Makes everything in the window bigger or smaller. Hold Ctrl and turn the mouse wheel \
      to zoom from anywhere; over a picture or a sound being compared, the wheel zooms that instead.";
@@ -29,6 +39,7 @@ const ZOOM_IN: &str = "Zoom in";
 const RESET: &str = "Reset";
 const BACK_TO_ACTUAL_SIZE: &str = "Back to 100 %";
 const PERCENT_WIDTH: f32 = 52.;
+const PICKER_RADIUS: f32 = 8.;
 
 pub(crate) fn zoom_label(zoom: Zoom) -> String {
     format!("{} %", zoom.percent())
@@ -37,16 +48,8 @@ pub(crate) fn zoom_label(zoom: Zoom) -> String {
 impl SettingsTab {
     pub(super) fn interface_page(&mut self, cx: &mut Context<Self>) -> AnyElement {
         let zoom = current_zoom(cx);
-        let muted = cx.theme().muted_foreground;
-        let zoom_row = row()
-            .child(
-                v_flex()
-                    .flex_1()
-                    .min_w_0()
-                    .gap_0p5()
-                    .child(div().sm_text().font_medium().child(ZOOM))
-                    .child(div().xs_text().text_color(muted).child(ZOOM_ABOUT)),
-            )
+        let theme_row = setting(THEME, THEME_ABOUT, cx).child(theme_picker(cx)).into_any_element();
+        let zoom_row = setting(ZOOM, ZOOM_ABOUT, cx)
             .child(zoom_stepper(zoom))
             .child(
                 Button::new("reset-zoom")
@@ -62,10 +65,45 @@ impl SettingsTab {
             v_flex()
                 .gap_6()
                 .child(Heading::new(INTERFACE).about(INTERFACE_ABOUT).render(cx))
-                .child(boxed(vec![zoom_row], cx)),
+                .child(boxed(vec![theme_row, zoom_row], cx)),
         )
         .into_any_element()
     }
+}
+
+fn setting(title: &'static str, about: &'static str, cx: &App) -> gpui_kit::Div {
+    row().child(
+        v_flex()
+            .flex_1()
+            .min_w_0()
+            .gap_0p5()
+            .child(div().sm_text().font_medium().child(title))
+            .child(div().xs_text().text_color(cx.theme().muted_foreground).child(about)),
+    )
+}
+
+fn theme_picker(cx: &App) -> impl IntoElement {
+    let current = current_theme(cx);
+    let picked = cx.theme().list_active;
+    let choice = |id: &'static str, mode: ThemeMode, icon: IconName, label: &'static str| {
+        Button::new(id)
+            .ghost()
+            .small()
+            .icon(icon)
+            .label(label)
+            .selected(mode == current)
+            .when(mode == current, |button| button.bg(picked))
+            .on_click(move |_, _, cx| switch_theme(mode, cx))
+    };
+    h_flex()
+        .flex_none()
+        .gap_0p5()
+        .p_0p5()
+        .border_1()
+        .border_color(cx.theme().border)
+        .rounded(px(PICKER_RADIUS))
+        .child(choice("dark-theme", ThemeMode::Dark, IconName::Moon, DARK))
+        .child(choice("light-theme", ThemeMode::Light, IconName::Sun, LIGHT))
 }
 
 fn zoom_stepper(zoom: Zoom) -> impl IntoElement {

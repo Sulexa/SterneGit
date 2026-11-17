@@ -9,7 +9,9 @@ nothing to install.
   the screen; hover one to see its name and source file, click it to jump to it.
   ← and → move between screens, and **Open alone** shows a screen with nothing
   around it, for screenshots. Click a section or a folder in the refs list or in a
-  file tree to fold or unfold it.
+  file tree to fold or unfold it. **Dark** and **Light** at the top of the list
+  switch every screen and component between the two themes; add `/light` to an
+  **Open alone** address to shoot the light one.
 - **Components** shows every reusable piece with its variants, the Rust type or
   function it stands for, the file it lives in, what it is built from, and the
   screens that use it. Those last two lists are worked out from the screens, so
@@ -19,7 +21,7 @@ nothing to install.
 
 | File | Holds |
 | --- | --- |
-| `app.css` | The theme tokens (gpui-kit's Default Dark) and the look of every component |
+| `app.css` | The theme tokens (Ardoise, the dark theme, then Neige, the light one, under `.light`) and the look of every component |
 | `components.js` | One function per component, named after its Rust counterpart |
 | `screens.js` | Each screen, composed from the components |
 | `catalog.js` | The component pages: variants, Rust name, source file, description |
@@ -35,7 +37,9 @@ Change the mockup in the same commit as the UI change it mirrors.
 - **A new component:** add a function to `C` in `components.js` whose root element
   carries `data-c="Name"`, then an entry under the right group in `catalog.js`.
 - **A new screen or state:** add an entry to `screens.js`.
-- **A theme change:** edit the tokens at the top of `app.css`.
+- **A theme change:** edit the tokens at the top of `app.css`, in both themes. A
+  color written straight into a rule only suits the dark one: give it a `.light`
+  rule too.
 
 `cargo test` checks that every `source:` path in the mockup still names a file in
 `src/`, so moving or renaming a file reminds you to update it.

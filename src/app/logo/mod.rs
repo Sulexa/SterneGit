@@ -58,24 +58,27 @@ mod tests {
     }
 
     #[test]
-    fn the_bill_row_is_cut_into_sky_cap_orange_bill_and_black_tip() {
+    fn the_bill_row_is_cut_into_grey_shoulders_rose_cheeks_and_a_dark_bill() {
         let bill_row = runs().filter(|run| run.row == 6).collect::<Vec<_>>();
         let run = |columns, color| Run { row: 6, columns, color };
         assert_eq!(
             bill_row,
             [
-                run(0..2, 0x8ec3e6),
-                run(2..11, 0x111111),
-                run(11..14, 0xf26b1d),
-                run(14..15, 0x111111),
-                run(15..16, 0x8ec3e6),
+                run(1..3, 0x8e99a7),
+                run(3..6, 0xe5584a),
+                run(6..7, 0x111111),
+                run(7..9, 0x3b3d44),
+                run(9..10, 0x111111),
+                run(10..13, 0xe5584a),
+                run(13..15, 0x8e99a7),
             ]
         );
     }
 
     #[test]
-    fn transparent_corners_are_left_unpainted() {
-        let first_row = runs().filter(|run| run.row == 0).collect::<Vec<_>>();
-        assert_eq!(first_row, [Run { row: 0, columns: 3..13, color: 0x8ec3e6 }]);
+    fn nothing_is_painted_behind_the_bird() {
+        assert_eq!(runs().filter(|run| run.row == 0).count(), 0);
+        let cap_top = runs().filter(|run| run.row == 1).collect::<Vec<_>>();
+        assert_eq!(cap_top, [Run { row: 1, columns: 6..10, color: 0x111111 }]);
     }
 }

@@ -4,6 +4,7 @@ mod opening;
 mod saved_tabs;
 mod tab_strip;
 mod tabs;
+pub(crate) mod theme;
 pub(crate) mod top_bar;
 pub(crate) mod updates;
 mod window;
@@ -58,6 +59,7 @@ pub(crate) fn run(path: Option<PathBuf>, opening: Opening) {
             ..TitleBar::window_options()
         };
         connectors::install_connectors(cx);
+        theme::install_theme(cx);
         zoom::install_zoom(cx);
         updates::install_updates(cx);
         gpui_kit::open_window(options, cx, |window, cx| {

@@ -1,42 +1,86 @@
 :root {
-  --background: #0a0a0a;
-  --foreground: #fafafa;
-  --border: #262626;
-  --muted: #a3a3a3;
-  --sidebar: #0a0a0a;
-  --title-bar: #171717;
-  --tab-bar: #171717;
-  --tab-active: #0a0a0a;
-  --tab-foreground: #d4d4d4;
-  --status-bar: #171717;
-  --list-active: #1e40af33;
-  --list-hover: #26262699;
-  --secondary: #262626;
-  --secondary-hover: #292929;
-  --secondary-active: #212121;
-  --primary: #fafafa;
-  --primary-foreground: #171717;
-  --popover: #0a0a0a;
-  --accent: #262626;
+  --background: #1c2128;
+  --foreground: #eef1f4;
+  --border: #323a45;
+  --muted: #8e99a7;
+  --sidebar: #20262e;
+  --title-bar: #3a4452;
+  --tab-bar: #262d36;
+  --tab-active: #1c2128;
+  --tab-foreground: #c9d0d8;
+  --status-bar: #262d36;
+  --list-active: #e5584a33;
+  --list-hover: #323a4599;
+  --secondary: #2a313b;
+  --secondary-hover: #323a45;
+  --secondary-active: #252b34;
+  --primary: #e5584a;
+  --primary-foreground: #ffffff;
+  --popover: #222831;
+  --accent: #2a313b;
   --overlay: #00000066;
-  --scrollbar-thumb: #525252e6;
-  --danger: #f87171;
-  --input: #2f2f2f;
-  --input-background: #151515;
-  --ring: #737373;
-  --selection: #1d4ed84d;
-  --blue: #60a5fa;
-  --magenta: #c084fc;
-  --green: #4ade80;
-  --yellow: #facc15;
+  --scrollbar-thumb: #5d6875e6;
+  --danger: #f07a6e;
+  --input: #3a4350;
+  --input-background: #171b21;
+  --ring: #e5584a;
+  --selection: #e5584a40;
+  --blue: #6fa8f5;
+  --magenta: #c58cf5;
+  --green: #5fcf86;
+  --yellow: #f2c84b;
   --found: #fb923c;
-  --cyan: #22d3ee;
-  --red: #f87171;
+  --cyan: #4cc9dc;
+  --red: #f07a6e;
   --font: "Segoe UI", system-ui, -apple-system, Ubuntu, sans-serif;
   --mono: "Cascadia Mono", Consolas, "SF Mono", Menlo, "DejaVu Sans Mono", monospace;
   --row-height: 28px;
   --lane-width: 12px;
 }
+
+.light {
+  --background: #f8f9fb;
+  --foreground: #16181d;
+  --border: #dde1e7;
+  --muted: #6b7684;
+  --sidebar: #eef1f5;
+  --title-bar: #e2e6ec;
+  --tab-bar: #e8ebf0;
+  --tab-active: #f8f9fb;
+  --tab-foreground: #3b3d44;
+  --status-bar: #e8ebf0;
+  --list-active: #e5584a26;
+  --list-hover: #8e99a724;
+  --secondary: #e8ebf0;
+  --secondary-hover: #dfe3e9;
+  --secondary-active: #d5dae1;
+  --primary: #16181d;
+  --primary-foreground: #ffffff;
+  --popover: #ffffff;
+  --accent: #e8ebf0;
+  --overlay: #16181d47;
+  --scrollbar-thumb: #8e99a7b3;
+  --danger: #c8463c;
+  --input: #cfd5dd;
+  --input-background: #ffffff;
+  --ring: #e5584a;
+  --selection: #e5584a33;
+  --blue: #2f6fd0;
+  --magenta: #a24bd6;
+  --green: #2f9a4a;
+  --yellow: #b8860b;
+  --found: #f08c3a;
+  --cyan: #0f93a8;
+  --red: #d2473c;
+}
+
+.light .tok-keyword { color: #9a3fb5; }
+.light .tok-type { color: #9a6200; }
+.light .tok-string { color: #0b7a8a; }
+.light .tok-function { color: #2f5fc4; }
+.light .tok-number { color: #c23f6e; }
+.light .tok-comment { color: #7a8594; }
+.light .change-ruler > .view { background: #16181d10; border-color: #16181d2e; }
 
 .fg {
   font-family: var(--font);
@@ -137,8 +181,8 @@
 .btn.ghost:hover { background: var(--secondary-hover); }
 .btn.selected { background: var(--accent); }
 .btn.primary { background: var(--primary); color: var(--primary-foreground); }
-.btn.primary:hover { background: #f5f5f5; }
-.btn.primary.disabled { background: #2e2e2e; color: #686868; opacity: 1; }
+.btn.primary:hover { background: color-mix(in srgb, var(--primary) 85%, var(--foreground)); }
+.btn.primary.disabled { background: var(--secondary); color: var(--muted); opacity: 1; }
 .btn.danger { background: color-mix(in srgb, var(--danger) 18%, transparent); color: var(--danger); }
 .btn.danger:hover { background: color-mix(in srgb, var(--danger) 26%, transparent); }
 .btn.disabled { opacity: 0.5; }
@@ -858,7 +902,7 @@
   margin-right: -8px;
   color: var(--foreground);
 }
-.diff-line.blank { background: repeating-linear-gradient(135deg, transparent 0 4px, #ffffff08 4px 8px); }
+.diff-line.blank { background: repeating-linear-gradient(135deg, transparent 0 4px, color-mix(in srgb, var(--foreground) 3%, transparent) 4px 8px); }
 
 .diff-split-row {
   display: flex;
@@ -1034,6 +1078,8 @@
 .file-stepper > span { padding: 0 4px; white-space: nowrap; }
 .zoom-control > .percent { min-width: 52px; text-align: center; white-space: nowrap; }
 .zoom-stepper { flex: none; display: flex; align-items: center; gap: 4px; }
+.theme-picker { flex: none; display: flex; gap: 2px; padding: 2px; border: 1px solid var(--border); border-radius: 8px; }
+.theme-picker > .btn.selected { background: var(--list-active); color: var(--foreground); }
 .zoom-stepper > .percent { min-width: 52px; text-align: center; white-space: nowrap; font-variant-numeric: tabular-nums; }
 
 .swatch {
@@ -1835,7 +1881,7 @@
 .prop-row > .cell { min-width: 0; display: flex; align-items: center; padding: 3px 8px; border-left: 1px solid var(--border); }
 .prop-row > .cell.before { background: color-mix(in srgb, var(--red) 9%, transparent); }
 .prop-row > .cell.after { background: color-mix(in srgb, var(--green) 9%, transparent); }
-.prop-row > .cell.missing { background: repeating-linear-gradient(135deg, transparent 0 4px, #ffffff08 4px 8px); }
+.prop-row > .cell.missing { background: repeating-linear-gradient(135deg, transparent 0 4px, color-mix(in srgb, var(--foreground) 3%, transparent) 4px 8px); }
 .prop-row .inline { border-radius: 2px; }
 .prop-row > .cell.before .inline { background: color-mix(in srgb, var(--red) 30%, transparent); }
 .prop-row > .cell.after .inline { background: color-mix(in srgb, var(--green) 30%, transparent); }
@@ -1860,7 +1906,7 @@
 .guid-warning > .title { display: flex; align-items: center; gap: 8px; color: var(--yellow); }
 .guid-warning > .title > span { color: var(--foreground); }
 .guid-warning > .users { display: flex; flex-direction: column; gap: 2px; margin: 2px 0; }
-.guid-user { display: flex; align-items: center; gap: 8px; height: 26px; padding: 0 8px; border-radius: 4px; background: #ffffff08; }
+.guid-user { display: flex; align-items: center; gap: 8px; height: 26px; padding: 0 8px; border-radius: 4px; background: color-mix(in srgb, var(--foreground) 3%, transparent); }
 .guid-user > .where { margin-left: auto; color: var(--foreground); }
 .guid-warning > .actions { display: flex; gap: 8px; margin-top: 2px; }
 

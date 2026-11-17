@@ -44,7 +44,7 @@ pub(super) fn warning(change: GuidChange, cx: &mut Context<UnityCompare>) -> Any
             .px_2()
             .gap_2()
             .rounded(px(4.))
-            .bg(gpui_kit::white().opacity(0.03))
+            .bg(theme.foreground.opacity(0.03))
             .child(Icon::new(icon).xsmall().text_color(theme.muted_foreground))
             .child(div().flex_none().sm_text().child(name.to_owned()))
             .child(div().flex_none().xs_text().text_color(theme.muted_foreground).child(folder.to_owned()))
