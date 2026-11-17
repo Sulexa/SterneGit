@@ -58,6 +58,9 @@ const IconPaths = {
   globe: '<circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/>',
   building: '<rect width="16" height="20" x="4" y="2" rx="2" ry="2"/><path d="M9 22v-4h6v4"/><path d="M8 6h.01"/><path d="M16 6h.01"/><path d="M12 6h.01"/><path d="M12 10h.01"/><path d="M12 14h.01"/><path d="M16 10h.01"/><path d="M16 14h.01"/><path d="M8 10h.01"/><path d="M8 14h.01"/>',
   search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+  'case-sensitive': '<path d="m3 15 4-8 4 8"/><path d="M4 13h6"/><circle cx="18" cy="12" r="3"/><path d="M21 9v6"/>',
+  'whole-word': '<circle cx="7" cy="12" r="3"/><path d="M10 9v6"/><circle cx="17" cy="12" r="3"/><path d="M14 7v8"/><path d="M22 17v1c0 .5-.5 1-1 1H3c-.5 0-1-.5-1-1v-1"/>',
+  regex: '<path d="M17 3v10"/><path d="m12.67 5.5 8.66 5"/><path d="m12.67 10.5 8.66-5"/><path d="M9 17a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v2a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2v-2z"/>',
   copy: '<rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>',
   'git-fork': '<circle cx="12" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><circle cx="18" cy="6" r="3"/><path d="M18 9v2c0 .6-.4 1-1 1H7c-.6 0-1-.4-1-1V9"/><path d="M12 12v3"/>',
   'folder-open': '<path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"/>',
@@ -262,7 +265,7 @@ const Menus = {
     '-',
     ['Quit', 'Ctrl+Q'],
   ],
-  Edit: [['Copy Commit Hash', 'Ctrl+Shift+C']],
+  Edit: [['Copy Commit Hash', 'Ctrl+Shift+C'], '-', ['Find…', 'Ctrl+F'], ['Find Next', 'F3'], ['Find Previous', 'Shift+F3']],
   View: [
     ['Refresh', 'Ctrl+R'],
     ['Fetch All Remotes', 'Ctrl+Shift+R'],
@@ -379,6 +382,22 @@ const LinesAboveAChange = 4;
 const ViewRows = 30;
 
 const DrawnRows = 60;
+
+const FindTexts = {
+  file: 'Find in this file',
+  commits: 'Find commits by message, author, id, branch or tag',
+  none: 'No results',
+  badPattern: 'Not a valid pattern',
+  matchCase: 'Match case  Alt+C',
+  wholeWord: 'Whole words only  Alt+W',
+  regex: 'Regular expression  Alt+R',
+  previous: 'Previous result  Shift+Enter',
+  next: 'Next result  Enter',
+  close: 'Close the search  Esc',
+  open: 'Find in the graph, or in the file you opened  Ctrl+F',
+  newest: (count) => `in the newest ${thousands(count)} commits`,
+  where: { description: 'in the description', email: 'in the email', id: 'in the full id' },
+};
 
 const Texts = {
   welcomeTitle: 'Open a Git repository',
@@ -1038,7 +1057,51 @@ function icon(name, size = 'md', color) {
 
 const RustTokens = /(\/\/.*$)|("(?:[^"\\]|\\.)*")|\b(fn|let|pub|impl|if|else|return|match|mut|use|struct|enum|crate|self|Self|move|for|in|const|as|where|loop|while|break|continue|ref|dyn|trait|type|mod|static|super|async|await|unsafe)\b|\b([A-Z][A-Z0-9_]+|true|false|\d[\d_]*(?:\.\d*)?)\b|\b([A-Z][A-Za-z0-9_]*|bool|char|str|f32|f64|usize|isize|u8|u16|u32|u64|i8|i16|i32|i64)\b|\b([a-z_][a-z0-9_]*!?)(?=\()/g;
 
-function highlight(code, words = []) {
+function findRanges(text, find) {
+  if (!find || !find.query || text === undefined) return [];
+  const options = find.options || [];
+  const source = options.includes('regex') ? find.query : find.query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const bounded = options.includes('word') ? `\\b(?:${source})\\b` : source;
+  const pattern = new RegExp(bounded, options.includes('case') ? 'g' : 'gi');
+  return [...text.matchAll(pattern)].filter((match) => match[0].length).map((match) => [match.index, match.index + match[0].length]);
+}
+
+function markFound(text, find, current = -1) {
+  const found = findRanges(text, find);
+  let html = '';
+  let from = 0;
+  found.forEach(([start, end], ix) => {
+    html += esc(text.slice(from, start)) + `<span class="found${ix === current ? ' current' : ''}">${esc(text.slice(start, end))}</span>`;
+    from = end;
+  });
+  return html + esc(text.slice(from));
+}
+
+function fileFinds(diff, find) {
+  const order = [];
+  let shown = 1;
+  const add = (key, text) => findRanges(text, find).forEach((_, ix) => order.push({ key: `${key}:${ix}`, at: shown }));
+  let next = 1;
+  diff.hunks.forEach((h) => {
+    const [start, end] = newSpan(h);
+    for (; next < start; next++) {
+      shown = next;
+      add(`n${next}`, diff.unchanged(next) ?? '');
+    }
+    h.lines.forEach(([sign, oldNo, newNo, text]) => {
+      if (newNo) shown = newNo;
+      add(sign === '-' ? `o${oldNo}` : `n${newNo}`, text);
+    });
+    next = Math.max(next, end + 1);
+  });
+  for (; next <= diff.lines && diff.unchanged(next) !== undefined; next++) {
+    shown = next;
+    add(`n${next}`, diff.unchanged(next));
+  }
+  return order;
+}
+
+function highlight(code, words = [], found = [], current = -1) {
   const pieces = [];
   let last = 0;
   for (const match of code.matchAll(RustTokens)) {
@@ -1048,14 +1111,16 @@ function highlight(code, words = []) {
     last = match.index + match[0].length;
   }
   if (last < code.length) pieces.push([last, code.length, '']);
-  const cuts = words.flat();
+  const cuts = [...words.flat(), ...found.flat()];
   const marked = (from, to) => words.some(([start, end]) => from >= start && to <= end);
+  const hit = (from, to) => found.findIndex(([start, end]) => from >= start && to <= end);
   let html = '';
   for (const [start, end, kind] of pieces) {
     const points = [...new Set(cuts.filter((point) => point > start && point < end))].sort((a, b) => a - b);
     let from = start;
     for (const to of [...points, end]) {
-      const classes = [kind, marked(from, to) && 'inline'].filter(Boolean).join(' ');
+      const at = hit(from, to);
+      const classes = [kind, marked(from, to) && 'inline', at >= 0 && 'found', at >= 0 && at === current && 'current'].filter(Boolean).join(' ');
       const text = esc(code.slice(from, to));
       html += classes ? `<span class="${classes}">${text}</span>` : text;
       from = to;
@@ -1754,10 +1819,10 @@ const C = {
     return `<div data-c="SectionHeader" class="${classes}"${title_}>${foldable ? twisty(open) : ''}<span class="title ellipsis">${esc(title)}</span>${shownCount}${panel}${action || ''}</div>`;
   },
 
-  RefBadge({ name, kind, head = false, synced = false, color = LaneColors[0], pull, worktree }) {
+  RefBadge({ name, kind, head = false, synced = false, color = LaneColors[0], pull, worktree, find }) {
     const icons = icon(RefIcons[kind], 'xs') + (synced ? icon(RefIcons.remote, 'xs') : '') + (worktree ? icon(RefIcons.worktree, 'xs') : '');
     const title = worktree ? ` title="${esc(WorktreeTexts.elsewhere(worktree))}"` : '';
-    return `<div data-c="RefBadge" class="ref-badge${head ? ' head' : ''}" style="--c:${color}"${title}><div class="icons">${icons}</div><div class="name ellipsis">${esc(name)}</div>${pull ? pullChip(pull) : ''}</div>`;
+    return `<div data-c="RefBadge" class="ref-badge${head ? ' head' : ''}" style="--c:${color}"${title}><div class="icons">${icons}</div><div class="name ellipsis">${markFound(name, find)}</div>${pull ? pullChip(pull) : ''}</div>`;
   },
 
   ChangeBadge({ kind }) {
@@ -1911,23 +1976,26 @@ const C = {
     return `<div data-c="RefsList" class="refs">${pullSection}${sections.join('')}</div>`;
   },
 
-  CommitRow({ commit, selected = false, width, pulls = {}, elsewhere = {} }) {
+  CommitRow({ commit, selected = false, width, pulls = {}, elsewhere = {}, find }) {
     const color = LaneColors[commit.graph[0] % LaneColors.length];
     const refs = foldSyncedRefs(commit.refs).map((label) => (label.kind === 'local' && elsewhere[label.name] ? { ...label, worktree: elsewhere[label.name] } : label));
-    const stashBadge = commit.stash ? C.RefBadge({ name: commit.stash, kind: 'stash', color }) : '';
-    const treeBadge = commit.worktree ? C.RefBadge({ name: commit.worktree, kind: 'worktree', color }) : '';
-    const badges = stashBadge + treeBadge + refs.slice(0, 3).map((label) => C.RefBadge({ ...label, color, pull: label.kind === 'local' ? pulls[label.name] : undefined })).join('');
+    const stashBadge = commit.stash ? C.RefBadge({ name: commit.stash, kind: 'stash', color, find }) : '';
+    const treeBadge = commit.worktree ? C.RefBadge({ name: commit.worktree, kind: 'worktree', color, find }) : '';
+    const badges = stashBadge + treeBadge + refs.slice(0, 3).map((label) => C.RefBadge({ ...label, color, pull: label.kind === 'local' ? pulls[label.name] : undefined, find })).join('');
     const more = refs.length > 3 ? `<div class="none xs muted">+${refs.length - 3}</div>` : '';
+    const shown = [commit.subject, commit.author, commit.id, ...refs.map((label) => label.name)];
+    const where = find && find.where ? `<span class="found-where xs">${icon('search', 'xs')}${esc(FindTexts.where[find.where])}</span>` : '';
+    const unfound = Boolean(find) && !where && !shown.some((text) => findRanges(text, find).length);
     const subject = commit.subject
-      ? `<div class="fill ellipsis sm">${esc(commit.subject)}</div>`
+      ? `<div class="fill h subject"><span class="ellipsis sm">${markFound(commit.subject, find)}</span>${where}</div>`
       : '<div class="fill ellipsis sm muted">(no message)</div>';
     const content =
       C.GraphCell({ graph: commit.graph, merge: commit.merge, head: commit.head, stash: Boolean(commit.stash), width }) +
       `<div class="labels">${badges}${more}${subject}</div>` +
-      `<div class="author h xs muted">${C.AuthorAvatar({ name: commit.author, email: commit.email })}<span class="ellipsis">${esc(commit.author)}</span></div>` +
+      `<div class="author h xs muted">${C.AuthorAvatar({ name: commit.author, email: commit.email })}<span class="ellipsis">${markFound(commit.author, find)}</span></div>` +
       `<div class="date xs muted">${esc(commit.date)}</div>` +
-      `<div class="short-id xs muted mono">${esc(commit.id)}</div>`;
-    return C.ListRow({ content, selected, extraClass: 'commit-row', name: 'CommitRow' });
+      `<div class="short-id xs muted mono">${markFound(commit.id, find)}</div>`;
+    return C.ListRow({ content, selected, extraClass: unfound ? 'commit-row unfound' : 'commit-row', name: 'CommitRow' });
   },
 
   UncommittedRow({ changes, selected = false }) {
@@ -1947,18 +2015,22 @@ const C = {
     return C.ListRow({ content, selected, extraClass: 'commit-row', name: 'WorktreeChangesRow' });
   },
 
-  HistoryList({ history, selectedRow, picked = [], changes, wipSelected = false }) {
+  HistoryList({ history, selectedRow, picked = [], changes, wipSelected = false, find }) {
     const width = graphWidth(history.commits);
     const wip = changes && (changes.conflicted?.length || changes.unstaged.length || changes.staged.length) ? C.UncommittedRow({ changes, selected: wipSelected }) : '';
+    const rowFind = (ix) => find && { ...find, where: (find.elsewhere || {})[ix] };
     const rows = history.commits
       .map((commit, ix) =>
         commit.wip
           ? C.WorktreeChangesRow({ tree: commit.wip, graph: commit.graph, width, selected: ix === selectedRow })
-          : C.CommitRow({ commit, selected: ix === selectedRow || picked.includes(ix), width, pulls: history.pulls, elsewhere: history.elsewhere }),
+          : C.CommitRow({ commit, selected: ix === selectedRow || picked.includes(ix), width, pulls: history.pulls, elsewhere: history.elsewhere, find: rowFind(ix) }),
       )
       .join('');
     const thumb = Math.max(20, Math.round((28 / history.total) * 800));
-    return `<div data-c="HistoryList" class="history v">${wip}<div class="fill" style="position:relative;overflow:hidden">${rows}<div class="scrollbar" style="top:2px;height:${thumb}px"></div></div></div>`;
+    const ticks = find ? `<div class="find-ticks">${(find.ticks || []).map((at) => `<span style="top:${(at * 100).toFixed(2)}%"></span>`).join('')}</div>` : '';
+    const note = find && history.truncated ? FindTexts.newest(history.commits.length) : '';
+    const bar = find ? C.FindBar({ query: find.query, options: find.options, current: find.current, total: find.total, placeholder: FindTexts.commits, note, focused: find.focused !== false }) : '';
+    return `<div data-c="HistoryList" class="history v">${bar}${wip}<div class="fill" style="position:relative;overflow:hidden">${rows}${ticks}<div class="scrollbar" style="top:2px;height:${thumb}px"></div></div></div>`;
   },
 
   DiffView({ files, mode = 'unified', header = true, actions, selection, pointed, menu = '', words = true, look = {} }) {
@@ -1986,7 +2058,10 @@ const C = {
             : `<span class="number">${oldNo ?? ''}</span><span class="number">${newNo ?? ''}</span>`;
       const names = (look.hints || []).filter(([needle]) => text.includes(needle)).map(([, label]) => label);
       const hints = names.length ? `<span class="ref-hint">  # ${esc(names.join(', '))}</span>` : '';
-      return `<div class="${classes}">${numbers}${marker(sign)}<span class="text">${highlight(text, marks.words.get(entry))}${hints}</span>${anchored ? menu : ''}</div>`;
+      const key = sign === '-' ? `o${oldNo}` : `n${newNo}`;
+      const found = findRanges(text, look.find);
+      const current = look.find && look.find.current === key ? look.find.occurrence || 0 : -1;
+      return `<div class="${classes}">${numbers}${marker(sign)}<span class="text">${highlight(text, marks.words.get(entry), found, current)}${hints}</span>${anchored ? menu : ''}</div>`;
     };
     const hunk = (h, hx, marks, own) => {
       const selected = own && selection && selection.hunk === hx ? selectionSize(selection) : 0;
@@ -2352,12 +2427,14 @@ const C = {
     );
   },
 
-  MergeEditor({ merge }) {
+  MergeEditor({ merge, find }) {
     const resolutions = merge.resolutions || [];
     const lead = 3;
     const shownRows = 15;
-    const row = (no, text, classes = '', { plain = false, caret = false, tint = false } = {}) => {
-      const content = (plain ? esc(text) : highlight(text)) + (caret ? '<span class="caret"></span>' : '');
+    const row = (no, text, classes = '', { plain = false, caret = false, tint = false, area = 'versions' } = {}) => {
+      const current = find && find.current && find.current.area === area && find.current.line === no ? 0 : -1;
+      const found = findRanges(text, find);
+      const content = (plain ? markFound(text, find, current) : highlight(text, [], found, current)) + (caret ? '<span class="caret"></span>' : '');
       return `<div class="diff-line${classes ? ` ${classes}` : ''}"><span class="number">${no}</span><span class="sign"></span><span class="text">${tint ? `<span class="tint">${content}</span>` : content}</span></div>`;
     };
     const blank = '<div class="diff-line blank"><span class="number"></span><span class="sign"></span><span class="text"></span></div>';
@@ -2402,15 +2479,15 @@ const C = {
         const chosen = resolutions[index];
         const first = result.length;
         if (!chosen) {
-          result.push({ html: row(at.result++, `<<<<<<< ${merge.labels.current}`, 'marker', { plain: true, tint: true }) });
-          current.forEach((text) => result.push({ html: row(at.result++, text, 'conflicted current', { tint: true }) }));
-          result.push({ html: row(at.result++, '=======', 'marker', { plain: true, tint: true }) });
-          incoming.forEach((text) => result.push({ html: row(at.result++, text, 'conflicted incoming', { tint: true }) }));
-          result.push({ html: row(at.result++, `>>>>>>> ${merge.labels.incoming}`, 'marker', { plain: true, tint: true }) });
+          result.push({ html: row(at.result++, `<<<<<<< ${merge.labels.current}`, 'marker', { plain: true, tint: true, area: 'result' }) });
+          current.forEach((text) => result.push({ html: row(at.result++, text, 'conflicted current', { tint: true, area: 'result' }) }));
+          result.push({ html: row(at.result++, '=======', 'marker', { plain: true, tint: true, area: 'result' }) });
+          incoming.forEach((text) => result.push({ html: row(at.result++, text, 'conflicted incoming', { tint: true, area: 'result' }) }));
+          result.push({ html: row(at.result++, `>>>>>>> ${merge.labels.incoming}`, 'marker', { plain: true, tint: true, area: 'result' }) });
         } else {
           const lines = chosen.edited || chosen.take.flatMap((side) => part.conflict[side].map((text) => [side, text]));
           lines.forEach(([origin, text], ix) =>
-            result.push({ html: row(at.result++, text, `conflicted ${chosen.edited ? 'edited' : origin}`, { caret: chosen.caret === ix, tint: true }) }),
+            result.push({ html: row(at.result++, text, `conflicted ${chosen.edited ? 'edited' : origin}`, { caret: chosen.caret === ix, tint: true, area: 'result' }) }),
           );
         }
         result[first].starts = index;
@@ -2443,7 +2520,7 @@ const C = {
       }
       for (let k = 0; k < total; k++) {
         const text = textAt(k);
-        result.push(text === null ? { hidden: true } : { html: row(at.result + k, text) });
+        result.push(text === null ? { hidden: true } : { html: row(at.result + k, text, '', { area: 'result' }) });
       }
       at.current += total;
       at.incoming += total;
@@ -2480,6 +2557,19 @@ const C = {
   ChangeStepper({ current, total, noun = 'Change' }) {
     const text = total ? `${noun} ${thousands(current)} of ${thousands(total)}` : 'No changes';
     return `<div data-c="ChangeStepper" class="change-stepper"><span class="xs muted">${text}</span>${C.Button({ icon: 'arrow-up', variant: 'ghost', disabled: !total, tooltip: Texts.previousChange })}${C.Button({ icon: 'arrow-down', variant: 'ghost', disabled: !total, tooltip: Texts.nextChange })}</div>`;
+  },
+
+  FindBar({ query = '', options = [], current = 0, total = 0, placeholder = FindTexts.file, note = '', focused = true, invalid = false }) {
+    const toggle = (key, glyph, tooltip) => C.Button({ icon: glyph, variant: 'ghost', selected: options.includes(key), tooltip });
+    const caret = focused ? '<span class="caret"></span>' : '';
+    const text = query ? `<span class="query ellipsis">${esc(query)}${caret}</span>` : `${caret}<span class="placeholder ellipsis">${esc(placeholder)}</span>`;
+    const missed = Boolean(query) && (invalid || !total);
+    const toggles = toggle('case', 'case-sensitive', FindTexts.matchCase) + toggle('word', 'whole-word', FindTexts.wholeWord) + toggle('regex', 'regex', FindTexts.regex);
+    const field = `<div class="input find-input${focused ? ' focused' : ''}${missed ? ' missed' : ''}"><span class="prefix">${icon('search', 'sm')}</span>${text}<span class="fill"></span><span class="toggles">${toggles}</span></div>`;
+    const count = !query ? '' : invalid ? FindTexts.badPattern : !total ? FindTexts.none : current ? `${thousands(current)} of ${thousands(total)}` : counted(total, 'result', 'results');
+    const steps = C.Button({ icon: 'arrow-up', variant: 'ghost', disabled: !total, tooltip: FindTexts.previous }) + C.Button({ icon: 'arrow-down', variant: 'ghost', disabled: !total, tooltip: FindTexts.next });
+    const aside = note ? `<span class="note xs muted ellipsis">${esc(note)}</span>` : '';
+    return `<div data-c="FindBar" class="find-bar">${field}<span class="count xs${missed ? ' missed' : ' muted'}">${esc(count)}</span>${steps}${aside}<span class="fill"></span>${C.Button({ icon: 'close', variant: 'ghost', tooltip: FindTexts.close })}</div>`;
   },
 
   ZoomControl({ percent, fit = true }) {
@@ -2528,16 +2618,18 @@ const C = {
     return `<div data-c="ViewBar" class="view-bar"><div class="modes">${modes}</div>${picker}<div class="fill"></div>${note}${note ? separator : ''}${stepper}${stepper ? separator : ''}${tools}${menu}</div>`;
   },
 
-  ChangeRuler({ hunks, lines, shown: [top, bottom] = [] }) {
+  ChangeRuler({ hunks, lines, shown: [top, bottom] = [], found = [] }) {
     const marks = changeGroups(hunks).map((group) => {
       const color = group.added && group.deleted ? 'var(--yellow)' : group.added ? 'var(--green)' : 'var(--red)';
       const size = Math.max(group.end - group.start + 1, 1);
       return `<span class="mark" style="top:${percentOf(group.start - 1, lines)};height:${percentOf(size, lines)};--c:${color}"></span>`;
     });
+    const ticks = [...new Set(found)].map((at) => `<span class="found-mark" style="top:${percentOf(at - 1, lines)}"></span>`);
     const first = top ?? newSpan(hunks[0])[0];
     const last = bottom ?? newSpan(hunks[hunks.length - 1])[1];
     const shown = `<span class="view" style="top:${percentOf(first - 1, lines)};height:${percentOf(last - first + 1, lines)}"></span>`;
-    return `<div data-c="ChangeRuler" class="change-ruler" title="Where the changes are in the whole file">${marks.join('')}${shown}</div>`;
+    const title = found.length ? 'Where the changes and the results are in the whole file' : 'Where the changes are in the whole file';
+    return `<div data-c="ChangeRuler" class="change-ruler" title="${title}">${marks.join('')}${ticks.join('')}${shown}</div>`;
   },
 
   VersionTag({ side, from, hearing = false, align = 'left', label = VersionLabels[side] }) {
@@ -3115,7 +3207,7 @@ const C = {
     return `<div data-c="ScriptGraphCompare" class="animator-compare">${canvas}${C.GraphChanges({ diff, hidden })}</div>`;
   },
 
-  FileDiffPanel({ diff, mode = 'split', state = 'ready', writing = false, reason = '', selection, pointed, expanded = false, filePosition, menuOpen = false, hot, view = {}, look = {} }) {
+  FileDiffPanel({ diff, mode = 'split', state = 'ready', writing = false, reason = '', selection, pointed, expanded = false, filePosition, menuOpen = false, hot, view = {}, look = {}, find }) {
     const kind = diff.kind || 'text';
     const modes = diff.unity ? UnityModes[diff.unity] : kind;
     const labels = diff.commit ? null : SideLabels[diff.side];
@@ -3137,7 +3229,7 @@ const C = {
       kind === 'binary'
         ? ''
         : C.ViewBar({ kind, modes, mode, changes: ready ? { current: (diff.current || 0) + 1, total, noun } : null, zoom, menuOpen, hot, hidden, shown: ['animator', 'scriptgraph'].includes(kind) ? view.shown || 'both' : undefined });
-    const conflict = () => C.MergeEditor({ merge: diff });
+    const conflict = () => C.MergeEditor({ merge: diff, find });
     const text = () => {
       const diffView = C.DiffView({
         files: [{ path: diff.change.path, additions: diff.additions, deletions: diff.deletions, hunks: diff.hunks, lines: diff.lines, unchanged: diff.unchanged }],
@@ -3147,11 +3239,12 @@ const C = {
         selection,
         pointed,
         menu: pointed && labels ? C.LineMenu({ side: diff.side, selected: pointed.selected, changed: pointed.changed, left: pointed.left, top: pointed.top, hot: pointed.hot }) : '',
-        look: { gaps: diff.unity ? 'scope-always' : 'scope', marks: 'bars', sides: textSides(diff), scroll: true, whole: true, hints: diff.hints, ...look },
+        look: { gaps: diff.unity ? 'scope-always' : 'scope', marks: 'bars', sides: textSides(diff), scroll: true, whole: true, hints: diff.hints, find, ...look },
       });
       const whole = look.whole !== false && diff.unchanged && diff.hunks.length;
       const top = whole ? wholeFileTop(diff.hunks) : undefined;
-      const ruler = diff.lines ? C.ChangeRuler({ hunks: diff.hunks, lines: diff.lines, shown: whole ? [top, top + ViewRows - 1] : [] }) : '';
+      const found = find && diff.unchanged ? fileFinds(diff, find).map((result) => result.at) : [];
+      const ruler = diff.lines ? C.ChangeRuler({ hunks: diff.hunks, lines: diff.lines, shown: whole ? [top, top + ViewRows - 1] : [], found }) : '';
       return `<div class="diff-area">${diffView}${ruler}</div>`;
     };
     const bodies = {
@@ -3175,7 +3268,10 @@ const C = {
             ? C.Hint({ message: Texts.fileEmpty })
             : bodies[kind]();
     const bars = kind === 'text' && !diff.unity ? C.FileBar({ diff, state, writing, expanded, filePosition, tools: viewBar }) : C.FileBar({ diff, state, writing, expanded, filePosition }) + viewBar;
-    return `<div data-c="FileDiffPanel" class="file-diff">${bars}<div class="fill v">${content}</div></div>`;
+    const results = find && diff.unchanged ? fileFinds(diff, find) : [];
+    const reached = find ? find.reached ?? results.findIndex((result) => result.key === `${find.current}:${find.occurrence || 0}`) + 1 : 0;
+    const findBar = find ? C.FindBar({ query: find.query, options: find.options, current: reached, total: find.total ?? results.length, focused: find.focused !== false }) : '';
+    return `<div data-c="FileDiffPanel" class="file-diff">${bars}${findBar}<div class="fill v">${content}</div></div>`;
   },
 
   FileHistoryRow({ entry, selected = false }) {
@@ -3232,14 +3328,15 @@ const C = {
     return `<div data-c="PullModeMenu" data-base="PopupMenu" class="menu pull-modes sm" style="left:${left}px;top:${top}px"><div class="heading">Pull mode</div>${rows}</div>`;
   },
 
-  RepoToolbar({ ready = true, running, unavailable = ['pop'], mode = 'merge', menuOpen = false } = {}) {
+  RepoToolbar({ ready = true, running, unavailable = ['pop'], mode = 'merge', menuOpen = false, finding = false } = {}) {
     const disabled = (key) => !ready || (running ? running !== key : unavailable.includes(key));
     const render = (button) =>
       button.key === 'pull'
         ? C.PullButton({ mode, disabled: disabled('pull'), loading: running === 'pull', menuOpen, ready })
         : C.ToolbarButton({ ...button, disabled: disabled(button.key), loading: running === button.key });
     const groups = ToolbarGroups.map((group) => `<div class="group">${group.map(render).join('')}</div>`);
-    return `<div data-c="RepoToolbar" class="repo-toolbar">${groups.join('<div class="separator"></div>')}</div>`;
+    const find = C.ToolbarButton({ label: 'Find', icon: 'search', disabled: !ready, tooltip: FindTexts.open }).replace('toolbar-button', `toolbar-button${finding ? ' selected' : ''}`);
+    return `<div data-c="RepoToolbar" class="repo-toolbar">${groups.join('<div class="separator"></div>')}<div class="find-button">${find}</div></div>`;
   },
 
   RepoView({ body, left, middle, right, status, toolbar = C.RepoToolbar(), expanded = false, operation = '' }) {

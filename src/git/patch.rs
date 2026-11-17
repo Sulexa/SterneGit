@@ -262,7 +262,7 @@ impl Repo {
     }
 }
 
-fn message_body(commit: &gix::Commit<'_>) -> SharedString {
+pub(super) fn message_body(commit: &gix::Commit<'_>) -> SharedString {
     let message = decode(commit.message_raw_sloppy());
     message
         .split_once("\n\n")

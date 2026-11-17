@@ -3,7 +3,7 @@ use gpui_kit::{
     SharedString, Styled as _, Window,
     assets::IconName,
     component::{
-        ActiveTheme as _, Disableable as _, Icon, Sizable as _,
+        ActiveTheme as _, Disableable as _, Icon, Selectable as _, Sizable as _,
         button::{Button, ButtonVariants as _},
         h_flex,
         menu::{DropdownMenu as _, PopupMenu, PopupMenuItem},
@@ -28,6 +28,7 @@ use crate::{
 const HEIGHT: f32 = 48.;
 const BUTTON_HEIGHT: f32 = 40.;
 const BUTTON_MIN_WIDTH: f32 = 56.;
+const FIND_INSET: f32 = 12.;
 const CARET_WIDTH: f32 = 16.;
 const SEPARATOR_HEIGHT: f32 = 24.;
 const PULL_MENU_WIDTH: f32 = 280.;
@@ -90,6 +91,8 @@ pub(crate) struct RepoToolbar {
     state: ToolbarState,
     on_run: Option<Handler<Operation>>,
     on_pull_mode: Option<Handler<PullMode>>,
+    on_find: Option<Handler<()>>,
+    finding: bool,
 }
 
 impl RepoToolbar {
@@ -98,7 +101,47 @@ impl RepoToolbar {
             state,
             on_run: None,
             on_pull_mode: None,
+            on_find: None,
+            finding: false,
         }
+    }
+
+    pub(crate) fn on_find(
+        mut self,
+        finding: bool,
+        callback: impl Fn(&(), &mut Window, &mut App) + 'static,
+    ) -> Self {
+        self.finding = finding;
+        self.on_find = Some(handler(callback));
+        self
+    }
+
+    fn find_button(&self) -> Option<AnyElement> {
+        let on_find = self.on_find.clone()?;
+        Some(
+            div()
+                .absolute()
+                .top(px((HEIGHT - BUTTON_HEIGHT) / 2. - 1.))
+                .right(px(FIND_INSET))
+                .child(
+                    Button::new("toolbar-find")
+                        .ghost()
+                        .h(px(BUTTON_HEIGHT))
+                        .min_w(px(BUTTON_MIN_WIDTH))
+                        .px_2()
+                        .tooltip("Find in the graph, or in the file you opened  Ctrl+F")
+                        .selected(self.finding)
+                        .child(
+                            v_flex()
+                                .items_center()
+                                .gap_0p5()
+                                .child(Icon::new(IconName::Search))
+                                .child(div().xs_text().child("Find")),
+                        )
+                        .on_click(move |_, window, cx| on_find(&(), window, cx)),
+                )
+                .into_any_element(),
+        )
     }
 
     pub(crate) fn on_run(
@@ -204,7 +247,9 @@ impl RenderOnce for RepoToolbar {
             let controls = group.iter().map(|&operation| self.control(operation, cx));
             items.push(h_flex().gap_1().children(controls).into_any_element());
         }
+        let find = self.find_button();
         h_flex()
+            .relative()
             .flex_none()
             .h(px(HEIGHT))
             .justify_center()
@@ -213,6 +258,7 @@ impl RenderOnce for RepoToolbar {
             .border_b_1()
             .border_color(border)
             .children(items)
+            .children(find)
     }
 }
 

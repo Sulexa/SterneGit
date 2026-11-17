@@ -2,21 +2,22 @@ use std::{
     collections::HashSet,
     ffi::{OsStr, OsString},
     path::{Path, PathBuf},
+    rc::Rc,
     sync::Arc,
 };
 
 use gix::ObjectId;
 use gpui_kit::{
     Anchor, AnyElement, App, AppContext as _, ClickEvent, Context, Entity, EventEmitter,
-    InteractiveElement as _, IntoElement, MouseButton, MouseDownEvent, ParentElement as _, Render,
-    SharedString, Styled as _, Subscription, Window,
+    Focusable as _, InteractiveElement as _, IntoElement, MouseButton, MouseDownEvent,
+    ParentElement as _, Render, SharedString, Styled as _, Subscription, Window,
     assets::IconName,
     component::{
         ActiveTheme as _, Disableable as _, Selectable as _, Sizable as _,
         button::{Button, ButtonVariants as _},
         diff::{
             Diff, DiffChangeIndicator, DiffChangeMark, DiffFile, DiffHoverHighlight,
-            DiffHunkSeparator, DiffMode, DiffState,
+            DiffHunkSeparator, DiffMatcher, DiffMode, DiffState,
         },
         h_flex,
         menu::{ContextMenuExt as _, DropdownMenu as _, PopupMenuItem},
@@ -53,7 +54,10 @@ use crate::{
         Backdrop, MediaKind, Picture, Sound, VideoFacts, extension, ffmpeg_installed, media_kind,
         soundtrack, thumbnails, visible_changes,
     },
-    ui::{self, Job, Load, Look as _, SideUi as _, handler, run_in_background},
+    ui::{
+        self, FindBar, FindEvent, Found, Job, Load, Look as _, Matcher, SideUi as _, handler,
+        run_in_background,
+    },
     unity::{self, NotUnityText, Shape as UnityShape, Source as UnitySource, UnityFiles, UnityKind},
 };
 
@@ -65,6 +69,7 @@ const TEXTS: PatchTexts = PatchTexts {
 
 const ROWS_ABOVE_A_CHANGE: usize = 8;
 const SIDES_HEIGHT: f32 = 32.;
+const FIND_IN_FILE: &str = "Find in this file";
 
 pub(crate) enum FileDiffEvent {
     Close,
@@ -186,6 +191,9 @@ pub(crate) struct FileDiffPanel {
     not_unity: HashSet<SharedString>,
     unity_events: Vec<Subscription>,
     imports: Option<unity::ImportChanges>,
+    find: Option<Entity<FindBar>>,
+    finding: bool,
+    find_events: Option<Subscription>,
     _subscriptions: [Subscription; 2],
 }
 
@@ -229,8 +237,136 @@ impl FileDiffPanel {
             not_unity: HashSet::new(),
             unity_events: Vec::new(),
             imports: None,
+            find: None,
+            finding: false,
+            find_events: None,
             _subscriptions: subscriptions,
         }
+    }
+
+    pub(crate) fn shows_text(&self) -> bool {
+        self.compared.is_some() && (self.merging.is_some() || self.media_view.is_none())
+    }
+
+    pub(crate) fn is_finding(&self) -> bool {
+        self.finding && self.shows_text()
+    }
+
+    pub(crate) fn open_find(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.shows_text() {
+            return;
+        }
+        let bar = match &self.find {
+            Some(bar) => bar.clone(),
+            None => {
+                let panel = cx.entity().downgrade();
+                let bar = cx.new(|cx| {
+                    FindBar::new(
+                        FIND_IN_FILE,
+                        move |cx| {
+                            panel
+                                .upgrade()
+                                .map_or_else(Found::default, |panel| panel.read(cx).found(cx))
+                        },
+                        window,
+                        cx,
+                    )
+                });
+                self.find_events = Some(cx.subscribe_in(&bar, window, |this, _, event, window, cx| {
+                    match event {
+                        FindEvent::Searched => this.search_text(cx),
+                        FindEvent::Next => this.step_found(true, window, cx),
+                        FindEvent::Previous => this.step_found(false, window, cx),
+                        FindEvent::Closed => this.close_find(window, cx),
+                    }
+                }));
+                self.find = Some(bar.clone());
+                bar
+            }
+        };
+        let reopened = !self.finding;
+        self.finding = true;
+        bar.update(cx, |bar, cx| bar.focus(window, cx));
+        if reopened {
+            self.search_text(cx);
+        }
+        cx.notify();
+    }
+
+    pub(crate) fn close_find(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.finding {
+            return;
+        }
+        self.finding = false;
+        self.diff.update(cx, |state, cx| state.find(None, cx));
+        if let Some(Merging::Open(editor)) = &self.merging {
+            editor.update(cx, |editor, cx| editor.find(None, cx));
+        }
+        window.focus(&self.diff.focus_handle(cx), cx);
+        cx.notify();
+    }
+
+    pub(crate) fn step_found(&mut self, forward: bool, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.is_finding() {
+            self.open_find(window, cx);
+            return;
+        }
+        if let Some(Merging::Open(editor)) = &self.merging {
+            let editor = editor.clone();
+            editor.update(cx, |editor, cx| editor.step_found(forward, cx));
+            return;
+        }
+        self.diff.update(cx, |state, cx| {
+            let count = state.found_count();
+            if count == 0 {
+                return;
+            }
+            let next = match state.current_found() {
+                Some(at) if forward => (at + 1) % count,
+                Some(at) => (at + count - 1) % count,
+                None => first_found_in_view(state).unwrap_or(0),
+            };
+            state.show_found(next, ROWS_ABOVE_A_CHANGE, cx);
+        });
+    }
+
+    fn searched(&self, cx: &App) -> Option<Matcher> {
+        let bar = self.find.as_ref().filter(|_| self.finding)?;
+        bar.read(cx).search(cx).matcher().ok().flatten()
+    }
+
+    fn search_text(&mut self, cx: &mut Context<Self>) {
+        let matcher = self.searched(cx);
+        let merging = match &self.merging {
+            Some(Merging::Open(editor)) => {
+                let matcher = matcher.clone();
+                editor.update(cx, |editor, cx| editor.find(matcher, cx));
+                true
+            }
+            _ => false,
+        };
+        let matcher = matcher.map(|matcher| Rc::new(move |text: &str| matcher.ranges(text)) as DiffMatcher);
+        self.diff.update(cx, |state, cx| {
+            state.find(matcher, cx);
+            if !merging && let Some(first) = first_found_in_view(state) {
+                state.show_found(first, ROWS_ABOVE_A_CHANGE, cx);
+            }
+        });
+    }
+
+    fn found(&self, cx: &App) -> Found {
+        if let Some(Merging::Open(editor)) = &self.merging {
+            return editor.read(cx).found(cx);
+        }
+        let state = self.diff.read(cx);
+        Found {
+            count: state.found_count(),
+            current: state.current_found(),
+        }
+    }
+
+    fn find_bar(&self) -> Option<Entity<FindBar>> {
+        self.find.clone().filter(|_| self.is_finding())
     }
 
     pub(crate) fn use_repository(&mut self, repository: Entity<Repository>) {
@@ -589,6 +725,8 @@ impl FileDiffPanel {
         if let Some(Merging::Read(change, text)) = &self.merging {
             let (change, text) = (change.clone(), text.clone());
             let editor = cx.new(|cx| MergeEditor::new(change, &text, window, cx));
+            let matcher = self.searched(cx);
+            editor.update(cx, |editor, cx| editor.find(matcher, cx));
             self.merge_observer = Some(cx.observe(&editor, |_, _, cx| cx.notify()));
             self.merging = Some(Merging::Open(editor));
         }
@@ -658,6 +796,7 @@ impl FileDiffPanel {
             .pane()
             .child(file_bar)
             .child(view_bar)
+            .children(self.find_bar())
             .child(div().fill_height().child(content))
             .into_any_element()
     }
@@ -784,6 +923,9 @@ impl FileDiffPanel {
 
     pub(crate) fn close(&mut self, cx: &mut Context<Self>) {
         if self.compared.take().is_some() {
+            if std::mem::take(&mut self.finding) {
+                self.diff.update(cx, |state, cx| state.find(None, cx));
+            }
             self.leave_media(cx);
             self.leave_merge();
             self.unity_text = None;
@@ -1524,7 +1666,8 @@ impl FileDiffPanel {
             state.row_count(),
             state.visible_rows(),
             handler(cx.listener(|this, change: &usize, _, cx| this.jump_to_change(*change, cx))),
-        );
+        )
+        .found(state.found_rows());
         h_flex()
             .size_full()
             .child(
@@ -1797,10 +1940,20 @@ impl Render for FileDiffPanel {
             .pane()
             .child(file_bar)
             .children(view_bar)
+            .children(self.find_bar())
             .child(div().fill_height().child(content))
             .into_any_element()
     }
 }
+
+fn first_found_in_view(state: &DiffState) -> Option<usize> {
+    let rows = state.found_rows();
+    let top = state.top_row();
+    rows.iter()
+        .position(|row| *row >= top)
+        .or_else(|| (!rows.is_empty()).then_some(0))
+}
+
 
 const ZOOM_TEXT_WIDTH: f32 = 52.;
 const SWATCH: f32 = 12.;

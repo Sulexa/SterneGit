@@ -5,6 +5,7 @@ mod code_names;
 mod conflict;
 mod decoration;
 mod document;
+mod found;
 mod parser;
 #[cfg(test)]
 mod parser_tests;
@@ -15,6 +16,7 @@ mod state;
 pub use conflict::{DiffConflict, DiffConflictResolution};
 pub use decoration::{DiffDecoration, DiffGutterMarker};
 pub use document::{DiffFile, DiffFileStatus, DiffLinePosition, DiffLineRange, DiffSide};
+pub use found::DiffMatcher;
 pub use parser::{DiffParseError, DiffParseOptions};
 pub use presentation::DiffInlineUnit;
 pub use state::{DiffChangeMark, DiffEvent, DiffState};
@@ -42,6 +44,7 @@ use crate::{
 use actions::*;
 use conflict::ConflictPart;
 use decoration::{Decorations, GutterMarkers};
+use found::{Found, Hit};
 use presentation::FilePresentation;
 use selection::{CodeText, SelectionLayer};
 use state::{DisplayRow, FoldExpansion, LayoutKey, SelectedLines};
@@ -617,6 +620,9 @@ fn render_diff(
         },
         area: code_area,
     };
+    if !soft_wrap && let Some(hit) = state.take_found_reveal() {
+        reveal_found(&hit, state.files(), &code_scroll, font_size, &font_family, window, cx);
+    }
     let scroll_x = code_scroll.scrolled();
     let code_scrollbar_lane = if code_scroll.max() > px(0.) {
         Scrollbar::width()
@@ -648,6 +654,8 @@ fn render_diff(
         annotations: props.annotations.clone(),
         annotation_content: props.annotation_content,
         decorations: props.decorations,
+        found: state.found().clone(),
+        found_current: state.current_found(),
         gutter_markers: props.gutter_markers,
         gutter_marker_content: props.gutter_marker_content.filter(|_| marker_lane),
         hunk_suffix: props.hunk_suffix,
@@ -916,6 +924,8 @@ struct CodePresentation {
     annotations: Rc<Annotations>,
     annotation_content: Option<AnnotationRenderer>,
     decorations: Rc<Decorations>,
+    found: Rc<Found>,
+    found_current: Option<usize>,
     gutter_markers: Rc<GutterMarkers>,
     /// Set only while the marker lane is shown.
     gutter_marker_content: Option<MarkerRenderer>,
@@ -1772,7 +1782,75 @@ fn line_highlights(
             },
         ));
     }
+    let found = crate::orange_400();
+    for (range, hit) in code.found.on_line(file, side, ix) {
+        let current = code.found_current == Some(hit);
+        highlights.push((
+            line.display_range(range),
+            HighlightStyle {
+                background_color: Some(if current {
+                    found
+                } else {
+                    found.opacity(FOUND_TINT)
+                }),
+                color: current.then(crate::neutral_950),
+                ..Default::default()
+            },
+        ));
+    }
     highlights
+}
+
+const FOUND_TINT: f32 = 0.32;
+
+/// Scrolls a long line sideways so the current search result shows, about a
+/// third of the way into the code.
+fn reveal_found(
+    hit: &Hit,
+    files: &[DiffFile],
+    scroll: &CodeScroll,
+    font_size: Pixels,
+    family: &SharedString,
+    window: &mut Window,
+    cx: &App,
+) {
+    let (side, ix) = hit.line();
+    let Some(line) = files.get(hit.file).and_then(|file| file.lines(side).get(ix)) else {
+        return;
+    };
+    let display = line.display_range(hit.range.clone());
+    let font = gpui::Font {
+        family: family.clone(),
+        ..Default::default()
+    };
+    let width = |end: usize| {
+        let text = line.display().get(..end).unwrap_or_default().to_owned();
+        let len = text.len();
+        window
+            .text_system()
+            .shape_line(
+                text.into(),
+                font_size,
+                &[TextRun {
+                    len,
+                    font: font.clone(),
+                    color: cx.theme().foreground,
+                    background_color: None,
+                    underline: None,
+                    strikethrough: None,
+                }],
+                None,
+            )
+            .width
+    };
+    let start = width(display.start);
+    let end = width(display.end);
+    let shown = scroll.scrolled();
+    if start >= shown && end <= shown + scroll.area {
+        return;
+    }
+    let left = (start - scroll.area / 3.).clamp(px(0.), scroll.max());
+    scroll.offset.set_offset(point(-left, px(0.)));
 }
 
 /// The add-annotation button, shown on hover and at the end of the selection.

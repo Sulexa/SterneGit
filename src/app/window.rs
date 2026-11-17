@@ -33,8 +33,9 @@ use super::{
 };
 use crate::{
     actions::{
-        About, CheckForUpdates, CloneRepository, CloseTab, CopyHash, Fetch, NewRepository, NextTab,
-        OpenRepository, OpenSettings, PreviousTab, Quit, Refresh, ResetZoom, WINDOW_CONTEXT, ZoomIn, ZoomOut,
+        About, CheckForUpdates, CloneRepository, CloseTab, CopyHash, Fetch, Find, FindNext,
+        FindPrevious, NewRepository, NextTab, OpenRepository, OpenSettings, PreviousTab, Quit, Refresh,
+        ResetZoom, WINDOW_CONTEXT, ZoomIn, ZoomOut,
     },
     git,
     hosting::{
@@ -463,6 +464,15 @@ impl SterneGit {
         }
     }
 
+    fn find(&self, again: Option<bool>, window: &mut Window, cx: &mut App) {
+        if let Some(Tab::Repo(tab)) = self.tabs.active() {
+            tab.view.update(cx, |view, cx| match again {
+                None => view.find(window, cx),
+                Some(forward) => view.find_again(forward, window, cx),
+            });
+        }
+    }
+
     fn show_about(window: &mut Window, cx: &mut App) {
         window.open_alert_dialog(cx, |alert, _, _| {
             alert
@@ -657,6 +667,11 @@ impl Render for SterneGit {
                 this.update_active_repository(cx, |repository, cx| repository.fetch(cx))
             }))
             .on_action(cx.listener(|this, _: &CopyHash, window, cx| this.copy_hash(window, cx)))
+            .on_action(cx.listener(|this, _: &Find, window, cx| this.find(None, window, cx)))
+            .on_action(cx.listener(|this, _: &FindNext, window, cx| this.find(Some(true), window, cx)))
+            .on_action(cx.listener(|this, _: &FindPrevious, window, cx| {
+                this.find(Some(false), window, cx)
+            }))
             .on_action(|_: &ZoomIn, window, cx| zoom_in(window, cx))
             .on_action(|_: &ZoomOut, window, cx| zoom_out(window, cx))
             .on_action(|_: &ResetZoom, window, cx| reset_zoom(window, cx))

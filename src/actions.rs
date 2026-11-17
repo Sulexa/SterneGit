@@ -12,6 +12,12 @@ gpui_kit::actions!(
         NewRepository,
         OpenSettings,
         CopyHash,
+        Find,
+        FindNext,
+        FindPrevious,
+        ToggleMatchCase,
+        ToggleWholeWords,
+        TogglePattern,
         CloseDiff,
         PreviousChange,
         NextChange,
@@ -36,3 +42,4 @@ gpui_kit::actions!(
 pub(crate) const WINDOW_CONTEXT: &str = "SterneGit";
 pub(crate) const HISTORY_CONTEXT: &str = "History";
 pub(crate) const MEDIA_CONTEXT: &str = "Media";
+pub(crate) const FIND_CONTEXT: &str = "FindBar";

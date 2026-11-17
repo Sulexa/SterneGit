@@ -60,7 +60,9 @@ gpui_kit::assets::icon_assets!(
         Video,
         Workflow,
         Spline,
-        Braces
+        Braces,
+        WholeWord,
+        Regex
     ]
 );
 

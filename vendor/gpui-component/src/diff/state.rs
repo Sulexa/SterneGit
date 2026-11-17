@@ -17,6 +17,7 @@ use super::{
     DiffAnnotation, DiffConflictResolution, DiffFile, DiffFileStatus, DiffInlineUnit,
     DiffLinePosition, DiffLineRange, DiffMode, DiffSide,
     conflict::ConflictPart,
+    found::{DiffMatcher, Found, Hit},
     presentation::{
         DiffSyntaxHighlighter, FilePresentation, PresentationOptions, SyntaxHighlighters,
     },
@@ -243,6 +244,10 @@ pub struct DiffState {
     header_rows: Vec<usize>,
     rows: Rc<Vec<DisplayRow>>,
     change_rows: Vec<usize>,
+    matcher: Option<DiffMatcher>,
+    found: Rc<Found>,
+    found_current: Option<usize>,
+    found_reveal: bool,
     list: ListState,
     horizontal_scroll: ScrollHandle,
     focus: FocusHandle,
@@ -374,6 +379,10 @@ impl DiffState {
             header_rows: Vec::new(),
             rows: Rc::default(),
             change_rows: Vec::new(),
+            matcher: None,
+            found: Rc::default(),
+            found_current: None,
+            found_reveal: false,
             list: ListState::new(0, ListAlignment::Top, px(0.)),
             horizontal_scroll: ScrollHandle::new(),
             focus,
@@ -723,6 +732,7 @@ impl DiffState {
         self.selecting = false;
         self.geometry.borrow_mut().clear();
         self.rebuild(true);
+        self.find_again();
         self.horizontal_scroll.set_offset(point(px(0.), px(0.)));
         self.ensure_presentation(cx);
         cx.notify();
@@ -738,7 +748,11 @@ impl DiffState {
     ) {
         let top = self.list.logical_scroll_top();
         let anchor = self.row_position(top.item_ix);
+        let current = self
+            .found_current
+            .and_then(|ix| self.found.hits().get(ix).cloned());
         self.set_files(files, cx);
+        self.found_current = current.and_then(|hit| self.found.nearest(&hit));
         let anchored = anchor.and_then(|anchor| self.source_row(&anchor));
         let item_ix = anchored.unwrap_or(top.item_ix.min(self.rows.len().saturating_sub(1)));
         self.list.scroll_to(ListOffset {
@@ -955,6 +969,106 @@ impl DiffState {
             offset_in_item: px(0.),
         });
         cx.notify();
+    }
+
+    /// Searches every supplied line with `matcher`, or ends the search with
+    /// `None`. No result is current until [`Self::show_found`] picks one.
+    /// Files supplied later are searched again; [`Self::refresh_files`] keeps
+    /// the current result where it still is.
+    pub fn find(&mut self, matcher: Option<DiffMatcher>, cx: &mut Context<Self>) {
+        self.found = Rc::new(
+            matcher
+                .as_ref()
+                .map(|matcher| Found::new(&self.files, matcher))
+                .unwrap_or_default(),
+        );
+        self.matcher = matcher;
+        self.found_current = None;
+        self.found_reveal = false;
+        cx.notify();
+    }
+
+    /// How many results the search has.
+    pub fn found_count(&self) -> usize {
+        self.found.hits().len()
+    }
+
+    /// The result [`Self::show_found`] made current.
+    pub fn current_found(&self) -> Option<usize> {
+        self.found_current
+    }
+
+    /// The row each result shows on, in result order. A result inside folded
+    /// lines shows on the fold's row.
+    pub fn found_rows(&self) -> Vec<usize> {
+        self.found
+            .hits()
+            .iter()
+            .map(|hit| self.hit_row(hit).unwrap_or_default())
+            .collect()
+    }
+
+    /// Makes result `ix` current and unfolds the lines around it. Unless its
+    /// row is already in view, scrolls so that `rows_above` rows show above it.
+    pub fn show_found(&mut self, ix: usize, rows_above: usize, cx: &mut Context<Self>) {
+        let Some(hit) = self.found.hits().get(ix).cloned() else {
+            return;
+        };
+        self.found_current = Some(ix);
+        self.found_reveal = true;
+        let (side, line) = hit.line();
+        let position = self.position(hit.file, side, line);
+        if self.collapsed.remove(position.path().as_str()) {
+            self.rebuild_at_anchor();
+        }
+        if let Some(row) = self.expand_line(&position) {
+            let shown = self.visible_rows();
+            if !(shown.start <= row && row + 1 < shown.end) {
+                self.list.scroll_to(ListOffset {
+                    item_ix: row.saturating_sub(rows_above),
+                    offset_in_item: px(0.),
+                });
+            }
+        }
+        cx.notify();
+    }
+
+    /// Leaves the results in place with none of them current.
+    pub fn clear_current_found(&mut self, cx: &mut Context<Self>) {
+        if self.found_current.take().is_some() {
+            cx.notify();
+        }
+    }
+
+    pub(crate) fn found(&self) -> &Rc<Found> {
+        &self.found
+    }
+
+    /// The current result, once, after [`Self::show_found`] picked it, so the
+    /// view can scroll its line sideways to it.
+    pub(crate) fn take_found_reveal(&mut self) -> Option<Hit> {
+        if !std::mem::take(&mut self.found_reveal) {
+            return None;
+        }
+        self.found.hits().get(self.found_current?).cloned()
+    }
+
+    fn hit_row(&self, hit: &Hit) -> Option<usize> {
+        let rows = self.file_rows.get(hit.file)?;
+        let (side, ix) = hit.line();
+        let rows = match side {
+            DiffSide::Original => &rows.original,
+            DiffSide::Modified => &rows.modified,
+        };
+        rows.get(ix).copied().flatten()
+    }
+
+    fn find_again(&mut self) {
+        let Some(matcher) = self.matcher.clone() else {
+            return;
+        };
+        self.found = Rc::new(Found::new(&self.files, &matcher));
+        self.found_current = None;
     }
 
     /// Moves to the next changed group after the current viewport, across files,

@@ -5,22 +5,33 @@ use gpui_kit::{
     AnyElement, App, FocusHandle, Hsla, InteractiveElement as _, IntoElement, MouseButton,
     ParentElement as _, Pixels, RenderOnce, SharedString, StatefulInteractiveElement as _,
     Styled as _, UniformListScrollHandle, Window,
-    component::{ActiveTheme as _, h_flex, menu::ContextMenuExt as _, scroll::Scrollbar, v_flex},
+    assets::IconName,
+    component::{
+        ActiveTheme as _, Icon, Sizable as _, h_flex, menu::ContextMenuExt as _, scroll::Scrollbar,
+        v_flex,
+    },
     div,
     prelude::FluentBuilder as _,
-    px, uniform_list,
+    px, relative, uniform_list,
 };
 
 use super::{
-    branch_menu::BranchMenu, commit_menu::CommitMenu, pulls::PullMarks, ref_menus::RefMenus,
-    stash_menu::StashMenu, tag_menu::TagMenu, worktree_menu::WorktreeMenu,
+    branch_menu::BranchMenu,
+    commit_menu::CommitMenu,
+    commit_search::{CommitFinder, CommitsFound},
+    pulls::PullMarks,
+    ref_menus::RefMenus,
+    stash_menu::StashMenu,
+    tag_menu::TagMenu,
+    worktree_menu::WorktreeMenu,
 };
 use crate::{
     actions::HISTORY_CONTEXT,
     git::{History, RefLabel, ShownRef, WorkingChanges, Worktree, WorktreeChanges},
     ui::{
         self, GraphNode, Handler, Look as _, Palette, Pick, Picked, ROW_HEIGHT, commit_subject,
-        handler, is_double_click, list_row, ref_badge, stash_badge, thousands, worktree_badge,
+        found_text, handler, is_double_click, list_row, ref_badge, stash_badge, thousands,
+        worktree_badge,
     },
 };
 
@@ -31,6 +42,26 @@ const AUTHOR_WIDTH: Pixels = px(120.);
 const AVATAR_SIZE: Pixels = px(16.);
 const DATE_WIDTH: Pixels = px(104.);
 const ID_WIDTH: Pixels = px(56.);
+const UNFOUND_OPACITY: f32 = 0.35;
+const TICKS_WIDTH: Pixels = px(10.);
+const TICK_HEIGHT: Pixels = px(2.);
+const TICK_PLACES: usize = 512;
+
+#[derive(Clone)]
+pub(crate) struct Finding {
+    pub(crate) finder: Rc<CommitFinder>,
+    pub(crate) found: Rc<CommitsFound>,
+}
+
+impl Finding {
+    fn ranges(&self, row: usize, text: &str) -> Vec<std::ops::Range<usize>> {
+        if self.found.has(row) {
+            self.finder.ranges(text)
+        } else {
+            Vec::new()
+        }
+    }
+}
 
 #[derive(IntoElement)]
 pub(crate) struct HistoryList {
@@ -50,6 +81,7 @@ pub(crate) struct HistoryList {
     worktree_menu: Option<WorktreeMenu>,
     elsewhere: Arc<[WorktreeChanges]>,
     marks: Arc<PullMarks>,
+    finding: Option<Finding>,
 }
 
 #[derive(Clone)]
@@ -88,7 +120,13 @@ impl HistoryList {
             worktree_menu: None,
             elsewhere: Arc::from([]),
             marks: Arc::default(),
+            finding: None,
         }
+    }
+
+    pub(crate) fn finding(mut self, finding: Option<Finding>) -> Self {
+        self.finding = finding;
+        self
     }
 
     pub(crate) fn worktrees(
@@ -198,6 +236,7 @@ impl RenderOnce for HistoryList {
             worktree_menu,
             elsewhere,
             marks,
+            finding,
         } = self;
         let actions = RowActions {
             on_select: on_select_commit,
@@ -215,6 +254,9 @@ impl RenderOnce for HistoryList {
             uncommitted_row(&changes, selected, &palette, on_select_uncommitted, cx)
         });
         let focus_on_click = focus.clone();
+        let ticks = finding
+            .as_ref()
+            .map(|finding| found_ticks(&finding.found, history.commits.len()));
         let list = div()
             .id("history")
             .relative()
@@ -238,6 +280,7 @@ impl RenderOnce for HistoryList {
                                 graph_width,
                                 &palette,
                                 &actions,
+                                finding.as_ref(),
                                 cx,
                             )
                         })
@@ -246,6 +289,7 @@ impl RenderOnce for HistoryList {
                 .size_full()
                 .track_scroll(&scroll),
             )
+            .children(ticks)
             .child(Scrollbar::vertical(&scroll));
         v_flex()
             .size_full()
@@ -255,6 +299,34 @@ impl RenderOnce for HistoryList {
     }
 }
 
+fn found_ticks(found: &CommitsFound, rows: usize) -> AnyElement {
+    let mut places: Vec<usize> = found
+        .rows
+        .iter()
+        .map(|row| row * TICK_PLACES / rows.max(1))
+        .collect();
+    places.dedup();
+    let color = ui::found_color();
+    div()
+        .absolute()
+        .top_0()
+        .bottom_0()
+        .right_0()
+        .w(TICKS_WIDTH)
+        .children(places.into_iter().map(|place| {
+            div()
+                .absolute()
+                .left(px(1.))
+                .right(px(1.))
+                .top(relative(place as f32 / TICK_PLACES as f32))
+                .h(TICK_HEIGHT)
+                .rounded(px(1.))
+                .bg(color)
+        }))
+        .into_any_element()
+}
+
+#[allow(clippy::too_many_arguments)]
 fn commit_row(
     history: &History,
     row: usize,
@@ -262,11 +334,19 @@ fn commit_row(
     graph_width: Pixels,
     palette: &Palette,
     actions: &RowActions,
+    finding: Option<&Finding>,
     cx: &App,
 ) -> AnyElement {
     if let Some(worktree) = history.worktree_on_row(row) {
         return changes_row(history, row, worktree, selected, graph_width, palette, actions, cx);
     }
+    let unfound = finding.is_some_and(|finding| !finding.found.has(row));
+    let ranges = |text: &str| finding.map(|finding| finding.ranges(row, text)).unwrap_or_default();
+    let unseen = finding.and_then(|finding| finding.found.unseen.get(&row).copied());
+    let id_ranges = finding
+        .filter(|finding| finding.found.has(row))
+        .map(|finding| finding.finder.shown_id_ranges(&history.commits[row].id.to_string()))
+        .unwrap_or_default();
     let commit = &history.commits[row];
     let id = commit.id;
     let graph_row = history.graph.rows[row].clone();
@@ -278,6 +358,7 @@ fn commit_row(
     };
     let labels = history.shown_on(&commit.id);
     let color = palette.lane(graph_row.node_lane);
+    let shown = if unfound { UNFOUND_OPACITY } else { 1. };
     let row = list_row(SharedString::from(commit.id.to_string()), selected)
         .px_3()
         .child(
@@ -293,18 +374,17 @@ fn commit_row(
                         .min_w_0()
                         .overflow_hidden()
                         .gap_1p5()
-                        .children(stash.map(|stash| stash_badge(stash.name.clone(), color, cx)))
-                        .children(
-                            history
-                                .detached_worktrees_on(&id)
-                                .map(|worktree| worktree_tag(worktree, color, actions, cx)),
-                        )
-                        .children(
-                            labels
-                                .iter()
-                                .take(MAX_BADGES)
-                                .map(|&shown| branch_badge(shown, color, actions, cx)),
-                        )
+                        .opacity(shown)
+                        .children(stash.map(|stash| {
+                            stash_badge(stash.name.clone(), color, ranges(&stash.name), cx)
+                        }))
+                        .children(history.detached_worktrees_on(&id).map(|worktree| {
+                            worktree_tag(worktree, color, actions, ranges(&worktree.name), cx)
+                        }))
+                        .children(labels.iter().take(MAX_BADGES).map(|&shown| {
+                            let found = ranges(&shown.label.name);
+                            branch_badge(shown, color, actions, found, cx)
+                        }))
                         .when(labels.len() > MAX_BADGES, |this| {
                             this.child(
                                 div()
@@ -316,14 +396,15 @@ fn commit_row(
                         })
                         .child(
                             div()
-                                .flex_1()
+                                .when(unseen.is_none(), |this| this.flex_1())
                                 .ellipsis()
                                 .sm_text()
                                 .when(commit.subject.is_empty(), |this| {
                                     this.text_color(palette.muted)
                                 })
-                                .child(commit_subject(commit)),
-                        ),
+                                .child(found_text(commit_subject(commit), ranges(&commit.subject))),
+                        )
+                        .children(unseen.map(|unseen| unseen_chip(unseen.label()))),
                 )
                 .child(
                     h_flex()
@@ -332,8 +413,13 @@ fn commit_row(
                         .gap_1p5()
                         .xs_text()
                         .text_color(palette.muted)
+                        .opacity(shown)
                         .child(ui::author_avatar(&commit.author, &commit.author_email, AVATAR_SIZE))
-                        .child(div().ellipsis().child(commit.author.clone())),
+                        .child(
+                            div()
+                                .ellipsis()
+                                .child(found_text(commit.author.clone(), ranges(&commit.author))),
+                        ),
                 )
                 .child(
                     div()
@@ -341,6 +427,7 @@ fn commit_row(
                         .w(DATE_WIDTH)
                         .xs_text()
                         .text_color(palette.muted)
+                        .opacity(shown)
                         .child(commit.committed.clone()),
                 )
                 .child(
@@ -350,7 +437,8 @@ fn commit_row(
                         .xs_text()
                         .font_family(palette.mono.clone())
                         .text_color(palette.muted)
-                        .child(commit.short_id.clone()),
+                        .opacity(shown)
+                        .child(found_text(commit.short_id.clone(), id_ranges)),
                 ),
         )
         .when_some(actions.on_select.clone(), |row, on_select| {
@@ -377,7 +465,29 @@ fn commit_row(
     }
 }
 
-fn branch_badge(shown: ShownRef, color: Hsla, actions: &RowActions, cx: &App) -> AnyElement {
+fn unseen_chip(label: &'static str) -> AnyElement {
+    let color = ui::found_color();
+    h_flex()
+        .flex_none()
+        .h(px(18.))
+        .px_1p5()
+        .gap_1()
+        .rounded(px(9.))
+        .xs_text()
+        .text_color(color)
+        .bg(color.opacity(0.12))
+        .child(Icon::new(IconName::Search).xsmall().text_color(color))
+        .child(label)
+        .into_any_element()
+}
+
+fn branch_badge(
+    shown: ShownRef,
+    color: Hsla,
+    actions: &RowActions,
+    found: Vec<std::ops::Range<usize>>,
+    cx: &App,
+) -> AnyElement {
     let label = shown.label.clone();
     let on_check_out = actions
         .on_check_out
@@ -385,7 +495,7 @@ fn branch_badge(shown: ShownRef, color: Hsla, actions: &RowActions, cx: &App) ->
         .filter(|_| label.can_be_checked_out());
     let double_clicked = label.clone();
     let mark = actions.marks.get(&label.full_name()).copied();
-    let badge = ref_badge(shown, color, mark, cx).when_some(on_check_out, |badge, on_check_out| {
+    let badge = ref_badge(shown, color, mark, found, cx).when_some(on_check_out, |badge, on_check_out| {
         badge.on_click(move |event, window, cx| {
             if is_double_click(event) {
                 on_check_out(&double_clicked, window, cx)
@@ -395,8 +505,14 @@ fn branch_badge(shown: ShownRef, color: Hsla, actions: &RowActions, cx: &App) ->
     actions.menus.attach(badge, &label)
 }
 
-fn worktree_tag(worktree: &Worktree, color: Hsla, actions: &RowActions, cx: &App) -> AnyElement {
-    let badge = worktree_badge(worktree.name.clone(), color, cx);
+fn worktree_tag(
+    worktree: &Worktree,
+    color: Hsla,
+    actions: &RowActions,
+    found: Vec<std::ops::Range<usize>>,
+    cx: &App,
+) -> AnyElement {
+    let badge = worktree_badge(worktree.name.clone(), color, found, cx);
     match actions.worktree_menu.clone() {
         Some(menu) => {
             let right_clicked = worktree.clone();
@@ -443,7 +559,8 @@ fn changes_row(
                         .min_w_0()
                         .overflow_hidden()
                         .gap_1p5()
-                        .child(worktree_badge(worktree.name.clone(), color, cx))
+                        .child(worktree_badge(worktree.name.clone(), color, Vec::new(), cx))
+
                         .child(div().flex_1().ellipsis().sm_text().italic().child(UNCOMMITTED)),
                 )
                 .child(

@@ -1124,6 +1124,19 @@ const Catalog = (() => {
           ],
         },
         {
+          name: 'FindBar',
+          code: 'ui::find_bar::FindBar',
+          source: 'src/ui/find_bar.rs',
+          about: 'The bar Ctrl+F opens over a text comparison or over the graph. The field searches as you type; inside it, Aa matches case, the next toggle whole words only and .* reads the search as a regular expression. Then which result is current out of how many, ↑ and ↓ (Shift+Enter, Enter), an optional note, and × (Esc). The field turns red and the count says why when nothing matches.',
+          variants: [
+            ['In a file', () => `<div style="width:760px">${C.FindBar({ query: 'args', current: 3, total: 11 })}</div>`],
+            ['Empty', () => `<div style="width:760px">${C.FindBar({})}</div>`],
+            ['Options on, no results', () => `<div style="width:760px">${C.FindBar({ query: 'Args', options: ['case', 'word'] })}</div>`],
+            ['Bad pattern', () => `<div style="width:760px">${C.FindBar({ query: 'fn (', options: ['regex'], invalid: true })}</div>`],
+            ['Commits, history cut', () => `<div style="width:760px">${C.FindBar({ query: 'diff', current: 2, total: 14, placeholder: FindTexts.commits, note: FindTexts.newest(10000), focused: false })}</div>`],
+          ],
+        },
+        {
           name: 'ViewOptionsMenu',
           code: 'repo::file_diff_panel::ViewOptionsMenu',
           source: 'src/repo/file_diff_panel.rs',

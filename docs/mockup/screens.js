@@ -60,8 +60,18 @@ const Screens = (() => {
     repo({
       wipSelected: true,
       left: false,
-      middle: C.FileDiffPanel({ diff: extra.diff || fileDiff, mode, selection: extra.selection, pointed: extra.pointed, menuOpen: extra.menuOpen, hot: extra.hot, look: extra.look }),
+      middle: C.FileDiffPanel({ diff: extra.diff || fileDiff, mode, selection: extra.selection, pointed: extra.pointed, menuOpen: extra.menuOpen, hot: extra.hot, look: extra.look, find: extra.find }),
       right: C.ChangesList({ changes: extra.changes || changes, open: openFile, view: extra.view }),
+      toolbar: extra.find ? C.RepoToolbar({ finding: true }) : undefined,
+    });
+
+  const commitsFound = (find) =>
+    repo({
+      selectedRow: find.row,
+      middle: C.HistoryList({ history, selectedRow: find.row, changes, find }),
+      right: C.CommitPanel({ commit: history.commits[find.row], details: commitDetails }),
+      status: { position: position(find.row) },
+      toolbar: C.RepoToolbar({ finding: true }),
     });
 
   const { pickedLine, pickedApart, pickedHead } = Sample;
@@ -143,13 +153,14 @@ const Screens = (() => {
   const { unity } = Sample;
   const unityFiles = [...unity.work.staged, ...unity.work.unstaged];
 
-  const unityComparison = (diff, mode, { menuOpen = false, hot, view = {} } = {}) =>
+  const unityComparison = (diff, mode, { menuOpen = false, hot, view = {}, find } = {}) =>
     C.SterneGit({
       topBar: C.TopBar({ repository: starfall.name, head: starfall.head }),
       tabStrip: C.TabStrip({ tabs: gameTabs, active: gameTabs.length - 1 }),
       body: C.RepoView({
+        toolbar: find ? C.RepoToolbar({ finding: true }) : undefined,
         left: false,
-        middle: C.FileDiffPanel({ diff, mode, menuOpen, hot, view, filePosition: [unityFiles.indexOf(diff.change) + 1, unityFiles.length] }),
+        middle: C.FileDiffPanel({ diff, mode, menuOpen, hot, view, find, filePosition: [unityFiles.indexOf(diff.change) + 1, unityFiles.length] }),
         right: C.ChangesList({ changes: unity.work, open: { side: diff.side, path: diff.change.path } }),
         status: C.RepoStatusBar({ summary: historySummary(starfall) }),
       }),
@@ -717,6 +728,47 @@ const Screens = (() => {
       render: () => C.SterneGit({ topBar: topBar(), tabStrip: tabStrip(), body: fileComparison('split', { look: { whole: false } }) }),
     },
     {
+      id: 'find-in-file',
+      title: 'Find in a file',
+      about: "Ctrl+F, Find in the toolbar or Edit › Find… while a file is open puts a find bar under the file bar, its field focused and holding the last search, selected. Results show as you type, in the whole file and on both sides: every result is tinted orange, the current one is solid, and the strip at the right edge marks every line that has one, beside the change marks. A line both sides share counts once, so Split and Unified give the same count. Enter or F3 goes to the next result and Shift+Enter or Shift+F3 to the previous one, each brought to the same place as a change, and after the last one it starts over from the first. Aa matches case, the next toggle whole words only, .* reads the search as a regular expression; Alt+C, Alt+W and Alt+R flip them. With Show the whole file off, a result inside folded lines unfolds them when it becomes current. The bar stays open with its search when another file opens, so a name can be followed from file to file. Esc closes the bar; the next Esc closes the file.",
+      source: 'src/repo/file_diff_panel.rs',
+      render: () => C.SterneGit({ topBar: topBar(), tabStrip: tabStrip(), body: fileComparison('split', { find: { query: 'args', current: 'n19', occurrence: 0 } }) }),
+    },
+    {
+      id: 'find-in-file-none',
+      title: 'Find in a file — no results',
+      about: 'Nothing matches: the field gets a red edge, the count says No results, and the arrows are off. Here Aa is on, so Args does not match args. A regular expression that does not parse says Not a valid pattern instead.',
+      source: 'src/repo/file_diff_panel.rs',
+      render: () => C.SterneGit({ topBar: topBar(), tabStrip: tabStrip(), body: fileComparison('unified', { find: { query: 'Args', options: ['case'] } }) }),
+    },
+    {
+      id: 'find-in-yaml',
+      title: 'Find in a Unity file',
+      about: "The YAML of a Unity file is a text comparison like any other, so the same find bar searches it, under the view bar. Searching a fileID lists every line that points at that object: here the Slime game object, from its own components and from the others. The names shown after # are not part of the file and are not searched.",
+      source: 'src/repo/file_diff_panel.rs',
+      render: () => unityComparison(unity.prefabYaml, 'yaml', { find: { query: '3381795302254875041', current: 'n213', occurrence: 0 } }),
+    },
+    {
+      id: 'find-commits',
+      title: 'Find commits',
+      about: "Ctrl+F, Find or Edit › Find… while the graph shows puts the find bar above it. Results show as you type, in the commits the graph has read: the subject and the description, the author's name and email, the commit id from its first characters, and the names of branches and tags. The graph keeps every row and every line, so the results stay where they are in history; rows that do not match fade, and the matched text is tinted in the rows that do. A commit that matches only where the row does not show it, here in its description, says so after its subject. Enter or F3 selects the next result, Shift+Enter or Shift+F3 the previous one, like clicking it: the commit opens on the right and the list scrolls to it. Ticks by the scrollbar mark where every result is in the whole graph. When history was cut at 10,000 commits, the bar says the search covers only those.",
+      source: 'src/repo/history_list.rs',
+      render: () => C.SterneGit({ topBar: topBar(), tabStrip: tabStrip(), body: commitsFound({ query: 'diff', row: 2, current: 2, total: 14, elsewhere: { 4: 'description' }, ticks: [0.003, 0.005, 0.009, 0.011, 0.024, 0.09, 0.17, 0.31, 0.38, 0.52, 0.56, 0.71, 0.86, 0.93] }) }),
+    },
+    {
+      id: 'find-menu',
+      title: 'Edit menu — Find',
+      about: 'Edit holds Find… (Ctrl+F), Find Next (F3) and Find Previous (Shift+F3). They search what the middle pane shows: the open file, or the graph when no file is open.',
+      source: 'src/app/mod.rs',
+      render: () =>
+        C.SterneGit({
+          topBar: topBar({ openMenu: 'Edit' }),
+          tabStrip: tabStrip(),
+          body: commitSelected(),
+          overlays: C.Menu({ items: Menus.Edit, left: 76, top: 32, hot: 'Find…' }),
+        }),
+    },
+    {
       id: 'picture-split',
       title: 'Compare pictures — Split',
       about: 'A picture opens as pictures, not as “binary”: PNG, JPEG, GIF, WebP, BMP, TGA, ICO and QOI. Other formats show their details and the Open buttons. Split puts the version before the change on the left and the file on disk on the right, at the same zoom, on a checkerboard where they are transparent; zooming or dragging one moves the other. The view bar picks the way to compare, steps through the changed areas (each step zooms both sides onto one), zooms (Fit, − and +, Ctrl+wheel) and picks what shows behind transparent pixels. Past 400 % pixels stay square, which suits pixel art. Under the pictures, the details put both versions in one table, what changed in yellow. A new or deleted picture shows its one version and no modes.',
@@ -1160,6 +1212,20 @@ const Screens = (() => {
       render: () =>
         rebaseView({
           middle: C.FileDiffPanel({ diff: statusConflicts, expanded: true, filePosition: [1, 2] }),
+          changes: rebaseChanges,
+          open: { side: 'conflicted', path: statusConflicts.change.path },
+          conflicts: rebaseChanges.conflicted.length,
+          expanded: true,
+        }),
+    },
+    {
+      id: 'find-in-conflict',
+      title: 'Find in a conflicted file',
+      about: 'Ctrl+F in the MergeEditor puts the find bar under the conflict bar. It searches the current and the incoming versions at the top and the result below, in that order, and counts them together. A result in the versions is tinted like in any comparison; in the result, which is an editor, the current one is framed and selected, so typing replaces it. The result is searched again after every edit, so a name being renamed by hand can be followed until none is left.',
+      source: 'src/repo/merge_editor.rs',
+      render: () =>
+        rebaseView({
+          middle: C.FileDiffPanel({ diff: statusConflicts, expanded: true, filePosition: [1, 2], find: { query: 'Renamed', total: 2, reached: 2, current: { area: 'result', line: 37 } } }),
           changes: rebaseChanges,
           open: { side: 'conflicted', path: statusConflicts.change.path },
           conflicts: rebaseChanges.conflicted.length,

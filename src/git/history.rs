@@ -16,7 +16,9 @@ use gix::{
 use gpui_kit::SharedString;
 
 use super::{
+    Repo,
     graph::{self, Graph},
+    patch::message_body,
     refs::{self, RefDigest, RefLabel, ShownRef},
     stash::{Stash, stash_ids_newest_first, stash_name},
     status::WorkingChanges,
@@ -359,6 +361,18 @@ impl History {
     pub(crate) fn shown_on(&self, id: &ObjectId) -> Vec<ShownRef<'_>> {
         let labels: Vec<&RefLabel> = self.labels_on(id).collect();
         refs::fold_upstreams_in(&labels)
+    }
+}
+
+impl Repo {
+    pub(crate) fn descriptions(&self, ids: &[ObjectId]) -> HashMap<ObjectId, SharedString> {
+        let local = self.local();
+        ids.iter()
+            .filter_map(|id| {
+                let commit = local.find_commit(*id).ok()?;
+                Some((*id, message_body(&commit)))
+            })
+            .collect()
     }
 }
 

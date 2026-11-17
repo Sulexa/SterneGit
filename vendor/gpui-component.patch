@@ -177,11 +177,121 @@ index 0000000..213d660
 +        && word.chars().any(char::is_uppercase)
 +        && !word.chars().any(char::is_lowercase)
 +}
+diff --git a/src/diff/found.rs b/src/diff/found.rs
+new file mode 100644
+index 0000000..114b390
+--- /dev/null
++++ b/src/diff/found.rs
+@@ -0,0 +1,104 @@
++use std::{collections::HashMap, ops::Range, rc::Rc};
++
++use super::{DiffFile, DiffSide};
++
++/// Finds the byte ranges a search matches in one line of source text, without
++/// its line ending.
++pub type DiffMatcher = Rc<dyn Fn(&str) -> Vec<Range<usize>>>;
++
++/// One run of text the search matched. A line both sides share is one result
++/// shown on both.
++#[derive(Clone, Debug, PartialEq, Eq)]
++pub(crate) struct Hit {
++    pub(crate) file: usize,
++    pub(crate) original: Option<usize>,
++    pub(crate) modified: Option<usize>,
++    pub(crate) range: Range<usize>,
++}
++
++impl Hit {
++    /// The side and line index the result is read from: the new side when
++    /// both sides show it.
++    pub(crate) fn line(&self) -> (DiffSide, usize) {
++        match (self.modified, self.original) {
++            (Some(ix), _) => (DiffSide::Modified, ix),
++            (None, ix) => (DiffSide::Original, ix.unwrap_or_default()),
++        }
++    }
++
++    fn order(&self) -> (usize, usize, bool, usize) {
++        let (side, ix) = self.line();
++        (self.file, ix, side == DiffSide::Original, self.range.start)
++    }
++}
++
++/// Every result of a search, in patch order: within a run of changes, the
++/// removed lines' results come before the added lines'.
++#[derive(Default)]
++pub(crate) struct Found {
++    hits: Vec<Hit>,
++    lines: HashMap<(usize, DiffSide, usize), Vec<usize>>,
++}
++
++impl Found {
++    pub(crate) fn new(files: &[DiffFile], matcher: &DiffMatcher) -> Self {
++        let mut found = Self::default();
++        for (file_ix, file) in files.iter().enumerate() {
++            for line in file.patch_lines() {
++                let original = line.line(DiffSide::Original);
++                let modified = line.line(DiffSide::Modified);
++                let (side, ix) = match (modified, original) {
++                    (Some(ix), _) => (DiffSide::Modified, ix),
++                    (None, Some(ix)) => (DiffSide::Original, ix),
++                    (None, None) => continue,
++                };
++                for range in matcher(file.lines(side)[ix].text()) {
++                    if range.is_empty() {
++                        continue;
++                    }
++                    let hit = found.hits.len();
++                    for (side, line) in [(DiffSide::Original, original), (DiffSide::Modified, modified)] {
++                        if let Some(line) = line {
++                            found.lines.entry((file_ix, side, line)).or_default().push(hit);
++                        }
++                    }
++                    found.hits.push(Hit {
++                        file: file_ix,
++                        original,
++                        modified,
++                        range,
++                    });
++                }
++            }
++        }
++        found
++    }
++
++    pub(crate) fn hits(&self) -> &[Hit] {
++        &self.hits
++    }
++
++    /// The results on one line: each one's source range and index.
++    pub(crate) fn on_line(
++        &self,
++        file: usize,
++        side: DiffSide,
++        ix: usize,
++    ) -> impl Iterator<Item = (Range<usize>, usize)> + '_ {
++        self.lines
++            .get(&(file, side, ix))
++            .into_iter()
++            .flatten()
++            .map(|hit| (self.hits[*hit].range.clone(), *hit))
++    }
++
++    /// The result standing where `hit` stood before the search ran again:
++    /// the same one when it is still there, else the next, else the last.
++    pub(crate) fn nearest(&self, hit: &Hit) -> Option<usize> {
++        let wanted = hit.order();
++        self.hits
++            .iter()
++            .position(|candidate| candidate.order() >= wanted)
++            .or_else(|| self.hits.len().checked_sub(1))
++    }
++}
 diff --git a/src/diff/mod.rs b/src/diff/mod.rs
-index 2781ce0..d7d1e50 100644
+index 2781ce0..3c1dc49 100644
 --- a/src/diff/mod.rs
 +++ b/src/diff/mod.rs
-@@ -1,6 +1,7 @@
+@@ -1,9 +1,11 @@
  //! Readonly, virtualized patch display inspired by Diffs from Pierre.
  //! Parse an externally supplied patch into [`DiffFile`]s, retain one
  //! [`DiffState`] for all of them in the owner, and build [`Diff`] during rendering.
@@ -189,8 +299,15 @@ index 2781ce0..d7d1e50 100644
  mod conflict;
  mod decoration;
  mod document;
-@@ -16,7 +17,7 @@ pub use decoration::{DiffDecoration, DiffGutterMarker};
++mod found;
+ mod parser;
+ #[cfg(test)]
+ mod parser_tests;
+@@ -14,9 +16,10 @@ mod state;
+ pub use conflict::{DiffConflict, DiffConflictResolution};
+ pub use decoration::{DiffDecoration, DiffGutterMarker};
  pub use document::{DiffFile, DiffFileStatus, DiffLinePosition, DiffLineRange, DiffSide};
++pub use found::DiffMatcher;
  pub use parser::{DiffParseError, DiffParseOptions};
  pub use presentation::DiffInlineUnit;
 -pub use state::{DiffEvent, DiffState};
@@ -198,7 +315,7 @@ index 2781ce0..d7d1e50 100644
  
  use std::{collections::HashMap, rc::Rc, sync::Arc};
  
-@@ -35,7 +36,7 @@ use crate::{
+@@ -35,12 +38,13 @@ use crate::{
      button::{Button, ButtonVariants as _},
      h_flex,
      input::{Copy, SelectAll},
@@ -207,7 +324,13 @@ index 2781ce0..d7d1e50 100644
      v_flex,
  };
  use actions::*;
-@@ -133,6 +134,8 @@ pub enum DiffHunkSeparator {
+ use conflict::ConflictPart;
+ use decoration::{Decorations, GutterMarkers};
++use found::{Found, Hit};
+ use presentation::FilePresentation;
+ use selection::{CodeText, SelectionLayer};
+ use state::{DisplayRow, FoldExpansion, LayoutKey, SelectedLines};
+@@ -133,6 +137,8 @@ pub enum DiffHunkSeparator {
      LineInfo,
      /// A thin divider.
      Simple,
@@ -216,7 +339,7 @@ index 2781ce0..d7d1e50 100644
  }
  
  /// How changed lines are marked beside the code.
-@@ -196,6 +199,9 @@ type MarkerRenderer = Rc<dyn Fn(&DiffGutterMarker, &mut Window, &mut App) -> Any
+@@ -196,6 +202,9 @@ type MarkerRenderer = Rc<dyn Fn(&DiffGutterMarker, &mut Window, &mut App) -> Any
  type RangeHandler = Rc<dyn Fn(&DiffLineRange, &mut Window, &mut App)>;
  type ClickHandler = Rc<dyn Fn(&DiffLinePosition, &ClickEvent, &mut Window, &mut App)>;
  type HoverHandler = Rc<dyn Fn(Option<&DiffLinePosition>, &mut Window, &mut App)>;
@@ -226,7 +349,7 @@ index 2781ce0..d7d1e50 100644
  
  #[derive(Default)]
  struct HeaderSlots {
-@@ -237,9 +243,12 @@ pub struct Diff {
+@@ -237,9 +246,12 @@ pub struct Diff {
      decorations: Rc<Decorations>,
      gutter_markers: Rc<GutterMarkers>,
      gutter_marker_content: Option<MarkerRenderer>,
@@ -239,7 +362,7 @@ index 2781ce0..d7d1e50 100644
  }
  
  fn file_renderer<F, E>(render: F) -> FileRenderer
-@@ -269,9 +278,12 @@ impl Diff {
+@@ -269,9 +281,12 @@ impl Diff {
              decorations: Rc::default(),
              gutter_markers: Rc::default(),
              gutter_marker_content: None,
@@ -252,7 +375,7 @@ index 2781ce0..d7d1e50 100644
          }
      }
      /// Shows the original and modified line-number lanes. Default is true.
-@@ -415,6 +427,19 @@ impl Diff {
+@@ -415,6 +430,19 @@ impl Diff {
          self.header.suffix = Some(file_renderer(render));
          self
      }
@@ -272,7 +395,7 @@ index 2781ce0..d7d1e50 100644
      /// Compatibility alias for [`Self::render_annotation`].
      pub fn annotation_content<F, E>(self, render: F) -> Self
      where
-@@ -486,6 +511,26 @@ impl Diff {
+@@ -486,6 +514,26 @@ impl Diff {
          self.on_line_hover = Some(Rc::new(handler));
          self
      }
@@ -299,7 +422,7 @@ index 2781ce0..d7d1e50 100644
  }
  impl Styled for Diff {
      fn style(&mut self) -> &mut StyleRefinement {
-@@ -537,41 +582,60 @@ fn render_diff(
+@@ -537,41 +585,63 @@ fn render_diff(
          soft_wrap,
      );
      if state.update_layout(layout, row_height) {
@@ -350,6 +473,9 @@ index 2781ce0..d7d1e50 100644
 +        },
 +        area: code_area,
 +    };
++    if !soft_wrap && let Some(hit) = state.take_found_reveal() {
++        reveal_found(&hit, state.files(), &code_scroll, font_size, &font_family, window, cx);
++    }
 +    let scroll_x = code_scroll.scrolled();
 +    let code_scrollbar_lane = if code_scroll.max() > px(0.) {
 +        Scrollbar::width()
@@ -372,8 +498,12 @@ index 2781ce0..d7d1e50 100644
          line_number: props.line_number,
          syntax_highlight: props.syntax_highlight,
          header_visible: props.header_visible,
-@@ -586,10 +650,13 @@ fn render_diff(
+@@ -584,12 +654,17 @@ fn render_diff(
+         annotations: props.annotations.clone(),
+         annotation_content: props.annotation_content,
          decorations: props.decorations,
++        found: state.found().clone(),
++        found_current: state.current_found(),
          gutter_markers: props.gutter_markers,
          gutter_marker_content: props.gutter_marker_content.filter(|_| marker_lane),
 +        hunk_suffix: props.hunk_suffix,
@@ -386,7 +516,7 @@ index 2781ce0..d7d1e50 100644
          selection: state.selection().clone(),
          selected_lines: state.selected_lines(),
          selected: state.selected_span(),
-@@ -614,10 +681,7 @@ fn render_diff(
+@@ -614,10 +689,7 @@ fn render_diff(
              div()
                  .id("diff-horizontal")
                  .size_full()
@@ -398,7 +528,7 @@ index 2781ce0..d7d1e50 100644
                  .child(gpui_base::ScrollBounce::new(
                      "diff-bounce",
                      &scrollbar,
-@@ -629,7 +693,7 @@ fn render_diff(
+@@ -629,7 +701,7 @@ fn render_diff(
                              .child(render_row(row, code.clone(), window, cx))
                              .into_any_element()
                      })
@@ -407,7 +537,7 @@ index 2781ce0..d7d1e50 100644
                      .h_full(),
                  ))
                  .into_any_element(),
-@@ -640,7 +704,7 @@ fn render_diff(
+@@ -640,7 +712,7 @@ fn render_diff(
          ))
          .when(has_rows && !soft_wrap, |this| {
              this.child(
@@ -416,7 +546,7 @@ index 2781ce0..d7d1e50 100644
              )
          })
          .when(has_rows, |this| {
-@@ -651,7 +715,25 @@ fn render_diff(
+@@ -651,7 +723,25 @@ fn render_diff(
                      .child(Scrollbar::vertical(&scrollbar).viewport_from_layout()),
              )
              .when(!soft_wrap, |this| {
@@ -443,7 +573,7 @@ index 2781ce0..d7d1e50 100644
              })
          })
          // A line-number drag may finish anywhere, including outside the body.
-@@ -677,24 +759,26 @@ fn render_diff(
+@@ -677,24 +767,26 @@ fn render_diff(
              this.list().scroll_by(window.rem_size() * 1.5);
              cx.notify();
          }))
@@ -488,7 +618,7 @@ index 2781ce0..d7d1e50 100644
          .on_action(cx.listener(|this, _: &PageUp, window, cx| {
              if !body_focused(this, window, cx) {
                  return;
-@@ -765,8 +849,7 @@ fn render_diff(
+@@ -765,8 +857,7 @@ fn render_diff(
                              let painted = if soft_wrap {
                                  px(0.)
                              } else {
@@ -498,7 +628,7 @@ index 2781ce0..d7d1e50 100644
                              };
                              if state.record_paint(bounds.size, painted) || rehinted {
                                  cx.notify();
-@@ -814,11 +897,13 @@ struct CodePresentation {
+@@ -814,11 +905,13 @@ struct CodePresentation {
      mode: DiffMode,
      content_width: Pixels,
      column_width: Pixels,
@@ -512,7 +642,12 @@ index 2781ce0..d7d1e50 100644
      line_number: bool,
      syntax_highlight: bool,
      header_visible: bool,
-@@ -834,10 +919,13 @@ struct CodePresentation {
+@@ -831,13 +924,18 @@ struct CodePresentation {
+     annotations: Rc<Annotations>,
+     annotation_content: Option<AnnotationRenderer>,
+     decorations: Rc<Decorations>,
++    found: Rc<Found>,
++    found_current: Option<usize>,
      gutter_markers: Rc<GutterMarkers>,
      /// Set only while the marker lane is shown.
      gutter_marker_content: Option<MarkerRenderer>,
@@ -526,7 +661,7 @@ index 2781ce0..d7d1e50 100644
      selection: gpui_base::TextSelectionHandle,
      selected_lines: Option<DiffLineRange>,
      selected: Option<SelectedLines>,
-@@ -862,31 +950,53 @@ impl CodePresentation {
+@@ -862,31 +960,53 @@ impl CodePresentation {
      }
  }
  
@@ -596,7 +731,7 @@ index 2781ce0..d7d1e50 100644
      window: &mut Window,
      cx: &App,
  ) -> Pixels {
-@@ -936,7 +1046,7 @@ fn measure_code_width(
+@@ -936,7 +1056,7 @@ fn measure_code_width(
                  .width
          })
          .fold(px(0.), Pixels::max);
@@ -605,7 +740,7 @@ index 2781ce0..d7d1e50 100644
  }
  
  fn render_row(
-@@ -948,7 +1058,9 @@ fn render_row(
+@@ -948,7 +1068,9 @@ fn render_row(
      match row {
          DisplayRow::File(file) => render_file_header(*file, &code, window, cx),
          DisplayRow::Notice(file) => render_notice(&code.files[*file], cx),
@@ -616,7 +751,7 @@ index 2781ce0..d7d1e50 100644
          DisplayRow::Fold { file, pairs } => render_fold(*file, pairs.clone(), &code, cx),
          DisplayRow::Conflict {
              file,
-@@ -1007,35 +1119,89 @@ fn render_row(
+@@ -1007,35 +1129,89 @@ fn render_row(
      }
  }
  
@@ -720,7 +855,7 @@ index 2781ce0..d7d1e50 100644
  }
  
  fn render_fold(
-@@ -1043,15 +1209,37 @@ fn render_fold(
+@@ -1043,15 +1219,37 @@ fn render_fold(
      pairs: std::ops::Range<usize>,
      code: &CodePresentation,
      cx: &App,
@@ -764,7 +899,7 @@ index 2781ce0..d7d1e50 100644
      let lines = code.expansion_lines;
      let partial = pairs.len() > lines;
      let expand = |id: (&'static str, usize), expansion: FoldExpansion| {
-@@ -1069,19 +1257,16 @@ fn render_fold(
+@@ -1069,19 +1267,16 @@ fn render_fold(
              })
      };
      h_flex()
@@ -787,7 +922,7 @@ index 2781ce0..d7d1e50 100644
              this.child(
                  expand(("expand-up", pairs.start), FoldExpansion::Up)
                      .icon(IconName::ArrowUp)
-@@ -1349,6 +1534,7 @@ fn render_gutter(
+@@ -1349,6 +1544,7 @@ fn render_gutter(
      file: usize,
      side: DiffSide,
      ix: Option<usize>,
@@ -795,7 +930,7 @@ index 2781ce0..d7d1e50 100644
      code: &CodePresentation,
      cx: &App,
  ) -> AnyElement {
-@@ -1385,7 +1571,7 @@ fn render_gutter(
+@@ -1385,7 +1581,7 @@ fn render_gutter(
                      .items_center()
                      .justify_end()
                      .text_size(code.font_size)
@@ -804,7 +939,7 @@ index 2781ce0..d7d1e50 100644
                      .hover(|this| this.text_color(cx.theme().foreground))
                      .role(gpui::accesskit::Role::Button)
                      .aria_label(
-@@ -1446,8 +1632,12 @@ fn render_cell(
+@@ -1446,8 +1642,12 @@ fn render_cell(
              this.border_r_1().border_color(cx.theme().border)
          })
          .when(ix.is_none(), |this| {
@@ -819,7 +954,85 @@ index 2781ce0..d7d1e50 100644
          });
      let Some(ix) = ix else {
          return cell.into_any_element();
-@@ -1705,7 +1895,7 @@ fn code_line(
+@@ -1582,9 +1782,77 @@ fn line_highlights(
+             },
+         ));
+     }
++    let found = crate::orange_400();
++    for (range, hit) in code.found.on_line(file, side, ix) {
++        let current = code.found_current == Some(hit);
++        highlights.push((
++            line.display_range(range),
++            HighlightStyle {
++                background_color: Some(if current {
++                    found
++                } else {
++                    found.opacity(FOUND_TINT)
++                }),
++                color: current.then(crate::neutral_950),
++                ..Default::default()
++            },
++        ));
++    }
+     highlights
+ }
+ 
++const FOUND_TINT: f32 = 0.32;
++
++/// Scrolls a long line sideways so the current search result shows, about a
++/// third of the way into the code.
++fn reveal_found(
++    hit: &Hit,
++    files: &[DiffFile],
++    scroll: &CodeScroll,
++    font_size: Pixels,
++    family: &SharedString,
++    window: &mut Window,
++    cx: &App,
++) {
++    let (side, ix) = hit.line();
++    let Some(line) = files.get(hit.file).and_then(|file| file.lines(side).get(ix)) else {
++        return;
++    };
++    let display = line.display_range(hit.range.clone());
++    let font = gpui::Font {
++        family: family.clone(),
++        ..Default::default()
++    };
++    let width = |end: usize| {
++        let text = line.display().get(..end).unwrap_or_default().to_owned();
++        let len = text.len();
++        window
++            .text_system()
++            .shape_line(
++                text.into(),
++                font_size,
++                &[TextRun {
++                    len,
++                    font: font.clone(),
++                    color: cx.theme().foreground,
++                    background_color: None,
++                    underline: None,
++                    strikethrough: None,
++                }],
++                None,
++            )
++            .width
++    };
++    let start = width(display.start);
++    let end = width(display.end);
++    let shown = scroll.scrolled();
++    if start >= shown && end <= shown + scroll.area {
++        return;
++    }
++    let left = (start - scroll.area / 3.).clamp(px(0.), scroll.max());
++    scroll.offset.set_offset(point(-left, px(0.)));
++}
++
+ /// The add-annotation button, shown on hover and at the end of the selection.
+ fn add_annotation_button(
+     file: usize,
+@@ -1705,7 +1973,7 @@ fn code_line(
              if code.soft_wrap {
                  this.w_full()
              } else {
@@ -828,7 +1041,7 @@ index 2781ce0..d7d1e50 100644
              }
          })
          .children(ranges.into_iter().enumerate().map(|(chunk_ix, range)| {
-@@ -1749,6 +1939,16 @@ fn code_line(
+@@ -1749,6 +2017,16 @@ fn code_line(
          code.hover_highlight,
          DiffHoverHighlight::Line | DiffHoverHighlight::Both
      );
@@ -845,7 +1058,7 @@ index 2781ce0..d7d1e50 100644
      let add_button = add_annotation_button(
          file,
          side,
-@@ -1808,7 +2008,15 @@ fn code_line(
+@@ -1808,7 +2086,15 @@ fn code_line(
          .text_size(code.font_size)
          .line_height(code.row_height)
          .when(changed && code.change_background, |this| {
@@ -862,7 +1075,7 @@ index 2781ce0..d7d1e50 100644
          })
          // An overlay, so the change background shows through a translucent fill.
          .when_some(decoration, |this, background| {
-@@ -1824,12 +2032,18 @@ fn code_line(
+@@ -1824,12 +2110,18 @@ fn code_line(
                  handler(hovered.then_some(&position), window, cx)
              })
          })
@@ -882,7 +1095,7 @@ index 2781ce0..d7d1e50 100644
              )
          })
          .children(marker_lane)
-@@ -1842,7 +2056,7 @@ fn code_line(
+@@ -1842,7 +2134,7 @@ fn code_line(
                      if code.soft_wrap {
                          this.flex_1().min_w_0()
                      } else {
@@ -952,10 +1165,18 @@ index f3cf61c..296ba98 100644
              );
              presentation.syntax[side as usize] = LineSpans::from_lines(per_line);
 diff --git a/src/diff/state.rs b/src/diff/state.rs
-index fb309b8..cb8e78f 100644
+index fb309b8..73d4fb1 100644
 --- a/src/diff/state.rs
 +++ b/src/diff/state.rs
-@@ -33,6 +33,7 @@ pub(crate) enum DisplayRow {
+@@ -17,6 +17,7 @@ use super::{
+     DiffAnnotation, DiffConflictResolution, DiffFile, DiffFileStatus, DiffInlineUnit,
+     DiffLinePosition, DiffLineRange, DiffMode, DiffSide,
+     conflict::ConflictPart,
++    found::{DiffMatcher, Found, Hit},
+     presentation::{
+         DiffSyntaxHighlighter, FilePresentation, PresentationOptions, SyntaxHighlighters,
+     },
+@@ -33,6 +34,7 @@ pub(crate) enum DisplayRow {
      Hunk {
          file: usize,
          hunk: usize,
@@ -963,7 +1184,7 @@ index fb309b8..cb8e78f 100644
      },
      Fold {
          file: usize,
-@@ -54,6 +55,18 @@ pub(crate) enum DisplayRow {
+@@ -54,6 +56,18 @@ pub(crate) enum DisplayRow {
  }
  
  impl DisplayRow {
@@ -982,7 +1203,7 @@ index fb309b8..cb8e78f 100644
      pub(crate) fn file(&self) -> usize {
          match self {
              Self::File(file) | Self::Notice(file) => *file,
-@@ -65,6 +78,16 @@ impl DisplayRow {
+@@ -65,6 +79,16 @@ impl DisplayRow {
      }
  }
  
@@ -999,7 +1220,29 @@ index fb309b8..cb8e78f 100644
  /// Which part of a collapsed unchanged range a disclosure reveals.
  #[derive(Clone, Copy, Debug, PartialEq, Eq)]
  pub(crate) enum FoldExpansion {
-@@ -564,6 +587,76 @@ impl DiffState {
+@@ -220,6 +244,10 @@ pub struct DiffState {
+     header_rows: Vec<usize>,
+     rows: Rc<Vec<DisplayRow>>,
+     change_rows: Vec<usize>,
++    matcher: Option<DiffMatcher>,
++    found: Rc<Found>,
++    found_current: Option<usize>,
++    found_reveal: bool,
+     list: ListState,
+     horizontal_scroll: ScrollHandle,
+     focus: FocusHandle,
+@@ -351,6 +379,10 @@ impl DiffState {
+             header_rows: Vec::new(),
+             rows: Rc::default(),
+             change_rows: Vec::new(),
++            matcher: None,
++            found: Rc::default(),
++            found_current: None,
++            found_reveal: false,
+             list: ListState::new(0, ListAlignment::Top, px(0.)),
+             horizontal_scroll: ScrollHandle::new(),
+             focus,
+@@ -564,6 +596,76 @@ impl DiffState {
          self.collapsed.contains(path)
      }
  
@@ -1076,7 +1319,13 @@ index fb309b8..cb8e78f 100644
      pub(crate) fn rows(&self) -> &Rc<Vec<DisplayRow>> {
          &self.rows
      }
-@@ -635,6 +728,26 @@ impl DiffState {
+@@ -630,11 +732,36 @@ impl DiffState {
+         self.selecting = false;
+         self.geometry.borrow_mut().clear();
+         self.rebuild(true);
++        self.find_again();
+         self.horizontal_scroll.set_offset(point(px(0.), px(0.)));
+         self.ensure_presentation(cx);
          cx.notify();
      }
  
@@ -1090,7 +1339,11 @@ index fb309b8..cb8e78f 100644
 +    ) {
 +        let top = self.list.logical_scroll_top();
 +        let anchor = self.row_position(top.item_ix);
++        let current = self
++            .found_current
++            .and_then(|ix| self.found.hits().get(ix).cloned());
 +        self.set_files(files, cx);
++        self.found_current = current.and_then(|hit| self.found.nearest(&hit));
 +        let anchored = anchor.and_then(|anchor| self.source_row(&anchor));
 +        let item_ix = anchored.unwrap_or(top.item_ix.min(self.rows.len().saturating_sub(1)));
 +        self.list.scroll_to(ListOffset {
@@ -1103,7 +1356,114 @@ index fb309b8..cb8e78f 100644
      /// Changes the display mode while preserving source-line selection and a
      /// nearby source row.
      pub fn set_mode(&mut self, mode: DiffMode, cx: &mut Context<Self>) {
-@@ -1194,8 +1307,7 @@ impl DiffState {
+@@ -844,6 +971,106 @@ impl DiffState {
+         cx.notify();
+     }
+ 
++    /// Searches every supplied line with `matcher`, or ends the search with
++    /// `None`. No result is current until [`Self::show_found`] picks one.
++    /// Files supplied later are searched again; [`Self::refresh_files`] keeps
++    /// the current result where it still is.
++    pub fn find(&mut self, matcher: Option<DiffMatcher>, cx: &mut Context<Self>) {
++        self.found = Rc::new(
++            matcher
++                .as_ref()
++                .map(|matcher| Found::new(&self.files, matcher))
++                .unwrap_or_default(),
++        );
++        self.matcher = matcher;
++        self.found_current = None;
++        self.found_reveal = false;
++        cx.notify();
++    }
++
++    /// How many results the search has.
++    pub fn found_count(&self) -> usize {
++        self.found.hits().len()
++    }
++
++    /// The result [`Self::show_found`] made current.
++    pub fn current_found(&self) -> Option<usize> {
++        self.found_current
++    }
++
++    /// The row each result shows on, in result order. A result inside folded
++    /// lines shows on the fold's row.
++    pub fn found_rows(&self) -> Vec<usize> {
++        self.found
++            .hits()
++            .iter()
++            .map(|hit| self.hit_row(hit).unwrap_or_default())
++            .collect()
++    }
++
++    /// Makes result `ix` current and unfolds the lines around it. Unless its
++    /// row is already in view, scrolls so that `rows_above` rows show above it.
++    pub fn show_found(&mut self, ix: usize, rows_above: usize, cx: &mut Context<Self>) {
++        let Some(hit) = self.found.hits().get(ix).cloned() else {
++            return;
++        };
++        self.found_current = Some(ix);
++        self.found_reveal = true;
++        let (side, line) = hit.line();
++        let position = self.position(hit.file, side, line);
++        if self.collapsed.remove(position.path().as_str()) {
++            self.rebuild_at_anchor();
++        }
++        if let Some(row) = self.expand_line(&position) {
++            let shown = self.visible_rows();
++            if !(shown.start <= row && row + 1 < shown.end) {
++                self.list.scroll_to(ListOffset {
++                    item_ix: row.saturating_sub(rows_above),
++                    offset_in_item: px(0.),
++                });
++            }
++        }
++        cx.notify();
++    }
++
++    /// Leaves the results in place with none of them current.
++    pub fn clear_current_found(&mut self, cx: &mut Context<Self>) {
++        if self.found_current.take().is_some() {
++            cx.notify();
++        }
++    }
++
++    pub(crate) fn found(&self) -> &Rc<Found> {
++        &self.found
++    }
++
++    /// The current result, once, after [`Self::show_found`] picked it, so the
++    /// view can scroll its line sideways to it.
++    pub(crate) fn take_found_reveal(&mut self) -> Option<Hit> {
++        if !std::mem::take(&mut self.found_reveal) {
++            return None;
++        }
++        self.found.hits().get(self.found_current?).cloned()
++    }
++
++    fn hit_row(&self, hit: &Hit) -> Option<usize> {
++        let rows = self.file_rows.get(hit.file)?;
++        let (side, ix) = hit.line();
++        let rows = match side {
++            DiffSide::Original => &rows.original,
++            DiffSide::Modified => &rows.modified,
++        };
++        rows.get(ix).copied().flatten()
++    }
++
++    fn find_again(&mut self) {
++        let Some(matcher) = self.matcher.clone() else {
++            return;
++        };
++        self.found = Rc::new(Found::new(&self.files, &matcher));
++        self.found_current = None;
++    }
++
+     /// Moves to the next changed group after the current viewport, across files,
+     /// wrapping to the first once the list is scrolled to its end.
+     pub fn next_change(&mut self, cx: &mut Context<Self>) {
+@@ -1194,8 +1421,7 @@ impl DiffState {
  
      fn expand_line(&mut self, position: &DiffLinePosition) -> Option<usize> {
          let row = self.source_row(position)?;
@@ -1113,7 +1473,7 @@ index fb309b8..cb8e78f 100644
              self.expanded[file].push(pairs);
              self.rebuild_at_anchor();
          }
-@@ -1271,7 +1383,10 @@ impl DiffState {
+@@ -1271,7 +1497,10 @@ impl DiffState {
              DisplayRow::Code {
                  original, modified, ..
              } => pair_position(*original, *modified),
@@ -1125,7 +1485,7 @@ index fb309b8..cb8e78f 100644
                  .pairs()
                  .get(pairs.start)
                  .and_then(|pair| pair_position(pair.original(), pair.modified())),
-@@ -1534,7 +1649,12 @@ fn source_rows(files: &[DiffFile], rows: &[DisplayRow]) -> Vec<FileRows> {
+@@ -1534,7 +1763,12 @@ fn source_rows(files: &[DiffFile], rows: &[DisplayRow]) -> Vec<FileRows> {
                  modified,
                  ..
              } => map(*file, *original, *modified),
@@ -1139,7 +1499,7 @@ index fb309b8..cb8e78f 100644
                  for pair in &files[*file].pairs()[pairs.clone()] {
                      map(*file, pair.original(), pair.modified());
                  }
-@@ -1666,6 +1786,17 @@ fn visible_pairs(
+@@ -1666,6 +1900,17 @@ fn visible_pairs(
      visible
  }
  
@@ -1157,7 +1517,7 @@ index fb309b8..cb8e78f 100644
  fn project_file(
      rows: &mut Vec<DisplayRow>,
      file: usize,
-@@ -1679,22 +1810,37 @@ fn project_file(
+@@ -1679,22 +1924,37 @@ fn project_file(
      let hunks = document.hunks();
      let hunk_end = hunk_ends(document);
      let visible = visible_pairs(document, context, min_collapsed_lines, expanded);

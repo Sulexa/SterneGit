@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::{ops::Range, rc::Rc};
 
 use gpui_kit::{
     AnyElement, App, AppContext as _, Context, Entity, Hsla, IntoElement, ParentElement as _, Render,
@@ -10,13 +10,14 @@ use gpui_kit::{
         checkbox::Checkbox,
         diff::{
             Diff, DiffChangeIndicator, DiffDecoration, DiffFile, DiffHunkSeparator, DiffLineRange,
-            DiffMode, DiffSide, DiffState,
+            DiffMatcher, DiffMode, DiffSide, DiffState,
         },
         h_flex,
         input::{
             Editor, EditorState, GutterDecoration, GutterDecorationCollection, InputEvent,
             Position, RangeDecoration, RangeDecorationCollection, RangeDecorationStyle,
         },
+        orange_400,
         resizable::{resizable_panel, v_resizable},
         v_flex,
     },
@@ -31,7 +32,7 @@ use super::{
 };
 use crate::{
     git::{FileChange, Version},
-    ui::{self, Look as _, counted},
+    ui::{self, Found, Look as _, Matcher, counted},
 };
 
 const HEADER_HEIGHT: f32 = 28.;
@@ -42,6 +43,8 @@ const LINE_TINT: f32 = 0.16;
 const MARKER_TINT: f32 = 0.2;
 const CRLF: &str = "\r\n";
 const EDITOR_LINE_HEIGHT: f32 = 1.5;
+const FOUND_TINT: f32 = 0.32;
+const CURRENT_FOUND_TINT: f32 = 0.6;
 
 pub(crate) struct MergeEditor {
     change: FileChange,
@@ -56,6 +59,10 @@ pub(crate) struct MergeEditor {
     result: Entity<EditorState>,
     tints: RangeDecorationCollection,
     bars: GutterDecorationCollection,
+    matcher: Option<Matcher>,
+    result_found: Vec<Range<usize>>,
+    result_current: Option<usize>,
+    found_fills: RangeDecorationCollection,
     _subscription: Subscription,
 }
 
@@ -99,10 +106,11 @@ impl MergeEditor {
                 .soft_wrap(false)
                 .default_value(original.clone())
         });
-        let (tints, bars) = result.update(cx, |state, cx| {
+        let (tints, bars, found_fills) = result.update(cx, |state, cx| {
             (
                 state.create_range_decorations_collection(Vec::new(), cx),
                 state.create_gutter_decorations_collection(Vec::new(), cx),
+                state.create_range_decorations_collection(Vec::new(), cx),
             )
         });
         let subscription = cx.subscribe_in(&result, window, |this, state, event, _, cx| {
@@ -111,6 +119,7 @@ impl MergeEditor {
                 this.merge.edited(&text);
                 this.touched = true;
                 this.paint(cx);
+                this.find_in_result(cx);
                 cx.notify();
             }
         });
@@ -127,6 +136,10 @@ impl MergeEditor {
             result,
             tints,
             bars,
+            matcher: None,
+            result_found: Vec::new(),
+            result_current: None,
+            found_fills,
             _subscription: subscription,
         };
         editor.paint(cx);
@@ -173,6 +186,115 @@ impl MergeEditor {
         })
     }
 
+    pub(crate) fn find(&mut self, matcher: Option<Matcher>, cx: &mut Context<Self>) {
+        self.matcher = matcher;
+        if let Some(versions) = &self.versions {
+            let matcher = self.matcher.clone().map(|matcher| {
+                Rc::new(move |text: &str| matcher.ranges(text)) as DiffMatcher
+            });
+            versions.update(cx, |state, cx| state.find(matcher, cx));
+        }
+        self.result_current = None;
+        self.find_in_result(cx);
+        cx.notify();
+    }
+
+    pub(crate) fn found(&self, cx: &App) -> Found {
+        let (count, current) = self
+            .versions
+            .as_ref()
+            .map_or((0, None), |versions| {
+                let state = versions.read(cx);
+                (state.found_count(), state.current_found())
+            });
+        Found {
+            count: count + self.result_found.len(),
+            current: current.or(self.result_current.map(|ix| count + ix)),
+        }
+    }
+
+    pub(crate) fn step_found(&mut self, forward: bool, cx: &mut Context<Self>) {
+        let found = self.found(cx);
+        if found.count == 0 {
+            return;
+        }
+        let next = match found.current {
+            Some(at) if forward => (at + 1) % found.count,
+            Some(at) => (at + found.count - 1) % found.count,
+            None if forward => 0,
+            None => found.count - 1,
+        };
+        self.show_found(next, cx);
+    }
+
+    fn show_found(&mut self, ix: usize, cx: &mut Context<Self>) {
+        let in_versions = self
+            .versions
+            .as_ref()
+            .map_or(0, |versions| versions.read(cx).found_count());
+        if let Some(versions) = &self.versions {
+            versions.update(cx, |state, cx| {
+                if ix < in_versions {
+                    state.show_found(ix, ROWS_ABOVE_A_CHANGE, cx);
+                } else {
+                    state.clear_current_found(cx);
+                }
+            });
+        }
+        self.result_current = ix.checked_sub(in_versions);
+        if let Some(range) = self.result_current.and_then(|ix| self.result_found.get(ix)).cloned() {
+            let line = self.result.read(cx).value()[..range.start].matches('\n').count();
+            self.result.update(cx, |state, cx| state.set_selected_range(range, cx));
+            self.scroll_result_to(line, cx);
+        }
+        self.paint_found(cx);
+        cx.notify();
+    }
+
+    fn find_in_result(&mut self, cx: &mut Context<Self>) {
+        let text = self.result.read(cx).value();
+        let mut found = Vec::new();
+        if let Some(matcher) = &self.matcher {
+            let mut start = 0;
+            for line in text.split_inclusive('\n') {
+                let content = line.strip_suffix('\n').unwrap_or(line);
+                found.extend(
+                    matcher
+                        .ranges(content)
+                        .into_iter()
+                        .map(|range| range.start + start..range.end + start),
+                );
+                start += line.len();
+            }
+        }
+        self.result_current = self.result_current.filter(|ix| *ix < found.len());
+        self.result_found = found;
+        self.paint_found(cx);
+    }
+
+    fn paint_found(&mut self, cx: &mut Context<Self>) {
+        let color = orange_400();
+        let fills = self
+            .result_found
+            .iter()
+            .enumerate()
+            .flat_map(|(ix, range)| {
+                let current = Some(ix) == self.result_current;
+                let tint = if current { CURRENT_FOUND_TINT } else { FOUND_TINT };
+                let fill = RangeDecoration::new(range.clone())
+                    .with_style(RangeDecorationStyle::Fill)
+                    .with_color(color.opacity(tint));
+                let frame = current.then(|| {
+                    RangeDecoration::new(range.clone())
+                        .with_style(RangeDecorationStyle::Frame)
+                        .with_color(color)
+                });
+                std::iter::once(fill).chain(frame)
+            })
+            .collect();
+        self.found_fills.set(fills, cx);
+    }
+
     pub(crate) fn step(&mut self, direction: Direction, window: &mut Window, cx: &mut Context<Self>) {
         let count = self.total();
         if count == 0 {
@@ -205,8 +327,13 @@ impl MergeEditor {
     }
 
     fn reveal(&self, region: usize, cx: &mut Context<Self>) {
-        let line = self.merge.line_of(region).saturating_sub(ROWS_ABOVE_A_CONFLICT);
+        self.scroll_result_to(self.merge.line_of(region), cx);
+    }
+
+    fn scroll_result_to(&self, line: usize, cx: &mut Context<Self>) {
+        let line = line.saturating_sub(ROWS_ABOVE_A_CONFLICT);
         let fallback = cx.theme().mono_font_size * EDITOR_LINE_HEIGHT;
+
         self.result.update(cx, |state, cx| {
             let height = state.line_height().unwrap_or(fallback);
             state.set_scroll_offset(point(px(0.), -(height * line as f32)), cx);

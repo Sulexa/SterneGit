@@ -3,9 +3,11 @@ mod branch_dialog;
 mod branch_menu;
 mod changes_list;
 mod commit_files;
+mod commit_find;
 mod commit_form;
 mod commit_menu;
 mod commit_panel;
+mod commit_search;
 mod compare;
 mod discard_dialog;
 mod file_diff_panel;
@@ -66,8 +68,9 @@ use gpui_kit::{
 use crate::{
     accounts,
     actions::{
-        CloseDiff, CopyHash, Fetch, NewerCommit, NextChange, NextFile, OlderCommit, PickNewerCommit,
-        PickOlderCommit, PreviousChange, PreviousFile, Refresh, WholeWindow,
+        CloseDiff, CopyHash, Fetch, Find, FindNext, FindPrevious, NewerCommit, NextChange, NextFile,
+        OlderCommit, PickNewerCommit, PickOlderCommit, PreviousChange, PreviousFile, Refresh,
+        WholeWindow,
     },
     git::{
         Baseline, ChangeKind, Commit, FileChange, FileCommit, HISTORY_LIMIT, History, NamedRemote,
@@ -98,6 +101,7 @@ use stash_menu::{StashAction, StashMenu};
 use branch_menu::{BranchAction, BranchMenu, PullOffers, confirm_delete};
 use changes_list::{ChangesList, SideFolds, SideScrolls};
 use discard_dialog::{Discarded, confirm_discard, confirm_discard_all};
+use commit_find::CommitFind;
 use commit_form::CommitForm;
 use commit_panel::{CommitPanel, OpenCommitFile, ShowFileHistory, copy_commit_hash};
 use compare::{Direction, FilePlace, Position};
@@ -194,6 +198,7 @@ pub(crate) struct RepoView {
     reading_remotes: Option<Task<()>>,
     pulls: Entity<Pulls>,
     pull_pane: Option<PullPane>,
+    commit_find: CommitFind,
     _subscriptions: [Subscription; 9],
 }
 
@@ -300,6 +305,7 @@ impl RepoView {
             reading_remotes: None,
             pulls,
             pull_pane: None,
+            commit_find: CommitFind::default(),
             _subscriptions: subscriptions,
         }
     }
@@ -397,6 +403,7 @@ impl RepoView {
 
     fn on_history_read(&mut self, cx: &mut Context<Self>) {
         self.read_remotes(cx);
+        self.find_commits_again(cx);
         if self.file_history.is_some() {
             self.reread_file_history(cx);
             return;
@@ -1384,6 +1391,9 @@ impl RepoView {
     }
 
     fn close(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.close_find(window, cx) {
+            return;
+        }
         if matches!(self.target, Target::Pull { open: None, .. }) {
             self.leave_pull(cx);
             self.middle_focus.focus(window, cx);
@@ -1769,6 +1779,10 @@ impl RepoView {
                 this.repository
                     .update(cx, |repository, cx| repository.choose_pull_mode(*mode, cx))
             }))
+            .on_find(
+                self.is_finding(cx),
+                cx.listener(|this, _: &(), window, cx| this.find(window, cx)),
+            )
     }
 
     fn render_body(&self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
@@ -1820,7 +1834,11 @@ impl RepoView {
                         .track_focus(&self.middle_focus)
                         .child(pane.view.clone())
                         .into_any_element(),
-                    _ => self.history_list(history, cx).into_any_element(),
+                    _ => v_flex()
+                        .pane()
+                        .children(self.commit_find.bar())
+                        .child(div().fill_height().child(self.history_list(history, cx)))
+                        .into_any_element(),
                 },
             ))
             .child(
@@ -1918,6 +1936,7 @@ impl RepoView {
         .stash_menu(stash_menu)
         .commit_menu(commit_menu)
         .marks(marks)
+        .finding(self.commit_find.finding())
         .picked(self.target.picked())
         .uncommitted(changes, self.target.is_working_tree())
         .worktrees(elsewhere, selected_worktree.as_deref(), worktree_menu)
@@ -2008,6 +2027,14 @@ impl Render for RepoView {
                     .update(cx, |repository, cx| repository.fetch(cx))
             }))
             .on_action(cx.listener(|this, _: &CopyHash, window, cx| this.copy_hash(window, cx)))
+            .on_action(cx.listener(|this, _: &Find, window, cx| this.find(window, cx)))
+            .on_action(cx.listener(|this, _: &FindNext, window, cx| {
+                this.find_again(true, window, cx)
+            }))
+            .on_action(cx.listener(|this, _: &FindPrevious, window, cx| {
+                this.find_again(false, window, cx)
+            }))
+
             .on_action(cx.listener(|this, _: &CloseDiff, window, cx| this.close(window, cx)))
             .on_action(cx.listener(|this, _: &PreviousChange, window, cx| {
                 this.step_change(Direction::Back, window, cx)

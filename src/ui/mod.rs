@@ -2,6 +2,7 @@ mod avatar;
 mod badges;
 mod ctrl_wheel;
 mod file_view;
+mod find_bar;
 mod folded;
 mod graph_cell;
 mod handler;
@@ -11,6 +12,7 @@ mod notice;
 mod palette;
 mod picked;
 mod rows;
+mod search;
 mod side;
 mod text;
 
@@ -21,6 +23,7 @@ pub(crate) use badges::{
 };
 pub(crate) use ctrl_wheel::{ctrl_wheel_area, ctrl_wheel_elsewhere};
 pub(crate) use file_view::{FileView, FileViewToggle};
+pub(crate) use find_bar::{FindBar, FindEvent, Found, found_color, found_text};
 pub(crate) use folded::Folded;
 pub(crate) use graph_cell::{GraphNode, graph_cell, graph_width, uncommitted_cell};
 pub(crate) use handler::{Handler, handler, is_double_click};
@@ -32,5 +35,8 @@ pub(crate) use picked::{Pick, Picked, PickedFor};
 pub(crate) use rows::{
     FilePlace, ROW_HEIGHT, SectionHeader, file_row, file_row_tagged, folder_row, list_row, tree_line,
 };
+pub(crate) use search::{Matcher, Search};
+#[cfg(test)]
+pub(crate) use search::SearchOptions;
 pub(crate) use side::{BySide, SideUi};
 pub(crate) use text::{commit_subject, counted, listed, thousands};

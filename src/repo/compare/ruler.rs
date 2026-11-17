@@ -3,7 +3,7 @@ use std::ops::Range;
 use gpui_kit::{
     App, InteractiveElement as _, IntoElement, ParentElement as _, RenderOnce,
     StatefulInteractiveElement as _, Styled as _, Window,
-    component::{ActiveTheme as _, diff::DiffChangeMark},
+    component::{ActiveTheme as _, diff::DiffChangeMark, orange_400},
     div, px, relative,
 };
 
@@ -14,12 +14,15 @@ const MARK_INSET: f32 = 3.;
 const SHORTEST_MARK: f32 = 3.;
 const SHOWN_FILL: f32 = 0.07;
 const SHOWN_EDGE: f32 = 0.18;
+const FOUND_HEIGHT: f32 = 2.;
+const FOUND_PLACES: usize = 512;
 
 #[derive(IntoElement)]
 pub(crate) struct ChangeRuler {
     marks: Vec<DiffChangeMark>,
     rows: usize,
     shown: Range<usize>,
+    found: Vec<usize>,
     on_jump: Handler<usize>,
 }
 
@@ -34,8 +37,14 @@ impl ChangeRuler {
             marks,
             rows,
             shown,
+            found: Vec::new(),
             on_jump,
         }
+    }
+
+    pub(crate) fn found(mut self, rows: Vec<usize>) -> Self {
+        self.found = rows;
+        self
     }
 }
 
@@ -73,6 +82,22 @@ impl RenderOnce for ChangeRuler {
                 .cursor_pointer()
                 .on_click(move |_, window, cx| on_jump(&ix, window, cx))
         });
+        let mut places: Vec<usize> = self
+            .found
+            .iter()
+            .map(|row| row * FOUND_PLACES / self.rows.max(1))
+            .collect();
+        places.sort_unstable();
+        places.dedup();
+        let found = places.into_iter().map(|place| {
+            div()
+                .absolute()
+                .left_0()
+                .right_0()
+                .top(relative(place as f32 / FOUND_PLACES as f32))
+                .h(px(FOUND_HEIGHT))
+                .bg(orange_400())
+        });
         div()
             .relative()
             .flex_none()
@@ -83,5 +108,7 @@ impl RenderOnce for ChangeRuler {
             .bg(theme.secondary.opacity(0.25))
             .child(shown)
             .children(marks)
+            .children(found)
+
     }
 }

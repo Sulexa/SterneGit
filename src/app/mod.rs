@@ -20,7 +20,9 @@ use gpui_kit::{
 
 use crate::{
     actions::{
-        About, CheckForUpdates, CloneRepository, CloseDiff, CloseTab, CopyHash, Fetch, HISTORY_CONTEXT, NewRepository,
+        About, CheckForUpdates, CloneRepository, CloseDiff, CloseTab, CopyHash, FIND_CONTEXT, Fetch,
+        Find, FindNext, FindPrevious, HISTORY_CONTEXT, NewRepository, ToggleMatchCase, TogglePattern,
+        ToggleWholeWords,
         NewerCommit, NextChange, NextFile, NextTab, OlderCommit, OpenRepository, OpenSettings,
         PickNewerCommit, PickOlderCommit,
         PreviousChange, PreviousFile, PreviousTab, ResetZoom,
@@ -127,6 +129,12 @@ fn bind_keys(cx: &mut App) {
             CopyHash,
             Some(WINDOW_CONTEXT),
         ),
+        KeyBinding::new(primary("cmd-f", "ctrl-f"), Find, Some(WINDOW_CONTEXT)),
+        KeyBinding::new(primary("cmd-g", "f3"), FindNext, Some(WINDOW_CONTEXT)),
+        KeyBinding::new(primary("cmd-shift-g", "shift-f3"), FindPrevious, Some(WINDOW_CONTEXT)),
+        KeyBinding::new("alt-c", ToggleMatchCase, Some(FIND_CONTEXT)),
+        KeyBinding::new("alt-w", ToggleWholeWords, Some(FIND_CONTEXT)),
+        KeyBinding::new("alt-r", TogglePattern, Some(FIND_CONTEXT)),
         KeyBinding::new("escape", CloseDiff, Some(WINDOW_CONTEXT)),
         KeyBinding::new("alt-up", PreviousChange, Some(WINDOW_CONTEXT)),
         KeyBinding::new("alt-down", NextChange, Some(WINDOW_CONTEXT)),
@@ -190,7 +198,14 @@ fn menus() -> Vec<Menu> {
             MenuItem::separator(),
             MenuItem::action("Quit", Quit),
         ]),
-        Menu::new("Edit").items([MenuItem::action("Copy Commit Hash", CopyHash)]),
+        Menu::new("Edit").items([
+            MenuItem::action("Copy Commit Hash", CopyHash),
+            MenuItem::separator(),
+            MenuItem::action("Find…", Find),
+            MenuItem::action("Find Next", FindNext),
+            MenuItem::action("Find Previous", FindPrevious),
+        ]),
+
         Menu::new("View").items([
             MenuItem::action("Refresh", Refresh),
             MenuItem::action("Fetch All Remotes", Fetch),

@@ -1,3 +1,5 @@
+use std::ops::Range;
+
 use gpui_kit::{
     AnyElement, App, Div, Hsla, InteractiveElement as _, IntoElement, ParentElement as _,
     SharedString, Stateful, StatefulInteractiveElement as _, Styled as _,
@@ -8,7 +10,7 @@ use gpui_kit::{
     px,
 };
 
-use super::{look::Look as _, text::thousands};
+use super::{find_bar::found_text, look::Look as _, text::thousands};
 use crate::git::{ChangeKind, RefKind, ShownRef};
 
 const HEAD_FILL: f32 = 0.35;
@@ -62,7 +64,13 @@ pub(crate) fn pull_chip(mark: PullMark, cx: &App) -> AnyElement {
         .into_any_element()
 }
 
-pub(crate) fn ref_badge(shown: ShownRef, color: Hsla, pull: Option<PullMark>, cx: &App) -> Stateful<Div> {
+pub(crate) fn ref_badge(
+    shown: ShownRef,
+    color: Hsla,
+    pull: Option<PullMark>,
+    found: Vec<Range<usize>>,
+    cx: &App,
+) -> Stateful<Div> {
     let label = shown.label;
     let icons = h_flex()
         .flex_none()
@@ -79,7 +87,7 @@ pub(crate) fn ref_badge(shown: ShownRef, color: Hsla, pull: Option<PullMark>, cx
             this.child(Icon::new(IconName::FolderGit).xsmall().text_color(color))
         });
     let elsewhere = label.worktree.clone();
-    badge(icons, label.name.clone(), label.is_head, color, cx)
+    badge(icons, label.name.clone(), label.is_head, color, found, cx)
         .when_some(pull, |badge, pull| badge.child(pull_chip(pull, cx)))
         .id(label.full_name())
         .when_some(elsewhere, |badge, worktree| {
@@ -93,14 +101,25 @@ pub(crate) fn checked_out_in(worktree: &str) -> String {
     format!("Checked out in the worktree {worktree}")
 }
 
-pub(crate) fn worktree_badge(name: SharedString, color: Hsla, cx: &App) -> Stateful<Div> {
+pub(crate) fn worktree_badge(
+    name: SharedString,
+    color: Hsla,
+    found: Vec<Range<usize>>,
+    cx: &App,
+) -> Stateful<Div> {
     let icon = Icon::new(IconName::FolderGit).xsmall().text_color(color);
-    badge(icon, name.clone(), false, color, cx).id(SharedString::from(format!("worktree/{name}")))
+    badge(icon, name.clone(), false, color, found, cx)
+        .id(SharedString::from(format!("worktree/{name}")))
 }
 
-pub(crate) fn stash_badge(name: SharedString, color: Hsla, cx: &App) -> AnyElement {
+pub(crate) fn stash_badge(
+    name: SharedString,
+    color: Hsla,
+    found: Vec<Range<usize>>,
+    cx: &App,
+) -> AnyElement {
     let icon = Icon::new(IconName::Archive).xsmall().text_color(color);
-    badge(icon, name, false, color, cx).into_any_element()
+    badge(icon, name, false, color, found, cx).into_any_element()
 }
 
 fn badge(
@@ -108,6 +127,7 @@ fn badge(
     name: SharedString,
     checked_out: bool,
     color: Hsla,
+    found: Vec<Range<usize>>,
     cx: &App,
 ) -> Div {
     h_flex()
@@ -127,7 +147,8 @@ fn badge(
             div()
                 .ellipsis()
                 .when(checked_out, |this| this.font_semibold())
-                .child(name),
+                .child(found_text(name, found)),
+
         )
 }
 
