@@ -40,6 +40,7 @@ Compression=lzma2/ultra64
 SolidCompression=yes
 OutputBaseFilename={#AppName}-Setup-{#AppVersion}
 ChangesEnvironment=yes
+ChangesAssociations=yes
 CloseApplications=force
 RestartApplications=no
 SetupMutex=SterneGitSetup
