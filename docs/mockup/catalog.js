@@ -422,7 +422,7 @@ const Catalog = (() => {
           name: 'AppLogo',
           code: 'app::logo::logo',
           source: 'src/app/logo/mod.rs',
-          about: 'A Eurasian bullfinch seen from the front, the whole bird, drawn pixel by pixel on a 16 × 16 grid with nothing behind it: black cap and eyes, short dark bill, rose cheeks and breast, grey shoulders, black wings with a white touch, white belly, pinkish legs and a black tail. The top bar paints it cell by cell, snapped to device pixels; the build turns the same grid into the Windows icon of the exe, its window and its taskbar button, at 16, 32, 48 and 256 px. Every size is a whole multiple of the grid, so each stays sharp.',
+          about: 'A common tern standing in profile, facing right, the whole bird, drawn pixel by pixel on a 16 × 16 grid with nothing behind it: black cap with a white glint for the eye, a long orange bill with a black tip, white face and breast, pearl grey back, dark grey wing tips and tail streamer, a grey line under the belly so it shows on light bars, and red legs. The top bar paints it cell by cell, snapped to device pixels; the build turns the same grid into the Windows icon of the exe, its window and its taskbar button, at 16, 32, 48 and 256 px. Every size is a whole multiple of the grid, so each stays sharp.',
           variants: [
             ['16 px, top bar', () => C.AppLogo()],
             ['32 px', () => C.AppLogo({ size: 32 })],
@@ -1454,7 +1454,7 @@ const Catalog = (() => {
           name: 'ThemePicker',
           code: 'hosting::interface_page::theme_picker',
           source: 'src/hosting/interface_page.rs',
-          about: 'Dark or Light, as two halves of one switch; the picked half is tinted rose. A click switches the whole window at once and saves the choice.',
+          about: 'Dark or Light, as two halves of one switch; the picked half is tinted orange. A click switches the whole window at once and saves the choice.',
           variants: [
             ['Dark', () => C.ThemePicker({ theme: 'dark' })],
             ['Light', () => C.ThemePicker({ theme: 'light' })],

@@ -228,7 +228,7 @@ const Screens = (() => {
     {
       id: 'history-light',
       title: 'History — light theme',
-      about: 'The same screen in the light theme, Neige: snow white panes, pale blue-grey bars, near-black text and the bullfinch grey for what is secondary. The picked rows are tinted bullfinch rose, as in the dark theme, Ardoise; lane, ref and file colors are darker so they read on white.',
+      about: 'The same screen in the light theme, Neige: snow white panes, pale blue-grey bars, near-black text and slate grey for what is secondary. The picked rows are tinted tern-bill orange, as in the dark theme, Ardoise; lane, ref and file colors are darker so they read on white.',
       source: 'src/repo/mod.rs',
       render: () => C.SterneGit({ topBar: topBar(), tabStrip: tabStrip(), body: commitSelected(), light: true }),
     },
@@ -545,7 +545,7 @@ const Screens = (() => {
     {
       id: 'commit-ready-light',
       title: 'Uncommitted changes — ready to commit, light theme',
-      about: 'In the light theme the main button is near-black, like the bullfinch cap, and the focused field is ringed in rose. In the dark theme the main button is rose itself.',
+      about: 'In the light theme the main button is near-black, like the cap of the tern, and the focused field is ringed in orange. In the dark theme the main button is the orange of the bill itself, with near-black text.',
       source: 'src/repo/changes_list.rs',
       render: () =>
         C.SterneGit({

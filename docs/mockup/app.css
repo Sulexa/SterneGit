@@ -9,13 +9,13 @@
   --tab-active: #1c2128;
   --tab-foreground: #c9d0d8;
   --status-bar: #262d36;
-  --list-active: #e5584a33;
+  --list-active: #f26b1d33;
   --list-hover: #323a4599;
   --secondary: #2a313b;
   --secondary-hover: #323a45;
   --secondary-active: #252b34;
-  --primary: #e5584a;
-  --primary-foreground: #ffffff;
+  --primary: #f26b1d;
+  --primary-foreground: #111111;
   --popover: #222831;
   --accent: #2a313b;
   --overlay: #00000066;
@@ -23,8 +23,8 @@
   --danger: #f07a6e;
   --input: #3a4350;
   --input-background: #171b21;
-  --ring: #e5584a;
-  --selection: #e5584a40;
+  --ring: #f26b1d;
+  --selection: #f26b1d40;
   --blue: #6fa8f5;
   --magenta: #c58cf5;
   --green: #5fcf86;
@@ -49,7 +49,7 @@
   --tab-active: #f8f9fb;
   --tab-foreground: #3b3d44;
   --status-bar: #e8ebf0;
-  --list-active: #e5584a26;
+  --list-active: #f26b1d26;
   --list-hover: #8e99a724;
   --secondary: #e8ebf0;
   --secondary-hover: #dfe3e9;
@@ -63,8 +63,8 @@
   --danger: #c8463c;
   --input: #cfd5dd;
   --input-background: #ffffff;
-  --ring: #e5584a;
-  --selection: #e5584a33;
+  --ring: #f26b1d;
+  --selection: #f26b1d33;
   --blue: #2f6fd0;
   --magenta: #a24bd6;
   --green: #2f9a4a;
