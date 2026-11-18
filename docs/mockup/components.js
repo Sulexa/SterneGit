@@ -3123,9 +3123,19 @@ const C = {
     );
   },
 
-  GraphParameters({ title, rows, corner = 'left' }) {
+  GraphParameters({ title, rows, corner = 'left', picked, shown = 'both' }) {
+    const value = (now, was) => {
+      if (now === undefined) return '';
+      if (was === undefined) return `<span class="value">${esc(now)}</span>`;
+      if (shown === 'before') return `<span class="value changed">${esc(was)}</span>`;
+      if (shown === 'after') return `<span class="value changed">${esc(now)}</span>`;
+      return `<span class="value was">${esc(was)}</span><span class="muted">→</span><span class="value changed">${esc(now)}</span>`;
+    };
     const lines = rows
-      .map(([name, type, state]) => `<div class="param${state ? ` ${state}` : ''}">${state ? C.ChangeBadge({ kind: UnityStates[state] }) : '<span class="badge-space"></span>'}<span class="fill">${esc(name)}</span><span class="muted">${esc(type)}</span></div>`)
+      .map(
+        ([name, type, state, now, was]) =>
+          `<div class="param${state ? ` ${state}` : ''}${name === picked ? ' picked' : ''}">${state ? C.ChangeBadge({ kind: UnityStates[state] }) : '<span class="badge-space"></span>'}<span class="fill ellipsis">${esc(name)}</span><span class="muted">${esc(type)}</span>${value(now, was)}</div>`,
+      )
       .join('');
     return `<div data-c="GraphParameters" class="graph-params ${corner}"><div class="xs medium">${esc(title)}</div>${lines}</div>`;
   },
@@ -3220,7 +3230,7 @@ const C = {
       .map((node) => {
         const badge = node.state ? C.ChangeBadge({ kind: UnityStates[node.state] }) : '';
         const rows = node.rows.map(([input, output], ix) => `<div class="unit-row">${port(input, 'in', node, ix)}${port(output, 'out', node, ix)}</div>`).join('');
-        const classes = ['unit', node.kind, node.state, node.id === diff.picked.id && 'picked'].filter(Boolean).join(' ');
+        const classes = ['unit', node.kind, node.state, (node.id === diff.picked.id || diff.picked.uses?.includes(node.id)) && 'picked'].filter(Boolean).join(' ');
         return `<div class="${classes}" style="left:${node.at[0]}px;top:${node.at[1]}px;width:${node.width}px"><div class="unit-head">${icon(node.icon, 'xs')}<span class="xs medium fill ellipsis">${esc(node.title)}</span>${badge}</div>${rows}</div>`;
       })
       .join('');
@@ -3228,7 +3238,7 @@ const C = {
       `<div class="graph-canvas script${hidden ? ' solo' : ''}" style="width:${width}px">` +
       `<svg class="graph-lines" width="${width}" height="640">${wires}</svg>${units}` +
       `<div class="graph-layer">${C.Select({ value: diff.graph, lead: icon('workflow', 'sm', 'var(--muted)') })}</div>` +
-      C.GraphParameters({ title: 'Graph variables', rows: diff.variables.filter(([, , state]) => state !== hidden), corner: 'right' }) +
+      C.GraphParameters({ title: 'Graph variables', rows: diff.variables.filter(([, , state]) => state !== hidden), corner: 'right', picked: diff.picked.variable, shown }) +
       `</div>`;
     return `<div data-c="ScriptGraphCompare" class="animator-compare">${canvas}${C.GraphChanges({ diff, hidden })}</div>`;
   },

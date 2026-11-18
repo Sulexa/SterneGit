@@ -85,6 +85,7 @@ pub(crate) struct GraphNode {
     pub(crate) inputs: Vec<Port>,
     pub(crate) outputs: Vec<Port>,
     pub(crate) was_at: Option<(f64, f64)>,
+    pub(crate) variable: Option<String>,
 }
 
 impl GraphNode {
@@ -118,7 +119,30 @@ pub(crate) struct GraphEdge {
 pub(crate) enum ChangeTarget {
     Node(usize),
     Edge(usize),
-    Parameter,
+    Parameter(usize),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct GraphParameter {
+    pub(crate) name: String,
+    pub(crate) kind: String,
+    pub(crate) value: Option<String>,
+    pub(crate) was: Option<String>,
+    pub(crate) was_kind: Option<String>,
+    pub(crate) state: State,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct Declared {
+    pub(crate) name: String,
+    pub(crate) kind: String,
+    pub(crate) value: String,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct ParameterLook {
+    pub(crate) value_label: &'static str,
+    pub(crate) value_shown: bool,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -135,7 +159,7 @@ pub(crate) struct GraphChange {
 pub(crate) struct GraphComparison {
     pub(crate) nodes: Vec<GraphNode>,
     pub(crate) edges: Vec<GraphEdge>,
-    pub(crate) parameters: Vec<(String, String, State)>,
+    pub(crate) parameters: Vec<GraphParameter>,
     pub(crate) parameters_title: &'static str,
     pub(crate) changes: Vec<GraphChange>,
     pub(crate) layers: Vec<String>,
@@ -173,8 +197,114 @@ impl GraphComparison {
                 }
             }
         }
+        for parameter in &mut drawn.parameters {
+            if let Some(was) = &parameter.was {
+                parameter.value = (!was.is_empty()).then(|| was.clone());
+            }
+            if let Some(kind) = &parameter.was_kind {
+                parameter.kind = kind.clone();
+            }
+        }
         drawn
     }
+
+    pub(crate) fn users_of(&self, parameter: usize) -> impl Iterator<Item = usize> + '_ {
+        let name = self.parameters.get(parameter).map(|parameter| parameter.name.as_str());
+        self.nodes
+            .iter()
+            .enumerate()
+            .filter(move |(_, node)| name.is_some() && node.variable.as_deref() == name)
+            .map(|(ix, _)| ix)
+    }
+}
+
+fn declared_fields(declared: &Declared, look: ParameterLook) -> Vec<Field> {
+    let mut fields = vec![Field {
+        path: "type".to_owned(),
+        label: "Type".to_owned(),
+        depth: 0,
+        value: Value::Text(declared.kind.clone()),
+    }];
+    if !declared.value.is_empty() {
+        fields.push(Field {
+            path: "value".to_owned(),
+            label: look.value_label.to_owned(),
+            depth: 0,
+            value: Value::Text(declared.value.clone()),
+        });
+    }
+    fields
+}
+
+fn declared_text(declared: &Declared) -> String {
+    format!("{} {}", declared.kind, declared.value).trim().to_owned()
+}
+
+pub(crate) fn compare_parameters(
+    old: &[Declared],
+    new: &[Declared],
+    kind: &'static str,
+    look: ParameterLook,
+    options: Options,
+) -> (Vec<GraphParameter>, Vec<GraphChange>) {
+    let mut parameters = Vec::new();
+    let mut changes = Vec::new();
+    let shown_value = |declared: &Declared| look.value_shown.then(|| declared.value.clone());
+    for declared in new {
+        let previous = old.iter().find(|previous| previous.name == declared.name);
+        let after = declared_fields(declared, look);
+        let before = previous.map(|previous| declared_fields(previous, look));
+        let (rows, _) = changed_rows(before.as_deref(), Some(&after), options);
+        let state = match previous {
+            None => State::Added,
+            Some(previous) if previous == declared => State::Same,
+            Some(_) => State::Changed,
+        };
+        let detail = match state {
+            State::Changed => rows.iter().filter(|row| row.state != State::Same).map(|row| row.label.clone()).collect::<Vec<_>>().join(", "),
+            _ => declared_text(declared),
+        };
+        if state != State::Same {
+            changes.push(GraphChange {
+                state,
+                kind,
+                name: declared.name.clone(),
+                detail,
+                target: ChangeTarget::Parameter(parameters.len()),
+                rows,
+            });
+        }
+        parameters.push(GraphParameter {
+            name: declared.name.clone(),
+            kind: declared.kind.clone(),
+            value: shown_value(declared),
+            was: previous.filter(|previous| look.value_shown && previous.value != declared.value).map(|previous| previous.value.clone()),
+            was_kind: previous.filter(|previous| previous.kind != declared.kind).map(|previous| previous.kind.clone()),
+            state,
+        });
+    }
+    for declared in old {
+        if !new.iter().any(|kept| kept.name == declared.name) {
+            let (rows, _) = changed_rows(Some(&declared_fields(declared, look)), None, options);
+            changes.push(GraphChange {
+                state: State::Removed,
+                kind,
+                name: declared.name.clone(),
+                detail: declared_text(declared),
+                target: ChangeTarget::Parameter(parameters.len()),
+                rows,
+            });
+            parameters.push(GraphParameter {
+                name: declared.name.clone(),
+                kind: declared.kind.clone(),
+                value: shown_value(declared),
+                was: None,
+                was_kind: None,
+                state: State::Removed,
+            });
+        }
+    }
+    (parameters, changes)
 }
 
 pub(crate) fn graph_json(documents: &[Document]) -> Option<Json> {
@@ -334,7 +464,14 @@ fn known_ports(element: &Json) -> (Vec<Port>, Vec<Port>) {
 struct Side {
     units: Vec<(String, GraphNode)>,
     edges: Vec<GraphEdge>,
-    variables: Vec<(String, String)>,
+    variables: Vec<Declared>,
+}
+
+fn graph_variable(element: &Json) -> Option<String> {
+    if element.get("kind").and_then(Json::as_str) != Some("Graph") {
+        return None;
+    }
+    element.pointer("/defaultValues/name/$content").and_then(Json::as_str).map(ToOwned::to_owned)
 }
 
 fn read_side(json: &Json) -> Side {
@@ -476,6 +613,7 @@ fn read_side(json: &Json) -> Side {
                 inputs,
                 outputs,
                 was_at: None,
+                variable: graph_variable(element),
             },
         ));
     }
@@ -511,14 +649,15 @@ fn read_side(json: &Json) -> Side {
             items
                 .iter()
                 .filter_map(|variable| {
-                    let name = variable.get("name")?.as_str()?.to_owned();
-                    let kind = variable
-                        .pointer("/typeHandle/Identification")
-                        .and_then(Json::as_str)
-                        .map(short_type)
-                        .unwrap_or_default();
-                    let value = variable.get("value").and_then(|value| literal(value, "value")).unwrap_or_default();
-                    Some((name, format!("{kind} {value}").trim().to_owned()))
+                    Some(Declared {
+                        name: variable.get("name")?.as_str()?.to_owned(),
+                        kind: variable
+                            .pointer("/typeHandle/Identification")
+                            .and_then(Json::as_str)
+                            .map(short_type)
+                            .unwrap_or_default(),
+                        value: variable.get("value").and_then(|value| literal(value, "value")).unwrap_or_else(|| "None".to_owned()),
+                    })
                 })
                 .collect()
         })
@@ -667,46 +806,19 @@ pub(crate) fn compare_script_graphs(before: Option<&Json>, after: Option<&Json>,
             edges.push(shown);
         }
     }
-    let old_variables: HashMap<&str, &str> = old.variables.iter().map(|(name, kind)| (name.as_str(), kind.as_str())).collect();
-    let mut parameters = Vec::new();
-    for (name, kind) in &new.variables {
-        let state = match old_variables.get(name.as_str()) {
-            None => State::Added,
-            Some(previous) if previous == kind => State::Same,
-            Some(_) => State::Changed,
-        };
-        if state != State::Same {
-            changes.push(GraphChange {
-                state,
-                kind: "Variable",
-                name: name.clone(),
-                detail: kind.clone(),
-                target: ChangeTarget::Parameter,
-                rows: Vec::new(),
-            });
-        }
-        parameters.push((name.clone(), kind.clone(), state));
-    }
-    for (name, kind) in &old.variables {
-        if !new.variables.iter().any(|(new_name, _)| new_name == name) {
-            changes.push(GraphChange {
-                state: State::Removed,
-                kind: "Variable",
-                name: name.clone(),
-                detail: kind.clone(),
-                target: ChangeTarget::Parameter,
-                rows: Vec::new(),
-            });
-            parameters.push((name.clone(), kind.clone(), State::Removed));
-        }
-    }
+    let look = ParameterLook {
+        value_label: "Value",
+        value_shown: true,
+    };
+    let (parameters, mut variable_changes) = compare_parameters(&old.variables, &new.variables, "Variable", look, options);
+    variable_changes.append(&mut changes);
     let states_graph = before.or(after).is_some_and(is_state_graph);
     GraphComparison {
         nodes,
         edges,
         parameters,
         parameters_title: "Graph variables",
-        changes,
+        changes: variable_changes,
         layers: Vec::new(),
         has_ports: !states_graph,
         hidden,
@@ -807,6 +919,63 @@ mod tests {
         let after: Vec<&str> = comparison.nodes.iter().filter(|node| !Shown::After.hides(node.state)).map(|node| node.title.as_str()).collect();
         assert!(after.contains(&"Multiply"));
         assert!(!after.contains(&"Debug: Log"));
+    }
+
+    fn with_variables(mut graph: serde_json::Value, variables: &[(&str, serde_json::Value, &str)]) -> serde_json::Value {
+        let declared: Vec<serde_json::Value> = variables
+            .iter()
+            .map(|(name, value, kind)| json!({"name": name, "value": value, "typeHandle": {"Identification": format!("{kind}, mscorlib, Version=4.0.0.0, Culture=neutral")}}))
+            .collect();
+        graph["graph"]["variables"]["collection"]["$content"] = json!(declared);
+        if let Some(elements) = graph["graph"]["elements"].as_array_mut() {
+            elements.push(json!({"$type": "Unity.VisualScripting.GetVariable", "$id": "9", "guid": "u-get-speed", "kind": "Graph",
+                "position": {"x": 0, "y": 400}, "defaultValues": {"name": {"$content": "Speed", "$type": "System.String"}}}));
+            elements.push(json!({"$type": "Unity.VisualScripting.SetVariable", "$id": "10", "guid": "u-set-speed", "kind": "Object",
+                "position": {"x": 200, "y": 400}, "defaultValues": {"name": {"$content": "Speed", "$type": "System.String"}}}));
+        }
+        graph
+    }
+
+    #[test]
+    fn graph_variables_come_first_with_their_values_before_and_after() {
+        let int = |value: i64| json!({"$content": value, "$type": "System.Int32"});
+        let before = with_variables(graph(0.8, false, false), &[("Speed", int(10), "System.Int32"), ("Lives", int(3), "System.Int32")]);
+        let after = with_variables(
+            graph(0.8, false, false),
+            &[("Speed", int(6), "System.Int32"), ("Drops", json!({"$content": [], "$type": "System.Collections.Generic.List`1[[Item, Game]]"}), "System.Collections.Generic.List`1[[Item, Game]]")],
+        );
+        let comparison = compare_script_graphs(Some(&before), Some(&after), Options::default());
+        let firsts: Vec<(&str, &str, State, &str)> = comparison
+            .changes
+            .iter()
+            .take(3)
+            .map(|change| (change.kind, change.name.as_str(), change.state, change.detail.as_str()))
+            .collect();
+        assert_eq!(
+            firsts,
+            vec![
+                ("Variable", "Speed", State::Changed, "Value"),
+                ("Variable", "Drops", State::Added, "List of Item 0 items"),
+                ("Variable", "Lives", State::Removed, "Integer 3"),
+            ]
+        );
+        let value = comparison.changes[0].rows.iter().find(|row| row.label == "Value");
+        assert_eq!(value.and_then(|row| row.before.as_ref()).map(|value| value.text()), Some("10".to_owned()));
+        assert_eq!(value.and_then(|row| row.after.as_ref()).map(|value| value.text()), Some("6".to_owned()));
+        let speed = comparison.parameters.iter().find(|parameter| parameter.name == "Speed");
+        assert_eq!(speed.map(|speed| (speed.kind.as_str(), speed.value.as_deref(), speed.was.as_deref())), Some(("Integer", Some("6"), Some("10"))));
+        let before_speed = comparison.as_shown(Shown::Before).parameters.into_iter().find(|parameter| parameter.name == "Speed");
+        assert_eq!(before_speed.and_then(|speed| speed.value), Some("10".to_owned()));
+    }
+
+    #[test]
+    fn a_picked_graph_variable_points_at_the_nodes_that_use_it() {
+        let int = json!({"$content": 3, "$type": "System.Int32"});
+        let both = with_variables(graph(0.8, false, false), &[("Speed", int, "System.Int32")]);
+        let comparison = compare_script_graphs(Some(&both), Some(&both), Options::default());
+        let speed = comparison.parameters.iter().position(|parameter| parameter.name == "Speed").unwrap_or(usize::MAX);
+        let users: Vec<&str> = comparison.users_of(speed).map(|ix| comparison.nodes[ix].id.as_str()).collect();
+        assert_eq!(users, vec!["u-get-speed"]);
     }
 
     #[test]

@@ -28,7 +28,7 @@ use super::{
 use crate::{
     media::{Sketch, Stroke},
     ui::{Look as _, ctrl_wheel_area, list_row},
-    unity::{ChangeTarget, GraphEdge, GraphNode, NodeKind, Port, PortType, Shown, State},
+    unity::{ChangeTarget, GraphEdge, GraphNode, GraphParameter, NodeKind, Port, PortType, Shown, State},
 };
 
 const BACKGROUND: [u8; 3] = [0x16, 0x16, 0x16];
@@ -40,6 +40,7 @@ const YELLOW: [u8; 4] = [0xfa, 0xcc, 0x15, 255];
 const BLUE: [u8; 4] = [0x60, 0xa5, 0xfa, 255];
 const SIDE_WIDTH: f32 = 340.;
 const SIDE_PROPERTY: f32 = 96.;
+const PARAMETERS_WIDTH: f32 = 250.;
 const GRID_STEP: f64 = 20.;
 const HEADER: f64 = 26.;
 const PORT_ROW: f64 = 20.;
@@ -136,13 +137,26 @@ fn change_area(compare: &UnityCompare) -> Option<Area> {
             let edge = compare.drawn.edges.get(ix)?;
             find(&edge.from)?.joined(find(&edge.to)?)
         }
-        ChangeTarget::Parameter => return None,
+        ChangeTarget::Parameter(ix) => compare
+            .graph
+            .users_of(ix)
+            .filter_map(|user| compare.drawn.nodes.get(user))
+            .filter(|node| !compare.shown.hides(node.state))
+            .map(node_area)
+            .reduce(Area::joined)?,
     };
     Some(area.grown(FOCUS_MARGIN))
 }
 
 fn picked_target(compare: &UnityCompare) -> Option<ChangeTarget> {
     compare.graph.changes.get(compare.current).map(|change| change.target)
+}
+
+fn picked_users(compare: &UnityCompare) -> Vec<usize> {
+    match picked_target(compare) {
+        Some(ChangeTarget::Parameter(ix)) => compare.graph.users_of(ix).collect(),
+        _ => Vec::new(),
+    }
 }
 
 fn node_center(node: &GraphNode) -> (f64, f64) {
@@ -333,6 +347,7 @@ fn nodes(compare: &UnityCompare, cx: &mut Context<UnityCompare>) -> Vec<AnyEleme
     let text = UNIT_TEXT * scale;
     let titled = text >= SMALLEST_TEXT;
     let picked = picked_target(compare);
+    let users = picked_users(compare);
     let solo = compare.shown != Shown::Both;
     let mut order: Vec<(usize, &GraphNode)> = compare.drawn.nodes.iter().enumerate().filter(|(_, node)| !compare.shown.hides(node.state)).collect();
     order.sort_by_key(|(_, node)| node.state != State::Removed);
@@ -361,7 +376,7 @@ fn nodes(compare: &UnityCompare, cx: &mut Context<UnityCompare>) -> Vec<AnyEleme
                 .border_color(if node.state == State::Removed { theme.red } else { gpui_kit::white().opacity(0.18) })
                 .when(node.state == State::Removed && !solo, |this| this.opacity(0.6))
                 .when_some(ring, |this, color| this.border_2().border_color(color))
-                .when(picked == Some(ChangeTarget::Node(ix)), |this| this.shadow_md().border_2().border_color(theme.blue))
+                .when(picked == Some(ChangeTarget::Node(ix)) || users.contains(&ix), |this| this.shadow_md().border_2().border_color(theme.blue))
                 .text_size(px(text))
                 .line_height(px(text * 1.3))
                 .when_some(change, |this, change| this.cursor_pointer().on_click(cx.listener(move |this, _, _, cx| this.choose_change(change, cx))));
@@ -403,9 +418,72 @@ fn nodes(compare: &UnityCompare, cx: &mut Context<UnityCompare>) -> Vec<AnyEleme
         .collect()
 }
 
-fn parameters(compare: &UnityCompare, cx: &App) -> Option<AnyElement> {
-    let shown: Vec<&(String, String, State)> = compare.drawn.parameters.iter().filter(|(_, _, state)| !compare.shown.hides(*state)).collect();
-    if shown.is_empty() {
+fn value_chip(text: String, changed: bool, cx: &App) -> AnyElement {
+    let theme = cx.theme();
+    div()
+        .flex_none()
+        .px_1()
+        .rounded(px(3.))
+        .when(changed, |this| this.bg(theme.yellow).text_color(gpui_kit::black()))
+        .when(!changed, |this| this.bg(gpui_kit::white().opacity(0.07)))
+        .child(text)
+        .into_any_element()
+}
+
+fn parameter_value(parameter: &GraphParameter, shown: Shown, cx: &App) -> Vec<AnyElement> {
+    let theme = cx.theme();
+    let Some(value) = parameter.value.clone() else {
+        return Vec::new();
+    };
+    match &parameter.was {
+        None => vec![value_chip(value, false, cx)],
+        Some(was) if shown == Shown::Both && !was.is_empty() => vec![
+            div().flex_none().text_color(theme.muted_foreground).line_through().child(was.clone()).into_any_element(),
+            div().flex_none().text_color(theme.muted_foreground).child("→").into_any_element(),
+            value_chip(value, true, cx),
+        ],
+        Some(_) => vec![value_chip(value, true, cx)],
+    }
+}
+
+fn parameters(compare: &UnityCompare, cx: &mut Context<UnityCompare>) -> Option<AnyElement> {
+    let picked = match picked_target(compare) {
+        Some(ChangeTarget::Parameter(ix)) => Some(ix),
+        _ => None,
+    };
+    let rows: Vec<AnyElement> = compare
+        .drawn
+        .parameters
+        .iter()
+        .enumerate()
+        .filter(|(_, parameter)| !compare.shown.hides(parameter.state))
+        .map(|(ix, parameter)| {
+            let theme = cx.theme();
+            let change = compare.graph.changes.iter().position(|change| change.target == ChangeTarget::Parameter(ix));
+            h_flex()
+                .id(("unity-graph-parameter", ix))
+                .gap_1p5()
+                .mx(px(-4.))
+                .px_1()
+                .rounded(px(4.))
+                .xs_text()
+                .when(picked == Some(ix), |this| this.border_1().border_color(theme.blue).bg(theme.blue.opacity(0.14)))
+                .child(state_badge(parameter.state, cx).unwrap_or_else(|| div().flex_none().w(px(18.)).into_any_element()))
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .ellipsis()
+                        .when(parameter.state == State::Removed && compare.shown == Shown::Both, |this| this.line_through())
+                        .child(parameter.name.clone()),
+                )
+                .child(div().flex_none().text_color(theme.muted_foreground).child(parameter.kind.clone()))
+                .children(parameter_value(parameter, compare.shown, cx))
+                .when_some(change, |this, change| this.cursor_pointer().on_click(cx.listener(move |this, _, _, cx| this.choose_change(change, cx))))
+                .into_any_element()
+        })
+        .collect();
+    if rows.is_empty() {
         return None;
     }
     let theme = cx.theme();
@@ -416,7 +494,7 @@ fn parameters(compare: &UnityCompare, cx: &App) -> Option<AnyElement> {
             .bottom_2p5()
             .when(right, |this| this.right_2p5())
             .when(!right, |this| this.left_2p5())
-            .w(px(220.))
+            .w(px(PARAMETERS_WIDTH))
             .px_2p5()
             .py_2()
             .gap_0p5()
@@ -425,14 +503,7 @@ fn parameters(compare: &UnityCompare, cx: &App) -> Option<AnyElement> {
             .border_color(theme.border)
             .bg(theme.popover.opacity(0.92))
             .child(div().xs_text().font_weight(gpui_kit::FontWeight::MEDIUM).child(compare.graph.parameters_title))
-            .children(shown.into_iter().map(|(name, kind, state)| {
-                h_flex()
-                    .gap_1p5()
-                    .xs_text()
-                    .child(state_badge(*state, cx).unwrap_or_else(|| div().flex_none().w(px(18.)).into_any_element()))
-                    .child(div().flex_1().ellipsis().when(*state == State::Removed, |this| this.line_through()).child(name.clone()))
-                    .child(div().text_color(theme.muted_foreground).child(kind.clone()))
-            }))
+            .children(rows)
             .into_any_element(),
     )
 }

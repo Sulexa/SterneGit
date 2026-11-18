@@ -1385,16 +1385,20 @@ const Catalog = (() => {
           code: 'repo::compare::unity::graph::side_panel',
           source: 'src/repo/compare/unity/graph.rs',
           about: 'The side panel of every graph comparison: each change with its badge, what it is and a short detail, then the settings of the picked one, before and after, in a compact InspectorCard.',
-          variants: [['Script graph', () => `<div style="width:340px;height:560px;display:flex">${C.GraphChanges({ diff: unity.brainDiff })}</div>`]],
+          variants: [
+            ['Script graph', () => `<div style="width:340px;height:560px;display:flex">${C.GraphChanges({ diff: unity.brainDiff })}</div>`],
+            ['A graph variable picked', () => `<div style="width:340px;height:560px;display:flex">${C.GraphChanges({ diff: unity.brainVariable })}</div>`],
+          ],
         },
         {
           name: 'GraphParameters',
           code: 'repo::compare::unity::graph::parameters',
           source: 'src/repo/compare/unity/graph.rs',
-          about: 'A corner of a graph that lists its parameters or variables, an added or removed one with its badge.',
+          about: 'A corner of a graph that lists its parameters or variables, an added or removed one with its badge. Graph variables also give their initial value, the old one struck through before the new one when it changed, and the picked one is outlined in blue.',
           variants: [
             ['Animator parameters', () => `<div style="position:relative;width:240px;height:140px">${C.GraphParameters({ title: 'Parameters', rows: unity.animatorDiff.parameters })}</div>`],
-            ['Graph variables', () => `<div style="position:relative;width:240px;height:110px">${C.GraphParameters({ title: 'Graph variables', rows: unity.brainDiff.variables })}</div>`],
+            ['Graph variables', () => `<div style="position:relative;width:280px;height:130px">${C.GraphParameters({ title: 'Graph variables', rows: unity.brainDiff.variables })}</div>`],
+            ['Graph variables, one picked', () => `<div style="position:relative;width:280px;height:130px">${C.GraphParameters({ title: 'Graph variables', rows: unity.brainDiff.variables, picked: 'Speed' })}</div>`],
           ],
         },
       ],

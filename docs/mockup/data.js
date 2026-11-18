@@ -1327,7 +1327,7 @@ const Sample = (() => {
     sources: onDisk,
     facts: 'Script graph · Visual Scripting',
     graph: 'SlimeBrain',
-    current: 4,
+    current: 6,
     nodes: [
       { id: 'update', title: 'On Update', kind: 'event', icon: 'zap', at: [16, 56], width: 112, rows: [[null, { flow: true }]] },
       { id: 'if', title: 'If', kind: 'flow', icon: 'git-branch', at: [150, 56], width: 118, rows: [[{ flow: true }, { label: 'True', flow: true }], [{ label: 'Condition', type: 'bool' }, { label: 'False', flow: true }]] },
@@ -1335,7 +1335,8 @@ const Sample = (() => {
       { id: 'cooldown', title: 'Cooldown', kind: 'flow', icon: 'clock', state: 'changed', at: [292, 56], width: 150, rows: [[{ flow: true }, { label: 'Ready', flow: true }], [{ label: 'Duration', type: 'float', value: '0.6', was: '0.8' }, { label: 'Not Ready', flow: true }]] },
       { id: 'force', title: 'Add Force', kind: 'flow', icon: 'arrow-up', at: [458, 196], width: 128, rows: [[{ flow: true }, { flow: true }], [{ label: 'Target', type: 'object', value: 'This' }, null], [{ label: 'Force', type: 'vector' }, null], [{ label: 'Mode', type: 'object', value: 'Impulse' }, null]] },
       { id: 'log', title: 'Debug: Log', kind: 'flow', icon: 'message-square', state: 'removed', at: [458, 352], width: 128, rows: [[{ flow: true }, { flow: true }], [{ label: 'Message', type: 'object', value: '"jump"' }, null]] },
-      { id: 'vector', title: 'Create Vector 2', kind: 'value', icon: 'move-horizontal', state: 'changed', at: [284, 262], width: 150, rows: [[{ label: 'X', type: 'float', value: '0' }, { type: 'vector' }], [{ label: 'Y', type: 'float', was: '6' }, null]] },
+      { id: 'speed', title: 'Get Variable', kind: 'variable', icon: 'box', at: [140, 262], width: 104, rows: [[{ label: 'Speed', field: true }, { type: 'float' }]] },
+      { id: 'vector', title: 'Create Vector 2', kind: 'value', icon: 'move-horizontal', state: 'changed', at: [284, 262], width: 150, rows: [[{ label: 'X', type: 'float' }, { type: 'vector' }], [{ label: 'Y', type: 'float', was: '6' }, null]] },
       { id: 'multiply', title: 'Multiply', kind: 'value', icon: 'close', state: 'added', at: [146, 346], width: 116, rows: [[{ label: 'A', type: 'float', value: '7.5' }, { type: 'float' }], [{ label: 'B', type: 'float' }, null]] },
       { id: 'bonus', title: 'Get Variable', kind: 'variable', icon: 'box', state: 'added', at: [16, 440], width: 128, rows: [[{ label: 'CrownBonus', field: true }, { type: 'float' }]] },
     ],
@@ -1345,12 +1346,15 @@ const Sample = (() => {
       ['if', 0, 'cooldown', 0],
       ['cooldown', 0, 'force', 0],
       ['vector', 0, 'force', 2],
+      ['speed', 0, 'vector', 0],
       ['force', 0, 'log', 0, 'removed'],
       ['multiply', 0, 'vector', 1, 'added'],
       ['bonus', 0, 'multiply', 1, 'added'],
     ],
-    variables: [['Speed', 'Float 3'], ['IsGrounded', 'Boolean'], ['CrownBonus', 'Float 1.25', 'added']],
+    variables: [['Speed', 'Float', 'changed', '4', '3'], ['IsGrounded', 'Boolean', '', 'Off'], ['Drops', 'List of Item', '', '0 items'], ['CrownBonus', 'Float', 'added', '1.25']],
     changes: [
+      ['changed', 'Variable', 'Speed', 'Value'],
+      ['added', 'Variable', 'CrownBonus', 'Float 1.25'],
       ['added', 'Node', 'Multiply', 'A 7.5'],
       ['added', 'Node', 'Get Variable', 'CrownBonus'],
       ['removed', 'Node', 'Debug: Log', '"jump"'],
@@ -1359,13 +1363,23 @@ const Sample = (() => {
       ['added', 'Connection', 'Multiply → Y', 'Float'],
       ['added', 'Connection', 'CrownBonus → B', 'Float'],
       ['removed', 'Connection', 'Add Force → Log', 'Flow'],
-      ['added', 'Variable', 'CrownBonus', 'Float'],
     ],
     picked: {
       id: 'vector',
       name: 'Create Vector 2',
       type: 'Node',
       components: [{ name: 'Inputs', props: [['Y', '6', ref('Multiply', 'Result', 'spline')]] }],
+    },
+  };
+  const brainVariable = {
+    ...brainDiff,
+    current: 0,
+    picked: {
+      variable: 'Speed',
+      uses: ['speed'],
+      name: 'Speed',
+      type: 'Variable',
+      components: [{ name: 'Graph variable', props: [['Value', '3', '4']] }],
     },
   };
 
@@ -1394,7 +1408,7 @@ const Sample = (() => {
     ],
   };
 
-  const unity = { work: unityWork, prefabDiff, prefabYaml, menuDiff, levelDiff, materialDiff, jumpDiff, animatorDiff, brainDiff, slimeMetaDiff, guidDiff, longValues, longLine };
+  const unity = { work: unityWork, prefabDiff, prefabYaml, menuDiff, levelDiff, materialDiff, jumpDiff, animatorDiff, brainDiff, brainVariable, slimeMetaDiff, guidDiff, longValues, longLine };
 
   const stoppedAt ={ id: '3f2a91c', subject: 'Show conflicted files in the changes list' };
 

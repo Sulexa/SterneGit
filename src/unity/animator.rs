@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use super::{
     compare::{Options, State, changed_rows},
-    graph::{ChangeTarget, GraphChange, GraphComparison, GraphEdge, GraphNode, NodeKind, PortType},
+    graph::{ChangeTarget, Declared, GraphChange, GraphComparison, GraphEdge, GraphNode, NodeKind, ParameterLook, PortType, compare_parameters},
     value::{Field, Lookup, Value, fields, short_number},
     yaml::{Document, Node},
 };
@@ -171,6 +171,7 @@ impl<'a> Machine<'a> {
                     inputs: Vec::new(),
                     outputs: Vec::new(),
                     was_at: None,
+                    variable: None,
                 },
                 Vec::new(),
             )
@@ -198,6 +199,7 @@ impl<'a> Machine<'a> {
                     inputs: Vec::new(),
                     outputs: Vec::new(),
                     was_at: None,
+                    variable: None,
                 },
                 fields(&state.body, &STATE_FIELDS_SKIPPED, self.lookup),
             ));
@@ -227,6 +229,7 @@ impl<'a> Machine<'a> {
                     inputs: Vec::new(),
                     outputs: Vec::new(),
                     was_at: None,
+                    variable: None,
                 },
                 Vec::new(),
             ));
@@ -388,40 +391,18 @@ pub(crate) fn compare_controllers(
             edges.push(shown);
         }
     }
-    let old_parameters = parameters(old_docs);
-    let new_parameters = parameters(new_docs);
-    let mut shown_parameters = Vec::new();
-    for (name, kind, _, default) in &new_parameters {
-        let state = match old_parameters.iter().find(|(old_name, ..)| old_name == name) {
-            None => State::Added,
-            Some((_, old_kind, _, old_default)) if old_kind == kind && old_default == default => State::Same,
-            Some(_) => State::Changed,
-        };
-        if state != State::Same {
-            changes.push(GraphChange {
-                state,
-                kind: "Parameter",
-                name: name.clone(),
-                detail: kind.clone(),
-                target: ChangeTarget::Parameter,
-                rows: Vec::new(),
-            });
-        }
-        shown_parameters.push((name.clone(), kind.clone(), state));
-    }
-    for (name, kind, ..) in &old_parameters {
-        if !new_parameters.iter().any(|(new_name, ..)| new_name == name) {
-            changes.push(GraphChange {
-                state: State::Removed,
-                kind: "Parameter",
-                name: name.clone(),
-                detail: kind.clone(),
-                target: ChangeTarget::Parameter,
-                rows: Vec::new(),
-            });
-            shown_parameters.push((name.clone(), kind.clone(), State::Removed));
-        }
-    }
+    let declared = |documents: &[Document]| -> Vec<Declared> {
+        parameters(documents)
+            .into_iter()
+            .map(|(name, kind, _, value)| Declared { name, kind, value })
+            .collect()
+    };
+    let look = ParameterLook {
+        value_label: "Default",
+        value_shown: false,
+    };
+    let (shown_parameters, mut parameter_changes) = compare_parameters(&declared(old_docs), &declared(new_docs), "Parameter", look, options);
+    changes.append(&mut parameter_changes);
     let mut all_layers = layers(new_docs);
     for name in layers(old_docs) {
         if !all_layers.contains(&name) {
@@ -574,5 +555,21 @@ AnimatorStateTransition:
         let transition = comparison.changes.iter().find(|change| change.kind == "Transition");
         let conditions = transition.and_then(|change| change.rows.iter().find(|row| row.label == "Conditions"));
         assert_eq!(conditions.and_then(|row| row.after.as_ref()).map(|value| value.text()), Some("Jump".to_owned()));
+    }
+
+    #[test]
+    fn a_parameter_default_that_changed_shows_before_and_after() {
+        let with_speed = |default: &str| {
+            controller(false, "0.75").replace(
+                "  m_AnimatorLayers:",
+                &format!("  - m_Name: Speed\n    m_Type: 1\n    m_DefaultFloat: {default}\n    m_DefaultInt: 0\n    m_DefaultBool: 0\n  m_AnimatorLayers:"),
+            )
+        };
+        let comparison = compare_controllers(Some(&documents(&with_speed("1"))), Some(&documents(&with_speed("2.5"))), &Lookup::default(), 0, Options::default());
+        let speed = comparison.changes.iter().find(|change| change.name == "Speed");
+        assert_eq!(speed.map(|change| (change.kind, change.state, change.detail.as_str())), Some(("Parameter", State::Changed, "Default")));
+        let default = speed.and_then(|change| change.rows.iter().find(|row| row.label == "Default"));
+        assert_eq!(default.and_then(|row| row.before.as_ref()).map(|value| value.text()), Some("1".to_owned()));
+        assert_eq!(default.and_then(|row| row.after.as_ref()).map(|value| value.text()), Some("2.5".to_owned()));
     }
 }
