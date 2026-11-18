@@ -21,7 +21,7 @@ nothing to install.
 
 | File | Holds |
 | --- | --- |
-| `app.css` | The theme tokens (Ardoise, the dark theme, then Neige, the light one, under `.light`) and the look of every component |
+| `app.css` | The theme tokens (Graphite, the dark theme, then Perle, the light one, under `.light`) and the look of every component |
 | `components.js` | One function per component, named after its Rust counterpart |
 | `screens.js` | Each screen, composed from the components |
 | `catalog.js` | The component pages: variants, Rust name, source file, description |

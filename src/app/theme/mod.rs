@@ -9,8 +9,8 @@ use serde_json::Value;
 use crate::settings::{Fields, settings_file};
 
 const THEME_FIELD: &str = "theme";
-const ARDOISE: &str = include_str!("ardoise.json");
-const NEIGE: &str = include_str!("neige.json");
+const GRAPHITE: &str = include_str!("graphite.json");
+const PERLE: &str = include_str!("perle.json");
 
 fn bundled(json: &str) -> Rc<ThemeConfig> {
     Rc::new(serde_json::from_str(json).expect("the bundled themes are valid"))
@@ -30,8 +30,8 @@ fn write(mode: ThemeMode, fields: &mut Fields) {
 pub(crate) fn install_theme(cx: &mut App) {
     let mode = settings_file().map_or(ThemeMode::Dark, |file| read(&file.read()));
     Theme::update(cx, |theme| {
-        theme.dark_theme = bundled(ARDOISE);
-        theme.light_theme = bundled(NEIGE);
+        theme.dark_theme = bundled(GRAPHITE);
+        theme.light_theme = bundled(PERLE);
     });
     Theme::change(mode, None, cx);
 }
@@ -55,21 +55,21 @@ mod tests {
     use gpui_kit::component::{ThemeMode, try_parse_color};
     use serde_json::{Value, json};
 
-    use super::{ARDOISE, Fields, NEIGE, bundled, read, write};
+    use super::{Fields, GRAPHITE, PERLE, bundled, read, write};
 
     fn fields(value: Value) -> Fields {
         value.as_object().cloned().unwrap()
     }
 
     #[test]
-    fn ardoise_is_the_dark_theme_and_neige_the_light_one() {
-        assert_eq!(bundled(ARDOISE).mode, ThemeMode::Dark);
-        assert_eq!(bundled(NEIGE).mode, ThemeMode::Light);
+    fn graphite_is_the_dark_theme_and_perle_the_light_one() {
+        assert_eq!(bundled(GRAPHITE).mode, ThemeMode::Dark);
+        assert_eq!(bundled(PERLE).mode, ThemeMode::Light);
     }
 
     #[test]
     fn every_color_of_both_themes_parses() {
-        for json in [ARDOISE, NEIGE] {
+        for json in [GRAPHITE, PERLE] {
             let theme: Value = serde_json::from_str(json).unwrap();
             for (key, color) in theme["colors"].as_object().unwrap() {
                 let color = color.as_str().unwrap();

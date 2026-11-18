@@ -1454,7 +1454,7 @@ const Catalog = (() => {
           name: 'ThemePicker',
           code: 'hosting::interface_page::theme_picker',
           source: 'src/hosting/interface_page.rs',
-          about: 'Dark or Light, as two halves of one switch; the picked half is tinted orange. A click switches the whole window at once and saves the choice.',
+          about: 'Dark or Light, as two halves of one switch; the picked half is tinted like a picked row. A click switches the whole window at once and saves the choice.',
           variants: [
             ['Dark', () => C.ThemePicker({ theme: 'dark' })],
             ['Light', () => C.ThemePicker({ theme: 'light' })],

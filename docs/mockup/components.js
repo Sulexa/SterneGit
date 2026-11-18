@@ -647,7 +647,7 @@ const HostTexts = {
   interface: 'Interface',
   interfaceAbout: 'How SterneGit draws its window on this computer.',
   theme: 'Theme',
-  themeAbout: 'Dark slate or light snow, for the whole window: lists, the commit graph, comparisons, menus and dialogs. Whatever is picked stays tern-bill orange in both.',
+  themeAbout: 'Dark graphite or light pearl, for the whole window: lists, the commit graph, comparisons, menus and dialogs.',
   dark: 'Dark',
   light: 'Light',
   zoom: 'Zoom',

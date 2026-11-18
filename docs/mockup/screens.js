@@ -228,7 +228,7 @@ const Screens = (() => {
     {
       id: 'history-light',
       title: 'History — light theme',
-      about: 'The same screen in the light theme, Neige: snow white panes, pale blue-grey bars, near-black text and slate grey for what is secondary. The picked rows are tinted tern-bill orange, as in the dark theme, Ardoise; lane, ref and file colors are darker so they read on white.',
+      about: 'The same screen in the light theme, Perle: near-white panes, pale neutral grey bars, near-black text and mid grey for what is secondary. The picked rows are tinted light grey, as they are tinted pearl in the dark theme, Graphite; lane, ref and file colors are darker so they read on white.',
       source: 'src/repo/mod.rs',
       render: () => C.SterneGit({ topBar: topBar(), tabStrip: tabStrip(), body: commitSelected(), light: true }),
     },
@@ -545,7 +545,7 @@ const Screens = (() => {
     {
       id: 'commit-ready-light',
       title: 'Uncommitted changes — ready to commit, light theme',
-      about: 'In the light theme the main button is near-black, like the cap of the tern, and the focused field is ringed in orange. In the dark theme the main button is the orange of the bill itself, with near-black text.',
+      about: 'In the light theme the main button is near-black, like the cap of the tern, and the focused field is ringed in mid grey. In the dark theme the main button is pearl grey, like the back of the tern, with near-black text. The orange of the bill stays in the logo alone.',
       source: 'src/repo/changes_list.rs',
       render: () =>
         C.SterneGit({
@@ -1593,7 +1593,7 @@ const Screens = (() => {
         {
           id: 'settings-interface',
           title: 'Settings — interface',
-          about: "Interface is the third page of Settings. Theme picks Dark, the slate theme every screen of this mockup shows, or Light, the snow theme; the whole window switches at once, without a restart. Zoom scales the whole window, like a browser's zoom: text, rows, icons, menus, dialogs and the top bar, with crisp text at every size. − and + step through 50, 67, 75, 80, 90, 100, 110, 125, 150, 175 and 200 %; each end turns its button off. Reset goes back to 100 % and is off there. SterneGit saves both in %APPDATA%\\SterneGit\\settings.json and opens with them next time.",
+          about: "Interface is the third page of Settings. Theme picks Dark, the graphite theme every screen of this mockup shows, or Light, the pearl theme; the whole window switches at once, without a restart. Zoom scales the whole window, like a browser's zoom: text, rows, icons, menus, dialogs and the top bar, with crisp text at every size. − and + step through 50, 67, 75, 80, 90, 100, 110, 125, 150, 175 and 200 %; each end turns its button off. Reset goes back to 100 % and is off there. SterneGit saves both in %APPDATA%\\SterneGit\\settings.json and opens with them next time.",
           source: 'src/hosting/interface_page.rs',
           render: () => settings('interface', C.InterfacePage({ zoom: 100 })),
         },

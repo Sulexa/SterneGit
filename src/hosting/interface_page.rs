@@ -27,8 +27,8 @@ use crate::{
 const INTERFACE: &str = "Interface";
 const INTERFACE_ABOUT: &str = "How SterneGit draws its window on this computer.";
 const THEME: &str = "Theme";
-const THEME_ABOUT: &str = "Dark slate or light snow, for the whole window: lists, the commit graph, comparisons, \
-     menus and dialogs. Whatever is picked stays tern-bill orange in both.";
+const THEME_ABOUT: &str =
+    "Dark graphite or light pearl, for the whole window: lists, the commit graph, comparisons, menus and dialogs.";
 const DARK: &str = "Dark";
 const LIGHT: &str = "Light";
 const ZOOM: &str = "Zoom";
