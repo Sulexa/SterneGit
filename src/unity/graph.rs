@@ -137,6 +137,7 @@ pub(crate) struct Declared {
     pub(crate) name: String,
     pub(crate) kind: String,
     pub(crate) value: String,
+    pub(crate) members: Vec<Field>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -225,7 +226,7 @@ fn declared_fields(declared: &Declared, look: ParameterLook) -> Vec<Field> {
         depth: 0,
         value: Value::Text(declared.kind.clone()),
     }];
-    if !declared.value.is_empty() {
+    if !declared.value.is_empty() || !declared.members.is_empty() {
         fields.push(Field {
             path: "value".to_owned(),
             label: look.value_label.to_owned(),
@@ -233,7 +234,38 @@ fn declared_fields(declared: &Declared, look: ParameterLook) -> Vec<Field> {
             value: Value::Text(declared.value.clone()),
         });
     }
+    fields.extend(declared.members.iter().cloned());
     fields
+}
+
+fn member_fields(value: &Json, path: &str, depth: usize) -> Vec<Field> {
+    let members: Vec<(String, String, &Json)> = match value.get("$content").unwrap_or(value) {
+        Json::Array(items) => items
+            .iter()
+            .enumerate()
+            .map(|(ix, item)| (format!("{path}[{ix}]"), format!("Element {ix}"), item))
+            .collect(),
+        Json::Object(map) if !map.contains_key("x") => map
+            .iter()
+            .filter(|(key, _)| !key.starts_with('$'))
+            .map(|(key, inner)| (format!("{path}.{key}"), nicify(key), inner))
+            .collect(),
+        _ => Vec::new(),
+    };
+    members
+        .into_iter()
+        .flat_map(|(path, label, inner)| {
+            let nested = member_fields(inner, &path, depth + 1);
+            let shown = if nested.is_empty() { literal(inner, "value").unwrap_or_else(|| "None".to_owned()) } else { String::new() };
+            std::iter::once(Field {
+                path,
+                label,
+                depth,
+                value: Value::Text(shown),
+            })
+            .chain(nested)
+        })
+        .collect()
 }
 
 fn declared_text(declared: &Declared) -> String {
@@ -249,7 +281,7 @@ pub(crate) fn compare_parameters(
 ) -> (Vec<GraphParameter>, Vec<GraphChange>) {
     let mut parameters = Vec::new();
     let mut changes = Vec::new();
-    let shown_value = |declared: &Declared| look.value_shown.then(|| declared.value.clone());
+    let shown_value = |declared: &Declared| (look.value_shown && !declared.value.is_empty()).then(|| declared.value.clone());
     for declared in new {
         let previous = old.iter().find(|previous| previous.name == declared.name);
         let after = declared_fields(declared, look);
@@ -657,6 +689,7 @@ fn read_side(json: &Json) -> Side {
                             .map(short_type)
                             .unwrap_or_default(),
                         value: variable.get("value").and_then(|value| literal(value, "value")).unwrap_or_else(|| "None".to_owned()),
+                        members: variable.get("value").map(|value| member_fields(value, "value", 1)).unwrap_or_default(),
                     })
                 })
                 .collect()
@@ -848,7 +881,10 @@ fn edge_change(edge: &GraphEdge, name: String, at: usize) -> GraphChange {
 #[cfg(test)]
 mod tests {
     use super::{NodeKind, PortType, Shown, compare_script_graphs};
-    use crate::unity::compare::{Options, State};
+    use crate::unity::{
+        compare::{Options, State},
+        value::Value,
+    };
     use serde_json::json;
 
     fn graph(duration: f64, with_multiply: bool, with_log: bool) -> serde_json::Value {
@@ -966,6 +1002,25 @@ mod tests {
         assert_eq!(speed.map(|speed| (speed.kind.as_str(), speed.value.as_deref(), speed.was.as_deref())), Some(("Integer", Some("6"), Some("10"))));
         let before_speed = comparison.as_shown(Shown::Before).parameters.into_iter().find(|parameter| parameter.name == "Speed");
         assert_eq!(before_speed.and_then(|speed| speed.value), Some("10".to_owned()));
+    }
+
+    #[test]
+    fn a_variable_holding_an_object_compares_its_fields() {
+        let modifier = |value: i64| json!({"StatType": "OFFER_COST", "ModifierType": "ADD", "Value": value, "$type": "PassiveStatModifier"});
+        let before = with_variables(graph(0.8, false, false), &[("OffersPrice", modifier(-20), "PassiveStatModifier")]);
+        let after = with_variables(graph(0.8, false, false), &[("OffersPrice", modifier(-15), "PassiveStatModifier")]);
+        let comparison = compare_script_graphs(Some(&before), Some(&after), Options::default());
+        let change = comparison.changes.iter().find(|change| change.name == "OffersPrice");
+        assert_eq!(change.map(|change| (change.state, change.detail.as_str())), Some((State::Changed, "Value")));
+        let rows: Vec<(usize, &str, Option<String>, Option<String>)> = change
+            .map(|change| change.rows.iter().map(|row| (row.depth, row.label.as_str(), row.before.as_ref().map(Value::text), row.after.as_ref().map(Value::text))).collect())
+            .unwrap_or_default();
+        assert_eq!(rows, vec![(0, "Value", Some(String::new()), Some(String::new())), (1, "Value", Some("-20".to_owned()), Some("-15".to_owned()))]);
+        let added = compare_script_graphs(None, Some(&after), Options::default());
+        let fields: Vec<&str> = added.changes.iter().find(|change| change.name == "OffersPrice").map(|change| change.rows.iter().map(|row| row.label.as_str()).collect()).unwrap_or_default();
+        assert_eq!(fields, vec!["Type", "Value", "Stat Type", "Modifier Type", "Value"]);
+        let offers = comparison.parameters.iter().find(|parameter| parameter.name == "OffersPrice");
+        assert_eq!(offers.map(|offers| (offers.state, offers.value.clone())), Some((State::Changed, None)));
     }
 
     #[test]

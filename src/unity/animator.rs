@@ -394,7 +394,12 @@ pub(crate) fn compare_controllers(
     let declared = |documents: &[Document]| -> Vec<Declared> {
         parameters(documents)
             .into_iter()
-            .map(|(name, kind, _, value)| Declared { name, kind, value })
+            .map(|(name, kind, _, value)| Declared {
+                name,
+                kind,
+                value,
+                members: Vec::new(),
+            })
             .collect()
     };
     let look = ParameterLook {
