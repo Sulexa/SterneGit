@@ -32,6 +32,7 @@
   --found: #fb923c;
   --cyan: #4cc9dc;
   --red: #f07a6e;
+  --drag-border: #c9d3dc;
   --font: "Segoe UI", system-ui, -apple-system, Ubuntu, sans-serif;
   --mono: "Cascadia Mono", Consolas, "SF Mono", Menlo, "DejaVu Sans Mono", monospace;
   --row-height: 28px;
@@ -72,6 +73,7 @@
   --found: #f08c3a;
   --cyan: #0f93a8;
   --red: #d2473c;
+  --drag-border: #5c6066;
 }
 
 .light .tok-keyword { color: #9a3fb5; }
@@ -284,6 +286,7 @@
 }
 
 .tab-strip {
+  position: relative;
   flex: none;
   height: 32px;
   display: flex;
@@ -328,6 +331,20 @@
 .tab > .prefix { padding-left: 12px; display: flex; }
 .tab > .label { flex: 1; padding: 0 12px; }
 .tab > .btn { margin-left: -8px; margin-right: 8px; }
+.tab.drop { border-left: 2px solid var(--drag-border); border-right-width: 0; }
+.tab-strip > .suffix.drop { flex: 1; border-left: 2px solid var(--drag-border); padding-left: 2px; }
+
+.tab-drag-preview {
+  position: absolute;
+  top: 3px;
+  color: var(--tab-foreground);
+  background: var(--tab-active);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  opacity: 0.9;
+  box-shadow: 0 4px 12px #0006;
+  pointer-events: none;
+}
 
 .repo-view {
   flex: 1;

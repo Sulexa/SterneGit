@@ -25,7 +25,7 @@ use super::{
     connectors::Connectors,
     draws_its_own_menu_bar,
     saved_tabs::SavedTabs,
-    tab_strip::{TabLabel, TabState, TabStrip},
+    tab_strip::{TabLabel, TabMove, TabState, TabStrip},
     tabs::Tabs,
     top_bar::{TopBar, update_variant},
     updates::{self, Status, UPDATE, UPDATE_THEN_RESTART, Updates, release_out},
@@ -290,6 +290,13 @@ impl SterneGit {
     fn close_tab(&mut self, ix: usize, window: &mut Window, cx: &mut Context<Self>) {
         if self.tabs.close(ix) {
             self.show_active_tab(window, cx);
+        }
+    }
+
+    fn move_tab(&mut self, moved: TabMove, cx: &mut Context<Self>) {
+        if self.tabs.move_before(moved.from, moved.before) {
+            self.save_tabs(cx);
+            cx.notify();
         }
     }
 
@@ -597,6 +604,7 @@ impl SterneGit {
         TabStrip::new(labels, self.tabs.active_index())
             .on_select(cx.listener(|this, ix: &usize, window, cx| this.activate(*ix, window, cx)))
             .on_close(cx.listener(|this, ix: &usize, window, cx| this.close_tab(*ix, window, cx)))
+            .on_move(cx.listener(|this, moved: &TabMove, _, cx| this.move_tab(*moved, cx)))
             .on_open(cx.listener(|this, _: &(), window, cx| this.open_repository(window, cx)))
     }
 

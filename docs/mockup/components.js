@@ -1802,23 +1802,32 @@ const C = {
     return `<div data-c="TopBar" data-base="TitleBar" class="top-bar${mac ? ' mac' : ''}">${lights}<div class="content">${C.AppLogo()}${mac ? '' : C.AppMenuBar({ open: openMenu })}<div class="fill"></div>${repo}${update ? C.UpdateButton(update) : ''}</div>${mac ? '' : C.WindowControls()}</div>`;
   },
 
-  Tab({ name, state = 'ready', active = false, icon: glyph }) {
-    const prefix =
-      state === 'reading'
-        ? `<span class="prefix">${C.Spinner({ size: 'xs' })}</span>`
-        : state === 'failed'
-          ? `<span class="prefix">${icon('triangle-alert', 'xs', 'var(--red)')}</span>`
-          : glyph
-            ? `<span class="prefix">${icon(glyph, 'xs', 'var(--muted)')}</span>`
-            : '';
-    const close = C.Button({ icon: 'close', variant: 'ghost', tooltip: 'Close tab  Ctrl+W' });
-    return `<div data-c="Tab" class="tab${active ? ' active' : ''}">${prefix}<span class="label ellipsis">${esc(name)}</span>${close}</div>`;
+  TabPrefix({ state = 'ready', icon: glyph }) {
+    return state === 'reading'
+      ? `<span class="prefix">${C.Spinner({ size: 'xs' })}</span>`
+      : state === 'failed'
+        ? `<span class="prefix">${icon('triangle-alert', 'xs', 'var(--red)')}</span>`
+        : glyph
+          ? `<span class="prefix">${icon(glyph, 'xs', 'var(--muted)')}</span>`
+          : '';
   },
 
-  TabStrip({ tabs, active = 0 }) {
-    const items = tabs.map((tab, ix) => C.Tab({ ...tab, active: ix === active })).join('');
+  Tab({ name, state = 'ready', active = false, icon: glyph, drop = false }) {
+    const close = C.Button({ icon: 'close', variant: 'ghost', tooltip: 'Close tab  Ctrl+W' });
+    const classes = ['tab', active && 'active', drop && 'drop'].filter(Boolean).join(' ');
+    return `<div data-c="Tab" class="${classes}">${C.TabPrefix({ state, icon: glyph })}<span class="label ellipsis">${esc(name)}</span>${close}</div>`;
+  },
+
+  TabDragPreview({ name, state = 'ready', icon: glyph, left = 0 }) {
+    return `<div data-c="TabDragPreview" class="tab tab-drag-preview" style="left:${left}px">${C.TabPrefix({ state, icon: glyph })}<span class="label ellipsis">${esc(name)}</span></div>`;
+  },
+
+  TabStrip({ tabs, active = 0, drag }) {
+    const items = tabs.map((tab, ix) => C.Tab({ ...tab, active: ix === active, drop: drag?.over === ix })).join('');
     const open = C.Button({ icon: 'plus', variant: 'ghost', tooltip: 'Open a repository in a new tab  Ctrl+O' });
-    return `<div data-c="TabStrip" data-base="TabBar" class="tab-strip"><div class="tabs">${items}</div><div class="suffix">${open}</div></div>`;
+    const past = drag?.over === tabs.length ? ' drop' : '';
+    const preview = drag ? C.TabDragPreview({ ...tabs[drag.from], left: drag.left }) : '';
+    return `<div data-c="TabStrip" data-base="TabBar" class="tab-strip"><div class="tabs">${items}</div><div class="suffix${past}">${open}</div>${preview}</div>`;
   },
 
   ListRow({ content, selected = false, extraClass = '', name = 'ListRow', base }) {

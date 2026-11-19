@@ -74,6 +74,26 @@ impl<T> Tabs<T> {
         true
     }
 
+    pub(crate) fn move_before(&mut self, ix: usize, before: usize) -> bool {
+        let count = self.items.len();
+        if ix >= count {
+            return false;
+        }
+        let to = if before > ix { before.min(count) - 1 } else { before };
+        if to == ix {
+            return false;
+        }
+        let item = self.items.remove(ix);
+        self.items.insert(to, item);
+        self.active = match self.active {
+            active if active == ix => to,
+            active if ix < active && active <= to => active - 1,
+            active if to <= active && active < ix => active + 1,
+            active => active,
+        };
+        true
+    }
+
     pub(crate) fn cycle(&mut self, delta: isize) -> bool {
         let count = self.items.len();
         if count < 2 {
@@ -166,6 +186,64 @@ mod tests {
         let mut tabs = tabs(&["a"], 0);
         assert!(!tabs.cycle(1));
         assert_eq!(tabs.active(), Some(&"a"));
+    }
+
+    fn names(tabs: &Tabs<&'static str>) -> Vec<&'static str> {
+        tabs.iter().copied().collect()
+    }
+
+    #[test]
+    fn a_tab_moved_left_lands_before_the_tab_it_was_dropped_on() {
+        let mut tabs = tabs(&["a", "b", "c", "d"], 0);
+        assert!(tabs.move_before(3, 1));
+        assert_eq!(names(&tabs), ["a", "d", "b", "c"]);
+    }
+
+    #[test]
+    fn a_tab_moved_right_lands_before_the_tab_it_was_dropped_on() {
+        let mut tabs = tabs(&["a", "b", "c", "d"], 3);
+        assert!(tabs.move_before(0, 2));
+        assert_eq!(names(&tabs), ["b", "a", "c", "d"]);
+    }
+
+    #[test]
+    fn a_tab_moved_past_the_last_one_becomes_the_last() {
+        let mut tabs = tabs(&["a", "b", "c"], 0);
+        assert!(tabs.move_before(0, 3));
+        assert_eq!(names(&tabs), ["b", "c", "a"]);
+        assert!(tabs.move_before(0, usize::MAX));
+        assert_eq!(names(&tabs), ["c", "a", "b"]);
+    }
+
+    #[test]
+    fn a_tab_dropped_where_it_already_is_does_not_move() {
+        let mut tabs = tabs(&["a", "b", "c"], 0);
+        assert!(!tabs.move_before(1, 1));
+        assert!(!tabs.move_before(1, 2));
+        assert!(!tabs.move_before(2, 3));
+        assert!(!tabs.move_before(5, 0));
+        assert_eq!(names(&tabs), ["a", "b", "c"]);
+    }
+
+    #[test]
+    fn the_active_tab_stays_active_when_it_moves() {
+        let mut tabs = tabs(&["a", "b", "c", "d"], 1);
+        assert!(tabs.move_before(1, 4));
+        assert_eq!(tabs.active(), Some(&"b"));
+        assert!(tabs.move_before(3, 0));
+        assert_eq!(tabs.active(), Some(&"b"));
+    }
+
+    #[test]
+    fn the_active_tab_stays_active_when_another_moves_across_it() {
+        let mut tabs = tabs(&["a", "b", "c", "d"], 2);
+        assert!(tabs.move_before(0, 4));
+        assert_eq!(tabs.active(), Some(&"c"));
+        assert!(tabs.move_before(3, 0));
+        assert_eq!(tabs.active(), Some(&"c"));
+        assert!(tabs.move_before(3, 1));
+        assert_eq!(tabs.active(), Some(&"c"));
+        assert_eq!(names(&tabs), ["a", "d", "b", "c"]);
     }
 
     #[test]

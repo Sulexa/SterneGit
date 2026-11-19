@@ -459,10 +459,21 @@ const Catalog = (() => {
           name: 'TabStrip',
           code: 'app::tab_strip::TabStrip',
           source: 'src/app/tab_strip.rs',
-          about: 'One tab per open repository and, right after the last one, a + button that opens another.',
+          about: 'One tab per open repository and, right after the last one, a + button that opens another. Tabs are dragged along the strip to reorder them.',
           variants: [
             ['Three tabs', () => C.TabStrip({ tabs, active: 0 }), { w: 1000 }],
             ['One tab', () => C.TabStrip({ tabs: tabs.slice(0, 1), active: 0 }), { w: 1000 }],
+            ['Dragging linux before website', () => C.TabStrip({ tabs, active: 0, drag: { from: 2, over: 1, left: 100 } }), { w: 1000 }],
+            ['Dragging sternegit past the last tab', () => C.TabStrip({ tabs, active: 0, drag: { from: 0, over: tabs.length, left: 420 } }), { w: 1000 }],
+          ],
+        },
+        {
+          name: 'TabDragPreview',
+          code: 'app::tab_strip::TabDragPreview',
+          source: 'src/app/tab_strip.rs',
+          about: 'The copy of a tab that follows the pointer while the tab is dragged: its icon and name on the active tab color, outlined, with a shadow, at 90 % opacity, held where it was grabbed.',
+          variants: [
+            ['sternegit', () => `<div class="tab-strip" style="width:200px">${C.TabDragPreview({ name: 'sternegit' })}</div>`],
           ],
         },
         {
@@ -475,6 +486,7 @@ const Catalog = (() => {
             ['Inactive', () => `<div class="tab-strip">${C.Tab({ name: 'website' })}</div>`],
             ['Reading', () => `<div class="tab-strip">${C.Tab({ name: 'linux', state: 'reading' })}</div>`],
             ['Failed', () => `<div class="tab-strip">${C.Tab({ name: 'old-site', state: 'failed' })}</div>`],
+            ['A tab dragged over it', () => `<div class="tab-strip">${C.Tab({ name: 'website', drop: true })}</div>`],
           ],
         },
       ],

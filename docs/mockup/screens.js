@@ -5,6 +5,7 @@ const Screens = (() => {
   const position = (row) => `Commit ${thousands(row + 1)} of ${thousands(history.total)}`;
 
   const topBar = (extra = {}) => C.TopBar({ repository: history.name, head: history.head, ...extra });
+  const dragTabs = [...tabs.slice(0, 2), { name: 'linux', state: 'ready' }, { name: 'starfall', state: 'ready' }];
   const tabStrip = (overrides = {}) => C.TabStrip({ tabs: tabs.map((tab, ix) => ({ ...tab, ...(overrides[ix] || {}) })), active: 0 });
 
   const repo = ({ left, middle, right, selectedRow = null, picked = [], wipSelected = false, status = {}, toolbar }) =>
@@ -216,6 +217,30 @@ const Screens = (() => {
             }),
             status: C.RepoStatusBar({}),
           }),
+        }),
+    },
+    {
+      id: 'tab-drag',
+      title: 'Dragging a tab',
+      about: 'A tab moves by dragging it along the strip. Once the pointer has moved a few pixels with the button down, a copy of the tab follows it, lifted and slightly see-through, and the tab under the pointer gets a bar on its left edge: let go and the dragged tab takes that place, here starfall goes between sternegit and website. Dragging does not switch tabs: the tab that was showing stays showing, wherever it ends up. Letting go anywhere else leaves the order as it was. The new order is kept, so the tabs come back in it the next time SterneGit starts.',
+      source: 'src/app/tab_strip.rs',
+      render: () =>
+        C.SterneGit({
+          topBar: topBar(),
+          tabStrip: C.TabStrip({ tabs: dragTabs, active: 0, drag: { from: 3, over: 1, left: 136 } }),
+          body: commitSelected(),
+        }),
+    },
+    {
+      id: 'tab-drag-end',
+      title: 'Dragging a tab past the last one',
+      about: 'The space right of the last tab, + button included, stands for the end of the strip: while a tab is dragged over it, the bar shows right after the last tab, and letting go there makes the dragged tab the last one.',
+      source: 'src/app/tab_strip.rs',
+      render: () =>
+        C.SterneGit({
+          topBar: topBar(),
+          tabStrip: C.TabStrip({ tabs: dragTabs, active: 0, drag: { from: 1, over: dragTabs.length, left: 540 } }),
+          body: commitSelected(),
         }),
     },
     {
