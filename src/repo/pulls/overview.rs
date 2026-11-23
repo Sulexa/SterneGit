@@ -36,7 +36,7 @@ use crate::{
     git::{PullSource, RefKind, fork_branch_name, short_id},
     hosting::{Fix, Trouble},
     repo::{
-        commit_files::CommitFiles,
+        commit_files::{CommitFiles, scroll_to_file},
         patch_view::{PatchStats, parse_patch},
         repository::{PullCheckOut, Repository, RepositoryEvent},
     },
@@ -189,8 +189,13 @@ impl PullView {
         self.changes.value().map(|changes| (changes.head, changes.merge_base))
     }
 
+    pub(crate) fn folded(&self) -> &Folded<SharedString> {
+        &self.folded
+    }
+
     pub(crate) fn mark_open(&mut self, path: Option<SharedString>, cx: &mut Context<Self>) {
         if self.open != path {
+            scroll_to_file(self.files(), path.as_ref(), &self.folded, &self.files_scroll, cx);
             self.open = path;
             cx.notify();
         }

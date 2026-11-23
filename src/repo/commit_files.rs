@@ -2,7 +2,7 @@ use std::{path::Path, sync::Arc};
 
 use gpui_kit::{
     AnyElement, App, InteractiveElement as _, IntoElement, ParentElement as _, RenderOnce,
-    SharedString, Styled as _, UniformListScrollHandle, Window,
+    ScrollStrategy, SharedString, Styled as _, UniformListScrollHandle, Window,
     component::{
         ActiveTheme as _,
         diff::DiffFile,
@@ -17,7 +17,7 @@ use gpui_kit::{
 
 use super::{
     file_menu::{history_item, on_disk_items},
-    file_tree::{FileTreeRow, file_rows},
+    file_tree::{FileTreeRow, file_rows, row_of_file},
     patch_view::change_kind,
 };
 use crate::{
@@ -46,6 +46,22 @@ impl FileActions {
             ),
             None => menu,
         }
+    }
+}
+
+pub(crate) fn scroll_to_file(
+    files: Option<Arc<[DiffFile]>>,
+    path: Option<&SharedString>,
+    folded: &Folded<SharedString>,
+    scroll: &UniformListScrollHandle,
+    cx: &App,
+) {
+    let (Some(files), Some(path)) = (files, path) else {
+        return;
+    };
+    let paths = files.iter().map(|file| file.path().as_ref());
+    if let Some(row) = row_of_file(FileView::current(cx), paths, folded, path) {
+        scroll.scroll_to_item(row, ScrollStrategy::Nearest);
     }
 }
 

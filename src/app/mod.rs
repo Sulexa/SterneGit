@@ -21,8 +21,8 @@ use gpui_kit::{
 
 use crate::{
     actions::{
-        About, CheckForUpdates, CloneRepository, CloseDiff, CloseTab, CopyHash, FIND_CONTEXT, Fetch,
-        Find, FindNext, FindPrevious, HISTORY_CONTEXT, NewRepository, ToggleMatchCase, TogglePattern,
+        About, CheckForUpdates, CloneRepository, CloseDiff, CloseTab, CopyHash, FILES_CONTEXT, FIND_CONTEXT,
+        Fetch, FileAbove, FileBelow, Find, FindNext, FindPrevious, HISTORY_CONTEXT, NewRepository, ToggleMatchCase, TogglePattern,
         ToggleWholeWords,
         NewerCommit, NextChange, NextFile, NextTab, OlderCommit, OpenRepository, OpenSettings,
         PickNewerCommit, PickOlderCommit,
@@ -142,6 +142,8 @@ fn bind_keys(cx: &mut App) {
         KeyBinding::new("alt-down", NextChange, Some(WINDOW_CONTEXT)),
         KeyBinding::new("alt-left", PreviousFile, Some(WINDOW_CONTEXT)),
         KeyBinding::new("alt-right", NextFile, Some(WINDOW_CONTEXT)),
+        KeyBinding::new("up", FileAbove, Some(FILES_CONTEXT)),
+        KeyBinding::new("down", FileBelow, Some(FILES_CONTEXT)),
         KeyBinding::new("space", PlayPause, Some(MEDIA_CONTEXT)),
         KeyBinding::new("tab", SwitchVersion, Some(MEDIA_CONTEXT)),
         KeyBinding::new("l", LoopChange, Some(MEDIA_CONTEXT)),

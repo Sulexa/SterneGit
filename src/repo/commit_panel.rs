@@ -19,7 +19,7 @@ use gpui_kit::{
 };
 
 use super::{
-    commit_files::CommitFiles,
+    commit_files::{CommitFiles, scroll_to_file},
     message_editor::{Field, MessageEditor, StopEditing},
     patch_view::{PatchStats, PatchTexts, parse_patch, patch_content},
     repository::Repository,
@@ -245,8 +245,13 @@ impl CommitPanel {
         commit.parents.first().copied()
     }
 
+    pub(crate) fn folded(&self) -> &Folded<SharedString> {
+        &self.folded
+    }
+
     pub(crate) fn mark_open(&mut self, path: Option<SharedString>, cx: &mut Context<Self>) {
         if self.open != path {
+            scroll_to_file(self.files(), path.as_ref(), &self.folded, &self.files_scroll, cx);
             self.open = path;
             cx.notify();
         }

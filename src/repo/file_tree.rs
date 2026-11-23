@@ -43,6 +43,18 @@ pub(crate) fn file_rows<'a>(
     }
 }
 
+pub(crate) fn row_of_file<'a>(
+    view: FileView,
+    paths: impl IntoIterator<Item = &'a str>,
+    folded: &Folded<SharedString>,
+    path: &str,
+) -> Option<usize> {
+    let paths: Vec<&str> = paths.into_iter().collect();
+    file_rows(view, paths.iter().copied(), folded)
+        .iter()
+        .position(|row| matches!(row, FileTreeRow::File { ix, .. } if paths[*ix] == path))
+}
+
 pub(crate) fn is_inside(path: &str, folder: &str) -> bool {
     path.strip_prefix(folder)
         .is_some_and(|rest| rest.starts_with('/'))
@@ -128,7 +140,7 @@ fn by_name(a: &str, b: &str) -> Ordering {
 mod tests {
     use gpui_kit::SharedString;
 
-    use super::{FileTreeRow, file_rows, is_inside};
+    use super::{FileTreeRow, file_rows, is_inside, row_of_file};
     use crate::ui::{FilePlace, FileView, Folded};
 
     fn folder(path: &str, name: &str, depth: usize, open: bool) -> FileTreeRow {
@@ -246,6 +258,30 @@ mod tests {
                 folder("src/repo", "src/repo", 0, false),
                 file(4, 0),
             ]
+        );
+    }
+
+    #[test]
+    fn a_file_row_counts_the_folder_rows_above_it() {
+        assert_eq!(
+            row_of_file(FileView::Tree, COMMIT, &Folded::default(), "src/repo/patch_view.rs"),
+            Some(5)
+        );
+        assert_eq!(
+            row_of_file(FileView::List, COMMIT, &Folded::default(), "src/repo/patch_view.rs"),
+            Some(2)
+        );
+    }
+
+    #[test]
+    fn a_file_in_a_folded_folder_has_no_row() {
+        assert_eq!(
+            row_of_file(FileView::Tree, COMMIT, &folded(&["src/repo"]), "src/repo/patch_view.rs"),
+            None
+        );
+        assert_eq!(
+            row_of_file(FileView::Tree, COMMIT, &folded(&["src/repo"]), "Cargo.toml"),
+            Some(3)
         );
     }
 
