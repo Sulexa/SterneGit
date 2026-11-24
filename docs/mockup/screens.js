@@ -274,6 +274,22 @@ const Screens = (() => {
         }),
     },
     {
+      id: 'ahead-behind-rewritten',
+      title: 'Branch whose upstream was rewritten',
+      about: "When a fetch finds that someone rewrote origin/main and force pushed, main's row shows a yellow warning sign instead of ↓ and ↑: counting would be wrong, because ↑ would count the old versions main got from origin/main as commits to push. Hovering the sign says origin/main was rewritten and force pushed, and what Pull will do: replay the commits only main has on the new version, or move main to it when main has none of its own. SterneGit sees it with git merge-base --fork-point origin/main main: the newest place origin/main's reflog holds that main contains is where main's own commits start, and when origin/main no longer contains it, origin/main was rewritten. The sign goes away once Pull, Push or a rebase puts main on the new origin/main.",
+      source: 'src/repo/refs_list.rs',
+      render: () =>
+        C.SterneGit({
+          topBar: topBar(),
+          tabStrip: tabStrip(),
+          body: repo({
+            left: C.RefsList({ refs: tracked.refs.map((label) => (label.name === 'main' ? { ...label, rewritten: { ours: 2 } } : label)), selectedRow: null, collapsed }),
+            middle: C.HistoryList({ history: tracked, selectedRow: null, changes }),
+            right: C.Hint({ message: Texts.selectCommit }),
+          }),
+        }),
+    },
+    {
       id: 'commit-message-hover',
       title: 'Pointing at a commit message',
       about: "The message of the selected commit can be edited in place. Pointing at its subject or description lights them up, with a text cursor and a tooltip: Click to edit the message. That works for any commit a local branch holds, or a detached HEAD, however old. A commit that only remote branches or tags hold, a stash, and every commit while a rebase, a merge, a cherry-pick or a revert waits or another Git write runs, don't light up and ignore the click.",
@@ -1085,6 +1101,45 @@ const Screens = (() => {
           tabStrip: tabStrip(),
           body: commitSelected(),
           overlays: C.BehindDialog({ branch: 'main', upstream: 'origin/main', theirs: 2, ours: 2, rewritten: true }),
+        }),
+    },
+    {
+      id: 'pull-rewritten',
+      title: 'Header — pull after someone rewrote the upstream',
+      about: "Someone rewrote origin/main and force pushed, so the 3 commits main got from it are no longer on it. In Fast-forward if possible mode Pull would merge the old versions back beside the new ones, and in Fast-forward only mode it would stop on diverged branches, so it asks instead, as soon as the fetch shows the rewrite. Rebase replays the 2 commits only main has on the new origin/main and leaves the old versions out, as git pull --rebase does; uncommitted changes are set aside and come back, as with every pull. Commits whose changes the new origin/main already has are left out too. A rebase that stops on a conflict shows the OperationBar, as Rebase does. Cancel or Esc does nothing, and the left pane keeps its warning sign. When main has no commits of its own the button reads Reset to origin/main and moves main there; nothing is lost. In Rebase mode Pull doesn't ask; in Fetch only mode it only fetches.",
+      source: 'src/repo/behind_dialog.rs',
+      render: () =>
+        C.SterneGit({
+          topBar: topBar(),
+          tabStrip: tabStrip(),
+          body: commitSelected(),
+          overlays: C.RewrittenDialog({ branch: 'main', upstream: 'origin/main', old: 3, ours: 2 }),
+        }),
+    },
+    {
+      id: 'pulled-rewritten',
+      title: 'Header — rebase-mode pull onto a rewritten upstream',
+      about: 'In Rebase mode Pull already does the right thing, so it runs without asking and the notification says the upstream was rewritten: Rebased 2 commits of main onto the rewritten origin/main, or Moved main to the rewritten origin/main when main had none of its own.',
+      source: 'src/repo/toolbar.rs',
+      render: () =>
+        C.SterneGit({
+          topBar: topBar(),
+          tabStrip: tabStrip(),
+          body: commitSelected(),
+          overlays: `<div class="toasts">${C.Notification({ kind: 'success', message: Texts.rebasedOntoRewritten('main', 'origin/main', 2) })}</div>`,
+        }),
+    },
+    {
+      id: 'push-upstream-rewritten',
+      title: 'Header — push after someone rewrote the upstream',
+      about: "The remote refused the push and the fetch that follows shows that origin/main was rewritten since main got it. Pull and push would merge the old versions back, and Force push would throw the rewrite away for everyone, so the question offers only Cancel and Rebase and push, the primary button that Enter picks: it replays the commits only main has on the new origin/main, as the pull does, then pushes. A rebase that stops on a conflict pushes nothing; Push is clicked again once it is finished. After the rebase main is ahead of origin/main, so the push is an ordinary one: if someone pushed again in between, the remote refuses it and Push asks again with fresh counts.",
+      source: 'src/repo/behind_dialog.rs',
+      render: () =>
+        C.SterneGit({
+          topBar: topBar(),
+          tabStrip: tabStrip(),
+          body: commitSelected(),
+          overlays: C.RewrittenDialog({ branch: 'main', upstream: 'origin/main', old: 3, ours: 1, push: true }),
         }),
     },
     {

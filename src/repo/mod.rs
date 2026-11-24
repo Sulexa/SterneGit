@@ -86,7 +86,7 @@ use crate::{
         handler, run_in_background, thousands,
     },
 };
-use behind_dialog::open_behind_dialog;
+use behind_dialog::{open_behind_dialog, open_rewritten_dialog};
 use branch_dialog::{open_branch_dialog, open_branch_dialog_at};
 use commit_menu::{
     CommitAction, CommitMenu, PickedAction, confirm_reset_hard, copy_commit_hashes,
@@ -248,6 +248,16 @@ impl RepoView {
                         Ok(Outcome::Behind(behind)) => open_behind_dialog(
                             this.repository.clone(),
                             behind.clone(),
+                            window,
+                            cx,
+                        ),
+                        Ok(Outcome::UpstreamRewritten {
+                            rewritten,
+                            then_push,
+                        }) => open_rewritten_dialog(
+                            this.repository.clone(),
+                            rewritten.clone(),
+                            *then_push,
                             window,
                             cx,
                         ),

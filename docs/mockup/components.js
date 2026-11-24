@@ -467,6 +467,23 @@ const Texts = {
       : `The ${theirs} commits ${upstream} has and ${branch} doesn't were on ${branch} before: they were amended, rebased or reset away after they were pushed.`,
   behindRewrittenForce: (branch, upstream, theirs, sameChanges) =>
     `Force push replaces ${theirs === 1 ? 'it' : 'them'} on ${upstream} with ${branch}'s versions${sameChanges ? ', so no change is lost' : ''}. Pulling would bring the old versions back beside the new ones.`,
+  rewrittenTitle: (upstream) => `${upstream} was rewritten`,
+  rewrittenWhat: (branch, upstream, old) =>
+    old === 1
+      ? `${upstream} no longer has a commit ${branch} got from it: someone rewrote it and force pushed.`
+      : `${upstream} no longer has ${old} commits ${branch} got from it: someone rewrote them and force pushed.`,
+  rewrittenRebase: (branch, upstream, ours, push) =>
+    `${push ? 'Rebase and push' : 'Rebase'} replays ${ours === 1 ? `the commit only ${branch} has` : `the ${ours} commits only ${branch} has`} on the new ${upstream} and leaves the old versions out${push ? ', then pushes' : ''}.`,
+  rewrittenReset: (branch, upstream) => `${branch} has no commits of its own, so Reset moves it to the new ${upstream} and loses nothing.`,
+  rewrittenCheckOut: (branch, upstream) => `Check out ${branch} to rebase its own commits on the new ${upstream}.`,
+  rewrittenNoMerge: 'A merge would bring the old versions back beside the new ones.',
+  rebaseCommits: (n) => `Rebase ${counted(n, 'commit', 'commits')}`,
+  rebaseAndPush: 'Rebase and push',
+  resetTo: (upstream) => `Reset to ${upstream}`,
+  rebasedOntoRewritten: (branch, upstream, ours) =>
+    ours ? `Rebased ${counted(ours, 'commit', 'commits')} of ${branch} onto the rewritten ${upstream}` : `Moved ${branch} to the rewritten ${upstream}`,
+  rewrittenHint: (upstream, ours) =>
+    `${upstream} was rewritten and force pushed: Pull ${ours ? `replays ${ours === 1 ? 'the commit' : `the ${ours} commits`} only this branch has on its new version` : 'moves this branch to its new version'}`,
   pullAndPush: 'Pull and push',
   pullOnly: 'Pull',
   forcePush: 'Force push',
@@ -1930,13 +1947,16 @@ const C = {
     return `<div data-c="Notice" class="notice">${icon('git-merge', 'lg', 'var(--muted)')}<div class="lg medium">${esc(title)}</div><div class="description sm muted">${esc(description)}</div>${action}</div>`;
   },
 
-  AheadBehind({ ahead = 0, behind = 0, upstream }) {
+  AheadBehind({ ahead = 0, behind = 0, upstream, rewritten }) {
+    if (rewritten) {
+      return `<span data-c="AheadBehind" class="ahead-behind h xs" title="${esc(Texts.rewrittenHint(upstream, rewritten.ours))}">${icon('triangle-alert', 'xs', 'var(--yellow)')}</span>`;
+    }
     const side = (count, arrow) => (count ? `<span class="h">${icon(arrow, 'xs')}${thousands(count)}</span>` : '');
     return `<span data-c="AheadBehind" class="ahead-behind h xs muted" title="${esc(Texts.aheadBehind(ahead, behind, upstream))}">${side(behind, 'arrow-down')}${side(ahead, 'arrow-up')}</span>`;
   },
 
   RefRow({ label, name = label.name, depth = 0, selected = false }) {
-    const apart = label.ahead || label.behind ? C.AheadBehind(label) : '';
+    const apart = label.ahead || label.behind || label.rewritten ? C.AheadBehind(label) : '';
     const pull = label.pull ? pullChip(label.pull) : '';
     const elsewhere = label.worktree ? `<span class="none h" title="${esc(WorktreeTexts.elsewhere(label.worktree))}">${icon('folder-git', 'xs', 'var(--muted)')}</span>` : '';
     const content = `<div class="h fill tree-row" style="padding-left:${depth * TreeIndent}px">${twisty(null)}${icon(TreeIcons[label.kind].ref, 'sm', 'var(--muted)')}<div class="fill ellipsis sm${label.head ? ' semibold' : ''}">${esc(name)}</div>${pull}${apart}${elsewhere}</div>`;
@@ -3581,6 +3601,16 @@ const C = {
     const pullButton = ours === 0 || checkedOut ? C.Button({ label: ours === 0 ? Texts.pullOnly : Texts.pullAndPush, variant: 'primary', size: 'md' }) : '';
     const buttons = C.Button({ label: 'Cancel', size: 'md' }) + C.Button({ label: Texts.forcePush, variant: 'danger', size: 'md' }) + pullButton;
     return `<div class="overlay"><div data-c="BehindDialog" data-base="AlertDialog" class="dialog"><div class="base semibold">${esc(Texts.behindTitle(branch, upstream))}</div><div class="sm muted">${esc(description)}</div><div class="footer stretch">${buttons}</div></div></div>`;
+  },
+
+  RewrittenDialog({ branch, upstream, old, ours, push = false, checkedOut = true }) {
+    const pushes = push && ours > 0;
+    const what = !checkedOut ? Texts.rewrittenCheckOut(branch, upstream) : ours ? Texts.rewrittenRebase(branch, upstream, ours, pushes) : Texts.rewrittenReset(branch, upstream);
+    const description = [Texts.rewrittenWhat(branch, upstream, old), what, Texts.rewrittenNoMerge].join(' ');
+    const action = pushes ? Texts.rebaseAndPush : ours ? Texts.rebaseCommits(ours) : Texts.resetTo(upstream);
+    const primary = checkedOut ? C.Button({ label: action, variant: 'primary', size: 'md' }) : '';
+    const buttons = C.Button({ label: 'Cancel', size: 'md' }) + primary;
+    return `<div class="overlay"><div data-c="RewrittenDialog" data-base="AlertDialog" class="dialog"><div class="base semibold">${esc(Texts.rewrittenTitle(upstream))}</div><div class="sm muted">${esc(description)}</div><div class="footer stretch">${buttons}</div></div></div>`;
   },
 
   BranchDialog({ head, from, value = '', problem }) {

@@ -461,7 +461,10 @@ mod tests {
             target: ObjectId::null(gix::hash::Kind::Sha1),
             is_head: false,
             upstream: upstream.map(|upstream| upstream.to_owned().into()),
-            from_upstream: Some(AheadBehind { ahead, behind: 0 }),
+            from_upstream: Some(AheadBehind {
+                ahead,
+                ..AheadBehind::default()
+            }),
             worktree: None,
         }
     }

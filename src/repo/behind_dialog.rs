@@ -11,7 +11,7 @@ use gpui_kit::{
 
 use super::repository::Repository;
 use crate::{
-    git::{Behind, Rewritten, Tracking},
+    git::{Behind, Rewrite, Rewritten, Tracking, UpstreamRewritten},
     ui::counted,
 };
 
@@ -19,6 +19,8 @@ const CANCEL: &str = "Cancel";
 const FORCE_PUSH: &str = "Force push";
 const PULL_AND_PUSH: &str = "Pull and push";
 const PULL: &str = "Pull";
+const REBASE_AND_PUSH: &str = "Rebase and push";
+const NO_MERGE: &str = "A merge would bring the old versions back beside the new ones.";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Primary {
@@ -114,6 +116,95 @@ fn rewritten_question(behind: &Behind) -> BehindQuestion {
     }
 }
 
+#[derive(Debug, PartialEq, Eq)]
+struct RewrittenQuestion {
+    title: String,
+    description: String,
+    primary: Option<String>,
+}
+
+fn rewritten_question_of(rewritten: &UpstreamRewritten, pushes: bool) -> RewrittenQuestion {
+    let UpstreamRewritten {
+        tracking: Tracking { branch, upstream },
+        rewrite: Rewrite { lost, ours, .. },
+        checked_out,
+    } = rewritten;
+    let lost = match lost {
+        1 => format!(
+            "{upstream} no longer has a commit {branch} got from it: someone rewrote it and force pushed."
+        ),
+        lost => format!(
+            "{upstream} no longer has {lost} commits {branch} got from it: someone rewrote them and force pushed."
+        ),
+    };
+    let (remedy, primary) = match (checked_out, ours) {
+        (false, _) => (
+            format!("Check out {branch} to rebase its own commits on the new {upstream}."),
+            None,
+        ),
+        (true, 0) => (
+            format!(
+                "{branch} has no commits of its own, so Reset moves it to the new {upstream} and loses nothing."
+            ),
+            Some(format!("Reset to {upstream}")),
+        ),
+        (true, &ours) => {
+            let own = match ours {
+                1 => format!("the commit only {branch} has"),
+                _ => format!("the {ours} commits only {branch} has"),
+            };
+            let (action, then, label) = if pushes {
+                ("Rebase and push", ", then pushes", REBASE_AND_PUSH.to_owned())
+            } else {
+                ("Rebase", "", format!("Rebase {}", counted(ours, "commit", "commits")))
+            };
+            (
+                format!("{action} replays {own} on the new {upstream} and leaves the old versions out{then}."),
+                Some(label),
+            )
+        }
+    };
+    RewrittenQuestion {
+        title: format!("{upstream} was rewritten"),
+        description: format!("{lost} {remedy} {NO_MERGE}"),
+        primary,
+    }
+}
+
+pub(crate) fn open_rewritten_dialog(
+    repository: Entity<Repository>,
+    rewritten: UpstreamRewritten,
+    then_push: bool,
+    window: &mut Window,
+    cx: &mut App,
+) {
+    let pushes = then_push && rewritten.rewrite.ours > 0;
+    let question = rewritten_question_of(&rewritten, pushes);
+    window.open_alert_dialog(cx, move |alert, _, _| {
+        let chosen = (repository.clone(), rewritten.clone());
+        let primary_button = question.primary.clone().map(|label| {
+            DialogAction::new().child(Button::new("rewritten-primary").primary().label(label))
+        });
+        alert
+            .title(question.title.clone())
+            .description(question.description.clone())
+            .footer(
+                DialogFooter::new()
+                    .child(DialogClose::new().trigger(|button| button.label(CANCEL)))
+                    .children(primary_button),
+            )
+            .when(question.primary.is_some(), |alert| {
+                alert.on_ok(move |_, _, cx| {
+                    let (repository, rewritten) = &chosen;
+                    repository.update(cx, |repository, cx| {
+                        repository.replay_on_rewritten(rewritten.clone(), pushes, cx)
+                    });
+                    true
+                })
+            })
+    });
+}
+
 pub(crate) fn open_behind_dialog(
     repository: Entity<Repository>,
     behind: Behind,
@@ -170,8 +261,75 @@ pub(crate) fn open_behind_dialog(
 
 #[cfg(test)]
 mod tests {
-    use super::{BehindQuestion, PULL, PULL_AND_PUSH, Primary, behind_question};
-    use crate::git::{Behind, Rewritten, Tracking, fixtures::id};
+    use super::{
+        BehindQuestion, PULL, PULL_AND_PUSH, Primary, RewrittenQuestion, behind_question,
+        rewritten_question_of,
+    };
+    use crate::git::{Behind, Rewrite, Rewritten, Tracking, UpstreamRewritten, fixtures::id};
+
+    fn rewritten(lost: usize, ours: usize, checked_out: bool) -> UpstreamRewritten {
+        UpstreamRewritten {
+            tracking: Tracking {
+                branch: "main".into(),
+                upstream: "origin/main".into(),
+            },
+            rewrite: Rewrite {
+                since: id(2),
+                lost,
+                ours,
+            },
+            checked_out,
+        }
+    }
+
+    #[test]
+    fn an_upstream_rewritten_by_someone_else_offers_to_rebase_the_branchs_own_commits() {
+        assert_eq!(
+            rewritten_question_of(&rewritten(3, 2, true), false),
+            RewrittenQuestion {
+                title: "origin/main was rewritten".into(),
+                description: "origin/main no longer has 3 commits main got from it: someone rewrote them and force pushed. \
+                              Rebase replays the 2 commits only main has on the new origin/main and leaves the old versions out. \
+                              A merge would bring the old versions back beside the new ones."
+                    .into(),
+                primary: Some("Rebase 2 commits".into()),
+            }
+        );
+        assert_eq!(
+            rewritten_question_of(&rewritten(1, 1, true), true),
+            RewrittenQuestion {
+                title: "origin/main was rewritten".into(),
+                description: "origin/main no longer has a commit main got from it: someone rewrote it and force pushed. \
+                              Rebase and push replays the commit only main has on the new origin/main and leaves the old versions out, then pushes. \
+                              A merge would bring the old versions back beside the new ones."
+                    .into(),
+                primary: Some("Rebase and push".into()),
+            }
+        );
+    }
+
+    #[test]
+    fn a_branch_with_nothing_of_its_own_resets_to_the_rewritten_upstream() {
+        let question = rewritten_question_of(&rewritten(3, 0, true), false);
+        assert_eq!(
+            question.description,
+            "origin/main no longer has 3 commits main got from it: someone rewrote them and force pushed. \
+             main has no commits of its own, so Reset moves it to the new origin/main and loses nothing. \
+             A merge would bring the old versions back beside the new ones."
+        );
+        assert_eq!(question.primary.as_deref(), Some("Reset to origin/main"));
+    }
+
+    #[test]
+    fn a_branch_that_isnt_checked_out_cant_be_rebased_from_the_question() {
+        let question = rewritten_question_of(&rewritten(2, 1, false), true);
+        assert_eq!(question.primary, None);
+        assert!(
+            question
+                .description
+                .contains("Check out main to rebase its own commits on the new origin/main.")
+        );
+    }
 
     fn behind(branch: &str, theirs: usize, ours: usize, checked_out: bool) -> Behind {
         Behind {

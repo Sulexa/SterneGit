@@ -1,12 +1,13 @@
 use std::ffi::OsStr;
 
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use gix::{ObjectId, refs::FullName, remote::Direction};
 
 use super::{
-    Carried, PullMode, Refusal, Repo, Tracking,
+    Carried, PullMode, Refusal, Repo, Rewrite, Tracking,
     command::{Exit, run_text, run_with_access, run_with_input},
     merge::{AUTOSTASH, Ran},
+    refs::ahead_behind,
     text::decode,
 };
 
@@ -36,7 +37,9 @@ pub(crate) enum Pulled {
     UpToDate(Tracking),
     BroughtIn(Tracking),
     Rebased(Tracking),
+    Replayed { tracking: Tracking, ours: usize },
     Stopped(Tracking),
+    UpstreamRewritten(UpstreamRewritten),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -45,6 +48,14 @@ pub(crate) enum Pushed {
     AlreadyThere(Tracking),
     Forced(Tracking),
     Behind(Behind),
+    UpstreamRewritten(UpstreamRewritten),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct UpstreamRewritten {
+    pub(crate) tracking: Tracking,
+    pub(crate) rewrite: Rewrite,
+    pub(crate) checked_out: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -112,6 +123,13 @@ impl Repo {
             }
             .into());
         };
+        self.reach(&["fetch", "--quiet"])?;
+        if let Some(rewritten) = self.rewritten_upstream(&branch, &upstream)? {
+            return match mode {
+                PullMode::Rebase => self.replay_on(&rewritten),
+                _ => Ok((Pulled::UpstreamRewritten(rewritten), Carried::Along)),
+            };
+        }
         let before = head_commit(&repo);
         let stash = self.latest_stash();
         let mut args = vec!["pull", "--quiet", "--no-edit", AUTOSTASH];
@@ -227,7 +245,7 @@ impl Repo {
         }
         let (pulled, carried) = self.pull(PullMode::FastForwardIfPossible)?;
         let pushed = match pulled {
-            Pulled::Stopped(_) => None,
+            Pulled::Stopped(_) | Pulled::UpstreamRewritten(_) => None,
             _ => Some(self.push()?),
         };
         Ok(CaughtUp {
@@ -235,6 +253,66 @@ impl Repo {
             carried,
             pushed,
         })
+    }
+
+    pub(crate) fn replay_on_rewritten(
+        &self,
+        rewritten: &UpstreamRewritten,
+        then_push: bool,
+    ) -> Result<CaughtUp> {
+        let (pulled, carried) = self.replay_on(rewritten)?;
+        let pushed = match pulled {
+            Pulled::Replayed { .. } if then_push => Some(self.push()?),
+            _ => None,
+        };
+        Ok(CaughtUp {
+            pulled,
+            carried,
+            pushed,
+        })
+    }
+
+    fn replay_on(&self, rewritten: &UpstreamRewritten) -> Result<(Pulled, Carried)> {
+        let repo = self.local();
+        let branch = checked_out_branch(&repo)?;
+        let Some(upstream) = self
+            .upstream_of(&branch)
+            .filter(|upstream| upstream.tracking == rewritten.tracking)
+        else {
+            return Err(anyhow!("{} is no longer checked out", rewritten.tracking.branch));
+        };
+        let stash = self.latest_stash();
+        let onto = upstream.reference.as_bstr().to_string();
+        let since = rewritten.rewrite.since.to_string();
+        let args = ["rebase", "--quiet", AUTOSTASH, "--onto", &onto, &since];
+        if self.run_until_stopped(&args)? == Ran::Stopped {
+            return Ok((Pulled::Stopped(upstream.tracking), Carried::Along));
+        }
+        let replayed = Pulled::Replayed {
+            tracking: upstream.tracking,
+            ours: rewritten.rewrite.ours,
+        };
+        Ok((replayed, self.carried_since(stash)))
+    }
+
+    fn rewritten_upstream(
+        &self,
+        branch: &FullName,
+        upstream: &Upstream,
+    ) -> Result<Option<UpstreamRewritten>> {
+        let repo = self.local();
+        let (Some(local), Some(upstream_at)) =
+            (commit_of(&repo, branch), commit_of(&repo, &upstream.reference))
+        else {
+            return Ok(None);
+        };
+        let name = upstream.reference.as_bstr().to_string();
+        let apart = ahead_behind(&repo, local, upstream_at, &name)?;
+        Ok(apart.rewritten.map(|rewrite| UpstreamRewritten {
+            tracking: upstream.tracking.clone(),
+            rewrite,
+            checked_out: repo.head_name().ok().flatten().as_ref() == Some(branch),
+        }))
     }
 
     fn behind_or(&self, error: anyhow::Error, branch: &str) -> Result<Pushed> {
@@ -251,6 +329,9 @@ impl Repo {
         let Some(upstream_at) = commit_of(&repo, &upstream.reference) else {
             return Err(error);
         };
+        if let Some(rewritten) = self.rewritten_upstream(&local, &upstream)? {
+            return Ok(Pushed::UpstreamRewritten(rewritten));
+        }
         let range = format!("{}...{}", local.as_bstr(), upstream.reference.as_bstr());
         let mut args = COUNT_EACH_SIDE.to_vec();
         args.push(&range);
@@ -443,7 +524,7 @@ mod tests {
     use anyhow::Result;
     use gix::ObjectId;
 
-    use super::{Behind, CaughtUp, Fetched, Pulled, Pushed, Rewritten};
+    use super::{Behind, CaughtUp, Fetched, Pulled, Pushed, Rewritten, UpstreamRewritten};
     use crate::git::{Carried, CommitMode, PullMode, Refusal, Tracking, scratch::ScratchRepo};
 
     struct Shared {
@@ -504,6 +585,29 @@ mod tests {
 
         fn upstream_head(&self, branch: &str) -> Result<String> {
             Ok(self.origin.git(&["rev-parse", branch])?.trim().to_owned())
+        }
+
+        fn we_pull_then_they_rewrite_it(&self, own_commits: usize) -> Result<(String, String)> {
+            let old = self.they_push("second")?;
+            self.pull(PullMode::FastForwardOnly)?;
+            for n in 0..own_commits {
+                self.ours.commit(&format!("mine {n}"))?;
+            }
+            self.theirs.git(&["commit", "--amend", "--allow-empty", "--quiet", "-m", "reworded"])?;
+            self.theirs.git(&["push", "--quiet", "--force"])?;
+            Ok((old, self.theirs.head()?))
+        }
+
+        fn rewritten(&self, mode: PullMode) -> Result<UpstreamRewritten> {
+            match self.pull(mode)? {
+                Pulled::UpstreamRewritten(rewritten) => Ok(rewritten),
+                pulled => panic!("the pull should have stopped on the rewrite, got {pulled:?}"),
+            }
+        }
+
+        fn subjects(&self) -> Result<Vec<String>> {
+            let log = self.ours.git(&["log", "--format=%s"])?;
+            Ok(log.lines().map(str::to_owned).collect())
         }
     }
 
@@ -593,6 +697,93 @@ mod tests {
         );
         assert_eq!(parent_count(&shared.ours)?, 1);
         assert_eq!(shared.ours.git(&["rev-parse", "HEAD~1"])?.trim(), theirs);
+        Ok(())
+    }
+
+    #[test]
+    fn pulling_an_upstream_someone_rewrote_asks_before_merging_or_refusing() -> Result<()> {
+        for mode in [PullMode::FastForwardIfPossible, PullMode::FastForwardOnly] {
+            let shared = Shared::new(&format!("pull-rewritten-{mode:?}"))?;
+            let (old, _) = shared.we_pull_then_they_rewrite_it(1)?;
+            let before = shared.ours.head()?;
+            let rewritten = shared.rewritten(mode)?;
+            assert_eq!(rewritten.tracking, main_tracking(), "{mode:?}");
+            assert_eq!(rewritten.rewrite.since.to_string(), old, "{mode:?}");
+            assert_eq!((rewritten.rewrite.lost, rewritten.rewrite.ours), (1, 1), "{mode:?}");
+            assert!(rewritten.checked_out, "{mode:?}");
+            assert_eq!(shared.ours.head()?, before, "{mode:?} leaves main alone");
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn replaying_on_a_rewritten_upstream_keeps_only_the_branchs_own_commits() -> Result<()> {
+        let shared = Shared::new("replay-rewritten")?;
+        let (_, new) = shared.we_pull_then_they_rewrite_it(2)?;
+        let rewritten = shared.rewritten(PullMode::FastForwardIfPossible)?;
+        let caught_up = shared.ours.open()?.0.replay_on_rewritten(&rewritten, false)?;
+        assert_eq!(
+            caught_up,
+            CaughtUp {
+                pulled: Pulled::Replayed {
+                    tracking: main_tracking(),
+                    ours: 2
+                },
+                carried: Carried::Along,
+                pushed: None,
+            }
+        );
+        assert_eq!(shared.ours.git(&["rev-parse", "HEAD~2"])?.trim(), new);
+        assert_eq!(shared.subjects()?, ["mine 1", "mine 0", "reworded", "first"]);
+        Ok(())
+    }
+
+    #[test]
+    fn a_branch_without_commits_of_its_own_moves_to_the_rewritten_upstream() -> Result<()> {
+        let shared = Shared::new("reset-rewritten")?;
+        let (_, new) = shared.we_pull_then_they_rewrite_it(0)?;
+        let rewritten = shared.rewritten(PullMode::FastForwardOnly)?;
+        assert_eq!((rewritten.rewrite.lost, rewritten.rewrite.ours), (1, 0));
+        let caught_up = shared.ours.open()?.0.replay_on_rewritten(&rewritten, true)?;
+        assert_eq!(
+            caught_up.pulled,
+            Pulled::Replayed {
+                tracking: main_tracking(),
+                ours: 0
+            }
+        );
+        assert_eq!(shared.ours.head()?, new);
+        Ok(())
+    }
+
+    #[test]
+    fn rebase_mode_replays_on_a_rewritten_upstream_without_asking() -> Result<()> {
+        let shared = Shared::new("rebase-rewritten")?;
+        let (_, new) = shared.we_pull_then_they_rewrite_it(1)?;
+        assert_eq!(
+            shared.pull(PullMode::Rebase)?,
+            Pulled::Replayed {
+                tracking: main_tracking(),
+                ours: 1
+            }
+        );
+        assert_eq!(shared.ours.git(&["rev-parse", "HEAD~1"])?.trim(), new);
+        assert_eq!(shared.subjects()?, ["mine 0", "reworded", "first"]);
+        Ok(())
+    }
+
+    #[test]
+    fn a_push_refused_by_a_rewritten_upstream_replays_then_pushes() -> Result<()> {
+        let shared = Shared::new("push-upstream-rewritten")?;
+        shared.we_pull_then_they_rewrite_it(1)?;
+        let Pushed::UpstreamRewritten(rewritten) = shared.push()? else {
+            panic!("the push should have been refused for the rewrite");
+        };
+        assert_eq!((rewritten.rewrite.lost, rewritten.rewrite.ours), (1, 1));
+        let caught_up = shared.ours.open()?.0.replay_on_rewritten(&rewritten, true)?;
+        assert_eq!(caught_up.pushed, Some(Pushed::Sent(main_tracking())));
+        assert_eq!(shared.upstream_head("main")?, shared.ours.head()?);
+        assert_eq!(shared.subjects()?, ["mine 0", "reworded", "first"]);
         Ok(())
     }
 

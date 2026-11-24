@@ -24,7 +24,7 @@ use super::{
     worktree_menu::WorktreeMenu,
 };
 use crate::{
-    git::{AheadBehind, History, RefKind, RefLabel, Stash, Worktree},
+    git::{AheadBehind, History, RefKind, RefLabel, Rewrite, Stash, Worktree},
     ui::{
         Folded, Handler, Look as _, Picked, PullMark, SectionHeader, checked_out_in, counted, handler,
         is_double_click, list_row, pull_chip, thousands, tree_line,
@@ -404,9 +404,15 @@ fn ref_row(
     menus.attach(row, label)
 }
 
-fn ahead_behind(label: &RefLabel, cx: &App) -> Option<impl IntoElement> {
+fn ahead_behind(label: &RefLabel, cx: &App) -> Option<AnyElement> {
     let apart = label.from_upstream.filter(|apart| !apart.is_level())?;
-    let words = apart_in_words(apart, label.upstream.as_deref()?);
+    let upstream = label.upstream.as_deref()?;
+    if let Some(rewrite) = apart.rewritten {
+        let words = rewritten_in_words(rewrite, upstream);
+        let yellow = cx.theme().yellow;
+        return Some(state_icon("upstream-rewritten", IconName::TriangleAlert, yellow, words).into_any_element());
+    }
+    let words = apart_in_words(apart, upstream);
     let muted = cx.theme().muted_foreground;
     let side = |count: usize, arrow: IconName| {
         (count > 0).then(|| {
@@ -425,8 +431,18 @@ fn ahead_behind(label: &RefLabel, cx: &App) -> Option<impl IntoElement> {
             .text_color(muted)
             .children(side(apart.behind, IconName::ArrowDown))
             .children(side(apart.ahead, IconName::ArrowUp))
-            .tooltip(move |window, cx| Tooltip::new(words.clone()).build(window, cx)),
+            .tooltip(move |window, cx| Tooltip::new(words.clone()).build(window, cx))
+            .into_any_element(),
     )
+}
+
+fn rewritten_in_words(rewrite: Rewrite, upstream: &str) -> String {
+    let pull = match rewrite.ours {
+        0 => "moves this branch to its new version".to_owned(),
+        1 => "replays the commit only this branch has on its new version".to_owned(),
+        ours => format!("replays the {ours} commits only this branch has on its new version"),
+    };
+    format!("{upstream} was rewritten and force pushed: Pull {pull}")
 }
 
 fn apart_in_words(apart: AheadBehind, upstream: &str) -> String {
@@ -573,14 +589,47 @@ fn muted_icon(name: IconName, cx: &App) -> Icon {
 
 #[cfg(test)]
 mod tests {
-    use super::apart_in_words;
-    use crate::git::AheadBehind;
+    use super::{apart_in_words, rewritten_in_words};
+    use crate::git::{AheadBehind, Rewrite, fixtures::id};
 
     #[test]
     fn the_tooltip_says_what_to_pull_and_push_naming_the_upstream() {
-        let words = |ahead, behind| apart_in_words(AheadBehind { ahead, behind }, "origin/main");
+        let words = |ahead, behind| {
+            apart_in_words(
+                AheadBehind {
+                    ahead,
+                    behind,
+                    rewritten: None,
+                },
+                "origin/main",
+            )
+        };
         assert_eq!(words(2, 0), "2 commits to push to origin/main");
         assert_eq!(words(0, 1), "1 commit to pull from origin/main");
         assert_eq!(words(3, 1_284), "1,284 commits to pull from origin/main, 3 to push");
+    }
+
+    #[test]
+    fn the_tooltip_of_a_rewritten_upstream_says_what_pull_will_do() {
+        let words = |ours| {
+            let rewrite = Rewrite {
+                since: id(1),
+                lost: 3,
+                ours,
+            };
+            rewritten_in_words(rewrite, "origin/main")
+        };
+        assert_eq!(
+            words(2),
+            "origin/main was rewritten and force pushed: Pull replays the 2 commits only this branch has on its new version"
+        );
+        assert_eq!(
+            words(1),
+            "origin/main was rewritten and force pushed: Pull replays the commit only this branch has on its new version"
+        );
+        assert_eq!(
+            words(0),
+            "origin/main was rewritten and force pushed: Pull moves this branch to its new version"
+        );
     }
 }

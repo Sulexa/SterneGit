@@ -54,6 +54,14 @@ pub(crate) struct RefLabel {
 pub(crate) struct AheadBehind {
     pub(crate) ahead: usize,
     pub(crate) behind: usize,
+    pub(crate) rewritten: Option<Rewrite>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct Rewrite {
+    pub(crate) since: ObjectId,
+    pub(crate) lost: usize,
+    pub(crate) ours: usize,
 }
 
 impl AheadBehind {
@@ -199,7 +207,7 @@ pub(crate) fn read_labels(
 }
 
 pub(crate) fn count_from_upstreams(repo: &gix::Repository, labels: &mut [RefLabel]) {
-    let tracked: Vec<(usize, ObjectId, ObjectId)> = labels
+    let tracked: Vec<(usize, ObjectId, ObjectId, String)> = labels
         .iter()
         .enumerate()
         .filter_map(|(ix, label)| {
@@ -207,26 +215,67 @@ pub(crate) fn count_from_upstreams(repo: &gix::Repository, labels: &mut [RefLabe
             let upstream = labels
                 .iter()
                 .find(|other| other.kind == RefKind::RemoteBranch && other.name == *upstream)?;
-            Some((ix, label.target, upstream.target))
+            Some((ix, label.target, upstream.target, upstream.full_name()))
         })
         .collect();
-    for (ix, local, upstream) in tracked {
-        labels[ix].from_upstream = ahead_behind(repo, local, upstream).ok();
+    for (ix, local, upstream, upstream_name) in tracked {
+        labels[ix].from_upstream = ahead_behind(repo, local, upstream, &upstream_name).ok();
     }
 }
 
-fn ahead_behind(
+pub(super) fn ahead_behind(
     repo: &gix::Repository,
     local: ObjectId,
     upstream: ObjectId,
+    upstream_name: &str,
 ) -> Result<AheadBehind> {
     if local == upstream {
         return Ok(AheadBehind::default());
     }
+    let former_tips = former_tips(repo, upstream_name, upstream);
+    let mut ahead = 0;
+    let mut since = None;
+    for commit in repo.rev_walk([local]).with_hidden([upstream]).all()? {
+        let id = commit?.id;
+        ahead += 1;
+        if since.is_none() && former_tips.binary_search(&id).is_ok() {
+            since = Some(id);
+        }
+    }
+    let rewritten = match since {
+        Some(since) => {
+            let lost = commits_reached_only_from(repo, since, upstream)?;
+            Some(Rewrite {
+                since,
+                lost,
+                ours: ahead - lost,
+            })
+        }
+        None => None,
+    };
     Ok(AheadBehind {
-        ahead: commits_reached_only_from(repo, local, upstream)?,
+        ahead,
         behind: commits_reached_only_from(repo, upstream, local)?,
+        rewritten,
     })
+}
+
+fn former_tips(repo: &gix::Repository, name: &str, now: ObjectId) -> Vec<ObjectId> {
+    let Ok(Some(reference)) = repo.try_find_reference(name) else {
+        return Vec::new();
+    };
+    let mut log = reference.log_iter();
+    let mut tips: Vec<ObjectId> = match log.all() {
+        Ok(Some(lines)) => lines
+            .filter_map(Result::ok)
+            .map(|line| line.new_oid())
+            .filter(|id| !id.is_null() && *id != now)
+            .collect(),
+        _ => Vec::new(),
+    };
+    tips.sort_unstable();
+    tips.dedup();
+    tips
 }
 
 fn commits_reached_only_from(
@@ -301,7 +350,11 @@ mod tests {
     }
 
     fn apart(ahead: usize, behind: usize) -> Option<AheadBehind> {
-        Some(AheadBehind { ahead, behind })
+        Some(AheadBehind {
+            ahead,
+            behind,
+            rewritten: None,
+        })
     }
 
     #[test]
@@ -327,6 +380,33 @@ mod tests {
         assert_eq!(from_upstream(&ours, "main")?, apart(2, 1));
         ours.git(&["reset", "--quiet", "--hard", "origin/main~1"])?;
         assert_eq!(from_upstream(&ours, "main")?, apart(0, 1));
+        Ok(())
+    }
+
+    #[test]
+    fn a_branch_whose_upstream_was_rewritten_knows_where_its_own_commits_start() -> Result<()> {
+        let origin = ScratchRepo::bare("rewritten-origin")?;
+        let ours = ScratchRepo::new("rewritten-ours")?;
+        ours.commit("first")?;
+        ours.git(&["remote", "add", "origin", &origin.location()])?;
+        ours.git(&["push", "--quiet", "--set-upstream", "origin", "main"])?;
+        let theirs = ScratchRepo::tracking("rewritten-theirs", &origin)?;
+        theirs.commit("second")?;
+        theirs.git(&["push", "--quiet", "origin", "main"])?;
+        ours.git(&["pull", "--quiet", "--ff-only"])?;
+        let old = ours.head()?;
+        ours.commit("mine")?;
+        theirs.git(&["commit", "--amend", "--allow-empty", "--quiet", "-m", "reworded"])?;
+        theirs.git(&["push", "--quiet", "--force", "origin", "main"])?;
+        assert_eq!(from_upstream(&ours, "main")?, apart(1, 0), "not fetched yet");
+        ours.git(&["fetch", "--quiet", "origin"])?;
+        let counted = from_upstream(&ours, "main")?.expect("main has an upstream");
+        assert_eq!((counted.ahead, counted.behind), (2, 1));
+        let rewrite = counted.rewritten.expect("origin/main lost a commit main has");
+        assert_eq!(rewrite.since.to_string(), old);
+        assert_eq!((rewrite.lost, rewrite.ours), (1, 1));
+        ours.git(&["rebase", "--quiet", "--onto", "origin/main", &old])?;
+        assert_eq!(from_upstream(&ours, "main")?, apart(1, 0));
         Ok(())
     }
 

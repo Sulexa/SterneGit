@@ -16,8 +16,8 @@ use crate::{
     git::{
         self, Attendance, Behind, CheckedOut, CommitMode, FileChange, History, MergeMode,
         PartAction, PullMode, PullSource, RefLabel, RemoteBranch, Repo, ResetMode, Scope, Side,
-        Stash, Underway, Version, WorkingChanges, WorktreeChanges, WorktreeStart,
-        changes_elsewhere, short_id,
+        Stash, Tracking, Underway, UpstreamRewritten, Version, WorkingChanges, WorktreeChanges,
+        WorktreeStart, changes_elsewhere, short_id,
     },
     ui::{Failure, Job, Load, run_in_background},
 };
@@ -592,6 +592,24 @@ impl Repository {
             Some(Operation::Push),
             operation::PULL_AND_PUSH_FAILED.into(),
             move |repo| repo.pull_then_push(&behind).map(operation::caught_up),
+            cx,
+        );
+    }
+
+    pub(crate) fn replay_on_rewritten(
+        &mut self,
+        rewritten: UpstreamRewritten,
+        then_push: bool,
+        cx: &mut Context<Self>,
+    ) {
+        let Tracking { branch, upstream } = rewritten.tracking.clone();
+        self.write_and_report(
+            Some(if then_push { Operation::Push } else { Operation::Pull }),
+            operation::rebase_failed(&branch, &upstream),
+            move |repo| {
+                repo.replay_on_rewritten(&rewritten, then_push)
+                    .map(operation::caught_up)
+            },
             cx,
         );
     }

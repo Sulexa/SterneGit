@@ -4,7 +4,7 @@ use crate::{
     git::{
         Behind, Carried, CaughtUp, CheckedOut, Continued, FolderLeft, Merged, Picked, Picking,
         Pulled, Pushed, Rebased, RefLabel, Refusal, RemoteBranch, Replay, ResetMode, TagPushed,
-        Tracking, Underway,
+        Tracking, Underway, UpstreamRewritten,
     },
     ui::{Failure, counted, thousands},
 };
@@ -64,6 +64,10 @@ pub(crate) enum Outcome {
     },
     Stopped,
     Behind(Behind),
+    UpstreamRewritten {
+        rewritten: UpstreamRewritten,
+        then_push: bool,
+    },
     Quiet,
 }
 
@@ -90,9 +94,25 @@ pub(crate) fn pulled(pulled: &Pulled) -> SharedString {
         Pulled::Rebased(Tracking { branch, upstream }) => {
             format!("Rebased {branch} onto {upstream}").into()
         }
+        Pulled::Replayed {
+            tracking: Tracking { branch, upstream },
+            ours: 0,
+        } => format!("Moved {branch} to the rewritten {upstream}").into(),
+        Pulled::Replayed {
+            tracking: Tracking { branch, upstream },
+            ours,
+        } => format!(
+            "Rebased {} of {branch} onto the rewritten {upstream}",
+            counted(*ours, "commit", "commits")
+        )
+        .into(),
         Pulled::Stopped(Tracking { branch, upstream }) => {
             format!("Pulling {upstream} into {branch} stopped on conflicts").into()
         }
+        Pulled::UpstreamRewritten(UpstreamRewritten {
+            tracking: Tracking { upstream, .. },
+            ..
+        }) => format!("{upstream} was rewritten").into(),
     }
 }
 
@@ -100,7 +120,14 @@ pub(crate) fn pulled_back((pulled, carried): (Pulled, Carried)) -> Outcome {
     match &pulled {
         Pulled::Stopped(_) => Outcome::Stopped,
         Pulled::Fetched => Outcome::Done(self::pulled(&pulled)),
-        Pulled::UpToDate(tracking) | Pulled::BroughtIn(tracking) | Pulled::Rebased(tracking) => {
+        Pulled::UpstreamRewritten(rewritten) => Outcome::UpstreamRewritten {
+            rewritten: rewritten.clone(),
+            then_push: false,
+        },
+        Pulled::UpToDate(tracking)
+        | Pulled::BroughtIn(tracking)
+        | Pulled::Rebased(tracking)
+        | Pulled::Replayed { tracking, .. } => {
             let place = format!("the updated {}", tracking.branch);
             put_back(self::pulled(&pulled), &place, carried)
         }
@@ -110,6 +137,12 @@ pub(crate) fn pulled_back((pulled, carried): (Pulled, Carried)) -> Outcome {
 pub(crate) fn pushed(pushed: Pushed) -> Outcome {
     let done = match pushed {
         Pushed::Behind(behind) => return Outcome::Behind(behind),
+        Pushed::UpstreamRewritten(rewritten) => {
+            return Outcome::UpstreamRewritten {
+                rewritten,
+                then_push: true,
+            };
+        }
         Pushed::Sent(Tracking { branch, upstream }) => format!("Pushed {branch} to {upstream}"),
         Pushed::AlreadyThere(Tracking { branch, upstream }) => {
             format!("{upstream} already has every commit of {branch}")
@@ -127,14 +160,25 @@ pub(crate) fn caught_up(caught_up: CaughtUp) -> Outcome {
         carried,
         pushed,
     } = caught_up;
-    match pushed {
-        Some(Pushed::Behind(behind)) => Outcome::Behind(behind),
-        Some(Pushed::Sent(Tracking { branch, upstream })) => put_back(
-            format!("Pulled {upstream} into {branch}, then pushed {branch} to {upstream}").into(),
-            &format!("the updated {branch}"),
-            carried,
-        ),
-        _ => pulled_back((pulled, carried)),
+    match (pushed, pulled) {
+        (Some(Pushed::Behind(behind)), _) => Outcome::Behind(behind),
+        (Some(Pushed::UpstreamRewritten(rewritten)), _)
+        | (None, Pulled::UpstreamRewritten(rewritten)) => Outcome::UpstreamRewritten {
+            rewritten,
+            then_push: true,
+        },
+        (Some(Pushed::Sent(Tracking { branch, upstream })), pulled) => {
+            let brought_in = match pulled {
+                Pulled::Replayed { .. } => self::pulled(&pulled).to_string(),
+                _ => format!("Pulled {upstream} into {branch}"),
+            };
+            put_back(
+                format!("{brought_in}, then pushed {branch} to {upstream}").into(),
+                &format!("the updated {branch}"),
+                carried,
+            )
+        }
+        (_, pulled) => pulled_back((pulled, carried)),
     }
 }
 
@@ -512,7 +556,7 @@ mod tests {
     use crate::git::{
         Behind, Carried, CaughtUp, CheckedOut, Continued, FolderLeft, Merged, Merging, Picked,
         Picking, Pulled, Pushed, Rebased, Rebasing, RefKind, RefLabel, Refusal, Replaying,
-        Rewritten, Tracking, Underway, fixtures::id,
+        Rewrite, Rewritten, Tracking, Underway, UpstreamRewritten, fixtures::id,
     };
 
     #[test]
@@ -717,6 +761,56 @@ mod tests {
                 message: "Your uncommitted changes don't apply on the updated main, so they stay in the stash."
                     .into()
             }
+        );
+    }
+
+    #[test]
+    fn replaying_on_a_rewritten_upstream_says_so_and_asks_first() {
+        let replayed = |ours| Pulled::Replayed {
+            tracking: main_tracking(),
+            ours,
+        };
+        assert_eq!(
+            pulled(&replayed(2)),
+            "Rebased 2 commits of main onto the rewritten origin/main"
+        );
+        assert_eq!(pulled(&replayed(0)), "Moved main to the rewritten origin/main");
+        assert_eq!(
+            caught_up(CaughtUp {
+                pulled: replayed(1),
+                carried: Carried::Along,
+                pushed: Some(Pushed::Sent(main_tracking())),
+            }),
+            Outcome::Done(
+                "Rebased 1 commit of main onto the rewritten origin/main, then pushed main to origin/main"
+                    .into()
+            )
+        );
+        let rewritten = UpstreamRewritten {
+            tracking: main_tracking(),
+            rewrite: Rewrite {
+                since: id(2),
+                lost: 1,
+                ours: 1,
+            },
+            checked_out: true,
+        };
+        let asked = |then_push| Outcome::UpstreamRewritten {
+            rewritten: rewritten.clone(),
+            then_push,
+        };
+        assert_eq!(
+            pulled_back((Pulled::UpstreamRewritten(rewritten.clone()), Carried::Along)),
+            asked(false)
+        );
+        assert_eq!(pushed(Pushed::UpstreamRewritten(rewritten.clone())), asked(true));
+        assert_eq!(
+            caught_up(CaughtUp {
+                pulled: Pulled::UpstreamRewritten(rewritten.clone()),
+                carried: Carried::Along,
+                pushed: None,
+            }),
+            asked(true)
         );
     }
 
