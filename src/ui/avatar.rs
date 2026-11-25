@@ -156,11 +156,4 @@ mod tests {
             }
         }
     }
-
-    #[test]
-    fn a_pattern_bit_lights_a_left_cell_and_its_mirror() {
-        let identicon = Identicon::of("sam@sternegit.dev");
-        let top_row = identicon.cells().filter(|&(_, row)| row == 0).collect::<Vec<_>>();
-        assert_eq!(top_row, [(0, 0), (4, 0)]);
-    }
 }

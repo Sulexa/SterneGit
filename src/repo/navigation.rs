@@ -303,8 +303,6 @@ fn clean_at_shown_head(changes: &WorkingChanges, history: &History) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use std::rc::Rc;
-
     use super::{OpenFile, Step, Target};
     use crate::{
         git::{
@@ -395,15 +393,17 @@ mod tests {
     }
 
     #[test]
-    fn a_reload_keeps_the_selected_commit_while_it_exists() {
+    fn a_reload_keeps_the_selected_commit_and_its_open_file_while_it_exists() {
         let history = linear_history(&[4, 3, 2, 1], Some(4));
         assert_eq!(at(2).after_history_read(&history, None), at(2));
+        assert_eq!(open_in(2, "a.rs").after_history_read(&history, None), open_in(2, "a.rs"));
     }
 
     #[test]
-    fn a_reload_falls_back_to_the_newest_commit_when_the_selected_one_is_gone() {
+    fn a_reload_falls_back_to_the_newest_commit_and_closes_the_file_when_the_selected_one_is_gone() {
         let history = linear_history(&[4, 3], Some(3));
         assert_eq!(at(9).after_history_read(&history, None), at(4));
+        assert_eq!(open_in(9, "a.rs").after_history_read(&history, None), at(4));
     }
 
     #[test]
@@ -564,23 +564,6 @@ mod tests {
     }
 
     #[test]
-    fn a_reload_keeps_the_file_open_in_the_selected_commit() {
-        let history = linear_history(&[3, 2, 1], Some(3));
-        let target = open_in(2, "a.rs");
-        assert_eq!(target.after_history_read(&history, None), target);
-        assert_eq!(
-            target.after_history_read(&history, Some(&clean_at(3))),
-            target
-        );
-    }
-
-    #[test]
-    fn a_file_open_in_a_commit_that_is_gone_closes_with_it() {
-        let history = linear_history(&[4, 3], Some(4));
-        assert_eq!(open_in(9, "a.rs").after_history_read(&history, None), at(4));
-    }
-
-    #[test]
     fn new_changes_leave_the_file_open_in_a_commit_alone() {
         let history = linear_history(&[2, 1], Some(2));
         let target = open_in(1, "a.rs");
@@ -693,7 +676,6 @@ mod tests {
         assert!(opened.close_file());
         assert_eq!(opened, picked);
         assert_eq!(opened.back_to_one(), Some(at(3)));
-        assert!(Rc::ptr_eq(&opened.picked(), opened.several().expect("several")));
     }
 
     #[test]

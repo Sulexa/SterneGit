@@ -69,13 +69,8 @@ mod tests {
     }
 
     #[test]
-    fn the_running_version_is_the_one_in_cargo_toml() {
-        assert_eq!(Version::running().to_string(), env!("CARGO_PKG_VERSION"));
-    }
-
-    #[test]
     fn versions_read_back_as_written() {
-        for text in ["0.1.0", "12.0.3", "0.3.0-rc.1"] {
+        for text in ["0.1.0", "12.0.3", "0.3.0-rc.1", env!("CARGO_PKG_VERSION")] {
             assert_eq!(version(text).to_string(), text);
         }
     }

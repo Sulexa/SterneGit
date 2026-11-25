@@ -348,7 +348,9 @@ mod tests {
     };
     use serde_json::{Value, json};
 
-    use super::{CallError, Forge, budget_for, check_answer, decode, inside_answer};
+    use super::{
+        CallError, Forge, OPS_THAT_PAGE_THROUGH_LISTS, budget_for, check_answer, decode, inside_answer,
+    };
     use crate::{
         accounts::AccountId,
         connect::{
@@ -472,9 +474,9 @@ mod tests {
     #[test]
     fn answers_decode_into_protocol_types_and_ignore_fields_they_do_not_know() {
         let identity = r#"{"ok":{"id":"7","login":"octo","name":"Octo Cat","avatar_url":null,"scopes":["repo"],"plan":"pro"}}"#;
-        let forge = forge(&answering(identity), FakeHost::quiet(), None);
+        let full = forge(&answering(identity), FakeHost::quiet(), None);
         assert_eq!(
-            smol::block_on(forge.who_am_i()),
+            smol::block_on(full.who_am_i()),
             Ok(Identity {
                 id: "7".into(),
                 login: "octo".into(),
@@ -483,6 +485,10 @@ mod tests {
                 scopes: vec!["repo".into()],
             })
         );
+        let without_optional_fields = r#"{"ok":{"id":"7","login":"octo","scopes":[]}}"#;
+        let sparse = forge(&answering(without_optional_fields), FakeHost::quiet(), None);
+        let identity = smol::block_on(sparse.who_am_i()).unwrap();
+        assert_eq!((identity.name, identity.avatar_url), (None, None));
     }
 
     #[test]
@@ -567,10 +573,13 @@ mod tests {
     }
 
     #[test]
-    fn operations_that_page_through_whole_lists_get_four_times_the_fuel() {
-        assert_eq!(budget_for("pulls.threads"), Budget::of(200));
-        assert_eq!(budget_for("pulls.list"), Budget::of(50));
-        assert_eq!((Budget::LISTING, Budget::CALL), (Budget::of(200), Budget::of(50)));
+    fn operations_that_page_through_whole_lists_get_the_listing_budget() {
+        for listing in OPS_THAT_PAGE_THROUGH_LISTS {
+            assert_eq!(budget_for(listing), Budget::LISTING, "{listing}");
+        }
+        for single in ["pulls.list", "repositories.list", "pulls.get", "account.who_am_i"] {
+            assert_eq!(budget_for(single), Budget::CALL, "{single}");
+        }
     }
 
     #[test]

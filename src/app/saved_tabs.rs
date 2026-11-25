@@ -109,15 +109,9 @@ mod tests {
     }
 
     #[test]
-    fn saved_tabs_read_back_in_the_same_order_with_the_same_active_tab() {
-        let tabs = saved(&["a", "b", "c"], 1);
-        assert_eq!(SavedTabs::decode(&tabs.encode()), tabs);
-    }
-
-    #[test]
     fn saved_tabs_survive_a_trip_through_the_file() {
         let file = folder(&format!("sternegit-saved-tabs-{}", std::process::id())).join("tabs");
-        let tabs = saved(&["a", "b"], 1);
+        let tabs = saved(&["a", "b", "c"], 1);
         tabs.write_to(&file).unwrap();
         let read = SavedTabs::read_from(&file);
         let _ = std::fs::remove_dir_all(file.parent().unwrap());

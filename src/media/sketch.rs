@@ -1278,6 +1278,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "measures speed; run with --release -- --ignored"]
     fn five_thousand_short_segments_on_a_4k_sketch_finish_quickly() {
         let started = Instant::now();
         let mut sketch = Sketch::new(3840, 2160, [24, 24, 28]);

@@ -933,7 +933,8 @@ Transform:
         let item = &model.items[0];
         assert_eq!(item.name, "slime-hit.wav");
         assert_eq!(item.role, Role::Asset { type_name: "Audio Importer".to_owned(), detail: None });
-        assert_eq!(item.parts[0].fields[1].label, "GUID");
-        assert_eq!(item.parts[1].fields[1].value, Value::Flag(true));
+        let field = |part: usize, label: &str| item.parts[part].fields.iter().find(|field| field.label == label).map(|field| field.value.clone());
+        assert_eq!(field(0, "GUID").map(|value| value.text()).as_deref(), Some("9a3c51e07d2b4f6c8e1a0b2c3d4e5f60"));
+        assert_eq!(field(1, "Preload Audio Data"), Some(Value::Flag(true)));
     }
 }

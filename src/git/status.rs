@@ -416,8 +416,13 @@ mod tests {
         };
         stage_first_hunk()?;
         let first = repo.status()?;
-        std::thread::sleep(std::time::Duration::from_millis(20));
+        let index = scratch.dir.join(".git").join("index");
+        let first_staged_at = std::fs::metadata(&index)?.modified()?;
         stage_first_hunk()?;
+        std::fs::File::options()
+            .write(true)
+            .open(&index)?
+            .set_modified(first_staged_at + std::time::Duration::from_secs(1))?;
         let second = repo.status()?;
         assert_eq!(first.unstaged, second.unstaged);
         assert_eq!(first.staged, second.staged);

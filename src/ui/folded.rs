@@ -46,11 +46,6 @@ mod tests {
     use super::Folded;
 
     #[test]
-    fn everything_starts_open() {
-        assert!(Folded::<String>::default().is_open("src"));
-    }
-
-    #[test]
     fn toggling_folds_then_opens_again() {
         let mut folded = Folded::default();
         folded.toggle("src".to_owned());

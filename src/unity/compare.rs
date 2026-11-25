@@ -601,5 +601,7 @@ Transform:
         let after = model(&prefab("1.4", "0.25", true, false));
         let comparison = compare(Some(&before), Some(&after), Options::default());
         assert_eq!(comparison.anchors.len(), 4);
+        let anchored: Vec<&str> = comparison.anchors.iter().map(|anchor| comparison.objects[anchor.object].name.as_str()).collect();
+        assert_eq!(anchored, vec!["Slime", "Shadow", "SquishParticles", "Crown"]);
     }
 }

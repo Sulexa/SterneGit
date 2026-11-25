@@ -393,6 +393,11 @@ mod tests {
     }
 
     #[test]
+    fn a_listing_gets_four_times_the_slices_of_a_single_call() {
+        assert_eq!(Budget::LISTING.slices, 4 * Budget::CALL.slices);
+    }
+
+    #[test]
     fn an_echo_receives_its_call_with_the_account_but_no_token() {
         let echoed = answered(&echo(), FakeHost::quiet());
         assert_eq!(

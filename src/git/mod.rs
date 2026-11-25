@@ -196,6 +196,9 @@ pub(crate) mod scratch {
 [merge]
 	ff = true
 	verifySignatures = false
+	conflictStyle = merge
+[pull]
+	rebase = false
 ";
 
     pub(crate) struct ScratchRepo {

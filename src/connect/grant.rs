@@ -114,28 +114,30 @@ mod tests {
 
     #[test]
     fn a_connector_asks_for_every_origin_host_and_sign_in_address_its_services_name() {
-        let asked = github();
+        let mut manifest = samples::minimal("fake");
+        manifest["features"] = json!(["pulls"]);
+        let hosted = &mut manifest["services"][0];
+        hosted["endpoints"]["web"] = json!("https://example.com/");
+        hosted["images"] = json!(["https://images.example.com/"]);
+        hosted["sign_in"][0]["create_url"] = json!("{web}settings/tokens");
+        let mut on_premises = manifest["services"][0].clone();
+        on_premises["id"] = json!("server");
+        on_premises["fields"] = json!([{ "id": "server", "label": "Server", "kind": "url" }]);
+        on_premises["endpoints"] = json!({ "api": "{server}/api/" });
+        on_premises["images"] = json!([]);
+        on_premises["remotes"][0]["hosts"] = json!(["{server.host}"]);
+        on_premises["sign_in"] = json!([{ "method": "pasted_token", "token": { "kind": "bearer" } }]);
+        manifest["services"].as_array_mut().unwrap().push(on_premises);
+        let asked = Grant::asked_by(&Manifest::parse(manifest.to_string().as_bytes()).unwrap());
         assert_eq!(
-            asked.endpoints,
-            set(&[
-                "https://api.github.com/",
-                "https://api.github.com/graphql",
-                "https://github.com/",
-                "{server}/",
-                "{server}/api/graphql",
-                "{server}/api/v3/",
-            ])
-        );
-        assert_eq!(asked.images, set(&["https://avatars.githubusercontent.com/"]));
-        assert_eq!(asked.remote_hosts, set(&["github.com", "ssh.github.com", "{server.host}"]));
-        assert_eq!(
-            asked.sign_in,
-            set(&[
-                "https://github.com/login/device/code",
-                "https://github.com/login/oauth/access_token",
-                "{web}settings/tokens/new",
-                "{web}settings/tokens/new?scopes=repo,read:org,write:public_key,workflow&description=SterneGit",
-            ])
+            asked,
+            Grant {
+                endpoints: set(&["https://api.example.com/v1/", "https://example.com/", "{server}/api/"]),
+                images: set(&["https://images.example.com/"]),
+                remote_hosts: set(&["example.com", "{server.host}"]),
+                sign_in: set(&["{web}settings/tokens"]),
+                features: set(&["pulls"]),
+            }
         );
     }
 

@@ -537,6 +537,8 @@ mod tests {
             (Rebased::Replayed, Carried::WithConflicts)
         );
         assert!(!repo.status()?.conflicted.is_empty());
+        assert_eq!(scratch.git(&["stash", "list"])?.lines().count(), 1);
+        assert_eq!(scratch.git(&["show", "stash@{0}:shared.txt"])?, "draft\n");
         Ok(())
     }
 
@@ -577,11 +579,7 @@ mod tests {
     }
 
     #[test]
-    fn the_squash_message_lists_each_subject_under_the_branch_name() {
-        assert_eq!(
-            squash_message("feature/blame", &["Add blame".into(), "Show it".into()]),
-            "Squashed branch 'feature/blame'\n\n* Add blame\n* Show it\n"
-        );
+    fn a_squash_message_without_subjects_is_only_the_branch_line() {
         assert_eq!(squash_message("topic", &[]), "Squashed branch 'topic'\n");
     }
 }

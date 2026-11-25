@@ -119,11 +119,7 @@ mod tests {
     use super::{UnityOption, UnityOptions};
 
     #[test]
-    fn unity_noise_is_hidden_and_only_changed_properties_show_at_first() {
-        let options = UnityOptions::default().options();
-        assert!(options.hide_noise);
-        assert!(!options.unchanged);
-        assert!(!options.file_ids);
+    fn toggling_file_ids_shows_them() {
         assert!(UnityOptions::default().toggled(UnityOption::FileIds).options().file_ids);
     }
 }

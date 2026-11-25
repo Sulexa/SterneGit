@@ -361,22 +361,37 @@ mod tests {
     use super::name_problem;
     use crate::connect::CallError;
 
-    #[test]
-    fn a_taken_name_is_said_plainly() {
-        let taken = CallError::Failed(Failure::Invalid {
+    fn invalid(field: &str, message: &str) -> CallError {
+        CallError::Failed(Failure::Invalid {
             fields: vec![FieldError {
-                field: "name".into(),
-                message: "name already exists on this account".into(),
+                field: field.into(),
+                message: message.into(),
             }],
             message: "Repository creation failed.".into(),
-        });
+        })
+    }
+
+    #[test]
+    fn a_taken_name_is_said_plainly() {
         assert_eq!(
-            name_problem(&taken, "octocat", "starfall", "octocat", "GitHub"),
+            name_problem(&invalid("name", "name already exists on this account"), "octocat", "starfall", "octocat", "GitHub"),
             "octocat already has a repository named starfall."
         );
+    }
+
+    #[test]
+    fn another_problem_with_the_name_is_said_as_the_service_words_it() {
         assert_eq!(
-            name_problem(&CallError::Failed(Failure::SignedOut), "o", "n", "octocat", "GitHub"),
-            "GitHub refused the token of octocat. It expired or was revoked. Sign in again to keep using this account."
+            name_problem(&invalid("name", "name is too long"), "octocat", "starfall", "octocat", "GitHub"),
+            "name is too long"
+        );
+    }
+
+    #[test]
+    fn a_refusal_that_names_no_name_field_gives_the_overall_message() {
+        assert_eq!(
+            name_problem(&invalid("description", "description is too long"), "octocat", "starfall", "octocat", "GitHub"),
+            "Repository creation failed."
         );
     }
 }

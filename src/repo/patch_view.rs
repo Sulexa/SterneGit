@@ -291,7 +291,10 @@ five
             .expect("a.txt is conflicted");
         let files = working_patch(repo.file_patch(&conflicted, Side::Unstaged)?)?.files;
         assert_eq!(files.len(), 1);
-        assert_eq!(files[0].conflicts().len(), 1);
+        let [conflict] = files[0].conflicts() else { panic!("one conflict") };
+        assert_eq!((conflict.current_label().as_ref(), conflict.current_lines()), ("HEAD", 2..3));
+        assert_eq!((conflict.incoming_label().as_ref(), conflict.incoming_lines()), ("theirs", 4..5));
+        assert_eq!(conflict.base_lines(), None);
         Ok(())
     }
 }

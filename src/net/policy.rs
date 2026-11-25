@@ -188,8 +188,14 @@ mod tests {
 
     #[test]
     fn header_values_cannot_smuggle_extra_lines() {
-        assert!(check_headers(&headers(&[("X-A", "1\r\nX-B: 2")]), &TokenScheme::Bearer).is_err());
-        assert!(check_headers(&headers(&[("Bad Name", "1")]), &TokenScheme::Bearer).is_err());
+        assert_eq!(
+            check_headers(&headers(&[("X-A", "1\r\nX-B: 2")]), &TokenScheme::Bearer),
+            Err(NetError::HeaderNotAllowed("X-A".into()))
+        );
+        assert_eq!(
+            check_headers(&headers(&[("Bad Name", "1")]), &TokenScheme::Bearer),
+            Err(NetError::HeaderNotAllowed("Bad Name".into()))
+        );
     }
 
     fn redirect(status: u16, location: &str) -> ApiResponse {

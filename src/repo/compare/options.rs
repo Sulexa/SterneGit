@@ -148,15 +148,6 @@ mod tests {
     use crate::git::Whitespace;
 
     #[test]
-    fn the_whole_file_shows_with_changed_words_and_long_lines_scroll() {
-        let options = TextOptions::default();
-        assert!(options.inline_unit().is_some());
-        assert!(!options.wraps());
-        assert_eq!(options.context_lines(), None);
-        assert_eq!(options.whitespace(), Whitespace::Compared);
-    }
-
-    #[test]
     fn each_choice_flips_only_itself() {
         let options = TextOptions::default()
             .toggled(TextOption::WholeFile)

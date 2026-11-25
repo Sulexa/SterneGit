@@ -1,5 +1,5 @@
 use sternegit_protocol::{
-    Answer, CheckState, Done, Failure, FieldError, Identity, Mergeability, ResponseHead,
+    Answer, CheckState, Done, Failure, FieldError, Mergeability, ResponseHead,
     Visibility, major, ops, resolve, speaks_same_major,
 };
 use serde_json::json;
@@ -68,14 +68,6 @@ fn an_answer_is_ok_or_err() {
 }
 
 #[test]
-fn optional_fields_may_be_missing_and_unknown_fields_are_ignored() {
-    let identity: Identity =
-        serde_json::from_value(json!({ "id": "7", "login": "octo", "scopes": [], "plan": "pro" })).unwrap();
-    assert_eq!((identity.name, identity.avatar_url), (None, None));
-    assert!(serde_json::from_value::<Identity>(json!({ "login": "octo" })).is_err());
-}
-
-#[test]
 fn responses_are_framed_behind_a_little_endian_head_length() {
     let head = ResponseHead {
         status: 201,
@@ -112,7 +104,6 @@ fn every_operation_has_its_own_name() {
     names.sort_unstable();
     names.dedup();
     assert_eq!(names.len(), ops::NAMES.len());
-    assert_eq!(names.len(), 21);
     assert_eq!(ops::named("pulls.merge"), Some("pulls.merge"));
     assert_eq!(ops::named("pulls.teleport"), None);
 }

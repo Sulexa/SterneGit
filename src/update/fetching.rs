@@ -214,7 +214,9 @@ mod tests {
         let (_keep, cancel) = cancel_pair();
         let offer = offered(&server, "/setup.exe", b"small");
         let result = smol::block_on(download(&Curl::ignoring_git_config(), &offer, &folder.join("setup.exe"), cancel));
+        let left = std::fs::read_dir(&folder).unwrap().count();
         let _ = std::fs::remove_dir_all(&folder);
         assert!(matches!(result, Err(UpdateError::Network(_))));
+        assert_eq!(left, 0);
     }
 }

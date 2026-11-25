@@ -157,6 +157,7 @@ mod tests {
 
     #[test]
     fn bytes_that_are_no_picture_say_so() {
-        assert!(Picture::decode(b"not a picture", Some("txt")).is_err());
+        let error = Picture::decode(b"not a picture", Some("txt")).err().map(|error| error.to_string());
+        assert_eq!(error.as_deref(), Some("SterneGit can't tell what kind of picture this is"));
     }
 }

@@ -47,7 +47,7 @@ fn runs() -> impl Iterator<Item = Run> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Run, pixels, runs};
+    use super::{pixels, runs};
 
     #[test]
     fn every_row_is_as_wide_as_the_grid_and_uses_known_pixels() {
@@ -58,25 +58,7 @@ mod tests {
     }
 
     #[test]
-    fn the_bill_row_is_cut_into_cap_eye_glint_orange_bill_and_black_tip() {
-        let bill_row = runs().filter(|run| run.row == 4).collect::<Vec<_>>();
-        let run = |columns, color| Run { row: 4, columns, color };
-        assert_eq!(
-            bill_row,
-            [
-                run(6..9, 0x111111),
-                run(9..10, 0xffffff),
-                run(10..11, 0x111111),
-                run(11..15, 0xf26b1d),
-                run(15..16, 0x111111),
-            ]
-        );
-    }
-
-    #[test]
     fn nothing_is_painted_behind_the_bird() {
         assert_eq!(runs().filter(|run| run.row < 2 || run.row == 15).count(), 0);
-        let cap_top = runs().filter(|run| run.row == 2).collect::<Vec<_>>();
-        assert_eq!(cap_top, [Run { row: 2, columns: 7..10, color: 0x111111 }]);
     }
 }

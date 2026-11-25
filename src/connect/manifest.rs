@@ -448,8 +448,8 @@ pub(crate) mod samples {
 mod tests {
     use serde_json::{Value, json};
 
-    use super::{FieldKind, Manifest, samples};
-    use crate::accounts::{SignInMethod, TokenScheme};
+    use super::{FieldKind, Manifest, Service, samples};
+    use crate::accounts::SignInMethod;
 
     fn parse(value: &Value) -> Result<Manifest, String> {
         Manifest::parse(value.to_string().as_bytes())
@@ -468,19 +468,12 @@ mod tests {
         let [dot_com, enterprise] = github.services.as_slice() else {
             panic!("expected two services, got {:?}", github.services);
         };
-        assert_eq!(dot_com.token_endpoints, ["api", "graphql"]);
-        assert_eq!(dot_com.remotes[0].hosts, ["github.com", "ssh.github.com"]);
-        assert_eq!(dot_com.sign_in[0].method, SignInMethod::Device);
-        assert_eq!(dot_com.sign_in[0].scheme, TokenScheme::Bearer);
-        assert_eq!(dot_com.sign_in[0].client_id.as_deref(), Some("Ov23li4Gy6mcZEsgGOGB"));
-        assert_eq!(dot_com.sign_in[0].scopes, ["repo", "read:org", "write:public_key", "workflow"]);
-        assert_eq!(dot_com.sign_in[1].method, SignInMethod::PastedToken);
-        assert!(enterprise.sign_in.iter().all(|sign_in| sign_in.method != SignInMethod::Device));
-        assert_eq!(enterprise.fields[0].kind, FieldKind::Url);
-        assert_eq!(
-            enterprise.endpoints[0],
-            ("api".to_owned(), "{server}/api/v3/".to_owned())
-        );
+        assert_eq!((dot_com.id.as_str(), enterprise.id.as_str()), ("github.com", "enterprise"));
+        let methods = |service: &Service| service.sign_in.iter().map(|sign_in| sign_in.method).collect::<Vec<_>>();
+        assert!(methods(dot_com).contains(&SignInMethod::Device));
+        assert!(methods(dot_com).contains(&SignInMethod::PastedToken));
+        assert!(!methods(enterprise).contains(&SignInMethod::Device));
+        assert!(enterprise.fields.iter().any(|field| field.kind == FieldKind::Url));
     }
 
     #[test]

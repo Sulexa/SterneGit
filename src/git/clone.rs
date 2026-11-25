@@ -15,7 +15,7 @@ use anyhow::{Context as _, Result, bail};
 
 use super::{
     access::Access,
-    command::{Exit, run, without_console_window},
+    command::{Exit, ignoring_the_users_config, run, without_console_window},
     ssh_key::ssh_command_setting,
 };
 
@@ -76,6 +76,7 @@ pub(crate) fn clone(request: &CloneRequest, mut progress: impl FnMut(Progress) +
         .stdout(Stdio::null())
         .stderr(Stdio::piped());
     without_console_window(&mut command);
+    ignoring_the_users_config(&mut command);
     let mut child = command.spawn().context(GIT_MISSING)?;
     let mut stderr = child.stderr.take().context(GIT_MISSING)?;
     let reader = thread::spawn(move || {
@@ -165,11 +166,10 @@ pub(crate) fn is_empty_or_missing(folder: &Path) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::{Arc, Mutex};
-
     use super::{CloneRequest, Progress, Stop, add_remote, clone, init, is_empty_or_missing, read_progress};
     use crate::git::{
         Access,
+        command::{Exit, run_text},
         scratch::ScratchRepo,
         ssh_key::ssh_command_of,
     };
@@ -200,14 +200,14 @@ mod tests {
             access: Access::default(),
             ssh_command: Some("ssh -o IdentitiesOnly=yes".into()),
         };
-        let seen = Arc::new(Mutex::new(Vec::new()));
-        let recorded = seen.clone();
-        clone(&request, move |step| recorded.lock().unwrap().push(step), &Stop::default())?;
+        clone(&request, |_| {}, &Stop::default())?;
         let command = ssh_command_of(&target);
         let head = std::fs::read_to_string(target.join(".git").join("HEAD"))?;
+        let cloned_head = run_text(&target, &["rev-parse", "HEAD"], Exit::Success);
         let _ = std::fs::remove_dir_all(&target);
         assert_eq!(command.as_deref(), Some("ssh -o IdentitiesOnly=yes"));
         assert!(head.starts_with("ref: refs/heads/"));
+        assert_eq!(cloned_head?.trim(), origin.head()?);
         Ok(())
     }
 

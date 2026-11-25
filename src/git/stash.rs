@@ -343,13 +343,6 @@ mod tests {
         repo.pop_stash_entry(history.stashes[1].id)?;
         assert_eq!(changed_paths(&scratch)?, ["a.txt"]);
         assert_eq!(stash_messages(&scratch)?, "On main: newer\n");
-        Ok(())
-    }
-
-    #[test]
-    fn a_popped_stash_entry_keeps_what_was_staged_staged() -> Result<()> {
-        let scratch = two_stashes("stash-pop-staged")?;
-        let (repo, history) = scratch.open()?;
         repo.pop_stash_entry(history.stashes[0].id)?;
         assert_eq!(
             scratch.git(&["diff", "--cached", "--name-only"])?,

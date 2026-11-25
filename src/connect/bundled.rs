@@ -109,13 +109,10 @@ mod tests {
                 ("github.wasm".into(), "ab02".into()),
             ])
         );
-    }
-
-    #[test]
-    fn hashes_are_lowercase_hex() {
+        let hash = sha256(b"abc");
         assert_eq!(
-            sha256(b"abc"),
-            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+            read_sums(&format!("{}  connector.json\n", hash.to_uppercase())),
+            Hashes::from([("connector.json".into(), hash)])
         );
     }
 }

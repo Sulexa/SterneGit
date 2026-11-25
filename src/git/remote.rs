@@ -835,6 +835,8 @@ mod tests {
             shared.ours.commit("Add other.txt")?;
             shared.ours.write("other.txt", "more\n")?;
             assert_eq!(shared.pull_carrying(mode)?.1, Carried::Along, "{mode:?}");
+            assert_eq!(std::fs::read_to_string(shared.ours.dir.join("other.txt"))?, "more\n", "{mode:?}");
+            assert_eq!(shared.ours.git(&["stash", "list"])?, "", "{mode:?}");
             shared.theirs.write("shared.txt", "theirs again\n")?;
             shared.theirs.git(&["add", "shared.txt"])?;
             shared.they_push("again")?;
@@ -844,6 +846,7 @@ mod tests {
                 Carried::WithConflicts,
                 "{mode:?}"
             );
+            assert_eq!(shared.ours.git(&["stash", "list"])?.lines().count(), 1, "{mode:?}");
         }
         Ok(())
     }

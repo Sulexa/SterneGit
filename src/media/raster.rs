@@ -255,7 +255,7 @@ fn over(color: [f32; 4], base: [f32; 3]) -> [f32; 3] {
 
 #[cfg(test)]
 mod tests {
-    use super::{Backdrop, Layer, Placement, Surface, rasterize};
+    use super::{Backdrop, CHECKER_DARK, CHECKER_LIGHT, Layer, Placement, Surface, rasterize};
     use crate::media::{Picture, PixelDifference};
 
     const PANEL: Surface = Surface {
@@ -337,7 +337,7 @@ mod tests {
         let (width, height) = (3, 37);
         let out = rasterize(&Layer::Picture(&clear), at(0., 0., 1., width, height), checkerboard);
         let expected: Vec<u8> = (0..height)
-            .flat_map(|y| (0..width).map(move |x| if (x + y) % 2 == 0 { 0x1a } else { 0x26 }))
+            .flat_map(|y| (0..width).map(move |x| if (x + y) % 2 == 0 { CHECKER_DARK[0] } else { CHECKER_LIGHT[0] }))
             .collect();
         assert_eq!(red_channel(&out), expected);
     }
@@ -347,12 +347,17 @@ mod tests {
         let before = picture(2, &[gray(10), gray(10)]);
         let after = picture(2, &[gray(10), gray(200)]);
         let difference = PixelDifference::between(&before, &after);
+        let colors = [[0, 255, 0], [250, 200, 0], [255, 0, 0]];
         let layer = Layer::Difference {
             after: &after,
             difference: &difference,
-            colors: [[0, 255, 0], [250, 200, 0], [255, 0, 0]],
+            colors,
         };
         let out = rasterize(&layer, at(0., 0., 1., 2, 1), PANEL);
-        assert_eq!(red_channel(&out), [4, 250]);
+        let rgb = |pixel: &[u8]| [pixel[2], pixel[1], pixel[0]];
+        let (unchanged, changed) = (rgb(&out[0..4]), rgb(&out[4..8]));
+        assert!(unchanged.iter().all(|&channel| channel < 10), "{unchanged:?}");
+        assert!(!colors.contains(&unchanged));
+        assert_eq!(changed, colors[1]);
     }
 }

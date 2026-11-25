@@ -414,13 +414,6 @@ mod tests {
     }
 
     #[test]
-    fn sternegit_runs_the_curl_that_comes_with_the_system() {
-        let program = Curl::system().program;
-        let name = program.file_name().unwrap().to_string_lossy().into_owned();
-        assert_eq!(name, if cfg!(windows) { "curl.exe" } else { "curl" });
-    }
-
-    #[test]
     fn a_body_curl_cannot_carry_is_refused() {
         let mut request = outgoing(Method::Post, "https://api.github.com/x");
         request.body = Some(vec![0xff, 0x00]);

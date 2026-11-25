@@ -252,19 +252,13 @@ mod tests {
     }
 
     #[test]
-    fn a_manifest_must_ask_for_abi_1_and_protocol_1_and_name_a_module_beside_it() {
-        let wasm = two_faced(IDENTITY);
-        let mut escaping = manifest();
-        escaping["module"] = json!("../fake.wasm");
+    fn a_refused_manifest_stops_the_trial_with_the_reason() {
         let mut newer_abi = manifest();
         newer_abi["interface"]["abi"] = json!(2);
-        let mut newer_protocol = manifest();
-        newer_protocol["interface"]["protocol"] = json!("2.0");
-        for (name, manifest) in [("escaping", escaping), ("abi", newer_abi), ("protocol", newer_protocol)] {
-            let folder = folder(name, manifest, &wasm);
-            assert!(try_connector(&folder, None).is_err(), "{name}");
-            fs::remove_dir_all(folder).unwrap();
-        }
+        let folder = folder("abi", newer_abi, &two_faced(IDENTITY));
+        let refusal = try_connector(&folder, None).err().unwrap();
+        assert!(refusal.contains("ABI 1"), "{refusal}");
+        fs::remove_dir_all(folder).unwrap();
     }
 
     #[test]

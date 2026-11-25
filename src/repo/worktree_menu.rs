@@ -332,8 +332,13 @@ mod tests {
 
     #[test]
     fn the_removal_question_names_the_folder_counts_the_losses_and_keeps_the_commits() {
-        let question = removal_question(&worktree("diff-view"), 3);
-        assert!(question.ends_with("Its 3 uncommitted changes are lost. Its commits stay on feature/diff-view."));
-        assert!(question.starts_with("Deletes the folder "));
+        let diff_view = Worktree {
+            location: Arc::from(Path::new("/projects/diff-view")),
+            ..worktree("diff-view")
+        };
+        assert_eq!(
+            removal_question(&diff_view, 3),
+            "Deletes the folder /projects/diff-view. Its 3 uncommitted changes are lost. Its commits stay on feature/diff-view."
+        );
     }
 }

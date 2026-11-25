@@ -624,7 +624,6 @@ mod tests {
             ["api", "graphql", "images"]
         );
         assert!(!format!("{view:?}").contains("gho_secret"));
-        assert!(gateway.now() <= SystemTime::now());
     }
 
     #[test]

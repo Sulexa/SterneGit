@@ -19,11 +19,19 @@ use super::{
 
 const FOLDER_OF_WORKTREES: &str = "-worktrees";
 const ROW_ID_MARK: [u8; 4] = *b"wip:";
+#[cfg(not(test))]
 const PAUSES_BEFORE_DELETING_LEFTOVERS: [Duration; 4] = [
     Duration::from_millis(100),
     Duration::from_millis(200),
     Duration::from_millis(400),
     Duration::from_millis(800),
+];
+#[cfg(test)]
+const PAUSES_BEFORE_DELETING_LEFTOVERS: [Duration; 4] = [
+    Duration::from_millis(25),
+    Duration::from_millis(50),
+    Duration::from_millis(100),
+    Duration::from_millis(200),
 ];
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -313,8 +321,7 @@ mod tests {
     use anyhow::Result;
 
     use super::{
-        WorktreeStart, changes_elsewhere, changes_row_of, folder_is_free, is_linked_worktree, read_worktrees,
-        suggested_folder,
+        WorktreeStart, changes_elsewhere, folder_is_free, is_linked_worktree, read_worktrees, suggested_folder,
     };
     use crate::git::scratch::ScratchRepo;
 
@@ -353,13 +360,6 @@ mod tests {
         assert!(!is_linked_worktree(&submodule));
         assert!(!is_linked_worktree(&scratch.dir));
         Ok(())
-    }
-
-    #[test]
-    fn each_worktree_has_its_own_changes_row() {
-        let one = changes_row_of(Path::new("/a"));
-        assert_ne!(one, changes_row_of(Path::new("/b")));
-        assert_eq!(one, changes_row_of(Path::new("/a")));
     }
 
     #[test]
@@ -466,8 +466,9 @@ mod tests {
         let linked = beside(&scratch, "freed");
         repo.add_worktree(&linked, &new_branch("freed"))?;
         let held = held_shut(&linked.join("held.txt"))?;
+        let before_the_last_try = super::PAUSES_BEFORE_DELETING_LEFTOVERS.iter().sum::<std::time::Duration>() * 4 / 5;
         let release = std::thread::spawn(move || {
-            std::thread::sleep(std::time::Duration::from_millis(600));
+            std::thread::sleep(before_the_last_try);
             drop(held);
         });
         let left = repo.remove_worktree(&linked)?;

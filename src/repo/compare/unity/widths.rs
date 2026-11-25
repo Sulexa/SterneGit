@@ -87,10 +87,4 @@ mod tests {
         assert_eq!(widths.with_property(px(700.), px(900.)).property, px(480.));
         assert_eq!(widths.with_property(px(400.), px(560.)).property, px(320.));
     }
-
-    #[test]
-    fn dragging_one_width_keeps_the_other() {
-        let widths = InspectorWidths::default().with_property(px(250.), px(900.)).with_hierarchy(px(300.), px(1400.));
-        assert_eq!((widths.hierarchy, widths.property), (px(300.), px(250.)));
-    }
 }

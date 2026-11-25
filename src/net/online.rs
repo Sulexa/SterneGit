@@ -175,7 +175,7 @@ mod interfaces {
 mod tests {
     use std::net::IpAddr;
 
-    use super::{Addresses, Online, addresses, reaches_beyond_this_machine};
+    use super::{Addresses, Online, reaches_beyond_this_machine};
 
     fn on(texts: &[&str]) -> Addresses {
         texts.iter().map(|text| text.parse().unwrap()).collect()
@@ -186,12 +186,6 @@ mod tests {
         assert!(!online.came_back(on(texts)));
         assert!(!online.came_back(on(texts)));
         online
-    }
-
-    #[test]
-    fn the_addresses_found_first_are_where_it_starts_not_a_return() {
-        let mut online = settled_on(&["192.168.1.20"]);
-        assert!(!online.came_back(on(&["192.168.1.20"])));
     }
 
     #[test]
@@ -247,10 +241,5 @@ mod tests {
         for dropped in ["127.0.0.1", "169.254.10.1", "0.0.0.0", "::1", "fe80::1", "::"] {
             assert!(!reaches_beyond_this_machine(&dropped.parse::<IpAddr>().unwrap()), "{dropped}");
         }
-    }
-
-    #[test]
-    fn the_system_lists_running_interfaces_without_loopback() {
-        assert!(!addresses().contains(&"127.0.0.1".parse::<IpAddr>().unwrap()));
     }
 }

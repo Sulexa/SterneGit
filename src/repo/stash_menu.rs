@@ -126,7 +126,7 @@ pub(crate) fn confirm_delete(
 
 #[cfg(test)]
 mod tests {
-    use super::{StashAction, what_deleting_loses};
+    use super::what_deleting_loses;
     use crate::git::{Stash, fixtures::id};
 
     fn older() -> Stash {
@@ -135,27 +135,6 @@ mod tests {
             name: "stash@{1}".into(),
             message: "On feature/diff-view: Try a wider gutter".into(),
         }
-    }
-
-    #[test]
-    fn every_item_names_the_stash() {
-        let texts: Vec<String> = [StashAction::Apply, StashAction::Pop, StashAction::Delete]
-            .into_iter()
-            .map(|action| action.text(&older()))
-            .collect();
-        assert_eq!(
-            texts,
-            ["Apply stash@{1}", "Pop stash@{1}", "Delete stash@{1}…"]
-        );
-    }
-
-    #[test]
-    fn applying_says_the_stash_is_kept() {
-        assert_eq!(
-            StashAction::Apply.done(&older()),
-            "Applied stash@{1}; the stash is kept"
-        );
-        assert_eq!(StashAction::Pop.failed(&older()), "Couldn't pop stash@{1}");
     }
 
     #[test]

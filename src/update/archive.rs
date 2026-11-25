@@ -251,8 +251,11 @@ pub(crate) mod tests {
     fn a_file_that_is_not_a_zip_is_refused() {
         let folder = scratch("not-zip");
         std::fs::write(folder.join("page.zip"), "<html>Not Found</html>").unwrap();
-        let result = unpack(&folder.join("page.zip"), &folder.join("unpacked"));
+        let into = folder.join("unpacked");
+        let result = unpack(&folder.join("page.zip"), &into);
+        let unpacked = std::fs::read_dir(&into).map_or(0, |entries| entries.count());
         let _ = std::fs::remove_dir_all(&folder);
         assert!(result.is_err());
+        assert_eq!(unpacked, 0);
     }
 }

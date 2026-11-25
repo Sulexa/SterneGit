@@ -65,6 +65,7 @@ fn git<A: AsRef<OsStr>>(location: &Path, args: &[A]) -> Command {
     command.arg("--no-pager").arg("-C").arg(location).args(args);
     never_prompt(&mut command);
     without_console_window(&mut command);
+    ignoring_the_users_config(&mut command);
     command
 }
 
@@ -82,6 +83,17 @@ fn never_prompt(command: &mut Command) {
         .env("GIT_EDITOR", NO_EDITOR)
         .stdin(Stdio::null());
 }
+
+#[cfg(test)]
+pub(crate) fn ignoring_the_users_config(command: &mut Command) {
+    command.env("GIT_CONFIG_NOSYSTEM", "1").env(
+        "GIT_CONFIG_GLOBAL",
+        std::env::temp_dir().join("sternegit-tests-ignore-the-users-git-config"),
+    );
+}
+
+#[cfg(not(test))]
+pub(crate) fn ignoring_the_users_config(_: &mut Command) {}
 
 #[cfg(windows)]
 pub(crate) fn without_console_window(command: &mut Command) {

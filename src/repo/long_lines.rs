@@ -187,11 +187,15 @@ mod tests {
 
     #[test]
     fn an_unchanged_or_unpaired_long_line_shows_its_start() {
-        let patch = format!("{HEAD}@@ -1,1 +1,2 @@\n {}\n+{}\n", blob(20_000, None), blob(LONGEST_WHOLE_LINE + 1, None));
+        let unchanged = 20_000;
+        let unpaired = LONGEST_WHOLE_LINE + 1;
+        let patch = format!("{HEAD}@@ -1,1 +1,2 @@\n {}\n+{}\n", blob(unchanged, None), blob(unpaired, None));
         let shown = shown_lines(&patch);
         let lines = body_lines(&shown);
-        assert_eq!(lines[0], format!(" {} … 19,100 more characters\n", blob(SHOWN_CHARACTERS, None)));
-        assert_eq!(lines[1], format!("+{} … 9,101 more characters\n", blob(SHOWN_CHARACTERS, None)));
+        let start = blob(SHOWN_CHARACTERS, None);
+        let more = |length: usize| crate::ui::thousands(length - SHOWN_CHARACTERS);
+        assert_eq!(lines[0], format!(" {start} … {} more characters\n", more(unchanged)));
+        assert_eq!(lines[1], format!("+{start} … {} more characters\n", more(unpaired)));
     }
 
     #[test]
@@ -215,14 +219,19 @@ mod tests {
 
     #[test]
     fn a_cut_never_splits_a_character() {
-        let old = "é".repeat(20_000);
-        let new = format!("{}x{}", "é".repeat(15_000), "é".repeat(4_999));
+        let length = 20_000;
+        let changed_at = 15_000;
+        let old = "é".repeat(length);
+        let new = format!("{}x{}", "é".repeat(changed_at), "é".repeat(length - changed_at - 1));
         let patch = format!("{HEAD}@@ -1 +1 @@\n-{old}\n+{new}\n");
         let shown = shown_lines(&patch);
         let lines = body_lines(&shown);
-        assert!(lines[0].starts_with("-… 14,900 characters … ééé"), "{}", lines[0].chars().take(40).collect::<String>());
+        let skipped = changed_at - SHOWN_BEFORE_A_DIFFERENCE;
+        let more = length - skipped - SHOWN_CHARACTERS;
+        let start = format!("-… {} characters … ééé", crate::ui::thousands(skipped));
+        assert!(lines[0].starts_with(&start), "{}", lines[0].chars().take(40).collect::<String>());
         assert!(lines[1].contains(&format!("{}x", "é".repeat(SHOWN_BEFORE_A_DIFFERENCE))));
-        assert!(lines[1].ends_with(" … 4,200 more characters\n"));
+        assert!(lines[1].ends_with(&format!(" … {} more characters\n", crate::ui::thousands(more))));
     }
 
     #[test]
