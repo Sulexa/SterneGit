@@ -46,6 +46,18 @@ impl Search {
     }
 }
 
+pub(crate) fn seeded_by(selected: &str, options: SearchOptions) -> Option<String> {
+    let line = selected.trim_end_matches(['\r', '\n']);
+    if line.is_empty() || line.contains(['\r', '\n']) {
+        return None;
+    }
+    Some(if options.pattern {
+        fancy_regex::escape(line).into_owned()
+    } else {
+        line.to_owned()
+    })
+}
+
 impl Matcher {
     pub(crate) fn ranges(&self, text: &str) -> Vec<Range<usize>> {
         self.0
@@ -149,5 +161,30 @@ mod tests {
         let matcher = search("diff", SearchOptions::default()).matcher().unwrap().unwrap();
         assert!(matcher.finds("Split the Diff parser"));
         assert!(!matcher.finds("Add a menu top bar"));
+    }
+
+    #[test]
+    fn a_selected_line_seeds_the_search() {
+        let options = SearchOptions::default();
+        assert_eq!(seeded_by("diff_args", options).as_deref(), Some("diff_args"));
+        assert_eq!(seeded_by("let x = 1;\r\n", options).as_deref(), Some("let x = 1;"));
+    }
+
+    #[test]
+    fn several_lines_or_nothing_selected_seed_nothing() {
+        let options = SearchOptions::default();
+        assert_eq!(seeded_by("one\ntwo\n", options), None);
+        assert_eq!(seeded_by("", options), None);
+        assert_eq!(seeded_by("\n", options), None);
+    }
+
+    #[test]
+    fn a_selection_seeds_a_pattern_literally() {
+        let options = SearchOptions {
+            pattern: true,
+            ..Default::default()
+        };
+        let seed = seeded_by("f(x)", options).unwrap();
+        assert_eq!(ranges(&seed, options, "f(x) + fx"), [0..4]);
     }
 }

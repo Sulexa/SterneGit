@@ -1,7 +1,7 @@
 use std::{ops::Range, rc::Rc};
 
 use gpui_kit::{
-    AnyElement, App, AppContext as _, Context, Entity, Hsla, IntoElement, ParentElement as _, Render,
+    AnyElement, App, AppContext as _, Context, Entity, Focusable as _, Hsla, IntoElement, ParentElement as _, Render,
     SharedString, Styled as _, Subscription, WeakEntity, Window,
     assets::IconName,
     component::{
@@ -197,6 +197,12 @@ impl MergeEditor {
         self.result_current = None;
         self.find_in_result(cx);
         cx.notify();
+    }
+
+    pub(crate) fn selected_text(&self, window: &Window, cx: &App) -> Option<String> {
+        let result = self.result.read(cx);
+        (result.focus_handle(cx).is_focused(window) && !result.selected_range().is_empty())
+            .then(|| result.selected_text().to_string())
     }
 
     pub(crate) fn found(&self, cx: &App) -> Found {

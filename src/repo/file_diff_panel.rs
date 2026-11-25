@@ -11,6 +11,7 @@ use gpui_kit::{
     Anchor, AnyElement, App, AppContext as _, ClickEvent, Context, Entity, EventEmitter,
     Focusable as _, InteractiveElement as _, IntoElement, MouseButton, MouseDownEvent,
     ParentElement as _, Render, SharedString, Styled as _, Subscription, Window,
+    base::TextSelection,
     assets::IconName,
     component::{
         ActiveTheme as _, Disableable as _, Selectable as _, Sizable as _,
@@ -284,9 +285,14 @@ impl FileDiffPanel {
                 bar
             }
         };
+        let selected = match &self.merging {
+            Some(Merging::Open(editor)) => editor.read(cx).selected_text(window, cx),
+            _ => None,
+        }
+        .unwrap_or_else(|| TextSelection::selected_text(window, cx));
         let reopened = !self.finding;
         self.finding = true;
-        bar.update(cx, |bar, cx| bar.focus(window, cx));
+        bar.update(cx, |bar, cx| bar.focus(&selected, window, cx));
         if reopened {
             self.search_text(cx);
         }

@@ -3,6 +3,7 @@ use std::rc::Rc;
 use gix::ObjectId;
 use gpui_kit::{
     App, AppContext as _, Context, Entity, ScrollStrategy, SharedString, Subscription, Window,
+    base::TextSelection,
 };
 
 use super::{
@@ -129,7 +130,8 @@ impl RepoView {
         };
         let reopened = !self.commit_find.open;
         self.commit_find.open = true;
-        bar.update(cx, |bar, cx| bar.focus(window, cx));
+        let selected = TextSelection::selected_text(window, cx);
+        bar.update(cx, |bar, cx| bar.focus(&selected, window, cx));
         if reopened {
             self.search_commits(cx);
         }

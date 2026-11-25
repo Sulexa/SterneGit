@@ -18,7 +18,7 @@ use gpui_kit::{
 
 use super::{
     Look as _,
-    search::{Search, SearchOptions},
+    search::{Search, SearchOptions, seeded_by},
     text::{counted, thousands},
 };
 use crate::actions::{CloseDiff, FIND_CONTEXT, ToggleMatchCase, TogglePattern, ToggleWholeWords};
@@ -90,11 +90,18 @@ impl FindBar {
         }
     }
 
-    pub(crate) fn focus(&self, window: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn focus(&mut self, selected: &str, window: &mut Window, cx: &mut Context<Self>) {
+        let seed = seeded_by(selected, self.options);
         self.input.update(cx, |input, cx| {
+            if let Some(seed) = &seed {
+                input.set_value(seed.clone(), window, cx);
+            }
             input.focus(window, cx);
             input.select_all(window, cx);
         });
+        if seed.is_some() {
+            self.searched(cx);
+        }
     }
 
     pub(crate) fn set_note(&mut self, note: Option<SharedString>, cx: &mut Context<Self>) {
