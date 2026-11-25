@@ -16,10 +16,14 @@ impl Failure {
                 .map(str::trim)
                 .filter(|line| !line.is_empty())
         };
-        let reason = lines()
-            .rfind(|line| line.starts_with("fatal:") || line.starts_with("error:"))
-            .or_else(|| lines().next_back());
-        Self(reason.unwrap_or("unknown error").to_owned().into())
+        let marked = |line: &&str| line.starts_with("fatal:") || line.starts_with("error:");
+        let reason = match (lines().find(marked), lines().rfind(marked)) {
+            (Some(first), Some(last)) if first != last => format!("{first}
+{last}"),
+            (Some(only), _) => only.to_owned(),
+            _ => lines().next_back().unwrap_or("git failed and said nothing").to_owned(),
+        };
+        Self(reason.into())
     }
 
     pub(crate) fn followed_by(&self, advice: &str) -> Self {
@@ -184,7 +188,22 @@ mod tests {
             "src/main.rs: tabs found"
         );
         let empty = anyhow::anyhow!("  \n");
-        assert_eq!(Failure::git_reason(&empty).message(), "unknown error");
+        assert_eq!(Failure::git_reason(&empty).message(), "git failed and said nothing");
+    }
+
+    #[test]
+    fn git_reasons_keep_the_first_error_that_led_to_the_fatal_one() {
+        let error = anyhow::anyhow!(
+            "error: unable to unlink old 'Assets/Astro.prefab': Permission denied
+error: unable to unlink old 'Assets/Lune.prefab': Permission denied
+fatal: could not move back to a7ba6b2e2
+"
+        );
+        assert_eq!(
+            Failure::git_reason(&error).message(),
+            "error: unable to unlink old 'Assets/Astro.prefab': Permission denied
+fatal: could not move back to a7ba6b2e2"
+        );
     }
 
     #[test]

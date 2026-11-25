@@ -72,9 +72,20 @@ fn git<A: AsRef<OsStr>>(location: &Path, args: &[A]) -> Command {
 fn checked(output: Output, exit: Exit) -> Result<Vec<u8>> {
     let found_difference = exit == Exit::SuccessOrDifference && output.status.code() == Some(1);
     if !output.status.success() && !found_difference {
-        bail!("{}", decode(&output.stderr).trim());
+        bail!("{}", what_git_said(&output));
     }
     Ok(output.stdout)
+}
+
+fn what_git_said(output: &Output) -> String {
+    [&output.stderr, &output.stdout]
+        .into_iter()
+        .map(|said| decode(said).trim().to_owned())
+        .find(|said| !said.is_empty())
+        .unwrap_or_else(|| match output.status.code() {
+            Some(code) => format!("git stopped with exit code {code} and said nothing"),
+            None => "git was stopped before it finished".to_owned(),
+        })
 }
 
 fn never_prompt(command: &mut Command) {
@@ -104,3 +115,27 @@ pub(crate) fn without_console_window(command: &mut Command) {
 
 #[cfg(not(windows))]
 pub(crate) fn without_console_window(_: &mut Command) {}
+
+#[cfg(test)]
+mod tests {
+    use anyhow::Result;
+
+    use super::{Exit, run};
+    use crate::git::scratch::ScratchRepo;
+
+    #[test]
+    fn a_failure_with_nothing_on_stderr_keeps_what_git_printed_or_its_exit_code() -> Result<()> {
+        let scratch = ScratchRepo::new("silent-failure")?;
+        std::fs::write(scratch.dir.join("before"), "Lune
+")?;
+        std::fs::write(scratch.dir.join("after"), "Astro
+")?;
+        let printed = run(&scratch.dir, &["diff", "--no-index", "--exit-code", "before", "after"], Exit::Success)
+            .expect_err("the files differ");
+        assert!(printed.to_string().contains("+Astro"));
+        let silent = run(&scratch.dir, &["config", "--get", "sternegit.missing"], Exit::Success)
+            .expect_err("the key is missing");
+        assert_eq!(silent.to_string(), "git stopped with exit code 1 and said nothing");
+        Ok(())
+    }
+}
