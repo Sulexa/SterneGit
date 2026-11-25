@@ -91,18 +91,24 @@ impl Repo {
     }
 
     pub(crate) fn delete_branch(&self, branch: &str) -> Result<()> {
-        run(
-            &self.location,
-            &["branch", "--quiet", "--delete", "--force", branch],
-            Exit::Success,
-        )
-        .map(drop)
+        self.delete_branches(&[branch])
+    }
+
+    pub(crate) fn delete_branches(&self, branches: &[&str]) -> Result<()> {
+        let mut args = vec!["branch", "--quiet", "--delete", "--force"];
+        args.extend_from_slice(branches);
+        run(&self.location, &args, Exit::Success).map(drop)
     }
 
     pub(crate) fn delete_remote_branch(&self, remote: &str, branch: &str) -> Result<()> {
-        let there = format!("{BRANCHES}{branch}");
-        self.reach(&["push", "--quiet", remote, "--delete", &there])
-            .map(drop)
+        self.delete_remote_branches(remote, &[branch])
+    }
+
+    pub(crate) fn delete_remote_branches(&self, remote: &str, branches: &[&str]) -> Result<()> {
+        let there: Vec<String> = branches.iter().map(|branch| format!("{BRANCHES}{branch}")).collect();
+        let mut args = vec!["push", "--quiet", remote, "--delete"];
+        args.extend(there.iter().map(String::as_str));
+        self.reach(&args).map(drop)
     }
 
     pub(super) fn has_branch(&self, name: &str) -> bool {
@@ -365,6 +371,20 @@ mod tests {
         let (repo, _) = scratch.open()?;
         repo.delete_branch("topic")?;
         assert_eq!(scratch.git(&["branch", "--list", "topic"])?, "");
+        Ok(())
+    }
+
+    #[test]
+    fn several_branches_are_deleted_in_one_go() -> Result<()> {
+        let scratch = ScratchRepo::new("delete-branches")?;
+        scratch.commit("first")?;
+        scratch.git(&["switch", "--quiet", "--create=topic"])?;
+        scratch.commit("only here")?;
+        scratch.git(&["branch", "feature/other"])?;
+        scratch.git(&["switch", "--quiet", "main"])?;
+        let (repo, _) = scratch.open()?;
+        repo.delete_branches(&["topic", "feature/other"])?;
+        assert_eq!(scratch.git(&["branch", "--list"])?.trim(), "* main");
         Ok(())
     }
 

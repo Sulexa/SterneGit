@@ -2,11 +2,11 @@ use std::{path::Path, rc::Rc, sync::Arc};
 
 use gix::ObjectId;
 use gpui_kit::{
-    AnyElement, App, InteractiveElement as _, IntoElement, ParentElement as _, RenderOnce,
+    AnyElement, App, ClickEvent, InteractiveElement as _, IntoElement, ParentElement as _, RenderOnce,
     SharedString, StatefulInteractiveElement as _, Styled as _, UniformListScrollHandle, Window,
     assets::IconName,
     component::{
-        ActiveTheme as _, Icon, Sizable as _, StyledExt as _, h_flex, menu::ContextMenuExt as _,
+        ActiveTheme as _, Icon, Sizable as _, StyledExt as _, h_flex, menu::ContextMenuExt,
         scroll::Scrollbar, tooltip::Tooltip,
     },
     div,
@@ -19,6 +19,7 @@ use super::{
     pulls::{PullMarks, PullsSection},
     ref_menus::RefMenus,
     ref_tree::{Listed, RefGroup, RefTreeRow, Section, last_segment, ref_tree},
+    several_refs::{PickedRefs, PickedRefsMenu, RefKey},
     stash_menu::StashMenu,
     tag_menu::TagMenu,
     worktree_menu::WorktreeMenu,
@@ -26,7 +27,7 @@ use super::{
 use crate::{
     git::{AheadBehind, History, RefKind, RefLabel, Rewrite, Stash, Worktree},
     ui::{
-        Folded, Handler, Look as _, Picked, PullMark, SectionHeader, checked_out_in, counted, handler,
+        Folded, Handler, Look as _, Pick, Picked, PullMark, SectionHeader, checked_out_in, counted, handler,
         is_double_click, list_row, pull_chip, thousands, tree_line,
     },
 };
@@ -43,14 +44,34 @@ pub(crate) struct WorktreeSection {
     pub(crate) on_open_panel: Handler<()>,
 }
 
+#[derive(Clone)]
+pub(crate) struct Several {
+    pub(crate) keys: Rc<Picked<RefKey>>,
+    pub(crate) refs: PickedRefs,
+    pub(crate) menu: PickedRefsMenu,
+}
+
+impl Several {
+    fn attach<E>(&self, element: E) -> AnyElement
+    where
+        E: ContextMenuExt + IntoElement + 'static,
+    {
+        let (menu, refs) = (self.menu.clone(), self.refs.clone());
+        element
+            .context_menu(move |popup, _, _| menu.build(popup, &refs))
+            .into_any_element()
+    }
+}
+
 #[derive(IntoElement)]
 pub(crate) struct RefsList {
     history: Arc<History>,
     rows: Vec<RefTreeRow>,
     picked: Rc<Picked<ObjectId>>,
+    ref_pick: Option<Rc<Picked<RefKey>>>,
+    several: Option<Several>,
     scroll: UniformListScrollHandle,
-    on_reveal: Option<Handler<usize>>,
-    on_reveal_stash: Option<Handler<ObjectId>>,
+    on_pick: Option<Handler<(RefKey, Pick)>>,
     on_check_out: Option<Handler<RefLabel>>,
     on_toggle: Option<Handler<RefGroup>>,
     menus: RefMenus,
@@ -66,20 +87,14 @@ impl RefsList {
         folded: &Folded<RefGroup>,
         scroll: UniformListScrollHandle,
     ) -> Self {
-        let listed = Listed {
-            stashes: history.stashes.len(),
-            worktrees: match history.worktrees.len() {
-                0 | 1 => 0,
-                listed => listed,
-            },
-        };
         Self {
-            rows: ref_tree(&history.refs, listed, folded),
+            rows: ref_tree(&history.refs, listed(&history), folded),
             history,
             picked: Rc::default(),
+            ref_pick: None,
+            several: None,
             scroll,
-            on_reveal: None,
-            on_reveal_stash: None,
+            on_pick: None,
             on_check_out: None,
             on_toggle: None,
             menus: RefMenus::default(),
@@ -121,19 +136,17 @@ impl RefsList {
         self
     }
 
-    pub(crate) fn on_reveal(
-        mut self,
-        callback: impl Fn(&usize, &mut Window, &mut App) + 'static,
-    ) -> Self {
-        self.on_reveal = Some(handler(callback));
+    pub(crate) fn ref_pick(mut self, picked: Option<Rc<Picked<RefKey>>>, several: Option<Several>) -> Self {
+        self.ref_pick = picked;
+        self.several = several;
         self
     }
 
-    pub(crate) fn on_reveal_stash(
+    pub(crate) fn on_pick(
         mut self,
-        callback: impl Fn(&ObjectId, &mut Window, &mut App) + 'static,
+        callback: impl Fn(&(RefKey, Pick), &mut Window, &mut App) + 'static,
     ) -> Self {
-        self.on_reveal_stash = Some(handler(callback));
+        self.on_pick = Some(handler(callback));
         self
     }
 
@@ -160,9 +173,10 @@ impl RenderOnce for RefsList {
             history,
             rows,
             picked,
+            ref_pick,
+            several,
             scroll,
-            on_reveal,
-            on_reveal_stash,
+            on_pick,
             on_check_out,
             on_toggle,
             menus,
@@ -172,9 +186,10 @@ impl RenderOnce for RefsList {
             marks,
         } = self;
         let pull_rows = pulls.as_ref().map_or(0, PullsSection::len);
+        let shown = Shown { picked, ref_pick };
         let handlers = RowHandlers {
-            on_reveal,
-            on_reveal_stash,
+            on_pick,
+            several,
             on_check_out,
             on_toggle,
             menus,
@@ -194,7 +209,7 @@ impl RenderOnce for RefsList {
                             None => pulls
                                 .as_ref()
                                 .map_or_else(|| div().into_any_element(), |pulls| pulls.row(ix, cx)),
-                            Some(ix) => ref_tree_row(&rows[ix], &history, &picked, &marks, &handlers, cx),
+                            Some(ix) => ref_tree_row(&rows[ix], &history, &shown, &marks, &handlers, cx),
                         })
                         .collect::<Vec<_>>()
                 })
@@ -205,9 +220,44 @@ impl RenderOnce for RefsList {
     }
 }
 
+fn listed(history: &History) -> Listed {
+    Listed {
+        stashes: history.stashes.len(),
+        worktrees: match history.worktrees.len() {
+            0 | 1 => 0,
+            listed => listed,
+        },
+    }
+}
+
+pub(crate) fn shown_keys(history: &History, folded: &Folded<RefGroup>) -> Vec<RefKey> {
+    ref_tree(&history.refs, listed(history), folded)
+        .iter()
+        .filter_map(|row| match row {
+            RefTreeRow::Ref { ix, .. } => Some(RefKey::of(&history.refs[*ix])),
+            RefTreeRow::Stash { ix } => Some(RefKey::Stash(history.stashes[*ix].id)),
+            RefTreeRow::Section { .. } | RefTreeRow::Folder { .. } | RefTreeRow::Worktree { .. } => None,
+        })
+        .collect()
+}
+
+struct Shown {
+    picked: Rc<Picked<ObjectId>>,
+    ref_pick: Option<Rc<Picked<RefKey>>>,
+}
+
+impl Shown {
+    fn lit(&self, key: &RefKey, id: ObjectId) -> bool {
+        match &self.ref_pick {
+            Some(ref_pick) => ref_pick.contains(key),
+            None => self.picked.contains(&id),
+        }
+    }
+}
+
 struct RowHandlers {
-    on_reveal: Option<Handler<usize>>,
-    on_reveal_stash: Option<Handler<ObjectId>>,
+    on_pick: Option<Handler<(RefKey, Pick)>>,
+    several: Option<Several>,
     on_check_out: Option<Handler<RefLabel>>,
     on_toggle: Option<Handler<RefGroup>>,
     menus: RefMenus,
@@ -218,14 +268,14 @@ struct RowHandlers {
 fn ref_tree_row(
     row: &RefTreeRow,
     history: &History,
-    picked: &Picked<ObjectId>,
+    shown: &Shown,
     marks: &PullMarks,
     handlers: &RowHandlers,
     cx: &App,
 ) -> AnyElement {
     let RowHandlers {
-        on_reveal,
-        on_reveal_stash,
+        on_pick,
+        several,
         on_check_out,
         on_toggle,
         menus,
@@ -252,23 +302,24 @@ fn ref_tree_row(
         } => folder_row(*kind, path, *depth, *open, on_toggle.clone(), cx),
         &RefTreeRow::Ref { ix, depth } => ref_row(
             &history.refs[ix],
-            ix,
             depth,
-            picked,
+            shown,
             marks.get(&history.refs[ix].full_name()).copied(),
             RefClicks {
-                on_reveal: on_reveal.clone(),
+                on_pick: on_pick.clone(),
                 on_check_out: on_check_out.clone(),
             },
             menus,
+            several.as_ref(),
             cx,
         ),
         &RefTreeRow::Stash { ix } => stash_row(
             &history.stashes[ix],
             ix,
-            picked,
-            on_reveal_stash.clone(),
+            shown,
+            on_pick.clone(),
             stash_menu.clone(),
+            several.as_ref(),
             cx,
         ),
         &RefTreeRow::Worktree { ix } => worktree_row(&history.worktrees[ix], ix, worktrees.as_ref(), cx),
@@ -345,29 +396,35 @@ fn folder_row(
 }
 
 struct RefClicks {
-    on_reveal: Option<Handler<usize>>,
+    on_pick: Option<Handler<(RefKey, Pick)>>,
     on_check_out: Option<Handler<RefLabel>>,
+}
+
+fn pick_of(event: &ClickEvent, cx: &App) -> Pick {
+    let modifiers = event.modifiers();
+    Pick::new(modifiers.secondary(cx), modifiers.shift)
 }
 
 fn ref_row(
     label: &RefLabel,
-    ix: usize,
     depth: usize,
-    picked: &Picked<ObjectId>,
+    shown: &Shown,
     mark: Option<PullMark>,
     clicks: RefClicks,
     menus: &RefMenus,
+    several: Option<&Several>,
     cx: &App,
 ) -> AnyElement {
     let RefClicks {
-        on_reveal,
+        on_pick,
         on_check_out,
     } = clicks;
     let on_check_out = on_check_out.filter(|_| label.can_be_checked_out());
     let double_clicked = label.clone();
+    let key = RefKey::of(label);
     let row = list_row(
         SharedString::from(format!("{:?}/{}", label.kind, label.name)),
-        picked.contains(&label.target),
+        shown.lit(&key, label.target),
     )
     .px_3()
     .child(
@@ -393,15 +450,23 @@ fn ref_row(
                 state_icon("elsewhere", IconName::FolderGit, cx.theme().muted_foreground, words)
             })),
     )
-    .on_click(move |event, window, cx| {
-        if let Some(on_reveal) = &on_reveal {
-            on_reveal(&ix, window, cx)
-        }
-        if let Some(on_check_out) = on_check_out.as_ref().filter(|_| is_double_click(event)) {
-            on_check_out(&double_clicked, window, cx)
+    .on_click({
+        let key = key.clone();
+        move |event, window, cx| {
+            let pick = pick_of(event, cx);
+            if let Some(on_pick) = &on_pick {
+                on_pick(&(key.clone(), pick), window, cx)
+            }
+            let plain_double_click = pick == Pick::Only && is_double_click(event);
+            if let Some(on_check_out) = on_check_out.as_ref().filter(|_| plain_double_click) {
+                on_check_out(&double_clicked, window, cx)
+            }
         }
     });
-    menus.attach(row, label)
+    match several.filter(|several| several.keys.contains(&key)) {
+        Some(several) => several.attach(row),
+        None => menus.attach(row, label),
+    }
 }
 
 fn ahead_behind(label: &RefLabel, cx: &App) -> Option<AnyElement> {
@@ -464,13 +529,14 @@ fn apart_in_words(apart: AheadBehind, upstream: &str) -> String {
 fn stash_row(
     stash: &Stash,
     ix: usize,
-    picked: &Picked<ObjectId>,
-    on_reveal: Option<Handler<ObjectId>>,
+    shown: &Shown,
+    on_pick: Option<Handler<(RefKey, Pick)>>,
     stash_menu: Option<StashMenu>,
+    several: Option<&Several>,
     cx: &App,
 ) -> AnyElement {
-    let id = stash.id;
-    let row = list_row(SharedString::from(format!("stash/{ix}")), picked.contains(&id))
+    let key = RefKey::Stash(stash.id);
+    let row = list_row(SharedString::from(format!("stash/{ix}")), shown.lit(&key, stash.id))
         .px_3()
         .child(tree_line(
             0,
@@ -480,9 +546,13 @@ fn stash_row(
             false,
             cx,
         ))
-        .when_some(on_reveal, |row, on_reveal| {
-            row.on_click(move |_, window, cx| on_reveal(&id, window, cx))
+        .when_some(on_pick, |row, on_pick| {
+            let key = key.clone();
+            row.on_click(move |event, window, cx| on_pick(&(key.clone(), pick_of(event, cx)), window, cx))
         });
+    if let Some(several) = several.filter(|several| several.keys.contains(&key)) {
+        return several.attach(row);
+    }
     match stash_menu {
         Some(stash_menu) => {
             let right_clicked = stash.clone();

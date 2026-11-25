@@ -568,6 +568,18 @@ const Texts = {
   deleteRemoteTagDescription: (name, remote) => `The tag is removed from ${remote} for everyone who uses it. ${name} stays here, so a push would send it back.`,
   tagDeleted: (name) => `Deleted tag ${name}`,
   copyName: 'Copy name',
+  pushBranches: (n) => `Push ${n} branches`,
+  deleteBranches: (n) => `Delete ${n} branches…`,
+  deleteRemoteBranches: (n, remote) => `Delete ${n} branches from ${remote}…`,
+  pushTags: (n, remote) => `Push ${n} tags to ${remote}`,
+  deleteTags: (n) => `Delete ${n} tags…`,
+  deleteRemoteTags: (n, remote) => `Delete ${n} tags from ${remote}…`,
+  deleteStashes: (n) => `Delete ${n} stashes…`,
+  deleteBranchesTitle: (n) => `Delete ${n} branches?`,
+  deleteSeveralMerged: (names) => `Every commit of ${listed(names)} is on another branch or tag too, so nothing is lost.`,
+  deleteSeveralUnmerged: (names, n) => `${counted(n, 'commit is', 'commits are')} on no other branch or tag. Deleting ${listed(names)} loses ${n === 1 ? 'it' : 'them'}.`,
+  keptCheckedOut: (names) => `${listed(names)} ${names.length === 1 ? 'stays, since it is' : 'stay, since they are'} checked out.`,
+  branchesDeleted: (n) => `Deleted ${n} branches`,
   nameCopied: 'Tag name copied',
   remoteTagDeleted: (name, remote) => `Deleted ${name} from ${remote}`,
   branchPlaceholder: 'Branch name',
@@ -1642,6 +1654,20 @@ function tagMenuItems({ label, remote }) {
   ]);
 }
 
+function pickedRefsMenuItems({ labels, remote }) {
+  const item = (text) => [text, ''];
+  const n = labels.length;
+  const kind = labels[0].kind;
+  if (kind === 'stash') return [item(Texts.deleteStashes(n))];
+  if (kind === 'tag') return menuGroups([[remote && item(Texts.pushTags(n, remote))], [item(Texts.deleteTags(n)), remote && item(Texts.deleteRemoteTags(n, remote))]]);
+  if (kind === 'remote') {
+    const remotes = new Set(labels.map((label) => remoteParts(label.name).remote));
+    return [item(Texts.deleteRemoteBranches(n, remotes.size === 1 ? [...remotes][0] : 'their remotes'))];
+  }
+  const deletable = labels.filter((label) => !label.head && !label.worktree).length;
+  return menuGroups([[item(Texts.pushBranches(n))], [deletable > 0 && item(Texts.deleteBranches(deletable))]]);
+}
+
 function changedCount(tree) {
   const changes = tree.changes || { unstaged: [], staged: [] };
   return new Set([...(changes.conflicted || []), ...changes.staged, ...changes.unstaged].map((change) => change.path)).size;
@@ -1988,12 +2014,13 @@ const C = {
     return C.ListRow({ content, selected, name: 'StashRow' });
   },
 
-  RefsList({ refs, stashes = [], selectedRow, picked = [], collapsed = [], pulls, worktrees }) {
+  RefsList({ refs, stashes = [], selectedRow, picked = [], refPick, collapsed = [], pulls, worktrees }) {
     const closed = new Set(collapsed);
+    const isPicked = (label) => (refPick ? refPick.includes(label.name) : label.row === selectedRow || picked.includes(label.row));
     const nodes = (kind, list, depth) =>
       list
         .map((node) => {
-          if (!node.children) return C.RefRow({ label: node.label, name: node.name, depth, selected: node.label.row === selectedRow || picked.includes(node.label.row) });
+          if (!node.children) return C.RefRow({ label: node.label, name: node.name, depth, selected: isPicked(node.label) });
           const open = !closed.has(`${kind}:${node.path}`);
           return treeGroup(open, C.RefFolderRow({ name: node.name, kind, depth, open }), nodes(kind, node.children, depth + 1));
         })
@@ -2001,7 +2028,7 @@ const C = {
     const stashSection = () => {
       if (!stashes.length) return '';
       const open = !closed.has('stash');
-      const rows = stashes.map((stash) => C.StashRow({ stash, selected: stash.row === selectedRow })).join('');
+      const rows = stashes.map((stash) => C.StashRow({ stash, selected: refPick ? refPick.includes(stash.name) : stash.row === selectedRow })).join('');
       return treeGroup(open, C.SectionHeader({ title: 'Stashes', count: stashes.length, open }), rows);
     };
     const sections = RefSections.map(([kind, title]) => {
@@ -3517,6 +3544,18 @@ const C = {
       C.Button({ label: WorktreeTexts.removeSelected(picked.length), icon: 'trash-2', variant: 'danger', size: 'md', disabled: !picked.length });
     const body = `${tools}<div class="v worktree-list">${rows}</div>${warn}`;
     return dialogShell({ name: 'WorktreesDialog', title: WorktreeTexts.manageTitle(repository), description: WorktreeTexts.manageAbout, body, buttons, size: 'worktrees' });
+  },
+
+  PickedRefsMenu({ labels, remote, left = 0, top = 0, hot }) {
+    return C.Menu({ items: pickedRefsMenuItems({ labels, remote }), left, top, hot, name: 'PickedRefsMenu' });
+  },
+
+  DeleteBranchesDialog({ labels, only = 0 }) {
+    const kept = labels.filter((label) => label.head || label.worktree).map((label) => label.name);
+    const names = labels.map((label) => label.name).filter((name) => !kept.includes(name));
+    const lost = only ? Texts.deleteSeveralUnmerged(names, only) : Texts.deleteSeveralMerged(names);
+    const description = [lost, kept.length && Texts.keptCheckedOut(kept)].filter(Boolean).join(' ');
+    return C.AlertDialog({ title: Texts.deleteBranchesTitle(names.length), description, confirm: 'Delete', name: 'DeleteBranchesDialog' });
   },
 
   TagMenu({ label, remote, left = 0, top = 0, hot }) {

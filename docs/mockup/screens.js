@@ -100,6 +100,27 @@ const Screens = (() => {
   const pickedFiles = { side: 'unstaged', paths: changes.unstaged.slice(1).map((change) => change.path) };
   const ref = (name) => history.refs.find((label) => label.name === name);
 
+  const refsPicked = (names) => {
+    const rows = [...new Set(names.map((name) => ref(name).row))].sort((a, b) => a - b);
+    return repo({
+      left: C.RefsList({ refs: history.refs, refPick: names, collapsed }),
+      picked: rows,
+      right: C.PickedCommitsPanel({ commits: rows.map((row) => history.commits[row]) }),
+      status: pickStatus({ rows }),
+    });
+  };
+  const pickedBranches = ['feature/blame', 'feature/diff-view', 'topic/tabs'];
+  const pickedRemotes = ['origin/feature/diff-view', 'origin/feature/stash'];
+  const pickedTags = ['v0.1.0', 'v0.2.0'];
+  const stashesPicked = () =>
+    repo({
+      left: C.RefsList({ refs: stashed.history.refs, stashes: stashed.history.stashes, refPick: stashed.history.stashes.map((stash) => stash.name), collapsed }),
+      middle: C.HistoryList({ history: stashed.history, selectedRow: stashed.history.stashes[0].row, changes }),
+      right: C.CommitPanel({ commit: stashed.history.commits[stashed.history.stashes[0].row], details: stashed.details }),
+      status: { summary: historySummary(stashed.history), position: 'Stash 1 of 2' },
+      toolbar: C.RepoToolbar({ unavailable: [] }),
+    });
+
   const gameTabs = [...tabs, { name: starfall.name, state: 'ready' }];
 
   const { rebasing, rebase, squash, rebaseFastForward, starfallMerge, rebaseChanges, rebaseResolved, statusConflicts, statusMerged, slimeConflict, starfallConflicts } = Sample;
@@ -1283,6 +1304,78 @@ const Screens = (() => {
           tabStrip: tabStrip(),
           body: commitSelected(),
           overlays: C.DeleteTagDialog({ label: ref('v0.2.0'), remote: 'origin', there: true }),
+        }),
+    },
+    {
+      id: 'refs-picked',
+      title: 'Several branches picked',
+      about: "In the left pane, Ctrl+click (Cmd+click on macOS) adds a branch, a remote branch, a tag or a stash to the pick or takes it out, and Shift+click picks every row from the last one clicked to this one, as the rows show, skipping folded folders; Ctrl+Shift+click adds that run. A pick stays inside one section: Ctrl or Shift on a row of another section starts a new pick there with that row alone. Folders and section headers never join a pick. The left pane highlights exactly the picked rows, so a branch that shares its commit with a picked branch stays unlit. The graph picks every picked ref's commit, so the right pane shows the picked commits as when they are Ctrl+clicked in the graph, and the status bar counts the commits; when every picked ref is on one commit, that commit is selected alone. A plain click goes back to one ref. Clicking a commit in the graph drops the ref pick and lights the refs on the picked commits again. Here feature/blame, feature/diff-view and topic/tabs were Ctrl+clicked.",
+      source: 'src/repo/refs_list.rs',
+      render: () => C.SterneGit({ topBar: topBar(), tabStrip: tabStrip(), body: refsPicked(pickedBranches) }),
+    },
+    {
+      id: 'refs-menu',
+      title: 'Right-click on picked branches',
+      about: "A right-click on a picked row opens a menu that acts on every picked ref; a right-click on a row outside the pick opens that row's own menu and leaves the pick as it is, as for commits. Push 3 branches pushes each branch to its upstream, one after the other; a branch with no upstream goes to the push remote and gets it as its upstream, as Push does for one branch. A branch that is behind its upstream is left out and the notification says so, without the Pull and push question. Delete 3 branches… asks first. The checked-out branch and branches checked out in another worktree can't be deleted: when the pick holds main, the item counts the others, Delete 2 branches…, and is left out when none is left. Check out, Merge, Rebase, pull requests and worktrees need one branch, so they are left out. Like every write, the items are disabled while Git writes; Push spins the header's Push button.",
+      source: 'src/repo/branch_menu.rs',
+      render: () =>
+        C.SterneGit({
+          topBar: topBar(),
+          tabStrip: tabStrip(),
+          body: refsPicked(pickedBranches),
+          overlays: C.PickedRefsMenu({ labels: pickedBranches.map(ref), left: 92, top: 196, hot: Texts.pushBranches(3) }),
+        }),
+    },
+    {
+      id: 'delete-branches',
+      title: 'Delete several branches',
+      about: "Delete 3 branches… asks once for all of them. The question counts the commits that no branch or tag outside the pick holds, since deleting them all loses those, or says nothing is lost. When the pick holds the checked-out branch, the question says it stays. Delete then runs one git branch -D for all of them and says Deleted 3 branches. Remote branches are deleted from their remote with one git push --delete per remote, after a question that says everyone who uses it loses them; tags with one git tag --delete, and from their remote with one push; stashes one by one, newest number first, so the numbers of the others don't shift.",
+      source: 'src/repo/branch_menu.rs',
+      render: () =>
+        C.SterneGit({
+          topBar: topBar(),
+          tabStrip: tabStrip(),
+          body: refsPicked(pickedBranches),
+          overlays: C.DeleteBranchesDialog({ labels: pickedBranches.map(ref), only: 2 }),
+        }),
+    },
+    {
+      id: 'remotes-menu-picked',
+      title: 'Right-click on picked remote branches',
+      about: "Picked remote branches offer only Delete 2 branches from origin…; when they come from several remotes it says from their remotes…. Each remote gets one git push --delete. Local branches with the same names stay.",
+      source: 'src/repo/branch_menu.rs',
+      render: () =>
+        C.SterneGit({
+          topBar: topBar(),
+          tabStrip: tabStrip(),
+          body: refsPicked(pickedRemotes),
+          overlays: C.PickedRefsMenu({ labels: pickedRemotes.map(ref), left: 110, top: 448, hot: Texts.deleteRemoteBranches(2, 'origin') }),
+        }),
+    },
+    {
+      id: 'tags-menu-picked',
+      title: 'Right-click on picked tags',
+      about: "Picked tags offer Push 2 tags to origin, one git push for both, then Delete 2 tags… here and Delete 2 tags from origin…, each after one question. Without a remote only Delete is left. Push says which tags origin already had and refuses, like one tag, when origin has a different tag of the same name.",
+      source: 'src/repo/tag_menu.rs',
+      render: () =>
+        C.SterneGit({
+          topBar: topBar(),
+          tabStrip: tabStrip(),
+          body: refsPicked(pickedTags),
+          overlays: C.PickedRefsMenu({ labels: pickedTags.map(ref), remote: 'origin', left: 70, top: 590, hot: Texts.pushTags(2, 'origin') }),
+        }),
+    },
+    {
+      id: 'stashes-menu-picked',
+      title: 'Right-click on picked stashes',
+      about: "Stashes can be picked the same way. Stashes never join a commit pick, so the graph keeps the stash clicked last, with its changes in the right pane. The menu offers only Delete 2 stashes…, which asks once and says their changes are lost.",
+      source: 'src/repo/stash_menu.rs',
+      render: () =>
+        C.SterneGit({
+          topBar: topBar(),
+          tabStrip: tabStrip(),
+          body: stashesPicked(),
+          overlays: C.PickedRefsMenu({ labels: stashed.history.stashes.map((stash) => ({ ...stash, kind: 'stash' })), left: 120, top: 590, hot: Texts.deleteStashes(2) }),
         }),
     },
     {

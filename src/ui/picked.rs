@@ -45,6 +45,14 @@ impl<K: Clone + Hash + Eq> Picked<K> {
         }
     }
 
+    pub(crate) fn with(keys: impl IntoIterator<Item = K>, focus: K) -> Self {
+        Self {
+            keys: keys.into_iter().collect(),
+            anchor: Some(focus.clone()),
+            cursor: Some(focus),
+        }
+    }
+
     pub(crate) fn contains(&self, key: &K) -> bool {
         self.keys.contains(key)
     }

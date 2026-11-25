@@ -31,6 +31,7 @@ mod ref_tree;
 mod refs_list;
 mod repository;
 mod saved_folds;
+mod several_refs;
 mod squash_dialog;
 mod stash_menu;
 mod status_bar;
@@ -118,7 +119,8 @@ use pulls::{
     SectionState, filter_label, marks_for, open_create_pull,
 };
 use ref_tree::RefGroup;
-use refs_list::{RefsList, WorktreeSection};
+use refs_list::{RefsList, Several, WorktreeSection, shown_keys};
+use several_refs::{PickedRefs, PickedRefsMenu, RefKey, RefPick, RefsAction, graph_pick};
 pub(crate) use repository::{Repository, RepositoryEvent};
 use message_editor::{NOT_SAVED, message_saved};
 use repository::{Reworded, Squashed};
@@ -196,6 +198,7 @@ pub(crate) struct RepoView {
     repository: Entity<Repository>,
     target: Target,
     left_pane: LeftPaneFolds,
+    ref_pick: RefPick,
     here: Working,
     elsewhere: Option<Elsewhere>,
     commit_panel: Entity<CommitPanel>,
@@ -318,6 +321,7 @@ impl RepoView {
             repository: repository.clone(),
             target: Target::Nothing,
             left_pane,
+            ref_pick: RefPick::default(),
             here: Working::new(repository.clone(), commit_form),
             elsewhere: None,
             commit_panel,
@@ -591,6 +595,7 @@ impl RepoView {
     }
 
     fn pick_commit(&mut self, id: ObjectId, pick: Pick, cx: &mut Context<Self>) {
+        self.ref_pick = RefPick::default();
         if pick == Pick::Only {
             self.select_commit(id, cx);
             return;
@@ -1537,13 +1542,41 @@ impl RepoView {
         }
     }
 
-    fn reveal_ref(&mut self, ix: usize, window: &mut Window, cx: &mut Context<Self>) {
+    fn pick_ref(&mut self, key: RefKey, pick: Pick, window: &mut Window, cx: &mut Context<Self>) {
         let Some(history) = self.repository.read(cx).history().cloned() else {
             return;
         };
-        let Some(label) = history.refs.get(ix) else {
-            return;
-        };
+        let section: Vec<RefKey> = shown_keys(&history, &self.left_pane.refs)
+            .into_iter()
+            .filter(|shown| shown.same_section(&key))
+            .collect();
+        let before = self
+            .ref_pick
+            .current(&self.target.picked(), |kept| kept.exists_in(&history))
+            .map(|picked| (*picked).clone())
+            .unwrap_or_default();
+        let picked = before.after(key.clone(), pick, &section);
+        let label = history.refs.iter().find(|label| RefKey::of(label) == key);
+        match (&key, label) {
+            (RefKey::Stash(id), _) => self.reveal_stash(*id, cx),
+            (RefKey::Ref(..), Some(label)) if pick == Pick::Only => self.reveal_ref(label, &history, window, cx),
+            (RefKey::Ref(..), label) => {
+                if let Some(next) = graph_pick(&picked, &key, &history) {
+                    self.go_to(next, cx);
+                }
+                let row = label
+                    .filter(|_| picked.contains(&key))
+                    .and_then(|label| history.row_of(&label.target));
+                if let Some(row) = row {
+                    self.history_scroll.scroll_to_item(row, ScrollStrategy::Nearest);
+                }
+            }
+        }
+        self.ref_pick = RefPick::new(picked, &self.target.picked());
+        cx.notify();
+    }
+
+    fn reveal_ref(&mut self, label: &RefLabel, history: &History, window: &mut Window, cx: &mut Context<Self>) {
         match history.row_of(&label.target) {
             Some(row) => self.reveal_row(label.target, row, cx),
             None => window.push_notification(
@@ -1645,6 +1678,19 @@ impl RepoView {
                 .update(cx, |repository, cx| repository.act_on_stash(stash, action, cx)),
             StashAction::Delete => stash_menu::confirm_delete(repository, stash, window, cx),
         }
+    }
+
+    fn picked_refs_menu(&self, cx: &mut Context<Self>) -> PickedRefsMenu {
+        let repository = self.repository.read(cx);
+        PickedRefsMenu::new(
+            repository.push_remote().map(SharedString::from),
+            repository.is_writing(),
+        )
+        .on_action(cx.listener(
+            |this, (picked, action): &(PickedRefs, RefsAction), window, cx| {
+                several_refs::act(this.repository.clone(), picked.clone(), *action, window, cx)
+            },
+        ))
     }
 
     fn stash_menu(&self, cx: &mut Context<Self>) -> StashMenu {
@@ -1971,6 +2017,19 @@ impl RepoView {
     }
 
     fn refs_list(&self, history: Arc<History>, cx: &mut Context<Self>) -> RefsList {
+        let ref_pick = self
+            .ref_pick
+            .current(&self.target.picked(), |key| key.exists_in(&history));
+        let several = ref_pick
+            .as_ref()
+            .filter(|keys| keys.len() > 1)
+            .and_then(|keys| {
+                PickedRefs::of(keys, &history).map(|refs| Several {
+                    keys: keys.clone(),
+                    refs,
+                    menu: self.picked_refs_menu(cx),
+                })
+            });
         let branch_menu = self.branch_menu(&history, cx);
         let tag_menu = self.tag_menu(cx);
         let stash_menu = self.stash_menu(cx);
@@ -1981,11 +2040,13 @@ impl RepoView {
             .pulls(section, marks)
             .worktrees(worktrees)
             .picked(self.target.picked())
+            .ref_pick(ref_pick, several)
             .branch_menu(branch_menu)
             .tag_menu(tag_menu)
             .stash_menu(stash_menu)
-            .on_reveal(cx.listener(|this, ix: &usize, window, cx| this.reveal_ref(*ix, window, cx)))
-            .on_reveal_stash(cx.listener(|this, id: &ObjectId, _, cx| this.reveal_stash(*id, cx)))
+            .on_pick(cx.listener(|this, (key, pick): &(RefKey, Pick), window, cx| {
+                this.pick_ref(key.clone(), *pick, window, cx)
+            }))
             .on_check_out(cx.listener(|this, label: &RefLabel, window, cx| {
                 this.act_on_branch(label.clone(), BranchAction::CheckOut, window, cx)
             }))

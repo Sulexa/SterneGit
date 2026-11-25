@@ -54,18 +54,30 @@ impl History {
     }
 
     pub(crate) fn commits_only_on(&self, label: &RefLabel) -> Option<usize> {
-        let tip = self.row_of(&label.target)?;
+        self.commits_only_on_these(std::slice::from_ref(label))
+    }
+
+    pub(crate) fn commits_only_on_these(&self, labels: &[RefLabel]) -> Option<usize> {
+        let tips = labels
+            .iter()
+            .map(|label| self.row_of(&label.target))
+            .collect::<Option<Vec<_>>>()?;
+        let among = |other: &RefLabel| {
+            labels
+                .iter()
+                .any(|label| other.kind == label.kind && other.name == label.name)
+        };
         let mut reached = vec![false; self.commits.len()];
         let other_tips = self
             .refs
             .iter()
-            .filter(|other| other.kind != label.kind || other.name != label.name)
+            .filter(|other| !among(other))
             .map(|other| other.target)
             .chain(self.head_id)
             .chain(self.stashes.iter().map(|stash| stash.id))
             .filter_map(|id| self.row_of(&id));
         self.reach(other_tips, &mut reached);
-        Some(self.reach([tip], &mut reached))
+        Some(self.reach(tips, &mut reached))
     }
 
     fn reach(&self, tips: impl IntoIterator<Item = usize>, reached: &mut [bool]) -> usize {
@@ -115,6 +127,23 @@ mod tests {
         scratch.git(&["tag", "--delete", "tagged"])?;
         let (_, history) = scratch.open()?;
         assert_eq!(history.commits_only_on(branch(&history, "topic")), Some(2));
+        Ok(())
+    }
+
+    #[test]
+    fn commits_held_only_by_several_refs_together_are_counted_once() -> Result<()> {
+        let scratch = ScratchRepo::new("only-on-several")?;
+        scratch.commit("first")?;
+        scratch.git(&["switch", "--quiet", "--create=topic"])?;
+        scratch.commit("topic one")?;
+        scratch.git(&["branch", "copy"])?;
+        scratch.commit("topic two")?;
+        scratch.git(&["switch", "--quiet", "main"])?;
+        let (_, history) = scratch.open()?;
+        let (topic, copy) = (branch(&history, "topic").clone(), branch(&history, "copy").clone());
+        assert_eq!(history.commits_only_on(&copy), Some(0));
+        assert_eq!(history.commits_only_on(&topic), Some(1));
+        assert_eq!(history.commits_only_on_these(&[topic, copy]), Some(2));
         Ok(())
     }
 

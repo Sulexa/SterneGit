@@ -9,6 +9,7 @@ use gpui_kit::{Context, EventEmitter, SharedString};
 
 use super::{
     operation::{self, Finish, Operated, Operation, Outcome},
+    several_refs::RefsWrite,
     stash_menu::StashAction,
 };
 use crate::{
@@ -1134,6 +1135,12 @@ impl Repository {
             },
             cx,
         );
+    }
+
+    pub(crate) fn write_several(&mut self, write: RefsWrite, cx: &mut Context<Self>) {
+        let header_button = write.pushes().then_some(Operation::Push);
+        let failed = write.failed();
+        self.write_and_report(header_button, failed, move |repo| write.run(repo), cx);
     }
 
     pub(crate) fn choose_pull_mode(&mut self, mode: PullMode, cx: &mut Context<Self>) {

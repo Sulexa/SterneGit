@@ -36,27 +36,51 @@ impl Repo {
     }
 
     pub(crate) fn push_tag(&self, remote: &str, name: &str) -> Result<TagPushed> {
-        let tag = format!("{TAGS}{name}");
-        let args = ["push", "--porcelain", remote, &tag];
+        let pushed = self.push_tags(remote, &[name])?;
+        Ok(pushed.into_iter().next().unwrap_or(TagPushed::Sent))
+    }
+
+    pub(crate) fn push_tags(&self, remote: &str, names: &[&str]) -> Result<Vec<TagPushed>> {
+        let tags: Vec<String> = names.iter().map(|name| format!("{TAGS}{name}")).collect();
+        let mut args = vec!["push", "--porcelain", remote];
+        args.extend(tags.iter().map(String::as_str));
         let report = run_with_access(&self.location, &self.access, &args, Exit::SuccessOrDifference)?;
-        read_push_report(&decode(&report), &tag).map_err(|rejection| match rejection {
-            Rejection::TakenThere => Refusal::TagTakenThere {
-                tag: name.to_owned(),
-                remote: remote.to_owned(),
-            }
-            .into(),
-            Rejection::Other(reason) => anyhow!(reason),
-        })
+        let report = decode(&report);
+        names
+            .iter()
+            .zip(&tags)
+            .map(|(name, tag)| {
+                read_push_report(&report, tag).map_err(|rejection| match rejection {
+                    Rejection::TakenThere => Refusal::TagTakenThere {
+                        tag: (*name).to_owned(),
+                        remote: remote.to_owned(),
+                    }
+                    .into(),
+                    Rejection::Other(reason) => anyhow!(reason),
+                })
+            })
+            .collect()
     }
 
     pub(crate) fn delete_tag(&self, name: &str) -> Result<()> {
-        run(&self.location, &["tag", "--delete", name], Exit::Success).map(drop)
+        self.delete_tags(&[name])
+    }
+
+    pub(crate) fn delete_tags(&self, names: &[&str]) -> Result<()> {
+        let mut args = vec!["tag", "--delete"];
+        args.extend_from_slice(names);
+        run(&self.location, &args, Exit::Success).map(drop)
     }
 
     pub(crate) fn delete_remote_tag(&self, remote: &str, name: &str) -> Result<()> {
-        let there = format!("{TAGS}{name}");
-        self.reach(&["push", "--quiet", remote, "--delete", &there])
-            .map(drop)
+        self.delete_remote_tags(remote, &[name])
+    }
+
+    pub(crate) fn delete_remote_tags(&self, remote: &str, names: &[&str]) -> Result<()> {
+        let there: Vec<String> = names.iter().map(|name| format!("{TAGS}{name}")).collect();
+        let mut args = vec!["push", "--quiet", remote, "--delete"];
+        args.extend(there.iter().map(String::as_str));
+        self.reach(&args).map(drop)
     }
 
     pub(crate) fn push_remote(&self) -> Option<String> {
@@ -168,6 +192,27 @@ mod tests {
         assert!(origin.git(&["tag", "--list"])?.trim().is_empty());
         assert_eq!(scratch.git(&["tag", "--list"])?.trim(), "v1");
         repo.delete_tag("v1")?;
+        assert!(scratch.git(&["tag", "--list"])?.trim().is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn several_tags_are_pushed_and_deleted_in_one_go() -> Result<()> {
+        let origin = ScratchRepo::bare("tags-origin")?;
+        let (scratch, first) = with_two_commits("tags-several")?;
+        scratch.git(&["remote", "add", "origin", &origin.location()])?;
+        let (repo, _) = scratch.open()?;
+        repo.create_tag("v1", first, None)?;
+        repo.create_tag("v2", first, Some("Second release"))?;
+        repo.push_tag("origin", "v1")?;
+        assert_eq!(
+            repo.push_tags("origin", &["v1", "v2"])?,
+            [TagPushed::AlreadyThere, TagPushed::Sent]
+        );
+        assert_eq!(origin.git(&["tag", "--list"])?.trim(), "v1\nv2");
+        repo.delete_remote_tags("origin", &["v1", "v2"])?;
+        assert!(origin.git(&["tag", "--list"])?.trim().is_empty());
+        repo.delete_tags(&["v1", "v2"])?;
         assert!(scratch.git(&["tag", "--list"])?.trim().is_empty());
         Ok(())
     }

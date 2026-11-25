@@ -616,12 +616,13 @@ const Catalog = (() => {
           name: 'RefsList',
           code: 'repo::refs_list::RefsList',
           source: 'src/repo/refs_list.rs',
-          about: 'Branches, remotes, stashes and tags, each section only when it has something. Names are split at each slash into folders, in the order Git lists them; under Remotes the first folder is the remote. Stashes are listed newest first, without folders. Sections and folders fold with a click. Every section and folder starts folded the first time a repository opens; the ones opened since are remembered for that repository across launches. A local branch apart from its upstream ends its row with an AheadBehind. Clicking a ref or a stash selects its commit; double-clicking a branch checks it out; right-clicking a branch opens its BranchMenu, a tag its TagMenu, and a stash its StashMenu.',
+          about: 'Branches, remotes, stashes and tags, each section only when it has something. Names are split at each slash into folders, in the order Git lists them; under Remotes the first folder is the remote. Stashes are listed newest first, without folders. Sections and folders fold with a click. Every section and folder starts folded the first time a repository opens; the ones opened since are remembered for that repository across launches. A local branch apart from its upstream ends its row with an AheadBehind. Clicking a ref or a stash selects its commit; double-clicking a branch checks it out; right-clicking a branch opens its BranchMenu, a tag its TagMenu, and a stash its StashMenu. Ctrl+click and Shift+click pick several rows of one section; a right-click on a picked row opens the PickedRefsMenu.',
           variants: [
             ['Branches apart from their upstream', () => C.RefsList({ refs: tracked.refs, collapsed: ['remote', 'tag'] }), { w: 224, h: 200 }],
             ['With stashes, one selected', () => C.RefsList({ refs: stashed.history.refs, stashes: stashed.history.stashes, selectedRow: 3, collapsed: ['local', 'remote'] }), { w: 224, h: 200 }],
             ['With a selection', () => C.RefsList({ refs: history.refs, selectedRow: 2, collapsed }), { w: 224, h: 480 }],
             ['Folders and sections folded', () => C.RefsList({ refs: history.refs, collapsed: ['local:feature', 'remote', 'tag'] }), { w: 224, h: 200 }],
+            ['Three branches picked', () => C.RefsList({ refs: history.refs, refPick: ['feature/blame', 'feature/diff-view', 'topic/tabs'], collapsed: ['remote', 'tag'] }), { w: 224, h: 220 }],
           ],
         },
         {
@@ -723,6 +724,28 @@ const Catalog = (() => {
             ['Nothing lost, with a remote', () => dialogFrame(C.DeleteTagDialog({ label: ref('v0.2.0'), remote: 'origin' }))],
             ['Commits only it holds, no remote', () => dialogFrame(C.DeleteTagDialog({ label: ref('v0.2.0'), only: 2 }))],
             ['On the remote', () => dialogFrame(C.DeleteTagDialog({ label: ref('v0.2.0'), remote: 'origin', there: true }))],
+          ],
+        },
+        {
+          name: 'PickedRefsMenu',
+          code: 'repo::ref_menus::PickedRefsMenu',
+          source: 'src/repo/ref_menus.rs',
+          about: 'The right-click menu of several picked rows of one RefsList section. Local branches: Push N branches, then Delete N branches…, counting only those not checked out here or in another worktree. Remote branches: Delete N branches from the remote…. Tags: Push N tags to the push remote, then Delete N tags… and Delete N tags from the remote…. Stashes: Delete N stashes…. Every item is disabled while Git writes.',
+          variants: [
+            ['Branches', () => menuFrame(C.PickedRefsMenu({ labels: [ref('feature/blame'), ref('topic/tabs')] }), 220)],
+            ['Branches with the checked-out one', () => menuFrame(C.PickedRefsMenu({ labels: [ref('main'), ref('feature/blame'), ref('topic/tabs')] }), 220)],
+            ['Remote branches', () => menuFrame(C.PickedRefsMenu({ labels: [ref('origin/feature/diff-view'), ref('origin/feature/stash')] }), 260)],
+            ['Tags', () => menuFrame(C.PickedRefsMenu({ labels: [ref('v0.1.0'), ref('v0.2.0')], remote: 'origin' }), 240)],
+          ],
+        },
+        {
+          name: 'DeleteBranchesDialog',
+          code: 'repo::branch_menu::confirm_delete_several',
+          source: 'src/repo/branch_menu.rs',
+          about: 'An AlertDialog opened by Delete N branches… in a PickedRefsMenu. It counts the commits that no branch or tag outside the pick holds and says they are lost, or that nothing is lost, and names the picked branches that stay because they are checked out. Cancel or Esc does nothing.',
+          variants: [
+            ['Commits lost', () => dialogFrame(C.DeleteBranchesDialog({ labels: [ref('feature/blame'), ref('topic/tabs')], only: 2 }))],
+            ['Nothing lost, main stays', () => dialogFrame(C.DeleteBranchesDialog({ labels: [ref('main'), ref('feature/blame'), ref('topic/tabs')] }))],
           ],
         },
         {
