@@ -51,11 +51,13 @@ pub(crate) enum RefTreeRow {
     Worktree {
         ix: usize,
     },
+    DetachedHead,
 }
 
 pub(crate) struct Listed {
     pub(crate) stashes: usize,
     pub(crate) worktrees: usize,
+    pub(crate) detached: bool,
 }
 
 pub(crate) fn ref_tree(
@@ -72,7 +74,8 @@ pub(crate) fn ref_tree(
             Section::Worktrees => listed.worktrees,
             Section::Stashes => listed.stashes,
         };
-        if count == 0 {
+        let detached_here = listed.detached && section == Section::Refs(RefKind::LocalBranch);
+        if count == 0 && !detached_here {
             continue;
         }
         let open = folded.is_open(&RefGroup::Section(section));
@@ -81,6 +84,9 @@ pub(crate) fn ref_tree(
             count,
             open,
         });
+        if open && detached_here {
+            rows.push(RefTreeRow::DetachedHead);
+        }
         match section {
             Section::Refs(kind) => {
                 first += count;
@@ -245,7 +251,45 @@ mod tests {
         Listed {
             stashes,
             worktrees: 0,
+            detached: false,
         }
+    }
+
+    fn detached() -> Listed {
+        Listed {
+            detached: true,
+            ..listing(0)
+        }
+    }
+
+    #[test]
+    fn a_detached_head_sits_first_under_branches_without_being_counted() {
+        assert_eq!(
+            ref_tree(&sample(), detached(), &Folded::default())[..3],
+            [
+                section(LocalBranch, 4, true),
+                RefTreeRow::DetachedHead,
+                folder(LocalBranch, "feature", 0, true),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_detached_head_keeps_the_branches_section_when_there_are_no_branches() {
+        let refs = labels(&[("origin/main", RemoteBranch)]);
+        assert_eq!(
+            ref_tree(&refs, detached(), &Folded::default())[..2],
+            [section(LocalBranch, 0, true), RefTreeRow::DetachedHead]
+        );
+    }
+
+    #[test]
+    fn a_folded_branches_section_hides_the_detached_head() {
+        let folded = folded([RefGroup::Section(Section::Refs(LocalBranch))]);
+        assert_eq!(
+            ref_tree(&sample(), detached(), &folded)[..2],
+            [section(LocalBranch, 4, false), section(RemoteBranch, 2, true)]
+        );
     }
 
     #[test]

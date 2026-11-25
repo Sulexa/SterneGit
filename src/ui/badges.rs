@@ -13,7 +13,6 @@ use gpui_kit::{
 use super::{find_bar::found_text, look::Look as _, text::thousands};
 use crate::git::{ChangeKind, RefKind, ShownRef};
 
-const HEAD_FILL: f32 = 0.35;
 const LABEL_FILL: f32 = 0.14;
 const LABEL_BORDER: f32 = 0.6;
 const CHANGE_FILL: f32 = 0.18;
@@ -72,19 +71,20 @@ pub(crate) fn ref_badge(
     cx: &App,
 ) -> Stateful<Div> {
     let label = shown.label;
+    let ink = icon_ink(label.is_head, color, cx);
     let icons = h_flex()
         .flex_none()
         .gap(px(2.))
-        .child(Icon::new(ref_icon(label.kind)).xsmall().text_color(color))
+        .child(Icon::new(ref_icon(label.kind)).xsmall().text_color(ink))
         .when(shown.with_upstream, |this| {
             this.child(
                 Icon::new(ref_icon(RefKind::RemoteBranch))
                     .xsmall()
-                    .text_color(color),
+                    .text_color(ink),
             )
         })
         .when(label.worktree.is_some(), |this| {
-            this.child(Icon::new(IconName::FolderGit).xsmall().text_color(color))
+            this.child(Icon::new(IconName::FolderGit).xsmall().text_color(ink))
         });
     let elsewhere = label.worktree.clone();
     badge(icons, label.name.clone(), label.is_head, color, found, cx)
@@ -95,6 +95,22 @@ pub(crate) fn ref_badge(
                 Tooltip::new(checked_out_in(&worktree)).build(window, cx)
             })
         })
+}
+
+const DETACHED: &str = "detached";
+
+pub(crate) fn detached_badge(color: Hsla, cx: &App) -> Stateful<Div> {
+    let icon = Icon::new(IconName::CircleDot)
+        .xsmall()
+        .text_color(icon_ink(true, color, cx));
+    badge(icon, DETACHED.into(), true, color, Vec::new(), cx).id("detached-head")
+}
+
+fn icon_ink(checked_out: bool, color: Hsla, cx: &App) -> Hsla {
+    match checked_out {
+        true => cx.theme().background,
+        false => color,
+    }
 }
 
 pub(crate) fn checked_out_in(worktree: &str) -> String {
@@ -138,10 +154,19 @@ fn badge(
         .gap_1()
         .rounded(px(4.))
         .border_1()
-        .border_color(color.opacity(LABEL_BORDER))
-        .bg(color.opacity(if checked_out { HEAD_FILL } else { LABEL_FILL }))
+        .border_color(match checked_out {
+            true => color,
+            false => color.opacity(LABEL_BORDER),
+        })
+        .bg(match checked_out {
+            true => color,
+            false => color.opacity(LABEL_FILL),
+        })
         .xs_text()
-        .text_color(cx.theme().foreground)
+        .text_color(match checked_out {
+            true => cx.theme().background,
+            false => cx.theme().foreground,
+        })
         .child(icons)
         .child(
             div()

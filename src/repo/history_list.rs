@@ -3,12 +3,12 @@ use std::{path::Path, rc::Rc, sync::Arc};
 use gix::ObjectId;
 use gpui_kit::{
     AnyElement, App, FocusHandle, Hsla, InteractiveElement as _, IntoElement, MouseButton,
-    ParentElement as _, Pixels, RenderOnce, SharedString, StatefulInteractiveElement as _,
-    Styled as _, UniformListScrollHandle, Window,
+    ParentElement as _, Pixels, RenderOnce, ScrollStrategy, SharedString,
+    StatefulInteractiveElement as _, Styled as _, UniformListScrollHandle, Window,
     assets::IconName,
     component::{
-        ActiveTheme as _, Icon, Sizable as _, h_flex, menu::ContextMenuExt as _, scroll::Scrollbar,
-        v_flex,
+        ActiveTheme as _, Icon, Sizable as _, StyledExt as _, h_flex, menu::ContextMenuExt as _,
+        scroll::Scrollbar, tooltip::Tooltip, v_flex,
     },
     div,
     prelude::FluentBuilder as _,
@@ -30,12 +30,18 @@ use crate::{
     git::{History, RefLabel, ShownRef, WorkingChanges, Worktree, WorktreeChanges},
     ui::{
         self, GraphNode, Handler, Look as _, Palette, Pick, Picked, ROW_HEIGHT, commit_subject,
-        found_text, handler, is_double_click, list_row, ref_badge, stash_badge, thousands,
-        worktree_badge,
+        counted, detached_badge, found_text, handler, is_double_click, list_row, ref_badge,
+        stash_badge, thousands, worktree_badge,
     },
 };
 
 const UNCOMMITTED: &str = "Uncommitted changes";
+const DETACHED_HEAD: &str = "detached HEAD";
+const JUMP_TOOLTIP: &str = "Scroll to the HEAD commit and select it";
+const HEAD_ROW_TINT: f32 = 0.05;
+const JUMP_INSET: Pixels = px(10.);
+const JUMP_HEIGHT: Pixels = px(26.);
+const JUMP_MAX_WIDTH: Pixels = px(360.);
 
 const MAX_BADGES: usize = 3;
 const AUTHOR_WIDTH: Pixels = px(120.);
@@ -250,9 +256,11 @@ impl RenderOnce for HistoryList {
             marks,
         };
         let palette = Palette::new(cx);
+        let onto = committed_onto(&history);
         let uncommitted_row = uncommitted.map(|(changes, selected)| {
-            uncommitted_row(&changes, selected, &palette, on_select_uncommitted, cx)
+            uncommitted_row(&changes, onto, selected, &palette, on_select_uncommitted, cx)
         });
+        let jump = head_jump(&history, &scroll, actions.on_select.clone(), cx);
         let focus_on_click = focus.clone();
         let ticks = finding
             .as_ref()
@@ -290,13 +298,114 @@ impl RenderOnce for HistoryList {
                 .track_scroll(&scroll),
             )
             .children(ticks)
-            .child(Scrollbar::vertical(&scroll));
+            .child(Scrollbar::vertical(&scroll))
+            .children(jump);
         v_flex()
             .size_full()
             .min_h_0()
             .children(uncommitted_row)
             .child(list)
     }
+}
+
+fn committed_onto(history: &History) -> Option<SharedString> {
+    match (&history.branch, history.detached) {
+        (Some(branch), _) => Some(branch.clone()),
+        (None, true) => Some(DETACHED_HEAD.into()),
+        (None, false) => None,
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum OutOfView {
+    Above(usize),
+    Below(usize),
+}
+
+fn out_of_view(row: usize, first_shown: usize, last_shown: usize) -> Option<OutOfView> {
+    if row < first_shown {
+        Some(OutOfView::Above(first_shown - row))
+    } else if row > last_shown {
+        Some(OutOfView::Below(row - last_shown))
+    } else {
+        None
+    }
+}
+
+fn shown_rows(scroll: &UniformListScrollHandle) -> Option<(usize, usize)> {
+    let state = scroll.0.borrow();
+    let viewport = state.base_handle.bounds().size.height;
+    if viewport <= px(0.) {
+        return None;
+    }
+    let top = -state.base_handle.offset().y;
+    Some(rows_between(top, top + viewport))
+}
+
+fn rows_between(top: Pixels, bottom: Pixels) -> (usize, usize) {
+    let first = (top / ROW_HEIGHT).floor().max(0.) as usize;
+    let last = ((bottom / ROW_HEIGHT).ceil().max(1.) as usize) - 1;
+    (first, last.max(first))
+}
+
+fn jump_words(onto: &str, away: OutOfView) -> String {
+    let (count, side) = match away {
+        OutOfView::Above(count) => (count, "above"),
+        OutOfView::Below(count) => (count, "below"),
+    };
+    format!("{onto} · {} {side}", counted(count, "commit", "commits"))
+}
+
+fn head_jump(
+    history: &History,
+    scroll: &UniformListScrollHandle,
+    on_select: Option<Handler<(ObjectId, Pick)>>,
+    cx: &App,
+) -> Option<AnyElement> {
+    let row = history.head_row()?;
+    let id = history.head_id?;
+    let (first, last) = shown_rows(scroll)?;
+    let away = out_of_view(row, first, last)?;
+    let onto = committed_onto(history).unwrap_or_else(|| history.commits[row].short_id.clone());
+    let theme = cx.theme();
+    let hover = theme.secondary_hover;
+    let arrow = match away {
+        OutOfView::Above(_) => IconName::ArrowUp,
+        OutOfView::Below(_) => IconName::ArrowDown,
+    };
+    let scroll = scroll.clone();
+    let button = h_flex()
+        .id("head-jump")
+        .flex_none()
+        .max_w(JUMP_MAX_WIDTH)
+        .h(JUMP_HEIGHT)
+        .px_3()
+        .gap_1p5()
+        .rounded_full()
+        .border_1()
+        .border_color(theme.border)
+        .bg(theme.popover)
+        .shadow_md()
+        .sm_text()
+        .cursor_pointer()
+        .hover(move |this| this.bg(hover))
+        .child(Icon::new(arrow).small())
+        .child(div().ellipsis().child(jump_words(&onto, away)))
+        .tooltip(|window, cx| Tooltip::new(JUMP_TOOLTIP).build(window, cx))
+        .occlude()
+        .on_click(move |_, window, cx| {
+            scroll.scroll_to_item(row, ScrollStrategy::Center);
+            if let Some(on_select) = &on_select {
+                on_select(&(id, Pick::Only), window, cx)
+            }
+            window.refresh();
+        });
+    let strip = h_flex().absolute().left_0().right_0().justify_center();
+    let strip = match away {
+        OutOfView::Above(_) => strip.top(JUMP_INSET),
+        OutOfView::Below(_) => strip.bottom(JUMP_INSET),
+    };
+    Some(strip.child(button).into_any_element())
 }
 
 fn found_ticks(found: &CommitsFound, rows: usize) -> AnyElement {
@@ -357,9 +466,12 @@ fn commit_row(
         None => GraphNode::Commit,
     };
     let labels = history.shown_on(&commit.id);
+    let is_head = history.head_id == Some(commit.id);
+    let detached = is_head && history.detached;
     let color = palette.lane(graph_row.node_lane);
     let shown = if unfound { UNFOUND_OPACITY } else { 1. };
     let row = list_row(SharedString::from(commit.id.to_string()), selected)
+        .when(is_head, |row| row.bg(cx.theme().foreground.opacity(HEAD_ROW_TINT)))
         .px_3()
         .child(
             h_flex()
@@ -378,6 +490,7 @@ fn commit_row(
                         .children(stash.map(|stash| {
                             stash_badge(stash.name.clone(), color, ranges(&stash.name), cx)
                         }))
+                        .when(detached, |this| this.child(detached_badge(color, cx)))
                         .children(history.detached_worktrees_on(&id).map(|worktree| {
                             worktree_tag(worktree, color, actions, ranges(&worktree.name), cx)
                         }))
@@ -602,6 +715,7 @@ pub(crate) fn summary(changes: &WorkingChanges) -> String {
 
 fn uncommitted_row(
     changes: &WorkingChanges,
+    onto: Option<SharedString>,
     selected: bool,
     palette: &Palette,
     on_select: Option<Handler<()>>,
@@ -621,12 +735,16 @@ fn uncommitted_row(
                 .gap_3()
                 .child(ui::uncommitted_cell(palette.muted))
                 .child(
-                    div()
+                    h_flex()
                         .flex_1()
-                        .ellipsis()
+                        .min_w_0()
+                        .gap_1()
                         .sm_text()
-                        .italic()
-                        .child(UNCOMMITTED),
+                        .child(div().flex_none().italic().child(UNCOMMITTED))
+                        .when_some(onto, |this, onto| {
+                            this.child(div().flex_none().text_color(palette.muted).child("on"))
+                                .child(div().ellipsis().font_semibold().child(onto))
+                        }),
                 )
                 .child(
                     div()
@@ -640,4 +758,40 @@ fn uncommitted_row(
             row.on_click(move |_, window, cx| on_select(&(), window, cx))
         })
         .into_any_element()
+}
+
+#[cfg(test)]
+mod tests {
+    use gpui_kit::px;
+
+    use super::{OutOfView, jump_words, out_of_view, rows_between};
+
+    #[test]
+    fn rows_partly_shown_at_either_edge_count_as_shown() {
+        assert_eq!(rows_between(px(42.), px(42. + 280.)), (1, 11));
+    }
+
+    #[test]
+    fn the_list_at_its_top_starts_at_the_first_row() {
+        assert_eq!(rows_between(px(0.), px(280.)), (0, 9));
+    }
+
+    #[test]
+    fn a_head_row_inside_the_shown_rows_needs_no_jump() {
+        assert_eq!(out_of_view(5, 3, 20), None);
+        assert_eq!(out_of_view(3, 3, 20), None);
+        assert_eq!(out_of_view(20, 3, 20), None);
+    }
+
+    #[test]
+    fn a_head_row_outside_counts_the_commits_to_it() {
+        assert_eq!(out_of_view(1, 3, 20), Some(OutOfView::Above(2)));
+        assert_eq!(out_of_view(418, 3, 20), Some(OutOfView::Below(398)));
+    }
+
+    #[test]
+    fn the_jump_names_where_head_is_and_how_far() {
+        assert_eq!(jump_words("feature/blame", OutOfView::Above(2)), "feature/blame · 2 commits above");
+        assert_eq!(jump_words("main", OutOfView::Below(1)), "main · 1 commit below");
+    }
 }

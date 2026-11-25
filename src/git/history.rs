@@ -113,6 +113,7 @@ pub(crate) struct History {
     pub(crate) head_label: Option<SharedString>,
     pub(crate) branch: Option<SharedString>,
     pub(crate) head_id: Option<ObjectId>,
+    pub(crate) detached: bool,
     pub(crate) commits: Vec<Commit>,
     pub(crate) refs: Vec<RefLabel>,
     pub(crate) stashes: Vec<Stash>,
@@ -147,6 +148,10 @@ impl Head {
         self.name
             .as_ref()
             .map(|name| decode(name.shorten()).into())
+    }
+
+    fn is_detached(&self) -> bool {
+        self.name.is_none() && self.rebasing.is_none() && self.id.is_some()
     }
 
     fn label(&self) -> Option<SharedString> {
@@ -239,6 +244,7 @@ impl History {
             head_label: head.label(),
             branch: head.branch(),
             head_id: head.id,
+            detached: head.is_detached(),
             commits,
             refs,
             stashes,
@@ -257,6 +263,10 @@ impl History {
 
     pub(crate) fn row_of(&self, id: &ObjectId) -> Option<usize> {
         self.rows.get(id).copied()
+    }
+
+    pub(crate) fn head_row(&self) -> Option<usize> {
+        self.head_id.and_then(|id| self.row_of(&id))
     }
 
     pub(crate) fn newest(&self) -> Option<ObjectId> {

@@ -18,8 +18,8 @@ mod text;
 
 pub(crate) use avatar::{author_avatar, identicon};
 pub(crate) use badges::{
-    PullMark, additions, change_badge, checked_out_in, deletions, pull_chip, ref_badge, stash_badge,
-    worktree_badge,
+    PullMark, additions, change_badge, checked_out_in, deletions, detached_badge, pull_chip,
+    ref_badge, stash_badge, worktree_badge,
 };
 pub(crate) use ctrl_wheel::{ctrl_wheel_area, ctrl_wheel_elsewhere};
 pub(crate) use file_view::{FileView, FileViewToggle};

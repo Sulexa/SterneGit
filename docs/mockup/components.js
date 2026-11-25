@@ -122,7 +122,7 @@ const ChangeColors = {
   U: 'var(--magenta)',
 };
 
-const RefIcons = { local: 'git-branch', remote: 'cloud', tag: 'tag', stash: 'archive', worktree: 'folder-git' };
+const RefIcons = { local: 'git-branch', remote: 'cloud', tag: 'tag', stash: 'archive', worktree: 'folder-git', detached: 'circle-dot' };
 
 const TreeIcons = {
   local: { top: 'folder', folder: 'folder', ref: 'git-branch' },
@@ -905,6 +905,15 @@ const MergeLooks = {
   closed: { icon: 'git-pull-request-closed', color: 'var(--red)', title: () => 'Closed without merging', about: () => 'Reopen it on the server to merge it.' },
 };
 
+const HeadTexts = {
+  on: 'on',
+  detached: 'detached',
+  detachedAt: (id) => `detached at ${id}`,
+  detachedHead: 'detached HEAD',
+  jump: (name, rows, where) => `${name} · ${rows} commits ${where}`,
+  jumpTooltip: 'Scroll to the HEAD commit',
+};
+
 const WorktreeTexts = {
   section: 'Worktrees',
   headerTooltip: 'Open the Worktrees panel to add and clean up worktrees',
@@ -1393,6 +1402,12 @@ function graphEdges(spec) {
   return spec.split(' ').filter(Boolean).map((token) => ({ kind: token[0], lane: Number(token.slice(1)) }));
 }
 
+function headBranch(history) {
+  const head = history.commits.find((commit) => commit.head);
+  const label = head && (head.refs || []).find(([, kind, isHead]) => isHead && kind === 'local');
+  return label ? label[0] : undefined;
+}
+
 function refTree(labels) {
   const root = [];
   for (const label of labels) {
@@ -1873,11 +1888,12 @@ const C = {
     return `<div data-c="TabStrip" data-base="TabBar" class="tab-strip"><div class="tabs">${items}</div><div class="suffix${past}">${open}</div>${preview}</div>`;
   },
 
-  ListRow({ content, selected = false, extraClass = '', name = 'ListRow', base }) {
+  ListRow({ content, selected = false, extraClass = '', name = 'ListRow', base, style = '' }) {
     const shownBase = base || (name === 'ListRow' ? '' : 'ListRow');
     const baseAttribute = shownBase ? ` data-base="${shownBase}"` : '';
     const classes = ['list-row', selected && 'selected', extraClass].filter(Boolean).join(' ');
-    return `<div data-c="${name}"${baseAttribute} class="${classes}">${content}</div>`;
+    const shownStyle = style ? ` style="${style}"` : '';
+    return `<div data-c="${name}"${baseAttribute} class="${classes}"${shownStyle}>${content}</div>`;
   },
 
   SectionHeader({ title, count, action, open, opens, hot = false }) {
@@ -1981,12 +1997,12 @@ const C = {
     return `<span data-c="AheadBehind" class="ahead-behind h xs muted" title="${esc(Texts.aheadBehind(ahead, behind, upstream))}">${side(behind, 'arrow-down')}${side(ahead, 'arrow-up')}</span>`;
   },
 
-  RefRow({ label, name = label.name, depth = 0, selected = false }) {
+  RefRow({ label, name = label.name, depth = 0, selected = false, color = LaneColors[0] }) {
     const apart = label.ahead || label.behind || label.rewritten ? C.AheadBehind(label) : '';
     const pull = label.pull ? pullChip(label.pull) : '';
     const elsewhere = label.worktree ? `<span class="none h" title="${esc(WorktreeTexts.elsewhere(label.worktree))}">${icon('folder-git', 'xs', 'var(--muted)')}</span>` : '';
-    const content = `<div class="h fill tree-row" style="padding-left:${depth * TreeIndent}px">${twisty(null)}${icon(TreeIcons[label.kind].ref, 'sm', 'var(--muted)')}<div class="fill ellipsis sm${label.head ? ' semibold' : ''}">${esc(name)}</div>${pull}${apart}${elsewhere}</div>`;
-    return C.ListRow({ content, selected, name: 'RefRow' });
+    const content = `<div class="h fill tree-row" style="padding-left:${depth * TreeIndent}px">${twisty(null)}${icon(label.detached ? RefIcons.detached : TreeIcons[label.kind].ref, 'sm', label.head ? 'var(--c)' : 'var(--muted)')}<div class="fill ellipsis sm${label.head ? ' semibold' : ''}">${esc(name)}</div>${pull}${apart}${elsewhere}</div>`;
+    return C.ListRow({ content, selected, name: 'RefRow', extraClass: label.head ? 'head-row' : '', style: label.head ? `--c:${color}` : '' });
   },
 
   RefFolderRow({ name, kind, depth = 0, open = true }) {
@@ -2014,13 +2030,13 @@ const C = {
     return C.ListRow({ content, selected, name: 'StashRow' });
   },
 
-  RefsList({ refs, stashes = [], selectedRow, picked = [], refPick, collapsed = [], pulls, worktrees }) {
+  RefsList({ refs, stashes = [], selectedRow, picked = [], refPick, collapsed = [], pulls, worktrees, headColor = LaneColors[0] }) {
     const closed = new Set(collapsed);
     const isPicked = (label) => (refPick ? refPick.includes(label.name) : label.row === selectedRow || picked.includes(label.row));
     const nodes = (kind, list, depth) =>
       list
         .map((node) => {
-          if (!node.children) return C.RefRow({ label: node.label, name: node.name, depth, selected: isPicked(node.label) });
+          if (!node.children) return C.RefRow({ label: node.label, name: node.name, depth, selected: isPicked(node.label), color: headColor });
           const open = !closed.has(`${kind}:${node.path}`);
           return treeGroup(open, C.RefFolderRow({ name: node.name, kind, depth, open }), nodes(kind, node.children, depth + 1));
         })
@@ -2036,7 +2052,7 @@ const C = {
       const items = refs.filter((label) => label.kind === kind);
       if (!items.length) return '';
       const open = !closed.has(kind);
-      return treeGroup(open, C.SectionHeader({ title, count: items.length, open }), nodes(kind, refTree(items), 0));
+      return treeGroup(open, C.SectionHeader({ title, count: items.filter((label) => !label.detached).length, open }), nodes(kind, refTree(items), 0));
     });
     const worktreeSection = () => {
       if (!worktrees) return '';
@@ -2069,13 +2085,15 @@ const C = {
       `<div class="author h xs muted">${C.AuthorAvatar({ name: commit.author, email: commit.email })}<span class="ellipsis">${markFound(commit.author, find)}</span></div>` +
       `<div class="date xs muted">${esc(commit.date)}</div>` +
       `<div class="short-id xs muted mono">${markFound(commit.id, find)}</div>`;
-    return C.ListRow({ content, selected, extraClass: unfound ? 'commit-row unfound' : 'commit-row', name: 'CommitRow' });
+    const extra = ['commit-row', unfound && 'unfound', commit.head && 'head-commit'].filter(Boolean).join(' ');
+    return C.ListRow({ content, selected, extraClass: extra, name: 'CommitRow' });
   },
 
-  UncommittedRow({ changes, selected = false }) {
+  UncommittedRow({ changes, selected = false, on }) {
+    const where = on ? `<span class="not-italic muted"> ${esc(HeadTexts.on)} </span><span class="not-italic semibold">${esc(on)}</span>` : '';
     const content =
       C.UncommittedCell() +
-      '<div class="fill ellipsis sm italic">Uncommitted changes</div>' +
+      `<div class="fill ellipsis sm italic">Uncommitted changes${where}</div>` +
       `<div class="none xs muted">${esc(summarize(changes))}</div>`;
     return C.ListRow({ content, selected, extraClass: 'uncommitted-row', name: 'UncommittedRow' });
   },
@@ -2089,12 +2107,14 @@ const C = {
     return C.ListRow({ content, selected, extraClass: 'commit-row', name: 'WorktreeChangesRow' });
   },
 
-  HistoryList({ history, selectedRow, picked = [], changes, wipSelected = false, find }) {
+  HistoryList({ history, selectedRow, picked = [], changes, wipSelected = false, find, on = headBranch(history), jump, from = 0 }) {
     const width = graphWidth(history.commits);
-    const wip = changes && (changes.conflicted?.length || changes.unstaged.length || changes.staged.length) ? C.UncommittedRow({ changes, selected: wipSelected }) : '';
+    const wip = changes && (changes.conflicted?.length || changes.unstaged.length || changes.staged.length) ? C.UncommittedRow({ changes, selected: wipSelected, on }) : '';
     const rowFind = (ix) => find && { ...find, where: (find.elsewhere || {})[ix] };
     const rows = history.commits
-      .map((commit, ix) =>
+      .map((commit, ix) => [commit, ix])
+      .slice(from)
+      .map(([commit, ix]) =>
         commit.wip
           ? C.WorktreeChangesRow({ tree: commit.wip, graph: commit.graph, width, selected: ix === selectedRow })
           : C.CommitRow({ commit, selected: ix === selectedRow || picked.includes(ix), width, pulls: history.pulls, elsewhere: history.elsewhere, find: rowFind(ix) }),
@@ -2104,7 +2124,12 @@ const C = {
     const ticks = find ? `<div class="find-ticks">${(find.ticks || []).map((at) => `<span style="top:${(at * 100).toFixed(2)}%"></span>`).join('')}</div>` : '';
     const note = find && history.truncated ? FindTexts.newest(history.commits.length) : '';
     const bar = find ? C.FindBar({ query: find.query, options: find.options, current: find.current, total: find.total, placeholder: FindTexts.commits, note, focused: find.focused !== false }) : '';
-    return `<div data-c="HistoryList" class="history v">${bar}${wip}<div class="fill" style="position:relative;overflow:hidden">${rows}${ticks}<div class="scrollbar" style="top:2px;height:${thumb}px"></div></div></div>`;
+    const toHead = jump ? C.HeadJump(jump) : '';
+    return `<div data-c="HistoryList" class="history v">${bar}${wip}<div class="fill" style="position:relative;overflow:hidden">${rows}${ticks}${toHead}<div class="scrollbar" style="top:${2 + from * 3}px;height:${thumb}px"></div></div></div>`;
+  },
+
+  HeadJump({ name, rows, where = 'below' }) {
+    return `<div data-c="HeadJump" data-base="Button" class="head-jump ${where}" title="${esc(HeadTexts.jumpTooltip)}">${icon(where === 'below' ? 'arrow-down' : 'arrow-up', 'sm')}<span class="sm">${esc(HeadTexts.jump(name, rows, where))}</span></div>`;
   },
 
   DiffView({ files, mode = 'unified', header = true, actions, selection, pointed, menu = '', words = true, look = {} }) {

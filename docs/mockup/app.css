@@ -508,8 +508,9 @@
   color: var(--foreground);
 }
 
-.ref-badge.head { background: color-mix(in srgb, var(--c) 35%, transparent); }
-.ref-badge.head > .name { font-weight: 600; }
+.ref-badge.head { background: var(--c); border-color: var(--c); }
+.ref-badge.head > .name { font-weight: 600; color: var(--background); }
+.ref-badge.head > .icons { color: var(--background); }
 .ref-badge > .icons { flex: none; display: flex; gap: 2px; color: var(--c); }
 
 .change-badge {
@@ -2083,3 +2084,31 @@
 .port.flow.out { margin-right: -6px; }
 .literal { padding: 0 5px; border-radius: 3px; background: #ffffff12; font-variant-numeric: tabular-nums; }
 .literal.changed { color: #171717; background: var(--yellow); }
+
+.not-italic { font-style: normal; }
+
+.list-row.head-row { background: color-mix(in srgb, var(--c) 22%, transparent); box-shadow: inset 3px 0 0 var(--c); }
+.list-row.head-row.selected { background: color-mix(in srgb, var(--c) 30%, transparent); }
+.list-row.head-row:hover { background: color-mix(in srgb, var(--c) 28%, transparent); }
+
+.list-row.head-commit { background: color-mix(in srgb, var(--foreground) 5%, transparent); }
+.list-row.head-commit.selected { background: var(--list-active); }
+
+.head-jump {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--popover);
+  box-shadow: 0 4px 12px #00000066;
+}
+
+.head-jump.below { bottom: 12px; }
+.head-jump.above { top: 8px; }
+.light .head-jump { box-shadow: 0 4px 12px #16161826; }

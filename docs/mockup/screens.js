@@ -55,6 +55,48 @@ const Screens = (() => {
       status: { position: Texts.historyPosition(3, fileHistory.entries.length, splitPath(fileHistory.path)[0]) },
     });
 
+  const onBlame = (() => {
+    const name = 'feature/blame';
+    const upstream = 'origin/feature/blame';
+    const refs = [
+      ...history.refs.map((label) => ({ ...label, head: label.name === name, ...(label.name === name ? { ahead: 2, upstream } : {}) })),
+      { name: upstream, kind: 'remote', row: 10 },
+    ];
+    const commits = history.commits.map((commit, row) => ({
+      ...commit,
+      head: row === 9,
+      refs: [...(commit.refs || []).map(([ref, kind]) => (ref === name ? [ref, kind, true] : [ref, kind])), ...(row === 10 ? [[upstream, 'remote']] : [])],
+    }));
+    const flip = (id) => id.split('').reverse().join('');
+    const longer = [...commits.slice(0, -1), ...commits.slice(11, -1).map((commit) => ({ ...commit, id: flip(commit.id), refs: [] })), commits[commits.length - 1]];
+    return { name, color: LaneColors[commits[9].graph[0] % LaneColors.length], history: { ...history, head: name, refs, commits }, longer: { ...history, head: name, refs, commits: longer } };
+  })();
+
+  const onDetached = (() => {
+    const row = 11;
+    const id = history.commits[row].id;
+    const refs = [{ name: HeadTexts.detachedAt(id), kind: 'local', row, head: true, detached: true }, ...onBlame.history.refs.map((label) => ({ ...label, head: false, ahead: 0 }))];
+    const commits = onBlame.history.commits.map((commit, ix) => ({
+      ...commit,
+      head: ix === row,
+      refs: [...(ix === row ? [[HeadTexts.detached, 'detached', true]] : []), ...commit.refs.map(([ref, kind]) => [ref, kind])],
+    }));
+    return { id, color: LaneColors[commits[row].graph[0] % LaneColors.length], history: { ...history, head: HeadTexts.detachedAt(id), refs, commits } };
+  })();
+
+  const headScreen = ({ shown = onBlame.history, color = onBlame.color, pill = onBlame.name, on, from = 0, jump, light = false } = {}) =>
+    C.SterneGit({
+      topBar: topBar({ head: pill }),
+      tabStrip: tabStrip(),
+      body: repo({
+        left: C.RefsList({ refs: shown.refs, selectedRow: selected, collapsed, headColor: color }),
+        middle: C.HistoryList({ history: shown, selectedRow: selected, changes, on, from, jump }),
+        right: C.CommitPanel({ commit: shown.commits[selected], details: commitDetails }),
+        selectedRow: selected,
+      }),
+      light,
+    });
+
   const openFile = { side: fileDiff.side, path: fileDiff.change.path };
 
   const fileComparison = (mode, extra = {}) =>
@@ -277,6 +319,41 @@ const Screens = (() => {
       about: 'The same screen in the light theme, Perle: near-white panes, pale neutral grey bars, near-black text and mid grey for what is secondary. The picked rows are tinted light grey, as they are tinted pearl in the dark theme, Graphite; lane, ref and file colors are darker so they read on white.',
       source: 'src/repo/mod.rs',
       render: () => C.SterneGit({ topBar: topBar(), tabStrip: tabStrip(), body: commitSelected(), light: true }),
+    },
+    {
+      id: 'head-branch',
+      title: 'Current branch',
+      about: "Not built yet. feature/blame is checked out. Its row in the left pane is tinted with the color of its lane in the graph, with a 3 px bar of that color on its left edge and its branch icon in that color, so it stands out among the other branches. In the graph its badge is filled with that color, its name in the background color, where other badges are only tinted, and the HEAD commit's whole row is faintly tinted, so it reads apart from the selected row. The Uncommitted changes row names the branch the changes would be committed to: on feature/blame.",
+      source: 'src/repo/mod.rs',
+      render: () => headScreen(),
+    },
+    {
+      id: 'head-scrolled',
+      title: 'Current branch scrolled out of view',
+      about: 'Not built yet. When the HEAD commit is scrolled out of view, a floating button at the top or bottom edge of the graph says where it is: feature/blame · 2 commits above. A click scrolls back to it and selects it. It goes away once the HEAD row is in view.',
+      source: 'src/repo/history_list.rs',
+      render: () => headScreen({ shown: onBlame.longer, from: 11, jump: { name: onBlame.name, rows: 2, where: 'above' } }),
+    },
+    {
+      id: 'head-detached',
+      title: 'Detached HEAD',
+      about: "Not built yet. With no branch checked out there is no branch name to color, so a row reading detached at and the commit's id stands for HEAD at the top of Branches, tinted with the HEAD commit's lane color like a checked-out branch, with a dot for its icon. The Branches count leaves it out. In the graph the HEAD commit gets a badge filled with that color that reads detached. The Uncommitted changes row reads on detached HEAD, and the head pill in the title bar detached at the id.",
+      source: 'src/repo/mod.rs',
+      render: () => headScreen({ shown: onDetached.history, color: onDetached.color, pill: HeadTexts.detachedAt(onDetached.id), on: HeadTexts.detachedHead }),
+    },
+    {
+      id: 'head-detached-light',
+      title: 'Detached HEAD — light theme',
+      about: 'Not built yet. The same in Perle: the tint, the bar and the filled badge take the darker lane colors of the light theme.',
+      source: 'src/repo/mod.rs',
+      render: () => headScreen({ shown: onDetached.history, color: onDetached.color, pill: HeadTexts.detachedAt(onDetached.id), on: HeadTexts.detachedHead, light: true }),
+    },
+    {
+      id: 'head-branch-light',
+      title: 'Current branch — light theme',
+      about: 'Not built yet. The current branch in Perle.',
+      source: 'src/repo/mod.rs',
+      render: () => headScreen({ light: true }),
     },
     {
       id: 'ahead-behind',

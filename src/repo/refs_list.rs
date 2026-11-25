@@ -2,16 +2,17 @@ use std::{path::Path, rc::Rc, sync::Arc};
 
 use gix::ObjectId;
 use gpui_kit::{
-    AnyElement, App, ClickEvent, InteractiveElement as _, IntoElement, ParentElement as _, RenderOnce,
-    SharedString, StatefulInteractiveElement as _, Styled as _, UniformListScrollHandle, Window,
+    AnyElement, App, ClickEvent, Hsla, InteractiveElement as _, IntoElement, ParentElement as _,
+    RenderOnce, SharedString, StatefulInteractiveElement as _, Styled as _, UniformListScrollHandle,
+    Window,
     assets::IconName,
     component::{
-        ActiveTheme as _, Icon, Sizable as _, StyledExt as _, h_flex, menu::ContextMenuExt,
-        scroll::Scrollbar, tooltip::Tooltip,
+        ActiveTheme as _, Icon, Sizable as _, StyledExt as _, h_flex, list::ListItem,
+        menu::ContextMenuExt, scroll::Scrollbar, tooltip::Tooltip,
     },
     div,
     prelude::FluentBuilder as _,
-    uniform_list,
+    px, uniform_list,
 };
 
 use super::{
@@ -27,12 +28,14 @@ use super::{
 use crate::{
     git::{AheadBehind, History, RefKind, RefLabel, Rewrite, Stash, Worktree},
     ui::{
-        Folded, Handler, Look as _, Pick, Picked, PullMark, SectionHeader, checked_out_in, counted, handler,
-        is_double_click, list_row, pull_chip, thousands, tree_line,
+        Folded, Handler, Look as _, Palette, Pick, Picked, PullMark, SectionHeader, checked_out_in, counted,
+        handler, is_double_click, list_row, pull_chip, thousands, tree_line,
     },
 };
 
 const PANEL_TOOLTIP: &str = "Open the Worktrees panel to add and clean up worktrees";
+const CHECKED_OUT_TINT: f32 = 0.22;
+const CHECKED_OUT_EDGE: f32 = 3.;
 
 #[derive(Clone)]
 pub(crate) struct WorktreeSection {
@@ -227,6 +230,7 @@ fn listed(history: &History) -> Listed {
             0 | 1 => 0,
             listed => listed,
         },
+        detached: history.detached,
     }
 }
 
@@ -236,7 +240,10 @@ pub(crate) fn shown_keys(history: &History, folded: &Folded<RefGroup>) -> Vec<Re
         .filter_map(|row| match row {
             RefTreeRow::Ref { ix, .. } => Some(RefKey::of(&history.refs[*ix])),
             RefTreeRow::Stash { ix } => Some(RefKey::Stash(history.stashes[*ix].id)),
-            RefTreeRow::Section { .. } | RefTreeRow::Folder { .. } | RefTreeRow::Worktree { .. } => None,
+            RefTreeRow::Section { .. }
+            | RefTreeRow::Folder { .. }
+            | RefTreeRow::Worktree { .. }
+            | RefTreeRow::DetachedHead => None,
         })
         .collect()
 }
@@ -302,6 +309,7 @@ fn ref_tree_row(
         } => folder_row(*kind, path, *depth, *open, on_toggle.clone(), cx),
         &RefTreeRow::Ref { ix, depth } => ref_row(
             &history.refs[ix],
+            history,
             depth,
             shown,
             marks.get(&history.refs[ix].full_name()).copied(),
@@ -323,7 +331,37 @@ fn ref_tree_row(
             cx,
         ),
         &RefTreeRow::Worktree { ix } => worktree_row(&history.worktrees[ix], ix, worktrees.as_ref(), cx),
+        RefTreeRow::DetachedHead => detached_row(history, cx),
     }
+}
+
+fn head_color(history: &History, cx: &App) -> Hsla {
+    let palette = Palette::new(cx);
+    history
+        .head_row()
+        .map_or(palette.lane(0), |row| palette.lane(history.graph.rows[row].node_lane))
+}
+
+fn checked_out(row: ListItem, color: Hsla) -> ListItem {
+    row.relative().bg(color.opacity(CHECKED_OUT_TINT)).child(
+        div()
+            .absolute()
+            .left_0()
+            .top_0()
+            .bottom_0()
+            .w(px(CHECKED_OUT_EDGE))
+            .bg(color),
+    )
+}
+
+fn detached_row(history: &History, cx: &App) -> AnyElement {
+    let color = head_color(history, cx);
+    let label = history.head_label.clone().unwrap_or_default();
+    let icon = Icon::new(IconName::CircleDot).small().text_color(color);
+    checked_out(list_row("detached-head", false), color)
+        .px_3()
+        .child(tree_line(0, None, icon, &label, true, cx))
+        .into_any_element()
 }
 
 fn section_title(section: Section) -> &'static str {
@@ -407,6 +445,7 @@ fn pick_of(event: &ClickEvent, cx: &App) -> Pick {
 
 fn ref_row(
     label: &RefLabel,
+    history: &History,
     depth: usize,
     shown: &Shown,
     mark: Option<PullMark>,
@@ -422,10 +461,19 @@ fn ref_row(
     let on_check_out = on_check_out.filter(|_| label.can_be_checked_out());
     let double_clicked = label.clone();
     let key = RefKey::of(label);
+    let color = label.is_head.then(|| head_color(history, cx));
+    let icon = match color {
+        Some(color) => Icon::new(leaf_icon(label.kind)).small().text_color(color),
+        None => muted_icon(leaf_icon(label.kind), cx),
+    };
     let row = list_row(
         SharedString::from(format!("{:?}/{}", label.kind, label.name)),
         shown.lit(&key, label.target),
-    )
+    );
+    let row = match color {
+        Some(color) => checked_out(row, color),
+        None => row,
+    }
     .px_3()
     .child(
         h_flex()
@@ -436,7 +484,7 @@ fn ref_row(
                 tree_line(
                     depth,
                     None,
-                    muted_icon(leaf_icon(label.kind), cx),
+                    icon,
                     last_segment(&label.name),
                     label.is_head,
                     cx,
