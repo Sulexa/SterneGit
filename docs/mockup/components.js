@@ -1653,6 +1653,7 @@ function branchMenuItems({ label, current, mode = 'merge', pull, merge }) {
     pull && [item(pull === 'create' ? PullTexts.createItem : PullTexts.showItem(pull.number))],
     current && !checkedOut && [[Texts.merge(label.name, current), '', mergeModeItems(merge)], item(Texts.rebase(current, label.name))],
     [item(Texts.branchHere), item(taken ? WorktreeTexts.newFrom(label.name) : WorktreeTexts.newFor(remote ? remote.branch : label.name))],
+    [item(Texts.copyName)],
     !checkedOut && !elsewhere && [item(remote ? Texts.deleteRemoteBranch(remote.branch, remote.remote) : Texts.deleteBranch(label.name))],
   ].filter(Boolean);
   return groups.flatMap((group, ix) => (ix ? ['-', ...group] : group));

@@ -1,5 +1,5 @@
 use gpui_kit::{
-    App, Context, Entity, SharedString, Window,
+    App, ClipboardItem, Context, Entity, SharedString, Window,
     component::{
         WindowExt as _,
         button::ButtonVariant,
@@ -18,6 +18,8 @@ use crate::{
 const PULL_FAST_FORWARD_ONLY: &str = "Pull (fast-forward only)";
 const PUSH: &str = "Push";
 const BRANCH_HERE: &str = "Create branch here…";
+const COPY_NAME: &str = "Copy name";
+const NAME_COPIED: &str = "Branch name copied";
 const DELETE: &str = "Delete";
 const CREATE_PULL: &str = "Create pull request…";
 
@@ -32,6 +34,7 @@ pub(crate) enum BranchAction {
     NewWorktree,
     NewWorktreeFrom,
     OpenWorktree,
+    CopyName,
     Delete,
     ShowPull(u64),
     CreatePull,
@@ -172,6 +175,7 @@ impl BranchMenu {
                 .map(|action| actions(&[action])),
             another_branch_is_checked_out.then(|| vec![Entry::MergeModes, Entry::Action(Rebase)]),
             Some(actions(&[BranchHere, worktree])),
+            Some(actions(&[CopyName])),
             (!checked_out && !elsewhere).then(|| actions(&[Delete])),
         ]
         .into_iter()
@@ -212,6 +216,7 @@ impl BranchMenu {
             ),
             BranchAction::ShowPull(number) => format!("Show pull request #{number}"),
             BranchAction::CreatePull => CREATE_PULL.to_owned(),
+            BranchAction::CopyName => COPY_NAME.to_owned(),
             BranchAction::Delete => match label.on_remote() {
                 Some(RemoteBranch { remote, branch }) => format!("Delete {branch} from {remote}…"),
                 None => format!("Delete {}…", label.name),
@@ -223,13 +228,18 @@ impl BranchMenu {
         let on_action = self.on_action.clone();
         let chosen = (label.clone(), action);
         PopupMenuItem::new(self.text(action, label))
-            .disabled(self.writing || on_action.is_none())
+            .disabled((self.writing && action != BranchAction::CopyName) || on_action.is_none())
             .on_click(move |_, window, cx| {
                 if let Some(on_action) = &on_action {
                     on_action(&chosen, window, cx)
                 }
             })
     }
+}
+
+pub(crate) fn copy_branch_name(label: &RefLabel, window: &mut Window, cx: &mut App) {
+    cx.write_to_clipboard(ClipboardItem::new_string(label.name.to_string()));
+    window.push_notification(NAME_COPIED, cx);
 }
 
 pub(crate) struct DeleteQuestion {
@@ -386,6 +396,7 @@ mod tests {
                     "Rebase main onto feature/blame"
                 ],
                 vec!["Create branch here…", "New worktree for feature/blame…"],
+                vec!["Copy name"],
                 vec!["Delete feature/blame…"],
             ]
         );
@@ -414,7 +425,7 @@ mod tests {
         let main = label("main", RefKind::LocalBranch, true);
         assert_eq!(
             actions(&on_main(), &main),
-            [vec![Pull, Push], vec![BranchHere, NewWorktreeFrom]]
+            [vec![Pull, Push], vec![BranchHere, NewWorktreeFrom], vec![CopyName]]
         );
         let rebasing = BranchMenu::new(Some("main".into()), PullMode::Rebase, false);
         assert_eq!(rebasing.text(Pull, &main), "Pull (rebase)");
@@ -432,6 +443,7 @@ mod tests {
                     "Rebase main onto origin/feature/diff-view"
                 ],
                 vec!["Create branch here…", "New worktree for feature/diff-view…"],
+                vec!["Copy name"],
                 vec!["Delete feature/diff-view from origin…"],
             ]
         );
@@ -447,6 +459,7 @@ mod tests {
                 vec![CheckOut],
                 vec![Pull, Push],
                 vec![BranchHere, NewWorktree],
+                vec![CopyName],
                 vec![Delete]
             ]
         );
@@ -468,6 +481,7 @@ mod tests {
                     "Rebase main onto feature/diff-view"
                 ],
                 vec!["Create branch here…", "New worktree from feature/diff-view…"],
+                vec!["Copy name"],
             ]
         );
     }

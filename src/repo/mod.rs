@@ -99,7 +99,7 @@ use tag_menu::{
     confirm_delete_there as confirm_delete_tag_there, copy_tag_name,
 };
 use stash_menu::{StashAction, StashMenu};
-use branch_menu::{BranchAction, BranchMenu, PullOffers, confirm_delete};
+use branch_menu::{BranchAction, BranchMenu, PullOffers, confirm_delete, copy_branch_name};
 use changes_list::{ChangesList, SideFolds, SideScrolls};
 use discard_dialog::{Discarded, confirm_discard, confirm_discard_all};
 use commit_find::CommitFind;
@@ -1838,6 +1838,7 @@ impl RepoView {
                     cx.emit(RepoViewEvent::OpenWorktree(location))
                 }
             }
+            BranchAction::CopyName => copy_branch_name(&label, window, cx),
             BranchAction::Delete => confirm_delete(repository, label, window, cx),
             BranchAction::ShowPull(number) => self.select_pull(number, window, cx),
             BranchAction::CreatePull => self.create_pull(label, window, cx),
