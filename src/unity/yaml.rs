@@ -333,7 +333,7 @@ impl<'a> Block<'a> {
     }
 
     fn gather(&mut self, first: &'a str, threshold: usize) -> Cow<'a, str> {
-        let Some(mut found) = self.continuation(threshold) else {
+        let Some(mut found) = self.continuation(threshold, is_open_quote(first)) else {
             return Cow::Borrowed(first);
         };
         let mut fold = Fold { text: first.to_string(), blanks: 0, escapes: first.starts_with('"') };
@@ -342,19 +342,19 @@ impl<'a> Block<'a> {
             fold.blanks += at - self.next;
             fold.push(line);
             self.next = at + 1;
-            match self.continuation(threshold) {
+            match self.continuation(threshold, is_open_quote(&fold.text)) {
                 Some(more) => found = more,
                 None => return Cow::Owned(fold.text),
             }
         }
     }
 
-    fn continuation(&self, threshold: usize) -> Option<(usize, &'a str)> {
+    fn continuation(&self, threshold: usize, inside_quotes: bool) -> Option<(usize, &'a str)> {
         let mut at = self.next;
         loop {
             let (indent, content) = split_indent(self.lines.get(at).copied()?);
             if !content.is_empty() {
-                return (indent > threshold).then_some((at, content));
+                return (inside_quotes || indent > threshold).then_some((at, content));
             }
             at += 1;
         }
@@ -391,6 +391,10 @@ impl Fold {
         self.blanks = 0;
         self.text.push_str(line);
     }
+}
+
+fn is_open_quote(text: &str) -> bool {
+    matches!(text.as_bytes().first(), Some(b'\'' | b'"')) && quoted_end(text).is_none()
 }
 
 fn ends_in_escape(text: &str) -> bool {
@@ -790,6 +794,33 @@ mod tests {
                 "m_IsActive",
             ]
         );
+    }
+
+    #[test]
+    fn a_quoted_text_closing_at_the_start_of_a_line_keeps_the_entries_after_it() {
+        let table = only(
+            "
+            |--- !u!114 &11400000
+            |MonoBehaviour:
+            |  m_TableData:
+            |  - m_Id: 1
+            |    m_Localized: 'Jouer des cartes
+            |
+            |'
+            |    m_Metadata:
+            |      m_Items: []
+            |  - m_Id: 2
+            |    m_Localized: \"Merci
+            |\"
+            |  - m_Id: 3
+            |    m_Localized: Objectif de score
+            |  m_Name: Tutorial_fr
+            ",
+        );
+        let texts: Vec<_> = items_at(&table.body, &["m_TableData"]).iter().filter_map(|item| text_at(item, &["m_Localized"])).collect();
+        assert_eq!(texts, ["Jouer des cartes\n", "Merci ", "Objectif de score"]);
+        assert_eq!(items_at(&table.body, &["m_TableData"])[0].get("m_Metadata").map(|meta| meta.get("m_Items").is_some()), Some(true));
+        assert_eq!(text_at(&table.body, &["m_Name"]), Some("Tutorial_fr"));
     }
 
     #[test]
