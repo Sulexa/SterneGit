@@ -9,7 +9,7 @@ use sternegit_reader_sdk::{
 };
 
 use crate::{
-    animator, clip, convert, graph, hints::Scopes, layout, names::UnityKind, scene, sprites, value::Lookup,
+    animator, clip, convert, graph, hints, layout, names::UnityKind, scene, sprites, value::Lookup,
     yaml::{Document, plain},
 };
 
@@ -312,7 +312,6 @@ pub(crate) fn scopes_and_notes(text: &str, docs: &[Document], lookup: &Lookup) -
             })
         })
         .collect();
-    let hinter = Scopes::new(docs, docs, lookup);
     let notes = text
         .lines()
         .enumerate()
@@ -320,7 +319,7 @@ pub(crate) fn scopes_and_notes(text: &str, docs: &[Document], lookup: &Lookup) -
         .filter_map(|(ix, line)| {
             Some(Note {
                 line: ix as u32 + 1,
-                text: hinter.hint(line)?,
+                text: hints::hint(line, lookup)?,
             })
         })
         .collect();

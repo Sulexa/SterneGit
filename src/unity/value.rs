@@ -20,6 +20,15 @@ const FLAG_PREFIXES: [&str; 25] = [
     "flip", "invert", "lock", "keep", "ignore", "apply", "cast", "receive", "bypass", "preload", "force", "generate",
 ];
 
+const NOISE_FIELDS: [&str; 6] = [
+    "serializedVersion",
+    "m_RootOrder",
+    "m_LocalEulerAnglesHint",
+    "m_ConstrainProportionsScale",
+    "m_EditorClassIdentifier",
+    "m_ModificationsOrder",
+];
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Glyph {
     Object,
@@ -313,6 +322,12 @@ pub(crate) struct Field {
     pub(crate) label: String,
     pub(crate) depth: usize,
     pub(crate) value: Value,
+    pub(crate) noise: bool,
+}
+
+pub(crate) fn is_noise_path(path: &str) -> bool {
+    let last = path.rsplit(['.', ':']).next().unwrap_or(path);
+    NOISE_FIELDS.contains(&last) || NOISE_FIELDS.iter().any(|noise| path.starts_with(noise))
 }
 
 pub(crate) fn fields(body: &Node, skipped: &[&str], lookup: &Lookup) -> Vec<Field> {
@@ -333,6 +348,7 @@ fn flatten(key: &str, label: &str, path: &str, node: &Node, depth: usize, lookup
             label: label.to_owned(),
             depth,
             value,
+            noise: is_noise_path(path),
         });
         return;
     }
@@ -343,6 +359,7 @@ fn flatten(key: &str, label: &str, path: &str, node: &Node, depth: usize, lookup
                 label: label.to_owned(),
                 depth,
                 value: Value::Count(items.len()),
+                noise: is_noise_path(path),
             });
             let mut seen = std::collections::HashSet::new();
             let ids = identities(items);
@@ -366,6 +383,7 @@ fn flatten(key: &str, label: &str, path: &str, node: &Node, depth: usize, lookup
                 label: label.to_owned(),
                 depth,
                 value: Value::Text(String::new()),
+                noise: is_noise_path(path),
             });
             for (name, inner) in entries {
                 flatten(name, &nicify(name), &format!("{path}.{name}"), inner, depth + 1, lookup, out);

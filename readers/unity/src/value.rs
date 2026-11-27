@@ -7,11 +7,9 @@ use super::{
     names::{file_name, file_stem, nicify},
     yaml::Node,
 };
-use crate::size::file_size;
 
 const AXES: [&str; 4] = ["x", "y", "z", "w"];
 const CHANNELS: [&str; 4] = ["r", "g", "b", "a"];
-const SAME_NUMBER: f64 = 1e-5;
 const LONGEST_VALUE_SHOWN: usize = 300;
 const BUILT_IN_EXTRA: &str = "0000000000000000e000000000000000";
 const BUILT_IN_DEFAULT: &str = "0000000000000000f000000000000000";
@@ -70,102 +68,10 @@ pub(crate) enum Value {
     Count(usize),
 }
 
-impl Value {
-    pub(crate) fn same_as(&self, other: &Value) -> Sameness {
-        match (self, other) {
-            (Value::Number(a), Value::Number(b)) => numbers(a, b),
-            (Value::Vector(a), Value::Vector(b)) if a.len() == b.len() => a
-                .iter()
-                .zip(b)
-                .map(|((axis, x), (other_axis, y))| if axis == other_axis { numbers(x, y) } else { Sameness::Different })
-                .fold(Sameness::Equal, Sameness::and),
-            (Value::Color { rgba: a, .. }, Value::Color { rgba: b, .. }) => a
-                .iter()
-                .zip(b)
-                .map(|(x, y)| float_sameness(f64::from(*x), f64::from(*y)))
-                .fold(Sameness::Equal, Sameness::and),
-            (a, b) if a == b => Sameness::Equal,
-            _ => Sameness::Different,
-        }
-    }
-
-    pub(crate) fn text(&self) -> String {
-        match self {
-            Value::Text(text) | Value::Number(text) => text.clone(),
-            Value::Long { start, .. } => format!("{start}…"),
-            Value::Data { bytes, .. } => format!("{} of data", file_size(*bytes)),
-            Value::Flag(on) => if *on { "On" } else { "Off" }.to_owned(),
-            Value::Vector(axes) => axes
-                .iter()
-                .map(|(axis, value)| format!("{} {value}", axis.to_uppercase()))
-                .collect::<Vec<_>>()
-                .join("  "),
-            Value::Color { rgba, hdr } => {
-                let hex = hex_color(*rgba);
-                match hdr {
-                    Some(intensity) => format!("{hex} · Intensity {}", short_number(f64::from(*intensity))),
-                    None => hex,
-                }
-            }
-            Value::Reference(reference) => format!("{} ({})", reference.name, reference.kind),
-            Value::Nothing(kind) => format!("None ({kind})"),
-            Value::Count(count) => format!("{count} {}", if *count == 1 { "item" } else { "items" }),
-        }
-    }
-
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Sameness {
-    Equal,
-    Rounding,
-    Different,
-}
-
-impl Sameness {
-    fn and(self, other: Sameness) -> Sameness {
-        match (self, other) {
-            (Sameness::Different, _) | (_, Sameness::Different) => Sameness::Different,
-            (Sameness::Rounding, _) | (_, Sameness::Rounding) => Sameness::Rounding,
-            _ => Sameness::Equal,
-        }
-    }
-}
-
-fn numbers(a: &str, b: &str) -> Sameness {
-    if a == b {
-        return Sameness::Equal;
-    }
-    match (a.trim().parse::<f64>(), b.trim().parse::<f64>()) {
-        (Ok(x), Ok(y)) => float_sameness(x, y),
-        _ => Sameness::Different,
-    }
-}
-
-fn float_sameness(x: f64, y: f64) -> Sameness {
-    if x == y {
-        Sameness::Equal
-    } else if (x - y).abs() <= SAME_NUMBER * x.abs().max(y.abs()).max(1.) {
-        Sameness::Rounding
-    } else {
-        Sameness::Different
-    }
-}
-
 pub(crate) fn short_number(value: f64) -> String {
     let rounded = (value * 1000.).round() / 1000.;
     let text = format!("{rounded}");
     if text == "-0" { "0".to_owned() } else { text }
-}
-
-pub(crate) fn hex_color(rgba: [f32; 4]) -> String {
-    let byte = |channel: f32| (channel.clamp(0., 1.) * 255.).round() as u8;
-    let [r, g, b, a] = rgba.map(byte);
-    if a == 255 {
-        format!("#{r:02X}{g:02X}{b:02X}")
-    } else {
-        format!("#{r:02X}{g:02X}{b:02X}{a:02X}")
-    }
 }
 
 #[derive(Clone, Debug, Default)]
@@ -531,9 +437,47 @@ pub(crate) fn rotation_value(node: &Node) -> Option<Value> {
 }
 
 #[cfg(test)]
+pub(crate) fn hex_color(rgba: [f32; 4]) -> String {
+    let byte = |channel: f32| (channel.clamp(0., 1.) * 255.).round() as u8;
+    let [r, g, b, a] = rgba.map(byte);
+    if a == 255 {
+        format!("#{r:02X}{g:02X}{b:02X}")
+    } else {
+        format!("#{r:02X}{g:02X}{b:02X}{a:02X}")
+    }
+}
+
+#[cfg(test)]
+impl Value {
+    pub(crate) fn text(&self) -> String {
+        match self {
+            Value::Text(text) | Value::Number(text) => text.clone(),
+            Value::Long { start, .. } => format!("{start}…"),
+            Value::Data { bytes, .. } => format!("{bytes} B of data"),
+            Value::Flag(on) => if *on { "On" } else { "Off" }.to_owned(),
+            Value::Vector(axes) => axes
+                .iter()
+                .map(|(axis, value)| format!("{} {value}", axis.to_uppercase()))
+                .collect::<Vec<_>>()
+                .join("  "),
+            Value::Color { rgba, hdr } => {
+                let hex = hex_color(*rgba);
+                match hdr {
+                    Some(intensity) => format!("{hex} · Intensity {}", short_number(f64::from(*intensity))),
+                    None => hex,
+                }
+            }
+            Value::Reference(reference) => format!("{} ({})", reference.name, reference.kind),
+            Value::Nothing(kind) => format!("None ({kind})"),
+            Value::Count(count) => format!("{count} {}", if *count == 1 { "item" } else { "items" }),
+        }
+    }
+}
+
+#[cfg(test)]
 mod tests {
-    use super::{LONGEST_VALUE_SHOWN, Lookup, Sameness, Value, euler_degrees, fields, hex_color, is_flag_name};
-    use crate::{compare::State, yaml::Node};
+    use super::{Lookup, Value, euler_degrees, fields, hex_color, is_flag_name};
+    use crate::yaml::Node;
 
     fn map(entries: &[(&str, Node)]) -> Node {
         Node::Map(entries.iter().map(|(key, value)| ((*key).to_owned(), value.clone())).collect())
@@ -541,42 +485,6 @@ mod tests {
 
     fn text(value: &str) -> Node {
         Node::Scalar(value.to_owned())
-    }
-
-    #[test]
-    fn long_hex_reads_as_data_compared_whole_and_shown_by_size() {
-        let data = |changed_at: usize| {
-            let hex: String = (0..4_096).map(|at| if at == changed_at { 'a' } else { '0' }).collect();
-            fields(&map(&[("_typelessdata", text(&hex))]), &[], &Lookup::default()).remove(0).value
-        };
-        let before = data(3_000);
-        assert!(matches!(before, Value::Data { bytes: 2_048, .. }));
-        assert_eq!(before.text(), "2.0 KB of data");
-        assert_eq!(before.same_as(&data(3_000)), Sameness::Equal);
-        assert_eq!(before.same_as(&data(3_001)), Sameness::Different);
-    }
-
-    #[test]
-    fn long_text_keeps_its_start_and_counts_the_rest() {
-        let long = |last: char| {
-            let words = format!("{}{last}", "é".repeat(LONGEST_VALUE_SHOWN + 4_699));
-            fields(&map(&[("m_Description", text(&words))]), &[], &Lookup::default()).remove(0).value
-        };
-        let before = long('a');
-        let Value::Long { start, more, .. } = &before else { panic!("{before:?}") };
-        assert_eq!(start.chars().count(), LONGEST_VALUE_SHOWN);
-        assert_eq!(*more, 4_700);
-        assert_eq!(before.same_as(&long('b')), Sameness::Different);
-        let short = "0".repeat(LONGEST_VALUE_SHOWN);
-        assert!(matches!(fields(&map(&[("m_Seed", text(&short))]), &[], &Lookup::default()).remove(0).value, Value::Number(_)));
-    }
-
-    #[test]
-    fn floats_that_only_round_differently_are_not_a_real_change() {
-        let one = Value::Number("1".to_owned());
-        assert_eq!(one.same_as(&Value::Number("0.99999994".to_owned())), Sameness::Rounding);
-        assert_eq!(one.same_as(&Value::Number("1.4".to_owned())), Sameness::Different);
-        assert_eq!(one.same_as(&Value::Number("1".to_owned())), Sameness::Equal);
     }
 
     #[test]
@@ -604,29 +512,6 @@ mod tests {
         assert_eq!(found[0].value, Value::Count(2));
         assert_eq!(found[2].label, "Element 1");
         assert_eq!(found[2].depth, 1);
-    }
-
-    #[test]
-    fn list_entries_with_an_id_pair_by_id_so_removing_one_leaves_the_rest_unchanged() {
-        let entry = |id: &str, words: &str| map(&[("m_Id", text(id)), ("m_Localized", text(words))]);
-        let table = |entries: Vec<Node>| fields(&map(&[("m_TableData", Node::List(entries))]), &[], &Lookup::default());
-        let before = table(vec![entry("1", "Language"), entry("2", "Send data"), entry("3", "General")]);
-        let after = table(vec![entry("1", "Language"), entry("3", "General"), entry("4", "Privacy")]);
-        let (rows, _) = crate::compare::changed_rows(Some(&before), Some(&after), Default::default());
-        let changed: Vec<(String, State)> = rows
-            .iter()
-            .filter(|row| row.depth == 2)
-            .map(|row| (row.before.as_ref().or(row.after.as_ref()).unwrap().text(), row.state))
-            .collect();
-        assert_eq!(
-            changed,
-            [
-                ("2".to_owned(), State::Removed),
-                ("Send data".to_owned(), State::Removed),
-                ("4".to_owned(), State::Added),
-                ("Privacy".to_owned(), State::Added),
-            ]
-        );
     }
 
     #[test]

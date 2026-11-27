@@ -1,9 +1,8 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use serde_json::Value as Json;
 
 use super::{
-    compare::{Options, Row, State, changed_rows},
     names::{nicify, short_type},
     value::{Field, Value, short_number},
     yaml::Document,
@@ -71,7 +70,6 @@ pub(crate) struct Port {
     pub(crate) label: String,
     pub(crate) kind: PortType,
     pub(crate) literal: Option<String>,
-    pub(crate) was: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -81,10 +79,8 @@ pub(crate) struct GraphNode {
     pub(crate) kind: NodeKind,
     pub(crate) at: (f64, f64),
     pub(crate) size: (f64, f64),
-    pub(crate) state: State,
     pub(crate) inputs: Vec<Port>,
     pub(crate) outputs: Vec<Port>,
-    pub(crate) was_at: Option<(f64, f64)>,
     pub(crate) variable: Option<String>,
 }
 
@@ -93,15 +89,6 @@ impl GraphNode {
         self.inputs.len().max(self.outputs.len())
     }
 
-    pub(crate) fn input_y(&self, key: &str) -> f64 {
-        let row = self.inputs.iter().position(|port| port.key == key).unwrap_or(0);
-        self.at.1 + UNIT_HEADER + (row as f64 + 0.5) * PORT_ROW
-    }
-
-    pub(crate) fn output_y(&self, key: &str) -> f64 {
-        let row = self.outputs.iter().position(|port| port.key == key).unwrap_or(0);
-        self.at.1 + UNIT_HEADER + (row as f64 + 0.5) * PORT_ROW
-    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -111,25 +98,7 @@ pub(crate) struct GraphEdge {
     pub(crate) to: String,
     pub(crate) from_port: Option<String>,
     pub(crate) to_port: Option<String>,
-    pub(crate) state: State,
     pub(crate) kind: PortType,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum ChangeTarget {
-    Node(usize),
-    Edge(usize),
-    Parameter(usize),
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub(crate) struct GraphParameter {
-    pub(crate) name: String,
-    pub(crate) kind: String,
-    pub(crate) value: Option<String>,
-    pub(crate) was: Option<String>,
-    pub(crate) was_kind: Option<String>,
-    pub(crate) state: State,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -138,104 +107,6 @@ pub(crate) struct Declared {
     pub(crate) kind: String,
     pub(crate) value: String,
     pub(crate) members: Vec<Field>,
-}
-
-#[derive(Clone, Copy, Debug)]
-pub(crate) struct ParameterLook {
-    pub(crate) value_label: &'static str,
-    pub(crate) value_shown: bool,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub(crate) struct GraphChange {
-    pub(crate) state: State,
-    pub(crate) kind: &'static str,
-    pub(crate) name: String,
-    pub(crate) detail: String,
-    pub(crate) target: ChangeTarget,
-    pub(crate) rows: Vec<Row>,
-}
-
-#[derive(Clone, Debug, Default, PartialEq)]
-pub(crate) struct GraphComparison {
-    pub(crate) nodes: Vec<GraphNode>,
-    pub(crate) edges: Vec<GraphEdge>,
-    pub(crate) parameters: Vec<GraphParameter>,
-    pub(crate) parameters_title: &'static str,
-    pub(crate) changes: Vec<GraphChange>,
-    pub(crate) layers: Vec<String>,
-    pub(crate) has_ports: bool,
-    pub(crate) hidden: usize,
-}
-
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub(crate) enum Shown {
-    Before,
-    #[default]
-    Both,
-    After,
-}
-
-impl Shown {
-    pub(crate) fn hides(self, state: State) -> bool {
-        matches!((self, state), (Shown::Before, State::Added) | (Shown::After, State::Removed))
-    }
-}
-
-impl GraphComparison {
-    pub(crate) fn as_shown(&self, shown: Shown) -> GraphComparison {
-        let mut drawn = self.clone();
-        if shown != Shown::Before {
-            return drawn;
-        }
-        for node in &mut drawn.nodes {
-            if let Some(at) = node.was_at {
-                node.at = at;
-            }
-            for port in &mut node.inputs {
-                if let Some(was) = &port.was {
-                    port.literal = (!was.is_empty()).then(|| was.clone());
-                }
-            }
-        }
-        for parameter in &mut drawn.parameters {
-            if let Some(was) = &parameter.was {
-                parameter.value = (!was.is_empty()).then(|| was.clone());
-            }
-            if let Some(kind) = &parameter.was_kind {
-                parameter.kind = kind.clone();
-            }
-        }
-        drawn
-    }
-
-    pub(crate) fn users_of(&self, parameter: usize) -> impl Iterator<Item = usize> + '_ {
-        let name = self.parameters.get(parameter).map(|parameter| parameter.name.as_str());
-        self.nodes
-            .iter()
-            .enumerate()
-            .filter(move |(_, node)| name.is_some() && node.variable.as_deref() == name)
-            .map(|(ix, _)| ix)
-    }
-}
-
-fn declared_fields(declared: &Declared, look: ParameterLook) -> Vec<Field> {
-    let mut fields = vec![Field {
-        path: "type".to_owned(),
-        label: "Type".to_owned(),
-        depth: 0,
-        value: Value::Text(declared.kind.clone()),
-    }];
-    if !declared.value.is_empty() || !declared.members.is_empty() {
-        fields.push(Field {
-            path: "value".to_owned(),
-            label: look.value_label.to_owned(),
-            depth: 0,
-            value: Value::Text(declared.value.clone()),
-        });
-    }
-    fields.extend(declared.members.iter().cloned());
-    fields
 }
 
 fn member_fields(value: &Json, path: &str, depth: usize) -> Vec<Field> {
@@ -266,77 +137,6 @@ fn member_fields(value: &Json, path: &str, depth: usize) -> Vec<Field> {
             .chain(nested)
         })
         .collect()
-}
-
-fn declared_text(declared: &Declared) -> String {
-    format!("{} {}", declared.kind, declared.value).trim().to_owned()
-}
-
-pub(crate) fn compare_parameters(
-    old: &[Declared],
-    new: &[Declared],
-    kind: &'static str,
-    look: ParameterLook,
-    options: Options,
-) -> (Vec<GraphParameter>, Vec<GraphChange>) {
-    let mut parameters = Vec::new();
-    let mut changes = Vec::new();
-    let shown_value = |declared: &Declared| (look.value_shown && !declared.value.is_empty()).then(|| declared.value.clone());
-    for declared in new {
-        let previous = old.iter().find(|previous| previous.name == declared.name);
-        let after = declared_fields(declared, look);
-        let before = previous.map(|previous| declared_fields(previous, look));
-        let (rows, _) = changed_rows(before.as_deref(), Some(&after), options);
-        let state = match previous {
-            None => State::Added,
-            Some(previous) if previous == declared => State::Same,
-            Some(_) => State::Changed,
-        };
-        let detail = match state {
-            State::Changed => rows.iter().filter(|row| row.state != State::Same).map(|row| row.label.clone()).collect::<Vec<_>>().join(", "),
-            _ => declared_text(declared),
-        };
-        if state != State::Same {
-            changes.push(GraphChange {
-                state,
-                kind,
-                name: declared.name.clone(),
-                detail,
-                target: ChangeTarget::Parameter(parameters.len()),
-                rows,
-            });
-        }
-        parameters.push(GraphParameter {
-            name: declared.name.clone(),
-            kind: declared.kind.clone(),
-            value: shown_value(declared),
-            was: previous.filter(|previous| look.value_shown && previous.value != declared.value).map(|previous| previous.value.clone()),
-            was_kind: previous.filter(|previous| previous.kind != declared.kind).map(|previous| previous.kind.clone()),
-            state,
-        });
-    }
-    for declared in old {
-        if !new.iter().any(|kept| kept.name == declared.name) {
-            let (rows, _) = changed_rows(Some(&declared_fields(declared, look)), None, options);
-            changes.push(GraphChange {
-                state: State::Removed,
-                kind,
-                name: declared.name.clone(),
-                detail: declared_text(declared),
-                target: ChangeTarget::Parameter(parameters.len()),
-                rows,
-            });
-            parameters.push(GraphParameter {
-                name: declared.name.clone(),
-                kind: declared.kind.clone(),
-                value: shown_value(declared),
-                was: None,
-                was_kind: None,
-                state: State::Removed,
-            });
-        }
-    }
-    (parameters, changes)
 }
 
 pub(crate) fn graph_json(documents: &[Document]) -> Option<Json> {
@@ -473,14 +273,12 @@ fn known_ports(element: &Json) -> (Vec<Port>, Vec<Port>) {
         label: port_label(key),
         kind: PortType::Flow,
         literal: None,
-        was: None,
     };
     let value = |key: &str, kind: PortType| Port {
         key: key.to_owned(),
         label: port_label(key),
         kind,
         literal: None,
-        was: None,
     };
     if EVENTS.contains(&short) {
         return (Vec::new(), vec![flow("trigger")]);
@@ -540,7 +338,6 @@ fn read_side(json: &Json) -> Side {
             to,
             from_port,
             to_port,
-            state: State::Same,
             kind: if flow { PortType::Flow } else { PortType::Object },
         });
     }
@@ -586,7 +383,6 @@ fn read_side(json: &Json) -> Side {
                         label: port_label(port),
                         kind: port_type(Some(value)),
                         literal: literal(value, port),
-                        was: None,
                     }),
                 }
             }
@@ -601,7 +397,6 @@ fn read_side(json: &Json) -> Side {
                     label: port_label(port),
                     kind: edge.kind,
                     literal: None,
-                    was: None,
                 });
             }
             if edge.from == key
@@ -613,7 +408,6 @@ fn read_side(json: &Json) -> Side {
                     label: port_label(port),
                     kind: edge.kind,
                     literal: None,
-                    was: None,
                 });
             }
         }
@@ -641,10 +435,8 @@ fn read_side(json: &Json) -> Side {
                 kind,
                 at,
                 size: (0., 0.),
-                state: State::Same,
                 inputs,
                 outputs,
-                was_at: None,
                 variable: graph_variable(element),
             },
         ));
@@ -741,141 +533,6 @@ fn node_fields(node: &GraphNode, edges: &[GraphEdge], nodes: &HashMap<&str, &Gra
         });
     }
     fields
-}
-
-pub(crate) fn compare_script_graphs(before: Option<&Json>, after: Option<&Json>, options: Options) -> GraphComparison {
-    let empty = Json::Null;
-    let old = read_side(before.unwrap_or(&empty));
-    let new = read_side(after.unwrap_or(&empty));
-    let old_nodes: HashMap<&str, &GraphNode> = old.units.iter().map(|(key, node)| (key.as_str(), node)).collect();
-    let new_nodes: HashMap<&str, &GraphNode> = new.units.iter().map(|(key, node)| (key.as_str(), node)).collect();
-    let mut nodes = Vec::new();
-    let mut changes = Vec::new();
-    let mut hidden = 0;
-    for (key, node) in &new.units {
-        let previous = old_nodes.get(key.as_str()).copied();
-        let mut shown = node.clone();
-        let after_fields = node_fields(node, &new.edges, &new_nodes);
-        let before_fields = previous.map(|previous| node_fields(previous, &old.edges, &old_nodes));
-        let (rows, noise) = changed_rows(before_fields.as_deref(), Some(&after_fields), options);
-        hidden += noise;
-        shown.state = match previous {
-            None => State::Added,
-            Some(_) if rows.iter().any(|row| row.state != State::Same) => State::Changed,
-            Some(_) => State::Same,
-        };
-        if let Some(previous) = previous {
-            if previous.at != node.at {
-                shown.was_at = Some(previous.at);
-            }
-            for port in &mut shown.inputs {
-                let was = previous.inputs.iter().find(|old| old.key == port.key).and_then(|old| old.literal.clone());
-                if was != port.literal {
-                    port.was = Some(was.unwrap_or_default());
-                }
-            }
-        }
-        if shown.state != State::Same {
-            let detail = rows
-                .iter()
-                .filter(|row| row.state != State::Same && row.label != "Node")
-                .map(|row| row.label.clone())
-                .collect::<Vec<_>>()
-                .join(", ");
-            changes.push(GraphChange {
-                state: shown.state,
-                kind: "Node",
-                name: shown.title.clone(),
-                detail,
-                target: ChangeTarget::Node(nodes.len()),
-                rows,
-            });
-        }
-        nodes.push(shown);
-    }
-    for (key, node) in &old.units {
-        if !new_nodes.contains_key(key.as_str()) {
-            let mut shown = node.clone();
-            shown.state = State::Removed;
-            let (rows, _) = changed_rows(Some(&node_fields(node, &old.edges, &old_nodes)), None, options);
-            changes.push(GraphChange {
-                state: State::Removed,
-                kind: "Node",
-                name: shown.title.clone(),
-                detail: shown.inputs.iter().find_map(|port| port.literal.clone()).unwrap_or_default(),
-                target: ChangeTarget::Node(nodes.len()),
-                rows,
-            });
-            nodes.push(shown);
-        }
-    }
-    let titles: HashMap<String, String> = nodes.iter().map(|node| (node.id.clone(), node.title.clone())).collect();
-    let mut edges = Vec::new();
-    let old_edges: HashSet<&str> = old.edges.iter().map(|edge| edge.id.as_str()).collect();
-    let new_edges: HashSet<&str> = new.edges.iter().map(|edge| edge.id.as_str()).collect();
-    let describe = |edge: &GraphEdge| {
-        let from = titles.get(&edge.from).cloned().unwrap_or_default();
-        let to = edge
-            .to_port
-            .as_deref()
-            .map(port_label)
-            .filter(|label| !label.is_empty())
-            .unwrap_or_else(|| titles.get(&edge.to).cloned().unwrap_or_default());
-        format!("{from} → {to}")
-    };
-    for edge in &new.edges {
-        let mut shown = edge.clone();
-        if !old_edges.contains(edge.id.as_str()) {
-            shown.state = State::Added;
-            changes.push(edge_change(&shown, describe(&shown), edges.len()));
-        }
-        edges.push(shown);
-    }
-    for edge in &old.edges {
-        if !new_edges.contains(edge.id.as_str()) {
-            let mut shown = edge.clone();
-            shown.state = State::Removed;
-            changes.push(edge_change(&shown, describe(&shown), edges.len()));
-            edges.push(shown);
-        }
-    }
-    let look = ParameterLook {
-        value_label: "Value",
-        value_shown: true,
-    };
-    let (parameters, mut variable_changes) = compare_parameters(&old.variables, &new.variables, "Variable", look, options);
-    variable_changes.append(&mut changes);
-    let states_graph = before.or(after).is_some_and(is_state_graph);
-    GraphComparison {
-        nodes,
-        edges,
-        parameters,
-        parameters_title: "Graph variables",
-        changes: variable_changes,
-        layers: Vec::new(),
-        has_ports: !states_graph,
-        hidden,
-    }
-}
-
-fn edge_change(edge: &GraphEdge, name: String, at: usize) -> GraphChange {
-    GraphChange {
-        state: edge.state,
-        kind: if edge.kind == PortType::Flow && edge.from_port.is_none() { "Transition" } else { "Connection" },
-        name,
-        detail: match edge.kind {
-            PortType::Flow => "Flow",
-            PortType::Float => "Float",
-            PortType::Integer => "Integer",
-            PortType::Bool => "Boolean",
-            PortType::Vector => "Vector",
-            PortType::Text => "String",
-            PortType::Object => "Value",
-        }
-        .to_owned(),
-        target: ChangeTarget::Edge(at),
-        rows: Vec::new(),
-    }
 }
 
 pub(crate) type ScriptSide = (Vec<(String, GraphNode, Vec<Field>)>, Vec<GraphEdge>, Vec<Declared>);

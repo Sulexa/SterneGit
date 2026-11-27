@@ -1,13 +1,8 @@
-use std::collections::HashMap;
-
 use super::{
-    compare::State,
     names::nicify,
     value::{Lookup, Value, short_number},
     yaml::{Document, Node},
 };
-
-const SAME: f64 = 1e-5;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct CurveKey {
@@ -31,20 +26,6 @@ pub(crate) enum Keys {
 }
 
 impl Keys {
-    fn same_as(&self, other: &Keys) -> bool {
-        match (self, other) {
-            (Keys::Curve(a), Keys::Curve(b)) => {
-                a.len() == b.len()
-                    && a.iter().zip(b).all(|(x, y)| {
-                        close(x.time, y.time) && close(x.value, y.value) && close(x.in_slope, y.in_slope) && close(x.out_slope, y.out_slope)
-                    })
-            }
-            (Keys::Objects(a), Keys::Objects(b)) => {
-                a.len() == b.len() && a.iter().zip(b).all(|(x, y)| close(x.time, y.time) && x.value == y.value)
-            }
-            _ => false,
-        }
-    }
 
     pub(crate) fn last_time(&self) -> f64 {
         match self {
@@ -53,19 +34,6 @@ impl Keys {
         }
     }
 
-    pub(crate) fn range(&self) -> Option<(f64, f64)> {
-        let Keys::Curve(keys) = self else {
-            return None;
-        };
-        let values = keys.iter().map(|key| key.value).filter(|value| value.is_finite());
-        let low = values.clone().fold(f64::INFINITY, f64::min);
-        let high = values.fold(f64::NEG_INFINITY, f64::max);
-        low.is_finite().then_some((low, high))
-    }
-}
-
-fn close(a: f64, b: f64) -> bool {
-    a == b || (a - b).abs() <= SAME * a.abs().max(b.abs()).max(1.) || a.is_infinite() && b.is_infinite() && a.signum() == b.signum()
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -303,112 +271,10 @@ pub(crate) fn attribute_label(attribute: &str) -> String {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub(crate) struct TrackChange {
-    pub(crate) group: String,
-    pub(crate) name: String,
-    pub(crate) state: State,
-    pub(crate) before: Option<Keys>,
-    pub(crate) after: Option<Keys>,
-}
-
-#[derive(Clone, Debug, Default, PartialEq)]
-pub(crate) struct ClipComparison {
-    pub(crate) tracks: Vec<TrackChange>,
-    pub(crate) events: [Vec<(f64, String)>; 2],
-    pub(crate) events_changed: bool,
-    pub(crate) lengths: [f64; 2],
-    pub(crate) sample_rate: f64,
-    pub(crate) settings: [Option<Vec<(String, String)>>; 2],
-    pub(crate) changes: usize,
-}
-
-pub(crate) fn compare_clips(before: Option<&Clip>, after: Option<&Clip>, unchanged: bool) -> ClipComparison {
-    let empty = Clip::default();
-    let old = before.unwrap_or(&empty);
-    let new = after.unwrap_or(&empty);
-    let old_tracks: HashMap<&str, &Track> = old.tracks.iter().map(|track| (track.id.as_str(), track)).collect();
-    let mut tracks = Vec::new();
-    let mut seen = std::collections::HashSet::new();
-    for track in &new.tracks {
-        seen.insert(track.id.as_str());
-        let previous = old_tracks.get(track.id.as_str()).copied();
-        let state = match previous {
-            None => State::Added,
-            Some(previous) if previous.keys.same_as(&track.keys) => State::Same,
-            Some(_) => State::Changed,
-        };
-        tracks.push(TrackChange {
-            group: track.group.clone(),
-            name: track.name.clone(),
-            state,
-            before: previous.map(|previous| previous.keys.clone()),
-            after: Some(track.keys.clone()),
-        });
-    }
-    for track in &old.tracks {
-        if !seen.contains(track.id.as_str()) {
-            tracks.push(TrackChange {
-                group: track.group.clone(),
-                name: track.name.clone(),
-                state: State::Removed,
-                before: Some(track.keys.clone()),
-                after: None,
-            });
-        }
-    }
-    let changed_tracks = tracks.iter().filter(|track| track.state != State::Same).count();
-    if !unchanged && changed_tracks > 0 {
-        tracks.retain(|track| track.state != State::Same);
-    }
-    let events_changed = old.events.len() != new.events.len()
-        || old.events.iter().zip(&new.events).any(|(a, b)| !close(a.0, b.0) || a.1 != b.1);
-    let settings_changed = old.settings != new.settings && before.is_some() && after.is_some();
-    ClipComparison {
-        tracks,
-        events: [old.events.clone(), new.events.clone()],
-        events_changed,
-        lengths: [before.map_or(0., |clip| clip.length), after.map_or(0., |clip| clip.length)],
-        sample_rate: after.or(before).map_or(60., |clip| clip.sample_rate),
-        settings: [before.map(|clip| clip.settings.clone()), after.map(|clip| clip.settings.clone())],
-        changes: changed_tracks + usize::from(events_changed) + usize::from(settings_changed && changed_tracks == 0),
-    }
-}
-
-pub(crate) fn hermite(from: &CurveKey, to: &CurveKey, time: f64) -> f64 {
-    if !from.out_slope.is_finite() || !to.in_slope.is_finite() {
-        return from.value;
-    }
-    let span = to.time - from.time;
-    if span <= 0. {
-        return to.value;
-    }
-    let t = ((time - from.time) / span).clamp(0., 1.);
-    let (t2, t3) = (t * t, t * t * t);
-    let h00 = 2. * t3 - 3. * t2 + 1.;
-    let h10 = t3 - 2. * t2 + t;
-    let h01 = -2. * t3 + 3. * t2;
-    let h11 = t3 - t2;
-    h00 * from.value + h10 * span * from.out_slope + h01 * to.value + h11 * span * to.in_slope
-}
-
-pub(crate) fn value_at(keys: &[CurveKey], time: f64) -> Option<f64> {
-    let first = keys.first()?;
-    if time <= first.time {
-        return Some(first.value);
-    }
-    for pair in keys.windows(2) {
-        if time <= pair[1].time {
-            return Some(hermite(&pair[0], &pair[1], time));
-        }
-    }
-    keys.last().map(|key| key.value)
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{CurveKey, attribute_label, clock, compare_clips, read_clip, value_at};
-    use crate::{compare::State, value::Lookup, yaml::documents};
+    use super::{attribute_label, clock, read_clip};
+    use crate::{value::Lookup, yaml::documents};
 
     fn clip(peak: &str, stop: &str, with_alpha: bool) -> String {
         let alpha = if with_alpha {
@@ -465,27 +331,10 @@ AnimationClip:
     }
 
     #[test]
-    fn a_changed_curve_and_an_added_one_are_both_listed() {
-        let before = read_clip(&documents(&clip("0.8", "0.5", false)), &Lookup::default());
-        let after = read_clip(&documents(&clip("1.1", "0.5833333", true)), &Lookup::default());
-        let comparison = compare_clips(before.as_ref(), after.as_ref(), false);
-        let tracks: Vec<(&str, State)> = comparison.tracks.iter().map(|track| (track.name.as_str(), track.state)).collect();
-        assert_eq!(tracks, vec![("Position.y", State::Changed), ("Color.a", State::Added)]);
-        assert_eq!(comparison.tracks[0].group, "Root : Transform");
-        assert!(!comparison.events_changed);
-        assert_eq!(comparison.changes, 2);
-    }
-
-    #[test]
-    fn the_curve_passes_through_its_keys_and_eases_between_them() {
-        let keys = [
-            CurveKey { time: 0., value: 0., in_slope: 0., out_slope: 0. },
-            CurveKey { time: 1., value: 1., in_slope: 0., out_slope: 0. },
-        ];
-        assert_eq!(value_at(&keys, 0.), Some(0.));
-        assert_eq!(value_at(&keys, 1.), Some(1.));
-        assert!((value_at(&keys, 0.5).unwrap_or(0.) - 0.5).abs() < 1e-9);
-        assert!(value_at(&keys, 0.25).unwrap_or(1.) < 0.25);
+    fn each_curve_reads_as_a_track_named_after_its_object_and_property() {
+        let after = read_clip(&documents(&clip("1.1", "0.5833333", true)), &Lookup::default()).expect("a clip");
+        let tracks: Vec<(&str, &str)> = after.tracks.iter().map(|track| (track.group.as_str(), track.name.as_str())).collect();
+        assert_eq!(tracks, vec![("Root : Transform", "Position.y"), ("Root : Sprite Renderer", "Color.a")]);
     }
 
     #[test]

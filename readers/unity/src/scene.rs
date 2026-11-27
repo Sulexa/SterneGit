@@ -168,37 +168,6 @@ pub(crate) fn object_names(documents: &[Document], lookup_assets: &HashMap<Strin
     names
 }
 
-pub(crate) fn guids_in(documents: &[Document]) -> Vec<String> {
-    let mut found = HashSet::new();
-    for document in documents {
-        collect_guids(&document.body, &mut found);
-    }
-    let mut guids: Vec<String> = found.into_iter().collect();
-    guids.sort();
-    guids
-}
-
-pub(crate) fn guids_in_node(node: &Node, found: &mut HashSet<String>) {
-    collect_guids(node, found);
-}
-
-fn collect_guids(node: &Node, found: &mut HashSet<String>) {
-    match node {
-        Node::Map(entries) => {
-            for (key, value) in entries {
-                match (key.as_str(), value) {
-                    ("guid", Node::Scalar(guid)) if guid.len() == 32 => {
-                        found.insert(guid.clone());
-                    }
-                    _ => collect_guids(value, found),
-                }
-            }
-        }
-        Node::List(items) => items.iter().for_each(|item| collect_guids(item, found)),
-        Node::Scalar(_) => {}
-    }
-}
-
 pub(crate) fn source_prefabs(documents: &[Document]) -> Vec<String> {
     documents
         .iter()

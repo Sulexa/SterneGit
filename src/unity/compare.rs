@@ -5,14 +5,6 @@ use super::{
     value::{Field, Sameness, Value},
 };
 
-const NOISE_FIELDS: [&str; 6] = [
-    "serializedVersion",
-    "m_RootOrder",
-    "m_LocalEulerAnglesHint",
-    "m_ConstrainProportionsScale",
-    "m_EditorClassIdentifier",
-    "m_ModificationsOrder",
-];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct Options {
@@ -341,10 +333,6 @@ pub(crate) fn changed_rows(before: Option<&[Field]>, after: Option<&[Field]>, op
     (if options.unchanged || !both { rows } else { only_changes(rows) }, hidden)
 }
 
-fn is_noise_path(path: &str) -> bool {
-    let last = path.rsplit(['.', ':']).next().unwrap_or(path);
-    NOISE_FIELDS.contains(&last) || NOISE_FIELDS.iter().any(|noise| path.starts_with(noise))
-}
 
 fn rows(before: &[Field], after: &[Field], options: Options, hidden: &mut usize) -> Vec<Row> {
     let old: HashMap<&str, &Field> = before.iter().map(|field| (field.path.as_str(), field)).collect();
@@ -369,7 +357,7 @@ fn rows(before: &[Field], after: &[Field], options: Options, hidden: &mut usize)
                     *hidden += 1;
                     State::Same
                 }
-                _ if options.hide_noise && is_noise_path(path) => {
+                _ if options.hide_noise && shown.noise => {
                     *hidden += 1;
                     State::Same
                 }
@@ -377,7 +365,7 @@ fn rows(before: &[Field], after: &[Field], options: Options, hidden: &mut usize)
             },
             (None, None) => continue,
         };
-        if options.hide_noise && is_noise_path(path) && matches!(state, State::Added | State::Removed) && old.is_some() != new.is_some() {
+        if options.hide_noise && shown.noise && matches!(state, State::Added | State::Removed) && old.is_some() != new.is_some() {
             *hidden += 1;
             continue;
         }

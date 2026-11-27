@@ -194,6 +194,7 @@ fn declared_fields(declared: &Declared, look: ParameterLook) -> Vec<Field> {
         label: "Type".to_owned(),
         depth: 0,
         value: Value::Text(declared.kind.clone()),
+        noise: false,
     }];
     if !declared.value.is_empty() || !declared.members.is_empty() {
         fields.push(Field {
@@ -201,6 +202,7 @@ fn declared_fields(declared: &Declared, look: ParameterLook) -> Vec<Field> {
             label: look.value_label.to_owned(),
             depth: 0,
             value: Value::Text(declared.value.clone()),
+            noise: false,
         });
     }
     fields.extend(declared.members.iter().cloned());

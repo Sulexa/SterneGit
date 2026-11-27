@@ -146,9 +146,6 @@ pub(crate) struct Layout {
 }
 
 impl Layout {
-    pub(crate) fn spot(&self, key: Key) -> Option<&Spot> {
-        self.spots.iter().find(|spot| spot.key == key)
-    }
 }
 
 pub(crate) fn view_for(documents: &[Document]) -> View {
@@ -784,6 +781,13 @@ pub(crate) fn layout(documents: &[Document], model: &Model, library: &HashMap<St
         });
     }
     Layout { spots }
+}
+
+#[cfg(test)]
+impl Layout {
+    fn spot(&self, key: Key) -> Option<&Spot> {
+        self.spots.iter().find(|spot| spot.key == key)
+    }
 }
 
 #[cfg(test)]

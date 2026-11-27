@@ -1,8 +1,5 @@
-#![allow(dead_code)]
-
 mod animator;
 mod clip;
-mod compare;
 mod convert;
 mod graph;
 mod hints;
@@ -10,7 +7,6 @@ mod layout;
 mod lookup;
 mod names;
 mod scene;
-mod size;
 mod sprites;
 mod ui;
 mod value;

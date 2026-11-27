@@ -1,8 +1,7 @@
 use std::collections::HashMap;
 
 use super::{
-    compare::{Options, State, changed_rows},
-    graph::{ChangeTarget, Declared, GraphChange, GraphComparison, GraphEdge, GraphNode, NodeKind, ParameterLook, PortType, compare_parameters},
+    graph::{Declared, GraphEdge, GraphNode, NodeKind, PortType},
     value::{Field, Lookup, Value, fields, short_number},
     yaml::{Document, Node},
 };
@@ -167,10 +166,8 @@ impl<'a> Machine<'a> {
                     kind,
                     at,
                     size: STATE_SIZE,
-                    state: State::Same,
                     inputs: Vec::new(),
                     outputs: Vec::new(),
-                    was_at: None,
                     variable: None,
                 },
                 Vec::new(),
@@ -195,10 +192,8 @@ impl<'a> Machine<'a> {
                     kind: if Some(state_id) == default { NodeKind::DefaultState } else { NodeKind::State },
                     at: position(child.get("m_Position")),
                     size: STATE_SIZE,
-                    state: State::Same,
                     inputs: Vec::new(),
                     outputs: Vec::new(),
-                    was_at: None,
                     variable: None,
                 },
                 fields(&state.body, &STATE_FIELDS_SKIPPED, self.lookup),
@@ -225,10 +220,8 @@ impl<'a> Machine<'a> {
                     kind: NodeKind::Machine,
                     at: position(child.get("m_Position")),
                     size: STATE_SIZE,
-                    state: State::Same,
                     inputs: Vec::new(),
                     outputs: Vec::new(),
-                    was_at: None,
                     variable: None,
                 },
                 Vec::new(),
@@ -248,7 +241,6 @@ impl<'a> Machine<'a> {
                     to: default.to_string(),
                     from_port: None,
                     to_port: None,
-                    state: State::Same,
                     kind: PortType::Flow,
                 },
                 Vec::new(),
@@ -280,174 +272,11 @@ impl<'a> Machine<'a> {
                 to,
                 from_port: None,
                 to_port: None,
-                state: State::Same,
                 kind: PortType::Flow,
             },
             self.transition_fields(body),
         ));
     }
-}
-
-pub(crate) fn compare_controllers(
-    before: Option<&[Document]>,
-    after: Option<&[Document]>,
-    lookup: &Lookup,
-    layer: usize,
-    options: Options,
-) -> GraphComparison {
-    let none: [Document; 0] = [];
-    let old_docs = before.unwrap_or(&none);
-    let new_docs = after.unwrap_or(&none);
-    let old = Machine::new(old_docs, lookup).draw(layer);
-    let new = Machine::new(new_docs, lookup).draw(layer);
-    let mut hidden = 0;
-    let mut nodes = Vec::new();
-    let mut changes = Vec::new();
-    let old_nodes: HashMap<&str, &(GraphNode, Vec<Field>)> = old.nodes.iter().map(|entry| (entry.0.id.as_str(), entry)).collect();
-    for (node, node_fields) in &new.nodes {
-        let previous = old_nodes.get(node.id.as_str());
-        let mut shown = node.clone();
-        let (rows, noise) = changed_rows(previous.map(|entry| entry.1.as_slice()), Some(node_fields), options);
-        hidden += noise;
-        let renamed = previous.is_some_and(|entry| entry.0.title != node.title);
-        shown.state = match previous {
-            None => State::Added,
-            Some(_) if renamed || rows.iter().any(|row| row.state != State::Same) => State::Changed,
-            Some(_) => State::Same,
-        };
-        shown.was_at = previous.map(|entry| entry.0.at).filter(|at| *at != node.at);
-        if shown.state != State::Same && !matches!(node.kind, NodeKind::Entry | NodeKind::AnyState | NodeKind::Exit) {
-            changes.push(GraphChange {
-                state: shown.state,
-                kind: "State",
-                name: node.title.clone(),
-                detail: motion_of(node_fields),
-                target: ChangeTarget::Node(nodes.len()),
-                rows,
-            });
-        }
-        nodes.push(shown);
-    }
-    for (node, node_fields) in &old.nodes {
-        if !new.nodes.iter().any(|(new_node, _)| new_node.id == node.id) {
-            let mut shown = node.clone();
-            shown.state = State::Removed;
-            let (rows, _) = changed_rows(Some(node_fields), None, options);
-            changes.push(GraphChange {
-                state: State::Removed,
-                kind: "State",
-                name: node.title.clone(),
-                detail: motion_of(node_fields),
-                target: ChangeTarget::Node(nodes.len()),
-                rows,
-            });
-            nodes.push(shown);
-        }
-    }
-    let title_of = |id: &str| {
-        nodes
-            .iter()
-            .find(|node| node.id == id)
-            .map_or_else(|| id.to_owned(), |node| node.title.clone())
-    };
-    let mut edges = Vec::new();
-    let old_edges: HashMap<&str, &(GraphEdge, Vec<Field>)> = old.edges.iter().map(|entry| (entry.0.id.as_str(), entry)).collect();
-    for (edge, edge_fields) in &new.edges {
-        let previous = old_edges.get(edge.id.as_str());
-        let mut shown = edge.clone();
-        let (rows, noise) = changed_rows(previous.map(|entry| entry.1.as_slice()), Some(edge_fields), options);
-        hidden += noise;
-        let moved = previous.is_some_and(|entry| entry.0.from != edge.from || entry.0.to != edge.to);
-        shown.state = match previous {
-            None => State::Added,
-            Some(_) if moved || rows.iter().any(|row| row.state != State::Same) => State::Changed,
-            Some(_) => State::Same,
-        };
-        if shown.state != State::Same {
-            changes.push(GraphChange {
-                state: shown.state,
-                kind: "Transition",
-                name: format!("{} → {}", title_of(&edge.from), title_of(&edge.to)),
-                detail: transition_detail(&rows, shown.state),
-                target: ChangeTarget::Edge(edges.len()),
-                rows,
-            });
-        }
-        edges.push(shown);
-    }
-    for (edge, edge_fields) in &old.edges {
-        if !new.edges.iter().any(|(new_edge, _)| new_edge.id == edge.id) {
-            let mut shown = edge.clone();
-            shown.state = State::Removed;
-            let (rows, _) = changed_rows(Some(edge_fields), None, options);
-            changes.push(GraphChange {
-                state: State::Removed,
-                kind: "Transition",
-                name: format!("{} → {}", title_of(&edge.from), title_of(&edge.to)),
-                detail: String::new(),
-                target: ChangeTarget::Edge(edges.len()),
-                rows,
-            });
-            edges.push(shown);
-        }
-    }
-    let declared = |documents: &[Document]| -> Vec<Declared> {
-        parameters(documents)
-            .into_iter()
-            .map(|(name, kind, _, value)| Declared {
-                name,
-                kind,
-                value,
-                members: Vec::new(),
-            })
-            .collect()
-    };
-    let look = ParameterLook {
-        value_label: "Default",
-        value_shown: false,
-    };
-    let (shown_parameters, mut parameter_changes) = compare_parameters(&declared(old_docs), &declared(new_docs), "Parameter", look, options);
-    changes.append(&mut parameter_changes);
-    let mut all_layers = layers(new_docs);
-    for name in layers(old_docs) {
-        if !all_layers.contains(&name) {
-            all_layers.push(name);
-        }
-    }
-    GraphComparison {
-        nodes,
-        edges,
-        parameters: shown_parameters,
-        parameters_title: "Parameters",
-        changes,
-        layers: all_layers,
-        has_ports: false,
-        hidden,
-    }
-}
-
-fn motion_of(node_fields: &[Field]) -> String {
-    node_fields
-        .iter()
-        .find(|field| field.path == "m_Motion")
-        .map(|field| match &field.value {
-            Value::Reference(reference) if reference.missing => reference.name.clone(),
-            Value::Reference(reference) => format!("{}.anim", reference.name),
-            _ => String::new(),
-        })
-        .unwrap_or_default()
-}
-
-fn transition_detail(rows: &[super::compare::Row], state: State) -> String {
-    if state == State::Changed {
-        let changed = rows.iter().filter(|row| row.state != State::Same).count();
-        return format!("{changed} {}", if changed == 1 { "setting" } else { "settings" });
-    }
-    rows.iter()
-        .find(|row| row.label == "Exit Time")
-        .and_then(|row| row.after.as_ref())
-        .map(|value| format!("Exit time {}", value.text()))
-        .unwrap_or_default()
 }
 
 pub(crate) type Drawing = (Vec<(GraphNode, Vec<Field>)>, Vec<(GraphEdge, Vec<Field>)>);

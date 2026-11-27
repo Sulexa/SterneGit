@@ -15,6 +15,7 @@ use super::{
     value::{Digest, Field, Glyph, Reference, Value},
 };
 
+const NOISE: &str = "noise";
 const AXES: [&str; 8] = ["x", "y", "z", "w", "r", "g", "b", "a"];
 
 pub(crate) fn key_of(id: &str) -> Key {
@@ -85,6 +86,7 @@ fn flatten(tree: &[protocol::Field], parent: &str, depth: usize, out: &mut Vec<F
             label: field.label.clone(),
             depth,
             value: value(&field.value),
+            noise: field.tags.iter().any(|tag| tag == NOISE),
         });
         flatten(&field.children, &path, depth + 1, out);
     }

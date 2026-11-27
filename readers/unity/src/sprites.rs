@@ -3,29 +3,6 @@ use super::yaml::Node;
 const SINGLE_SPRITE: i64 = 21300000;
 const DEFAULT_PIXELS_PER_UNIT: f64 = 100.;
 
-#[derive(Clone, Debug, PartialEq)]
-pub(crate) struct SpriteImage {
-    pub(crate) rgba: Vec<u8>,
-    pub(crate) width: u32,
-    pub(crate) height: u32,
-    pub(crate) pivot: (f64, f64),
-    pub(crate) pixels_per_unit: f64,
-    pub(crate) border: [f64; 4],
-}
-
-impl SpriteImage {
-    pub(crate) fn size_in_units(&self) -> (f64, f64) {
-        (f64::from(self.width) / self.pixels_per_unit, f64::from(self.height) / self.pixels_per_unit)
-    }
-}
-
-struct Rect {
-    x: u32,
-    y: u32,
-    width: u32,
-    height: u32,
-}
-
 fn number(node: Option<&Node>, key: &str) -> Option<f64> {
     node?.get(key)?.number()
 }

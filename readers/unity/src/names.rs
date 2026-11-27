@@ -26,18 +26,6 @@ impl UnityKind {
         })
     }
 
-    pub(crate) fn label(self) -> &'static str {
-        match self {
-            UnityKind::Prefab => "Prefab",
-            UnityKind::Scene => "Scene",
-            UnityKind::Material => "Material",
-            UnityKind::AnimationClip => "Animation clip",
-            UnityKind::AnimatorController => "Animator controller",
-            UnityKind::Asset => "Asset",
-            UnityKind::Meta => "Import settings",
-        }
-    }
-
     pub(crate) fn has_hierarchy(self) -> bool {
         matches!(self, UnityKind::Prefab | UnityKind::Scene)
     }
