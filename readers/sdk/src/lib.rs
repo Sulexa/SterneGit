@@ -17,7 +17,7 @@ pub use reader::Reader;
 pub use sternegit_reader_protocol as protocol;
 pub use sternegit_reader_protocol::{
     Choice, Conflict, Edit, Failure, Field, Fix, FixInput, FixOffer, Found, Icon, Model, Object, Part, Place, ReadInput, Reference, Role, Scope,
-    MergeInput, Merged, Pick, Search, Side, SideFilesInput, Value, Warning, digest,
+    MergeInput, Merged, Note, Pick, Search, Side, SideFilesInput, Value, Warning, digest,
 };
 
 pub const SDK_VERSION: &str = env!("CARGO_PKG_VERSION");

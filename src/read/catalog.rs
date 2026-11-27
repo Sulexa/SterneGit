@@ -10,7 +10,10 @@ use crate::plugin::{self, Kind, Pin, Stop};
 
 pub(crate) const READERS_FOLDER: &str = "readers";
 
-pub(crate) const PINS: [Pin; 1] = [Pin::new("unity", include_str!("../../readers/unity/dist/SHA256SUMS"))];
+pub(crate) const PINS: [Pin; 2] = [
+    Pin::new("unity", include_str!("../../readers/unity/dist/SHA256SUMS")),
+    Pin::new("godot", include_str!("../../readers/godot/dist/SHA256SUMS")),
+];
 
 pub(crate) struct Readers;
 
@@ -123,16 +126,18 @@ mod tests {
     }
 
     #[test]
-    fn the_bundled_unity_reader_is_found_in_the_sources_and_starts() {
+    fn the_bundled_readers_are_found_in_the_sources_and_start() {
         let folders = Folders {
             source: Some(sources()),
             ..Folders::default()
         };
         let mut catalog = ReaderCatalog::discover(&folders, ReaderApprovals::default());
         catalog.start(&Arc::new(()));
-        let unity = &catalog.plugins()[0];
-        assert_eq!(unity.id.0, "unity");
-        assert_eq!(unity.standing, Standing::Ready);
-        assert!(unity.started.is_some());
+        let ids: Vec<&str> = catalog.plugins().iter().map(|reader| reader.id.0.as_str()).collect();
+        assert_eq!(ids, ["unity", "godot"]);
+        for reader in catalog.plugins() {
+            assert_eq!(reader.standing, Standing::Ready, "{}", reader.id.0);
+            assert!(reader.started.is_some());
+        }
     }
 }

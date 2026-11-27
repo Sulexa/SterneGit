@@ -1,0 +1,12 @@
+{
+  "id": "godot",
+  "name": "Godot",
+  "version": "1.0.0",
+  "protocol": "1.0",
+  "module": "godot.wasm",
+  "kinds": [
+    { "id": "scene", "label": "Scene", "extensions": [".tscn"], "sniff": ["[gd_scene"], "views": ["inspector", "text"] },
+    { "id": "resource", "label": "Resource", "extensions": [".tres"], "sniff": ["[gd_resource"], "views": ["inspector", "text"] }
+  ],
+  "grant": { "read": "file", "jobs": ["compare"] }
+}

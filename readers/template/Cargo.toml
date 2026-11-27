@@ -1,0 +1,23 @@
+[package]
+name = "sternegit-reader-template"
+version = "1.0.0"
+edition = "2024"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+sternegit-reader-sdk = { path = "../sdk" }
+
+[build-dependencies]
+sternegit-reader-sdk = { path = "../sdk" }
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+
+[workspace]

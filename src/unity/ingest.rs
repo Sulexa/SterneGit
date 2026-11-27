@@ -513,6 +513,42 @@ Transform:
 ";
 
     #[test]
+    fn a_godot_scene_compares_through_its_reader_with_no_godot_code_in_sternegit() -> anyhow::Result<()> {
+        let dist = Path::new(env!("CARGO_MANIFEST_DIR")).join("readers/godot/dist");
+        let reader = Arc::new(Reader::compile(&std::fs::read(dist.join("godot.wasm"))?).unwrap());
+        let manifest = crate::read::Manifest::parse(&std::fs::read(dist.join("reader.json"))?).unwrap();
+        let scene = |speed: &str, child: &str| {
+            format!("[gd_scene format=3]
+
+[node name=\"Player\" type=\"CharacterBody2D\"]
+speed = {speed}
+
+{child}")
+        };
+        let scratch = ScratchRepo::new("godot-reader")?;
+        scratch.write("player.tscn", &scene("300.0", ""))?;
+        scratch.git(&["add", "-A"])?;
+        scratch.commit("first")?;
+        scratch.write("player.tscn", &scene("320.0", "[node name=\"Hat\" type=\"Sprite2D\" parent=\".\"]
+"))?;
+        let (repo, _) = scratch.open()?;
+        let by = ByReader {
+            name: manifest.name.clone(),
+            reader,
+            kind: manifest.kind_for("player.tscn", None).unwrap().clone(),
+        };
+        let source = |revision| Some(Source { revision, path: OsString::from("player.tscn") });
+        let files = read(&repo, "player.tscn", source(Revision::Head), source(Revision::WorkTree), Some(&by))?;
+        let comparison = files.compare(Default::default());
+        let changed: Vec<(&str, crate::unity::State)> =
+            comparison.objects.iter().map(|object| (object.name.as_str(), object.state)).collect();
+        assert_eq!(changed, [("Player", crate::unity::State::Changed), ("Hat", crate::unity::State::Added)]);
+        assert_eq!(comparison.objects[0].parts[0].rows[0].label, "Speed");
+        assert_eq!(files.kind.label, "Scene");
+        Ok(())
+    }
+
+    #[test]
     fn a_changed_guid_warns_proposes_fixes_and_applies_only_what_was_read() -> anyhow::Result<()> {
         let old = "0123456789abcdef0123456789abcdef";
         let new = "fedcba9876543210fedcba9876543210";

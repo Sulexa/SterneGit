@@ -1,0 +1,11 @@
+{
+  "id": "ini",
+  "name": "INI files",
+  "version": "0.1.0",
+  "protocol": "1.0",
+  "module": "sternegit_reader_template.wasm",
+  "kinds": [
+    { "id": "ini", "label": "Settings", "extensions": [".ini", ".cfg"], "views": ["inspector", "text"] }
+  ],
+  "grant": { "read": "file", "jobs": ["compare"] }
+}
