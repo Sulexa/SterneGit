@@ -17,7 +17,7 @@ use super::{
 };
 use crate::{
     app::connectors::{Connectors, approve},
-    connect::{Connector, Grant, Manifest, Origin, Standing},
+    connect::{CONNECTOR, Connector, Grant, Manifest, Origin, Standing},
     net::services::ConnectorId,
     settings::Folder,
     ui::{Look as _, counted},
@@ -240,7 +240,7 @@ impl SettingsTab {
         let version = summary.version.clone();
         let second = match &summary.standing {
             Standing::Unusable(problem) => div().text_color(red).child(problem.clone()),
-            Standing::Failed(stop) => div().text_color(red).child(format!("Stopped while starting: {stop}")),
+            Standing::Failed(stop) => div().text_color(red).child(format!("Stopped while starting: {}", stop.told_of(CONNECTOR))),
             _ => {
                 let mut text = summary.reach.clone().unwrap_or_default();
                 if accounts > 0 {
@@ -345,7 +345,7 @@ impl SettingsTab {
                 let mono = cx.theme().mono_font_family.clone();
                 body = body.child(group(
                     "Why it stopped",
-                    Some(stop.to_string().into()),
+                    Some(stop.told_of(CONNECTOR).into()),
                     vec![
                         v_flex()
                             .p_3()

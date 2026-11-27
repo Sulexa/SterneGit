@@ -12,14 +12,14 @@ mod manifest;
 mod remote;
 mod replay;
 mod requests;
-mod sandbox;
 mod sign_in;
 mod started;
-mod stop;
 mod template;
 mod trial;
 #[cfg(test)]
 mod wire;
+
+pub(crate) const CONNECTOR: &str = "connector";
 
 pub(crate) use approvals::Approvals;
 pub(crate) use call::{Budget, Outcome, Usage};
@@ -34,5 +34,5 @@ pub(crate) use sign_in::{Draft, draft, identify};
 pub(crate) use forge::{CallError, Forge, check_answer};
 pub(crate) use replay::ReplayHost;
 pub(crate) use started::{Greeting, Started};
-pub(crate) use stop::Stop;
+pub(crate) use crate::plugin::Stop;
 pub(crate) use trial::{Played, Trial, try_connector};

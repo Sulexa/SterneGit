@@ -7,12 +7,13 @@ use std::{
 use super::{
     Started, Stop,
     approvals::{Approval, Approvals, Hashes},
-    bundled::{PINS, Pin, sha256},
+    bundled::PINS,
     grant::Grant,
     manifest::{MANIFEST_FILE, Manifest},
 };
 use crate::{
     net::services::{ConnectorId, HostServices},
+    plugin::{Pin, sha256},
     settings::Folder,
 };
 

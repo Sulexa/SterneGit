@@ -5,23 +5,18 @@ use std::{
 
 use sternegit_protocol::{RequestHead, ResponseHead, resolve};
 use futures::FutureExt as _;
-use wasmi::{
-    Memory, Store, StoreLimits, TrapCode, TypedResumableCall, Val,
-    errors::{ErrorKind, InstantiationError, MemoryError, TableError},
+use wasmi::{Memory, Store, StoreLimits, TypedResumableCall, Val};
+
+use super::{CallError, Stop, requests::Requests, started::Started};
+use crate::{
+    net::{
+        request::{ApiRequest, ApiResponse, Method, NetError},
+        services::{AccountView, Cancel, ConnectorId, HostServices, Level},
+    },
+    plugin::{ENTRY_EXPORT, FUEL_PER_SLICE, Guest, Interrupt, MEMORY_EXPORT, limits, stop_for},
 };
 
-use super::{
-    CallError, Stop,
-    abi::Interrupt,
-    requests::Requests,
-    sandbox::{ENTRY_EXPORT, FUEL_PER_SLICE, MEMORY_EXPORT, limits},
-    started::Started,
-};
-use crate::net::{
-    request::{ApiRequest, ApiResponse, Method, NetError},
-    services::{AccountView, Cancel, ConnectorId, HostServices, Level},
-};
-
+pub(super) const MEMORY_LIMIT_BYTES: usize = 64 * 1024 * 1024;
 const LOG_BYTES_PER_CALL: usize = 64 * 1024;
 const API_ENDPOINT: &str = "api";
 const LOG_FULL: &str = "The connector logged more than 64 KB in one call; later lines were dropped";
@@ -69,8 +64,8 @@ pub(super) struct Call {
     account: Option<AccountView>,
     cancel: Cancel,
     limits: StoreLimits,
-    pub(super) memory: Option<Memory>,
-    pub(super) waiting: Vec<u8>,
+    memory: Option<Memory>,
+    waiting: Vec<u8>,
     pub(super) requests: Requests,
     output: Option<Vec<u8>>,
     log: Log,
@@ -108,7 +103,22 @@ impl Call {
         i32::try_from(self.waiting.len()).unwrap_or(i32::MAX)
     }
 
-    pub(super) fn finish(&mut self, output: &[u8]) -> Result<(), String> {
+    fn record(&mut self, level: Level, text: &str) {
+        self.host.log(&self.connector, level, text);
+        self.log.lines.push(format!("{level:?} {text}"));
+    }
+}
+
+impl Guest for Call {
+    fn memory(&self) -> Option<Memory> {
+        self.memory
+    }
+
+    fn waiting(&self) -> &[u8] {
+        &self.waiting
+    }
+
+    fn finish(&mut self, output: &[u8]) -> Result<(), String> {
         if self.output.is_some() {
             return Err("the call already has its answer".to_owned());
         }
@@ -116,7 +126,7 @@ impl Call {
         Ok(())
     }
 
-    pub(super) fn log(&mut self, level: i32, text: &[u8]) {
+    fn log(&mut self, level: i32, text: &[u8]) {
         if self.log.full {
             return;
         }
@@ -129,16 +139,11 @@ impl Call {
         self.record(level_named(level), &String::from_utf8_lossy(text));
     }
 
-    pub(super) fn now(&self) -> i64 {
+    fn now(&self) -> i64 {
         self.host
             .now()
             .duration_since(UNIX_EPOCH)
             .map_or(0, |since| i64::try_from(since.as_millis()).unwrap_or(i64::MAX))
-    }
-
-    fn record(&mut self, level: Level, text: &str) {
-        self.host.log(&self.connector, level, text);
-        self.log.lines.push(format!("{level:?} {text}"));
     }
 }
 
@@ -174,7 +179,7 @@ pub(super) async fn run(
         host,
         account,
         cancel,
-        limits: limits(),
+        limits: limits(MEMORY_LIMIT_BYTES),
         memory: None,
         waiting: message,
         requests: Requests::default(),
@@ -282,12 +287,9 @@ impl Execution {
     }
 
     fn stopped(&self, error: &wasmi::Error) -> CallError {
-        if ran_out_of_memory(error) {
-            CallError::Stopped(Stop::OutOfMemory)
-        } else if error.as_trap_code() == Some(TrapCode::OutOfFuel) {
-            CallError::Stopped(Stop::OutOfFuel)
-        } else {
-            self.trapped(error.to_string())
+        match stop_for(error, MEMORY_LIMIT_BYTES) {
+            Some(stop) => CallError::Stopped(stop),
+            None => self.trapped(error.to_string()),
         }
     }
 
@@ -308,28 +310,6 @@ impl Execution {
     }
 }
 
-fn ran_out_of_memory(error: &wasmi::Error) -> bool {
-    let memory_denied = |error: &MemoryError| {
-        matches!(
-            error,
-            MemoryError::ResourceLimiterDeniedAllocation | MemoryError::OutOfSystemMemory
-        )
-    };
-    let table_denied = |error: &TableError| matches!(error, TableError::ResourceLimiterDeniedAllocation);
-    error.as_trap_code() == Some(TrapCode::GrowthOperationLimited)
-        || match error.kind() {
-            ErrorKind::Memory(error)
-            | ErrorKind::Instantiation(InstantiationError::FailedToInstantiateMemory(error)) => {
-                memory_denied(error)
-            }
-            ErrorKind::Table(error)
-            | ErrorKind::Instantiation(InstantiationError::FailedToInstantiateTable(error)) => {
-                table_denied(error)
-            }
-            _ => false,
-        }
-}
-
 #[cfg(test)]
 mod tests {
     use std::{sync::Arc, time::Duration};
@@ -337,7 +317,7 @@ mod tests {
     use sternegit_protocol::ops::{Op as _, WhoAmI};
     use serde_json::{Value, json};
 
-    use super::{Budget, Outcome, run};
+    use super::{Budget, MEMORY_LIMIT_BYTES, Outcome, run};
     use crate::{
         connect::{
             CallError, Started, Stop,
@@ -470,7 +450,7 @@ mod tests {
             "(loop $more (drop (memory.grow (i32.const 16))) (br $more)) (i32.const 0)",
         ));
         let outcome = call(&hog, FakeHost::quiet(), Some(fake_account()), Budget::CALL);
-        assert_eq!(outcome.result, Err(CallError::Stopped(Stop::OutOfMemory)));
+        assert_eq!(outcome.result, Err(CallError::Stopped(Stop::OutOfMemory { limit_bytes: MEMORY_LIMIT_BYTES })));
         assert!(outcome.usage.memory <= 64 * 1024 * 1024);
         assert!(outcome.usage.memory > 60 * 1024 * 1024);
     }
@@ -478,7 +458,7 @@ mod tests {
     #[test]
     fn a_module_asking_for_more_than_64_mb_at_once_never_runs() {
         let greedy = connector_with_pages(1100, &entry("(i32.const 0)"));
-        assert_eq!(stopped(&greedy), Stop::OutOfMemory);
+        assert_eq!(stopped(&greedy), Stop::OutOfMemory { limit_bytes: MEMORY_LIMIT_BYTES });
     }
 
     #[test]
@@ -512,7 +492,7 @@ mod tests {
             let message = trap_message(&connector(&entry(&format!("{instructions} (i32.const 0)"))));
             assert!(
                 message.starts_with(&format!("{import}: "))
-                    && message.contains("outside the connector's 65536 bytes"),
+                    && message.contains("outside the module's 65536 bytes"),
                 "{instructions}: {message}"
             );
         }

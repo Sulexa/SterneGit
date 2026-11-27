@@ -129,7 +129,7 @@ fn trial_report(trial: &Trial) -> String {
             ));
             lines.push(format!("  hello: {}", usage(&greeting.usage)));
         }
-        Err(stop) => lines.push(format!("  didn't start: {stop}")),
+        Err(stop) => lines.push(format!("  didn't start: {}", stop.told_of(connect::CONNECTOR))),
     }
     lines.extend(indented_log(&trial.start_log));
     if let Some(played) = &trial.played {

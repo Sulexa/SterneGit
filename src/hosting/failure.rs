@@ -11,7 +11,7 @@ use gpui_kit::{
 use crate::{
     accounts::AccountId,
     app::connectors::Connectors,
-    connect::{CallError, Stop},
+    connect::{CONNECTOR, CallError, Stop},
     net::{request::NetError, services::ConnectorId},
     ui::Look as _,
 };
@@ -124,7 +124,7 @@ impl Trouble {
             CallError::Stopped(stop) => {
                 let mut stopped = trouble(
                     format!("The {service} connector stopped"),
-                    stop.to_string(),
+                    stop.told_of(CONNECTOR),
                     Fix::CopyLog,
                     Tone::Error,
                 );

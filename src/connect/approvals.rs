@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, io, path::PathBuf};
+use std::{io, path::PathBuf};
 
 use serde_json::{Map, Value};
 
@@ -13,7 +13,7 @@ const VERSION: u64 = 1;
 const CONNECTORS: &str = "connectors";
 const KNOWN_FIELDS: [&str; 6] = ["id", "version", "files", "grant", "updated", "replaces_bundled"];
 
-pub(crate) type Hashes = BTreeMap<String, String>;
+pub(crate) use crate::plugin::Hashes;
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct Approval {

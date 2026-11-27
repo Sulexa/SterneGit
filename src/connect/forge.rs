@@ -14,7 +14,7 @@ use sternegit_protocol::{
 };
 use serde::{Serialize, de::DeserializeOwned};
 
-use super::{Budget, Outcome, Started, Stop, Usage};
+use super::{Budget, CONNECTOR, Outcome, Started, Stop, Usage};
 use crate::{
     accounts::AccountId,
     net::{
@@ -45,7 +45,7 @@ impl fmt::Display for CallError {
         match self {
             CallError::Failed(failure) => failure.fmt(f),
             CallError::Net(error) => error.fmt(f),
-            CallError::Stopped(stop) => stop.fmt(f),
+            CallError::Stopped(stop) => f.write_str(&stop.told_of(CONNECTOR)),
             CallError::Unavailable => f.write_str("Not available"),
         }
     }

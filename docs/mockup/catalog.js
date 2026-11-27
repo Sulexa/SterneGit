@@ -1706,7 +1706,7 @@ const Catalog = (() => {
         {
           name: 'ConnectorFailure',
           code: 'connect::failure::ConnectorFailure',
-          source: 'src/connect/stop.rs',
+          source: 'src/plugin/stop.rs',
           about: 'Why a connector call failed and the way out, wherever the call was made. Each CallError has its own words.',
           variants: Object.entries(Failures).map(([kind, failure]) => [kind, () => C.ConnectorFailure(failure), { w: 620 }]),
         },

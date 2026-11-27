@@ -1,64 +1,16 @@
-use std::{
-    fmt::Write as _,
-    path::{Path, PathBuf},
-};
-
-use sha2::{Digest as _, Sha256};
-
-use super::approvals::Hashes;
-
-const SOURCE_DIST: &str = "dist";
-
-pub(crate) struct Pin {
-    pub(crate) id: &'static str,
-    sums: &'static str,
-}
+use crate::plugin::Pin;
 
 pub(crate) const PINS: [Pin; 2] = [
-    Pin {
-        id: "github",
-        sums: include_str!("../../connectors/github/dist/SHA256SUMS"),
-    },
-    Pin {
-        id: "azure-devops",
-        sums: include_str!("../../connectors/azure-devops/dist/SHA256SUMS"),
-    },
+    Pin::new("github", include_str!("../../connectors/github/dist/SHA256SUMS")),
+    Pin::new("azure-devops", include_str!("../../connectors/azure-devops/dist/SHA256SUMS")),
 ];
-
-impl Pin {
-    pub(crate) fn files(&self) -> Hashes {
-        read_sums(self.sums)
-    }
-
-    pub(crate) fn source_folder(&self, connectors: &Path) -> PathBuf {
-        connectors.join(self.id).join(SOURCE_DIST)
-    }
-}
-
-pub(crate) fn read_sums(text: &str) -> Hashes {
-    text.lines()
-        .filter_map(|line| {
-            let (hash, file) = line.split_once("  ")?;
-            Some((file.trim().to_owned(), hash.trim().to_ascii_lowercase()))
-        })
-        .collect()
-}
-
-pub(crate) fn sha256(bytes: &[u8]) -> String {
-    Sha256::digest(bytes)
-        .iter()
-        .fold(String::with_capacity(64), |mut hex, byte| {
-            let _ = write!(hex, "{byte:02x}");
-            hex
-        })
-}
 
 #[cfg(test)]
 mod tests {
     use std::{fs, path::Path};
 
-    use super::{PINS, read_sums, sha256};
-    use crate::connect::approvals::Hashes;
+    use super::PINS;
+    use crate::plugin::{Hashes, sha256};
 
     const SUMS_FILE: &str = "SHA256SUMS";
 
@@ -97,22 +49,5 @@ mod tests {
                 assert!(PINS.iter().any(|pin| pin.id == id), "{id} has a dist folder but no pin");
             }
         }
-    }
-
-    #[test]
-    fn sums_are_read_as_sha256sum_writes_them() {
-        let text = "AB01  connector.json\nab02  github.wasm\n\nnot a line\n";
-        assert_eq!(
-            read_sums(text),
-            Hashes::from([
-                ("connector.json".into(), "ab01".into()),
-                ("github.wasm".into(), "ab02".into()),
-            ])
-        );
-        let hash = sha256(b"abc");
-        assert_eq!(
-            read_sums(&format!("{}  connector.json\n", hash.to_uppercase())),
-            Hashes::from([("connector.json".into(), hash)])
-        );
     }
 }

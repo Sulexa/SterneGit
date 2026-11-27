@@ -49,7 +49,8 @@ scripts/build-connectors.ps1   rebuilds dist/ (needs the wasm target) and rewrit
 src/settings/   folders per OS, atomic JSON files
 src/accounts/   accounts, secrets per OS, device flow, refresh, Git Credential Manager import
 src/net/        requests, policy (allow-list, token schemes, redirects), curl transport, proxies, the HostServices implementation
-src/connect/    manifests, grants, discovery and pinning, the wasmi engine, ABI, calls, claims, Forge
+src/plugin/     the wasmi engine shared with readers: limits, module checks, the common imports, pins, Stop
+src/connect/    manifests, grants, discovery, send and wait, calls, claims, Forge
 src/git/        access.rs (scoped credential helper), ssh_key.rs, clone.rs; command.rs gains run_with_access
 src/hosting/    the screens: Settings tab (Accounts, Connectors, approval), sign-in, SSH key, remove, Clone, New repository, Publish, the account bar
 src/repo/pulls/ the repository tab's pull requests: the left-pane section, branch marks, the overview and files of one, Create and Merge dialogs

@@ -10,6 +10,7 @@ mod git;
 mod hosting;
 mod media;
 mod net;
+mod plugin;
 mod repo;
 mod settings;
 #[cfg(test)]

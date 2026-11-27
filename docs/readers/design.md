@@ -47,15 +47,15 @@ readers/unity/         the Unity reader (today's src/unity/ moved, minus drawing
 readers/unity/dist/    reader.json, unity.wasm, SHA256SUMS, all committed
 readers/template/      the starting point for authors
 
-src/plugin/            what connectors and readers share: the wasmi engine, ABI, pins, grants, discovery, Standing, Stop
-src/connect/           connector-only parts: claims, Forge, the gateway
+src/plugin/            what connectors and readers share: the wasmi engine and limits, module checks, the common imports (take, finish, log, now) through the Guest trait, pins and hashes, Stop
+src/connect/           connector-only parts: send and wait, the call loop, manifests, grants, approvals, discovery, claims, Forge
 src/read/              reader-only parts: matching, the file host, the model, comparing models
 src/repo/compare/read/ the generic views, made from today's src/repo/compare/unity/
 src/settings/          readers folder per OS
 src/hosting/           Settings gains a Readers page beside Connectors
 ```
 
-The engine moves from `src/connect/` to `src/plugin/` once, before readers exist, with no change of behaviour.
+The engine moved from `src/connect/` to `src/plugin/` in milestone 1, with no change of behaviour. Grants, approvals and discovery stay in `src/connect/` until the reader manifest exists in milestone 2, so their shared shape is drawn from two real users instead of guessed.
 
 ## 2. The manifest
 
@@ -211,12 +211,12 @@ wasmi runs plugin code 15–20× slower than native. For connectors that never s
 
 - Unity's reader leaves the exe: about 1.37 MB comes out, measured at 447f1f5.
 - What comes in: the generic model and comparison in `src/read/`, the file host, the Readers page, and `src/repo/compare/read/` replacing `src/repo/compare/unity/` at about its size.
-- Expected: a smaller exe. Measured per milestone with the size-baseline recipe, codegen-units = 1.
+- Expected: a smaller exe. Not measured per milestone.
 
 ## 11. Milestones
 
-1. **Shared engine:** move the engine, pins, grants and discovery from `src/connect/` to `src/plugin/`. Connectors behave the same; the exe stays within noise.
-2. **Prefab reader, measured:** `readers/protocol`, `readers/sdk`, the file host, `read` for prefabs only, the inspector view made generic. Time it (section 9). Decide with the numbers whether Unity moves.
+1. **Shared engine** (built 2026-11-27): the engine, memory limit as a parameter, module checks, the common imports behind a `Guest` trait, pins and `Stop` moved to `src/plugin/`. A stop names its plugin ("The connector ran too long…") and its memory limit. Connectors behave the same.
+2. **Prefab reader, measured:** grants, approvals and discovery shared between connectors and readers, `readers/protocol`, `readers/sdk`, the file host, `read` for prefabs only, the inspector view made generic. Time it (section 9). Decide with the numbers whether Unity moves.
 3. **All of Unity:** scenes, clips, controllers, script graphs, layouts with sprites, scopes. `src/unity/` deleted. Every Unity test moves with it or into `src/read/`.
 4. **Screens:** Settings → Readers, approval, reader stopped, two readers for one file.
 5. **Side files and fixes:** `.meta` pairing, GUID warning, fix preview. Replaces `Repository::rewrite_guid`.

@@ -1956,7 +1956,7 @@ const Screens = (() => {
           id: 'clone-signed-out',
           title: 'Clone — account signed out',
           about: "When a connector call fails, the place that asked shows why, with the way out: signed out → Sign in again; a missing scope → Sign in with the browser; rate limited → when it resets; unreachable server → Retry; a stopped connector → its last log lines.",
-          source: 'src/connect/stop.rs',
+          source: 'src/plugin/stop.rs',
           render: () => overHistory(C.CloneDialog({ from: 'alex-acme', accounts, failure: Failures.signedOut })),
         },
         {

@@ -1,19 +1,22 @@
 use std::sync::Arc;
 
 use sternegit_protocol::{
-    ABI, Hello, PROTOCOL,
+    Hello, PROTOCOL,
     ops::{Greet, Op as _},
     speaks_same_major,
 };
-use wasmi::{Engine, ExternType, Instance, Linker, Module, Store, ValType};
+use wasmi::{Engine, Instance, Linker, Module, Store};
 
 use super::{
-    Budget, CallError, Outcome, Stop, Usage, abi,
+    Budget, CallError, Outcome, Stop, Usage,
+    abi::{self, IMPORTS},
     call::{self, Call},
     forge::{decode, envelope},
-    sandbox::{self, ENTRY_EXPORT, IMPORTS, MEMORY_EXPORT},
 };
-use crate::net::services::{AccountView, Cancel, ConnectorId, HostServices, cancel_pair};
+use crate::{
+    net::services::{AccountView, Cancel, ConnectorId, HostServices, cancel_pair},
+    plugin::{check_module, engine},
+};
 
 pub(crate) struct Started {
     id: ConnectorId,
@@ -40,11 +43,10 @@ impl Started {
     }
 
     pub(crate) fn compile(id: ConnectorId, wasm: &[u8]) -> Result<Self, Stop> {
-        let engine = sandbox::engine();
+        let engine = engine();
         let module = Module::new(&engine, wasm)
             .map_err(|error| Stop::Refused(format!("The module can't be loaded: {error}")))?;
-        refuse_foreign_imports(&module)?;
-        require_exports(&module)?;
+        check_module(&module, &IMPORTS)?;
         let mut linker = Linker::new(&engine);
         abi::link(&mut linker).map_err(|error| Stop::Refused(error.to_string()))?;
         Ok(Self {
@@ -114,48 +116,6 @@ fn refusal(error: CallError) -> Stop {
             Stop::Refused(format!("The connector reached for the network while starting: {error}"))
         }
         CallError::Unavailable => Stop::Refused("The connector didn't answer hello".to_owned()),
-    }
-}
-
-fn refuse_foreign_imports(module: &Module) -> Result<(), Stop> {
-    for import in module.imports() {
-        let offered = (import.module() == ABI)
-            .then(|| IMPORTS.iter().find(|offered| offered.name == import.name()))
-            .flatten();
-        let fits = match (offered, import.ty()) {
-            (Some(offered), ExternType::Func(ty)) => {
-                ty.params() == offered.params && ty.results() == offered.results
-            }
-            _ => false,
-        };
-        if !fits {
-            return Err(Stop::Refused(format!(
-                "The module imports {}::{}, which SterneGit doesn't offer",
-                import.module(),
-                import.name()
-            )));
-        }
-    }
-    Ok(())
-}
-
-fn require_exports(module: &Module) -> Result<(), Stop> {
-    let exported = |name: &str| {
-        module
-            .exports()
-            .find(|export| export.name() == name)
-            .map(|export| export.ty().clone())
-    };
-    if !matches!(exported(MEMORY_EXPORT), Some(ExternType::Memory(_))) {
-        return Err(Stop::Refused(format!(
-            "The module exports no {MEMORY_EXPORT}"
-        )));
-    }
-    match exported(ENTRY_EXPORT) {
-        Some(ExternType::Func(ty)) if ty.params() == [ValType::I32] && ty.results() == [ValType::I32] => Ok(()),
-        _ => Err(Stop::Refused(format!(
-            "The module exports no {ENTRY_EXPORT}(i32) -> i32"
-        ))),
     }
 }
 
