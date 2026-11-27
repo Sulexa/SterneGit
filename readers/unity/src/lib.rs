@@ -6,6 +6,7 @@ mod guid;
 mod hints;
 mod layout;
 mod lookup;
+mod merge;
 mod names;
 mod scene;
 mod sprites;
@@ -14,7 +15,9 @@ mod value;
 mod views;
 mod yaml;
 
-use sternegit_reader_sdk::{Failure, Fix, FixInput, Model, ReadInput, Reader, SideFilesInput, Warning, export, read_text};
+use sternegit_reader_sdk::{
+    Failure, Fix, FixInput, MergeInput, Merged, Model, ReadInput, Reader, SideFilesInput, Warning, export, read_text,
+};
 
 use crate::{
     lookup::lookup_for,
@@ -75,6 +78,13 @@ impl Reader for Unity {
         };
         let change = guid::guid_change(&input.path, before, after).ok_or(Failure::Unsupported)?;
         change.fix(&input.path, &input.fix)
+    }
+
+    fn merge(&self, input: MergeInput) -> Result<Merged, Failure> {
+        if !is_unity_yaml(&input.current) || !is_unity_yaml(&input.incoming) {
+            return Err(not_unity(&input.path));
+        }
+        Ok(merge::merge(input.base.as_deref(), &input.current, &input.incoming, &input.choices))
     }
 }
 

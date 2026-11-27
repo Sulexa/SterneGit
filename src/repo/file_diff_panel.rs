@@ -47,12 +47,16 @@ use super::{
         renamed_from, WorkingPatch, working_patch,
     },
 };
+use sternegit_reader_protocol::{MergeInput, Merged};
+
 use super::{
     fix_preview::{Preview, show_fix, show_fix_failure},
+    merge_objects::{MergeByReader, ObjectMerge, ObjectMergeEvent},
     reader_choice::ask_for_reader,
 };
 use crate::{
     app::readers::{Chosen, Readers, Routed},
+    read::Reader,
     git::{
         Baseline, ChangeKind, Conflicted, DifftoolTarget, FileChange, FilePatch, Hunks, Part,
         PartAction, Repo, Revision, Scope, Side, Version as Kept, Whitespace,
@@ -94,6 +98,43 @@ enum Merging {
     Reading,
     Read(FileChange, String),
     Open(Entity<MergeEditor>),
+    Objects(Entity<ObjectMerge>),
+}
+
+enum ConflictRead {
+    Text(FileChange, String),
+    Objects(FileChange, MergeByReader, [SharedString; 2], Merged),
+    Versions(FileChange, bool, bool),
+}
+
+fn marker_labels(text: &str) -> [SharedString; 2] {
+    let label = |marker: &str| {
+        text.lines()
+            .find_map(|line| line.strip_prefix(marker))
+            .map_or_else(SharedString::default, |label| SharedString::from(label.trim().to_owned()))
+    };
+    [label("<<<<<<< "), label(">>>>>>> ")]
+}
+
+fn read_by_object(repo: &Repo, change: &FileChange, text: &str, by: Option<(String, Arc<Reader>, String)>) -> Option<ConflictRead> {
+    let (name, reader, kind) = by?;
+    let path = change.exact_path();
+    let side = |version| {
+        repo.file_bytes(Revision::Conflict(version), path)
+            .ok()
+            .map(|bytes| String::from_utf8_lossy(&bytes).into_owned())
+    };
+    let input = MergeInput {
+        kind,
+        path: path.to_string_lossy().into_owned(),
+        base: repo.conflict_base(path).map(|bytes| String::from_utf8_lossy(&bytes).into_owned()),
+        current: side(Kept::Current)?,
+        incoming: side(Kept::Incoming)?,
+        choices: Vec::new(),
+    };
+    let by = MergeByReader { name, reader, input };
+    let merged = by.run(repo, Vec::new()).ok()?;
+    Some(ConflictRead::Objects(change.clone(), by, marker_labels(text), merged))
 }
 
 #[derive(Clone)]
@@ -193,12 +234,15 @@ pub(crate) struct FileDiffPanel {
     merging: Option<Merging>,
     merge_read: Job,
     merge_observer: Option<Subscription>,
+    merge_events: Option<Subscription>,
     unity_mode: UnityMode,
     unity_text: Option<Arc<UnityFiles>>,
     not_unity: HashSet<SharedString>,
     stopped: HashMap<SharedString, ReaderStopped>,
     asking: Option<(String, Vec<Chosen>)>,
     reading_with: Option<SharedString>,
+    by_text: HashSet<SharedString>,
+    resolving: Option<gpui_kit::Task<()>>,
     fixing: Option<gpui_kit::Task<()>>,
     fixed: Option<(Result<Preview, String>, String)>,
     unity_events: Vec<Subscription>,
@@ -245,12 +289,15 @@ impl FileDiffPanel {
             merging: None,
             merge_read: Job::default(),
             merge_observer: None,
+            merge_events: None,
             unity_mode: UnityMode::Main,
             unity_text: None,
             not_unity: HashSet::new(),
             stopped: HashMap::new(),
             asking: None,
             reading_with: None,
+            by_text: HashSet::new(),
+            resolving: None,
             fixing: None,
             fixed: None,
             unity_events: Vec::new(),
@@ -641,16 +688,37 @@ impl FileDiffPanel {
         }
         let reading = repo.clone();
         let repo = repo.clone();
+        let by_object = match Readers::of(cx).route(&change.path) {
+            Routed::By(chosen) if chosen.merges && !self.by_text.contains(&change.path) => {
+                Some((chosen.name, chosen.reader, chosen.kind.id))
+            }
+            _ => None,
+        };
         let task = run_in_background(
             cx,
-            move || reading.read_conflicted(change.exact_path()).map(|read| (change, read)),
+            move || {
+                reading.read_conflicted(change.exact_path()).map(|read| match read {
+                    Conflicted::Text(text) => {
+                        read_by_object(&reading, &change, &text, by_object).unwrap_or(ConflictRead::Text(change, text))
+                    }
+                    Conflicted::Versions { current, incoming } => ConflictRead::Versions(change, current, incoming),
+                })
+            },
             move |this, result, cx| {
                 this.merge_read.finish();
                 match result {
-                    Ok((change, Conflicted::Text(text))) => {
+                    Ok(ConflictRead::Text(change, text)) => {
                         this.merging = Some(Merging::Read(change, text));
                     }
-                    Ok((change, Conflicted::Versions { current, incoming })) => {
+                    Ok(ConflictRead::Objects(change, by, labels, merged)) => {
+                        let merge = cx.new(|_| ObjectMerge::new(change, by, labels, merged));
+                        this.merge_observer = Some(cx.observe(&merge, |_, _, cx| cx.notify()));
+                        this.merge_events = Some(cx.subscribe(&merge, |this, _, event: &ObjectMergeEvent, cx| match event {
+                            ObjectMergeEvent::AsText => this.merge_as_text(cx),
+                        }));
+                        this.merging = Some(Merging::Objects(merge));
+                    }
+                    Ok(ConflictRead::Versions(change, current, incoming)) => {
                         this.leave_merge();
                         let request = conflict_request(&change, current, incoming);
                         this.open_media(&repo, request, reload, cx);
@@ -845,7 +913,67 @@ impl FileDiffPanel {
     fn leave_merge(&mut self) {
         self.merging = None;
         self.merge_observer = None;
+        self.merge_events = None;
+        self.resolving = None;
         self.merge_read.cancel();
+    }
+
+    fn merge_as_text(&mut self, cx: &mut Context<Self>) {
+        if let Some(path) = self.compared_path() {
+            self.by_text.insert(path);
+        }
+        self.leave_merge();
+        self.reopen(cx);
+    }
+
+    fn render_object_merge(&mut self, heading: Heading, merge: Entity<ObjectMerge>, cx: &mut Context<Self>) -> AnyElement {
+        let writing = self.repository.read(cx).is_writing() || self.resolving.is_some();
+        let (resolved, facts) = {
+            let merge = merge.read(cx);
+            let chosen = merge.total() - merge.left();
+            (merge.is_resolved(), format!("{chosen} of {} chosen", ui::counted(merge.total(), "field", "fields")))
+        };
+        let mark = Button::new("mark-resolved")
+            .xsmall()
+            .icon(IconName::Check)
+            .label("Mark resolved")
+            .when(resolved, |button| button.primary())
+            .tooltip(if resolved { "Write the merged file and stage it" } else { "Choose every field first" })
+            .disabled(writing || !resolved)
+            .on_click(cx.listener(|this, _, _, cx| this.resolve_objects(cx)));
+        let muted = cx.theme().muted_foreground;
+        let file_bar = self
+            .file_bar(heading, Some(mark.into_any_element()), cx)
+            .facts(div().text_color(muted).child(facts).into_any_element());
+        v_flex()
+            .pane()
+            .child(file_bar)
+            .child(div().fill_height().child(merge))
+            .into_any_element()
+    }
+
+    fn resolve_objects(&mut self, cx: &mut Context<Self>) {
+        let Some(Merging::Objects(merge)) = &self.merging else {
+            return;
+        };
+        let Some(repo) = self.repository.read(cx).repo().cloned() else {
+            return;
+        };
+        let merge = merge.read(cx);
+        let (change, by, choices) = (merge.change().clone(), merge.by().clone(), merge.choices());
+        self.resolving = Some(run_in_background(
+            cx,
+            move || by.run(&repo, choices),
+            move |this, result, cx| {
+                this.resolving = None;
+                match result.map(|merged| merged.text) {
+                    Ok(Some(text)) => cx.emit(FileDiffEvent::Resolve(change, Resolution::Text(text.into_bytes()))),
+                    Ok(None) | Err(_) => this.merge_as_text(cx),
+                }
+                cx.notify();
+            },
+        ));
+        cx.notify();
     }
 
     fn merge_editor(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Option<Entity<MergeEditor>> {
@@ -2015,6 +2143,10 @@ impl Render for FileDiffPanel {
                     .as_ref()
                     .is_some_and(|change| change.kind == ChangeKind::Conflicted);
                 let heading = working_heading(open, change);
+                if let Some(Merging::Objects(merge)) = &self.merging {
+                    let merge = merge.clone();
+                    return self.render_object_merge(heading, merge, cx);
+                }
                 if self.merging.is_some() {
                     return self.render_merge(heading, window, cx);
                 }

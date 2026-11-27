@@ -1,5 +1,6 @@
 mod files;
 mod fixes;
+mod merge;
 mod model;
 mod views;
 
@@ -9,6 +10,7 @@ use serde::{Deserialize, Serialize};
 
 pub use files::{Found, Search};
 pub use fixes::{Edit, Fix, FixInput, FixOffer, Place, SideFilesInput, Warning, digest};
+pub use merge::{Choice, Conflict, MergeInput, Merged, Pick};
 pub use model::{Field, Icon, Model, Object, Part, Reference, Role, Scope, Value};
 pub use views::{
     CurveKey, Curves, Declared, Edge, Facing, Graph, GraphKind, Graphic, Keys, Layer, Layout, Marker, Node, NodeKind,
@@ -30,6 +32,7 @@ pub enum Call {
     Read(ReadInput),
     SideFiles(SideFilesInput),
     Fix(FixInput),
+    Merge(MergeInput),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

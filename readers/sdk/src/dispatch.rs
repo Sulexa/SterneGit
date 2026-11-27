@@ -12,6 +12,7 @@ pub fn dispatch(reader: &impl Reader, input: &[u8]) -> Vec<u8> {
         Ok(Call::Read(input)) => answer(reader.read(input)),
         Ok(Call::SideFiles(input)) => answer(reader.side_files(input)),
         Ok(Call::Fix(input)) => answer(reader.fix(input)),
+        Ok(Call::Merge(input)) => answer(reader.merge(input)),
         Err(error) => answer::<()>(Err(Failure::Protocol {
             message: format!("SterneGit's call can't be read: {error}"),
         })),

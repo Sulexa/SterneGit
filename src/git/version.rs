@@ -64,6 +64,17 @@ impl Repo {
         self.resolve_lfs(self.file_bytes(revision, path)?)
     }
 
+    pub(crate) fn conflict_base(&self, path: &OsStr) -> Option<Vec<u8>> {
+        let mut spec = OsString::from(":1:");
+        spec.push(path);
+        run(
+            self.location(),
+            &[OsStr::new(READ_ONLY), OsStr::new("cat-file"), OsStr::new("blob"), &spec],
+            Exit::Success,
+        )
+        .ok()
+    }
+
     pub(crate) fn read_conflicted(&self, path: &OsStr) -> Result<Conflicted> {
         let has = |version| self.file_bytes(Revision::Conflict(version), path).is_ok();
         let (current, incoming) = (has(Version::Current), has(Version::Incoming));

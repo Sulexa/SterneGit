@@ -19,6 +19,7 @@ mod history_list;
 mod hunk_actions;
 mod long_lines;
 mod merge_editor;
+mod merge_objects;
 mod merge_text;
 mod message_editor;
 mod navigation;

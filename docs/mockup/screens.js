@@ -1154,21 +1154,21 @@ const Screens = (() => {
       id: 'reader-choice',
       title: 'Readers — two readers for one file',
       about: "When two approved readers both claim an extension, the first file of that kind asks which one to use, with what each says it reads. The choice is remembered for every repository and can be changed in Settings → Readers; Show as text opens the file without a reader this time.",
-      source: 'src/app/readers.rs',
+      source: 'src/repo/reader_choice.rs',
       render: () => unityComparison(unity.prefabYaml, 'yaml', { overlays: C.ReaderChoiceDialog(Sample.readers.readerChoice) }),
     },
     {
       id: 'reader-fix-preview',
       title: 'Readers — a fix shown before it is applied',
       about: "Point the files to the new GUID in the GUID warning no longer writes anything at once: the Unity reader proposes the edits and SterneGit shows them, one file at a time, as an ordinary comparison. Apply writes each file only if it hasn't changed since the reader read it, then the changes list reads them again; Cancel leaves everything as it was. Keep the old GUID works the same way, with one file, the .meta. The reader never writes: SterneGit does, after you click.",
-      source: 'src/unity/read.rs',
+      source: 'src/repo/fix_preview.rs',
       render: () => unityComparison(unity.guidDiff, 'inspector', { overlays: C.FixPreviewDialog({ fix: Sample.readers.guidFix }) }),
     },
     {
       id: 'merge-by-object',
       title: 'Readers — merging a prefab by object',
       about: "A conflicted file a reader can merge opens merged by object instead of by line. The Unity reader merged every change that only one side made, or that both made alike, on its own (here 7), and lists only the fields both sides changed differently, under their object and component, Current next to Incoming. A click takes a side for that field; Take current or Take incoming does it for every field of the object. Move Speed and Color are chosen, Jump Height and Scale are left. Mark resolved becomes primary once nothing is left: the reader writes the merged file in Unity's own format, then SterneGit stages it. Merge as text goes back to the line-by-line editor with its markers; Start over forgets the choices.",
-      source: 'src/repo/merge_editor.rs',
+      source: 'src/repo/merge_objects.rs',
       render: () => unityComparison(Sample.readers.prefabMerge, 'objectmerge'),
     },
     {
@@ -1887,7 +1887,7 @@ const Screens = (() => {
           id: 'settings-readers',
           title: 'Settings — readers',
           about: "Every reader SterneGit found, bundled beside its exe or installed in the user's readers folder, with the kinds of files it reads, what it may read and its standing, as for connectors. Ready runs; Updated is a new version within what was approved; Waiting for approval waits for Review…; Can't run speaks a newer protocol or has a broken manifest; Stopped failed while starting. Underneath, the extensions more than one reader claims, with the reader chosen for each.",
-          source: 'src/read/catalog.rs',
+          source: 'src/hosting/readers_page.rs',
           render: () => settings('readers', C.ReadersPage({ readers: Sample.readers.readers, shared: Sample.readers.sharedExtensions })),
         },
         {

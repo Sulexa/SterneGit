@@ -9,7 +9,7 @@ use std::{
 
 use serde::de::DeserializeOwned;
 use sternegit_reader_protocol::{
-    ABI, Answer, Call, Failure, Fix, FixInput, Hello, Model, PROTOCOL, ReadInput, Search, SideFilesInput, Warning,
+    ABI, Answer, Call, Failure, Fix, FixInput, Hello, MergeInput, Merged, Model, PROTOCOL, ReadInput, Search, SideFilesInput, Warning,
     speaks_same_major,
 };
 use wasmtime::{Caller, Linker, Memory, Module, Store};
@@ -156,6 +156,10 @@ impl Reader {
         self.call(tree, &Call::Fix(input), cancel)
     }
 
+    pub(crate) fn merge(&self, tree: Arc<dyn Tree>, input: MergeInput, cancel: &AtomicBool) -> Result<Merged, ReadError> {
+        self.call(tree, &Call::Merge(input), cancel)
+    }
+
     fn call<T: DeserializeOwned>(&self, tree: Arc<dyn Tree>, call: &Call, cancel: &AtomicBool) -> Result<T, ReadError> {
         let message = serde_json::to_vec(call).unwrap_or_default();
         let output = self.run(tree, message, cancel)?;
@@ -233,6 +237,7 @@ fn op_name(call: &Call) -> &'static str {
         Call::Read(_) => "read",
         Call::SideFiles(_) => "side_files",
         Call::Fix(_) => "fix",
+        Call::Merge(_) => "merge",
     }
 }
 

@@ -26,6 +26,7 @@ impl Global for Readers {}
 pub(crate) struct Chosen {
     pub(crate) id: ReaderId,
     pub(crate) name: String,
+    pub(crate) merges: bool,
     pub(crate) reader: Arc<Reader>,
     pub(crate) kind: FileKind,
 }
@@ -120,6 +121,7 @@ impl Readers {
                 Some(Chosen {
                     id: plugin.id.clone(),
                     name: manifest.name.clone(),
+                    merges: manifest.grant.jobs.contains("merge"),
                     reader,
                     kind,
                 })
