@@ -1226,6 +1226,9 @@ impl Repository {
         {
             return;
         }
+        if let Some(repo) = self.repo() {
+            crate::read::forget_searches_in(repo.location());
+        }
         self.changes = Some(Arc::new(changes));
         cx.emit(RepositoryEvent::ChangesRead);
         cx.notify();

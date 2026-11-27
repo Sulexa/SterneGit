@@ -46,6 +46,11 @@ impl Revision {
 
 impl Repo {
     pub(crate) fn file_bytes(&self, revision: Revision, path: &OsStr) -> Result<Vec<u8>> {
+        if let (Revision::Head | Revision::Commit(_), Some(path)) = (revision, path.to_str())
+            && let Some(bytes) = self.tree_of(revision).and_then(|tree| self.blob_in_tree(tree, path))
+        {
+            return Ok(bytes);
+        }
         match revision.spec(path) {
             None => {
                 let on_disk = self.location().join(path);
@@ -58,6 +63,24 @@ impl Repo {
                 Exit::Success,
             ),
         }
+    }
+
+    pub(crate) fn tree_of(&self, revision: Revision) -> Option<ObjectId> {
+        let repo = self.local();
+        let commit = match revision {
+            Revision::Head => repo.head_commit().ok()?,
+            Revision::Commit(id) => repo.find_commit(id).ok()?,
+            _ => return None,
+        };
+        commit.tree_id().ok().map(|id| id.detach())
+    }
+
+    pub(crate) fn blob_in_tree(&self, tree: ObjectId, path: &str) -> Option<Vec<u8>> {
+        let repo = self.local();
+        let tree = repo.find_tree(tree).ok()?;
+        let entry = tree.lookup_entry_by_path(path).ok()??;
+        (!entry.mode().is_tree() && !entry.mode().is_commit()).then_some(())?;
+        repo.find_blob(entry.object_id()).ok().map(|blob| blob.detach().data)
     }
 
     pub(crate) fn file_version(&self, revision: Revision, path: &OsStr) -> Result<FileVersion> {

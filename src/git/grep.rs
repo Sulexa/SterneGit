@@ -4,12 +4,23 @@ use anyhow::Result;
 
 use super::command::{Exit, READ_ONLY, run};
 
-pub(crate) fn matches_in_commit(location: &Path, commit: &str, regex: &str, glob: &str) -> Result<Vec<(String, String)>> {
+pub(crate) fn paths_changed_since(location: &Path, commit: &str, glob: &str) -> Result<Vec<String>> {
     let output = run(
         location,
-        &[READ_ONLY, "grep", "-I", "-o", "-E", "-e", regex, commit, "--", glob],
-        Exit::SuccessOrDifference,
+        &[READ_ONLY, "-c", "core.quotePath=false", "diff", "--name-only", "--no-renames", "-z", commit, "--", glob],
+        Exit::Success,
     )?;
+    Ok(output
+        .split(|byte| *byte == 0)
+        .filter(|path| !path.is_empty())
+        .map(|path| String::from_utf8_lossy(path).into_owned())
+        .collect())
+}
+
+pub(crate) fn matches_in_commit(location: &Path, commit: &str, regex: &str, paths: &[&str]) -> Result<Vec<(String, String)>> {
+    let mut args = vec![READ_ONLY, "grep", "-I", "-o", "-E", "-e", regex, commit, "--"];
+    args.extend_from_slice(paths);
+    let output = run(location, &args, Exit::SuccessOrDifference)?;
     let prefix = format!("{commit}:");
     Ok(String::from_utf8_lossy(&output)
         .lines()
@@ -67,7 +78,7 @@ guid: {GUID}
         scratch.commit("first")?;
         scratch.write("slime.png.meta", "guid: ffffffffffffffffffffffffffffffff
 ")?;
-        let found = matches_in_commit(std::path::Path::new(&scratch.location()), "HEAD", "^guid: [0-9a-f]{32}", "*.meta")?;
+        let found = matches_in_commit(std::path::Path::new(&scratch.location()), "HEAD", "^guid: [0-9a-f]{32}", &["*.meta"])?;
         assert_eq!(found, vec![("slime.png.meta".to_owned(), format!("guid: {GUID}"))]);
         Ok(())
     }

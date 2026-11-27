@@ -1,8 +1,8 @@
 use std::{
     collections::HashMap,
     ffi::OsString,
-    path::Path,
-    sync::{Arc, atomic::AtomicBool},
+    path::{Path, PathBuf},
+    sync::{Arc, LazyLock, Mutex, atomic::AtomicBool},
 };
 
 use anyhow::Result;
@@ -243,9 +243,20 @@ fn read_side(repo: &Repo, by: &ByReader, source: &Source, side: Side) -> Result<
     }
 }
 
+type SideRead = Option<Result<protocol::Model>>;
+
+fn both_sides(repo: &Repo, by: &ByReader, before: Option<&Source>, after: Option<&Source>) -> (SideRead, SideRead) {
+    std::thread::scope(|scope| {
+        let later = after.map(|source| scope.spawn(move || read_side(repo, by, source, Side::After)));
+        let read_before = before.map(|source| read_side(repo, by, source, Side::Before));
+        let read_after = later.map(|handle| handle.join().unwrap_or_else(|_| Err(anyhow::anyhow!("reading the newer side panicked"))));
+        (read_before, read_after)
+    })
+}
+
 pub(crate) fn imports(repo: &Repo, by: &ByReader, before: &Source, after: &Source, file: &str) -> Option<ImportChanges> {
-    let old = read_side(repo, by, before, Side::Before).ok()?;
-    let new = read_side(repo, by, after, Side::After).ok()?;
+    let (old, new) = both_sides(repo, by, Some(before), Some(after));
+    let (old, new) = (old?.ok()?, new?.ok()?);
     import_changes(&ingest::model(&old), &ingest::model(&new), file)
 }
 
@@ -275,8 +286,8 @@ pub(crate) fn read(
     if before.is_none() && after.is_none() {
         return Err(NotUnityText.into());
     }
-    let read_before = before.as_ref().map(|source| read_side(repo, by, source, Side::Before)).transpose()?;
-    let read_after = after.as_ref().map(|source| read_side(repo, by, source, Side::After)).transpose()?;
+    let (read_before, read_after) = both_sides(repo, by, before.as_ref(), after.as_ref());
+    let (read_before, read_after) = (read_before.transpose()?, read_after.transpose()?);
     let reads: Vec<&protocol::Model> = [&read_before, &read_after].into_iter().flatten().collect();
     let shape = match () {
         _ if reads.iter().any(|read| read.curves.is_some()) => Shape::Clip,
@@ -327,26 +338,62 @@ pub(crate) fn read(
     })
 }
 
+const MOST_SPRITE_BYTES_KEPT: usize = 256 << 20;
+
+type SpriteKey = (PathBuf, Option<std::time::SystemTime>, u64, String);
+
+static CROPPED: LazyLock<Mutex<HashMap<SpriteKey, Option<Arc<SpriteImage>>>>> = LazyLock::new(Mutex::default);
+
+fn sprite_key(file: &Path, picture: &protocol::Picture) -> Option<SpriteKey> {
+    let stamp = std::fs::metadata(file).ok()?;
+    Some((file.to_owned(), stamp.modified().ok(), stamp.len(), format!("{picture:?}")))
+}
+
+fn keep_sprites(found: Vec<(SpriteKey, Option<Arc<SpriteImage>>)>) {
+    let Ok(mut cropped) = CROPPED.lock() else { return };
+    cropped.extend(found);
+    let kept: usize = cropped.values().flatten().map(|sprite| sprite.rgba.len()).sum();
+    if kept > MOST_SPRITE_BYTES_KEPT {
+        cropped.clear();
+    }
+}
+
 fn load_sprites(repo: &Repo, reads: [&Option<protocol::Model>; 2]) -> HashMap<String, Arc<SpriteImage>> {
     let mut decoded: HashMap<String, Option<Picture>> = HashMap::new();
     let mut sprites = HashMap::new();
+    let mut found = Vec::new();
     for picture in reads.into_iter().flatten().flat_map(|read| &read.pictures) {
         if sprites.contains_key(&picture.id) {
             continue;
         }
-        let image = decoded.entry(picture.path.clone()).or_insert_with(|| {
-            let bytes = std::fs::read(repo.location().join(&picture.path)).ok()?;
-            let extension = Path::new(&picture.path)
-                .extension()
-                .and_then(|extension| extension.to_str())
-                .map(str::to_lowercase);
-            Picture::decode(&bytes, extension.as_deref()).ok()
-        });
-        if let Some(image) = image
-            && let Some(sprite) = crop(&image.pixels, image.width, image.height, picture)
-        {
-            sprites.insert(picture.id.clone(), Arc::new(sprite));
+        let file = repo.location().join(&picture.path);
+        let key = sprite_key(&file, picture);
+        let known = key.as_ref().and_then(|key| CROPPED.lock().ok()?.get(key).cloned());
+        let sprite = match known {
+            Some(sprite) => sprite,
+            None => {
+                let image = decoded.entry(picture.path.clone()).or_insert_with(|| {
+                    let bytes = std::fs::read(&file).ok()?;
+                    let extension = Path::new(&picture.path)
+                        .extension()
+                        .and_then(|extension| extension.to_str())
+                        .map(str::to_lowercase);
+                    Picture::decode(&bytes, extension.as_deref()).ok()
+                });
+                let sprite = image
+                    .as_ref()
+                    .and_then(|image| crop(&image.pixels, image.width, image.height, picture))
+                    .map(Arc::new);
+                if let Some(key) = key {
+                    found.push((key, sprite.clone()));
+                }
+                sprite
+            }
+        };
+        if let Some(sprite) = sprite {
+            sprites.insert(picture.id.clone(), sprite);
         }
     }
+    keep_sprites(found);
     sprites
 }

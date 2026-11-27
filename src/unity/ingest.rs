@@ -513,6 +513,31 @@ Transform:
 ";
 
     #[test]
+    #[ignore = "times opening a real Unity file; set STERNEGIT_TIME_ROOT and STERNEGIT_TIME_PATH"]
+    fn times_opening_a_unity_file() -> anyhow::Result<()> {
+        let root = std::env::var("STERNEGIT_TIME_ROOT")?;
+        let path = std::env::var("STERNEGIT_TIME_PATH")?;
+        let (repo, _) = crate::git::Repo::open(Path::new(&root))?;
+        let by = ByReader {
+            name: "Unity".to_owned(),
+            reader: bundled_unity(),
+            kind: unity_kind(&path),
+        };
+        let source = |revision| Some(Source { revision, path: OsString::from(&path) });
+        for run in 1..=3 {
+            let started = std::time::Instant::now();
+            let files = read(&repo, &path, source(Revision::Head), source(Revision::WorkTree), Some(&by))?;
+            println!("run {run}: {} objects in {:?}", files.after.as_ref().map_or(0, |after| after.model.items.len()), started.elapsed());
+        }
+        let meta = format!("{path}.meta");
+        let by_meta = ByReader { kind: unity_kind(&meta), ..by.clone() };
+        let started = std::time::Instant::now();
+        let _ = crate::unity::imports(&repo, &by_meta, &Source { revision: Revision::Head, path: OsString::from(&meta) }, &Source { revision: Revision::WorkTree, path: OsString::from(&meta) }, &meta);
+        println!("imports of {meta} in {:?}", started.elapsed());
+        Ok(())
+    }
+
+    #[test]
     fn a_godot_scene_compares_through_its_reader_with_no_godot_code_in_sternegit() -> anyhow::Result<()> {
         let dist = Path::new(env!("CARGO_MANIFEST_DIR")).join("readers/godot/dist");
         let reader = Arc::new(Reader::compile(&std::fs::read(dist.join("godot.wasm"))?).unwrap());

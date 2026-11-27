@@ -3,28 +3,43 @@ use std::{
     ffi::OsStr,
     fs,
     path::{Component, Path, PathBuf},
-    sync::Mutex,
+    sync::{LazyLock, Mutex, OnceLock},
 };
 
 use sternegit_reader_protocol::{Found, Search};
 
-use crate::git::{Repo, Revision, matches_in_commit, matches_in_working_tree};
+use crate::git::{Repo, Revision, matches_in_commit, matches_in_working_tree, paths_changed_since};
 
 pub(crate) trait Tree: Send + Sync {
     fn read(&self, path: &str) -> Option<Vec<u8>>;
     fn search(&self, search: &Search) -> Vec<Found>;
 }
 
-type Searched = Mutex<HashMap<(String, String), Vec<Found>>>;
+const MOST_PATHS_NAMED: usize = 200;
 
-fn remembered(searched: &Searched, search: &Search, find: impl FnOnce() -> Vec<Found>) -> Vec<Found> {
-    let key = (search.regex.clone(), search.glob.clone());
-    if let Some(found) = searched.lock().ok().and_then(|searched| searched.get(&key).cloned()) {
+#[derive(Clone, PartialEq, Eq, Hash)]
+struct Asked {
+    root: PathBuf,
+    commit: Option<String>,
+    regex: String,
+    glob: String,
+}
+
+static SEARCHED: LazyLock<Mutex<HashMap<Asked, Vec<Found>>>> = LazyLock::new(Mutex::default);
+
+pub(crate) fn forget_searches_in(root: &Path) {
+    if let Ok(mut searched) = SEARCHED.lock() {
+        searched.retain(|asked, _| asked.root != root);
+    }
+}
+
+fn remembered(asked: Asked, find: impl FnOnce() -> Vec<Found>) -> Vec<Found> {
+    if let Some(found) = SEARCHED.lock().ok().and_then(|searched| searched.get(&asked).cloned()) {
         return found;
     }
     let found = find();
-    if let Ok(mut searched) = searched.lock() {
-        searched.insert(key, found.clone());
+    if let Ok(mut searched) = SEARCHED.lock() {
+        searched.insert(asked, found.clone());
     }
     found
 }
@@ -43,14 +58,19 @@ fn found(matches: anyhow::Result<Vec<(String, String)>>) -> Vec<Found> {
 
 pub(crate) struct WorkingTree {
     root: PathBuf,
-    searched: Searched,
 }
 
 impl WorkingTree {
     pub(crate) fn new(root: impl Into<PathBuf>) -> Self {
-        Self {
-            root: root.into(),
-            searched: Mutex::default(),
+        Self { root: root.into() }
+    }
+
+    fn asked(&self, commit: Option<String>, search: &Search) -> Asked {
+        Asked {
+            root: self.root.clone(),
+            commit,
+            regex: search.regex.clone(),
+            glob: search.glob.clone(),
         }
     }
 }
@@ -61,7 +81,7 @@ impl Tree for WorkingTree {
     }
 
     fn search(&self, search: &Search) -> Vec<Found> {
-        remembered(&self.searched, search, || {
+        remembered(self.asked(None, search), || {
             found(matches_in_working_tree(&self.root, &search.regex, &search.glob))
         })
     }
@@ -72,7 +92,7 @@ pub(crate) struct RevisionTree {
     revision: Revision,
     file: String,
     working: WorkingTree,
-    searched: Searched,
+    tree: OnceLock<Option<gix::ObjectId>>,
 }
 
 impl RevisionTree {
@@ -83,7 +103,7 @@ impl RevisionTree {
             revision,
             file: file.into(),
             working,
-            searched: Mutex::default(),
+            tree: OnceLock::new(),
         }
     }
 
@@ -93,6 +113,33 @@ impl RevisionTree {
             Revision::Commit(id) => Some(id.to_string()),
             _ => None,
         }
+    }
+
+    fn tree(&self) -> Option<gix::ObjectId> {
+        *self.tree.get_or_init(|| self.repo.tree_of(self.revision))
+    }
+
+    fn search_commit(&self, commit: &str, search: &Search) -> Vec<Found> {
+        let location = self.repo.location();
+        let whole_commit = || found(matches_in_commit(location, commit, &search.regex, &[search.glob.as_str()]));
+        let Ok(changed) = paths_changed_since(location, commit, &search.glob) else {
+            return whole_commit();
+        };
+        if changed.len() > MOST_PATHS_NAMED {
+            return whole_commit();
+        }
+        let changed: HashSet<&str> = changed.iter().map(String::as_str).collect();
+        let mut answers: Vec<Found> = self
+            .working
+            .search(search)
+            .into_iter()
+            .filter(|answer| !changed.contains(answer.path.as_str()))
+            .collect();
+        if !changed.is_empty() {
+            let named: Vec<&str> = changed.iter().copied().collect();
+            answers.extend(found(matches_in_commit(location, commit, &search.regex, &named)));
+        }
+        answers
     }
 }
 
@@ -104,12 +151,8 @@ impl Tree for RevisionTree {
         if path == self.file {
             return self.repo.file_version(self.revision, OsStr::new(path)).ok().map(|version| version.bytes);
         }
-        match self.commit() {
-            Some(_) => self
-                .repo
-                .file_bytes(self.revision, OsStr::new(path))
-                .ok()
-                .or_else(|| self.working.read(path)),
+        match self.tree() {
+            Some(tree) => self.repo.blob_in_tree(tree, path).or_else(|| self.working.read(path)),
             None => self.working.read(path),
         }
     }
@@ -118,17 +161,7 @@ impl Tree for RevisionTree {
         let Some(commit) = self.commit() else {
             return self.working.search(search);
         };
-        remembered(&self.searched, search, || {
-            let mut answers = found(matches_in_commit(self.repo.location(), &commit, &search.regex, &search.glob));
-            let in_commit: HashSet<String> = answers.iter().map(|answer| answer.path.clone()).collect();
-            answers.extend(
-                self.working
-                    .search(search)
-                    .into_iter()
-                    .filter(|answer| !in_commit.contains(&answer.path)),
-            );
-            answers
-        })
+        remembered(self.working.asked(Some(commit.clone()), search), || self.search_commit(&commit, search))
     }
 }
 
@@ -136,7 +169,7 @@ impl Tree for RevisionTree {
 mod tests {
     use sternegit_reader_protocol::Search;
 
-    use super::{RevisionTree, Tree, WorkingTree};
+    use super::{RevisionTree, Tree, WorkingTree, forget_searches_in};
     use crate::git::{Revision, scratch::ScratchRepo};
 
     #[test]
@@ -181,6 +214,30 @@ mod tests {
                 ("Later.png.meta".to_owned(), "guid: 11111111111111111111111111111111".to_owned()),
             ]
         );
+        Ok(())
+    }
+
+    #[test]
+    fn a_search_is_kept_until_the_searches_of_its_folder_are_forgotten() -> anyhow::Result<()> {
+        let scratch = ScratchRepo::new("tree-forget")?;
+        scratch.write("A.png.meta", "guid: 0123456789abcdef0123456789abcdef
+")?;
+        let root = std::path::PathBuf::from(scratch.location());
+        let search = Search {
+            regex: "^guid: [0-9a-f]{32}".into(),
+            glob: "*.meta".into(),
+        };
+        let paths = || -> Vec<String> {
+            let mut paths: Vec<String> = WorkingTree::new(&root).search(&search).into_iter().map(|found| found.path).collect();
+            paths.sort();
+            paths
+        };
+        assert_eq!(paths(), ["A.png.meta"]);
+        scratch.write("B.png.meta", "guid: 11111111111111111111111111111111
+")?;
+        assert_eq!(paths(), ["A.png.meta"]);
+        forget_searches_in(&root);
+        assert_eq!(paths(), ["A.png.meta", "B.png.meta"]);
         Ok(())
     }
 }
