@@ -353,16 +353,18 @@ fn flatten(key: &str, label: &str, path: &str, node: &Node, depth: usize, lookup
                 value: Value::Count(items.len()),
             });
             let mut seen = std::collections::HashSet::new();
+            let ids = identities(items);
             for (ix, item) in items.iter().enumerate() {
                 let named = leaf(key, item, lookup).is_none().then(|| single_entry(item)).flatten();
+                let at = ids.as_ref().map_or_else(|| ix.to_string(), |ids| format!("#{}", ids[ix]));
                 match named {
                     Some((name, inner)) if seen.insert(name) => {
                         flatten(name, &nicify(name), &format!("{path}.{name}"), inner, depth + 1, lookup, out)
                     }
                     Some((name, inner)) => {
-                        flatten(name, &nicify(name), &format!("{path}[{ix}].{name}"), inner, depth + 1, lookup, out)
+                        flatten(name, &nicify(name), &format!("{path}[{at}].{name}"), inner, depth + 1, lookup, out)
                     }
-                    None => flatten(key, &format!("Element {ix}"), &format!("{path}[{ix}]"), item, depth + 1, lookup, out),
+                    None => flatten(key, &format!("Element {ix}"), &format!("{path}[{at}]"), item, depth + 1, lookup, out),
                 }
             }
         }
@@ -379,6 +381,16 @@ fn flatten(key: &str, label: &str, path: &str, node: &Node, depth: usize, lookup
         }
         Node::Scalar(_) => {}
     }
+}
+
+const IDENTITY_FIELDS: [&str; 5] = ["m_Id", "m_Key", "m_Guid", "guid", "rid"];
+
+fn identities(items: &[Node]) -> Option<Vec<&str>> {
+    IDENTITY_FIELDS.iter().find_map(|field| {
+        let ids: Vec<&str> = items.iter().map(|item| item.get(field)?.text()).collect::<Option<_>>()?;
+        let mut seen = std::collections::HashSet::new();
+        (!ids.is_empty() && ids.iter().all(|id| !id.is_empty() && seen.insert(*id))).then_some(ids)
+    })
 }
 
 fn single_entry(item: &Node) -> Option<(&str, &Node)> {
@@ -512,7 +524,7 @@ pub(crate) fn rotation_value(node: &Node) -> Option<Value> {
 #[cfg(test)]
 mod tests {
     use super::{LONGEST_VALUE_SHOWN, Lookup, Sameness, Value, euler_degrees, fields, hex_color, is_flag_name};
-    use crate::unity::yaml::Node;
+    use crate::unity::{compare::State, yaml::Node};
 
     fn map(entries: &[(&str, Node)]) -> Node {
         Node::Map(entries.iter().map(|(key, value)| ((*key).to_owned(), value.clone())).collect())
@@ -583,6 +595,29 @@ mod tests {
         assert_eq!(found[0].value, Value::Count(2));
         assert_eq!(found[2].label, "Element 1");
         assert_eq!(found[2].depth, 1);
+    }
+
+    #[test]
+    fn list_entries_with_an_id_pair_by_id_so_removing_one_leaves_the_rest_unchanged() {
+        let entry = |id: &str, words: &str| map(&[("m_Id", text(id)), ("m_Localized", text(words))]);
+        let table = |entries: Vec<Node>| fields(&map(&[("m_TableData", Node::List(entries))]), &[], &Lookup::default());
+        let before = table(vec![entry("1", "Language"), entry("2", "Send data"), entry("3", "General")]);
+        let after = table(vec![entry("1", "Language"), entry("3", "General"), entry("4", "Privacy")]);
+        let (rows, _) = crate::unity::compare::changed_rows(Some(&before), Some(&after), Default::default());
+        let changed: Vec<(String, State)> = rows
+            .iter()
+            .filter(|row| row.depth == 2)
+            .map(|row| (row.before.as_ref().or(row.after.as_ref()).unwrap().text(), row.state))
+            .collect();
+        assert_eq!(
+            changed,
+            [
+                ("2".to_owned(), State::Removed),
+                ("Send data".to_owned(), State::Removed),
+                ("4".to_owned(), State::Added),
+                ("Privacy".to_owned(), State::Added),
+            ]
+        );
     }
 
     #[test]
