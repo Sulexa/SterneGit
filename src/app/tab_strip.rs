@@ -7,7 +7,6 @@ use gpui_kit::{
         ActiveTheme as _, Icon, Sizable as _,
         button::{Button, ButtonVariants as _},
         h_flex,
-        spinner::Spinner,
         tab::{Tab, TabBar},
     },
     div,
@@ -15,6 +14,7 @@ use gpui_kit::{
     px,
 };
 
+use crate::ui::nodding_logo;
 use crate::{
     actions::{CloseTab, OpenRepository, WINDOW_CONTEXT},
     ui::{Handler, Look as _, handler},
@@ -203,7 +203,7 @@ impl Render for DraggedTabPreview {
 
 fn prefix(label: &TabLabel, cx: &App) -> Option<AnyElement> {
     let icon = match label.state {
-        TabState::Reading => Spinner::new().xsmall().into_any_element(),
+        TabState::Reading => nodding_logo().into_any_element(),
         TabState::Failed => Icon::new(IconName::TriangleAlert)
             .xsmall()
             .text_color(cx.theme().red)

@@ -2,10 +2,11 @@ use gpui_kit::{
     AnyElement, App, IntoElement, ParentElement as _, RenderOnce, SharedString, Styled as _,
     Window,
     assets::IconName,
-    component::{ActiveTheme as _, Icon, Sizable as _, StyledExt as _, spinner::Spinner, v_flex},
+    component::{ActiveTheme as _, Icon, Sizable as _, StyledExt as _, v_flex},
     div, px,
 };
 
+use super::nodding_logo;
 use super::look::Look as _;
 
 pub(crate) fn loading(message: &'static str) -> AnyElement {
@@ -14,7 +15,7 @@ pub(crate) fn loading(message: &'static str) -> AnyElement {
         .items_center()
         .justify_center()
         .gap_3()
-        .child(Spinner::new())
+        .child(nodding_logo())
         .child(div().sm_text().child(message))
         .into_any_element()
 }

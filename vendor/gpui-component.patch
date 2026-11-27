@@ -1,3 +1,87 @@
+diff --git a/src/button/button.rs b/src/button/button.rs
+index 2e67be4..bf6dcc1 100644
+--- a/src/button/button.rs
++++ b/src/button/button.rs
+@@ -3,7 +3,7 @@ use std::{rc::Rc, time::Duration};
+ use crate::{
+     ActiveTheme, Colorize as _, Disableable, Icon, Placement, RoleOverride, Selectable, Sizable,
+     Size, StyleSized, StyledExt,
+-    button::ButtonIcon,
++    button::{ButtonIcon, ButtonIconVariant},
+     h_flex,
+     select::Caret,
+     styled::{FocusLine, focus_style},
+@@ -403,6 +403,12 @@ impl Button {
+         self
+     }
+ 
++    /// Set any element as the icon of the button, drawn as it is at every size and kept while loading.
++    pub fn icon_element(mut self, element: impl IntoElement) -> Self {
++        self.icon = Some(ButtonIcon::new(ButtonIconVariant::Custom(element.into_any_element())));
++        self
++    }
++
+     /// Set the tooltip of the button.
+     pub fn tooltip(mut self, tooltip: impl Into<SharedString>) -> Self {
+         self.tooltip = Some((tooltip.into(), None));
+diff --git a/src/button/button_icon.rs b/src/button/button_icon.rs
+index 4403952..d6e2cb7 100644
+--- a/src/button/button_icon.rs
++++ b/src/button/button_icon.rs
+@@ -1,5 +1,5 @@
+ use crate::{Icon, Sizable, Size, progress::ProgressCircle, spinner::Spinner};
+-use gpui::{App, IntoElement, RenderOnce, Window, prelude::FluentBuilder};
++use gpui::{AnyElement, App, IntoElement, RenderOnce, Window, prelude::FluentBuilder};
+ 
+ /// Button icon which can be an Icon, Spinner, or Progress use for `icon` method of Button.
+ #[doc(hidden)]
+@@ -56,6 +56,8 @@ pub enum ButtonIconVariant {
+     Icon(Icon),
+     Spinner(Spinner),
+     Progress(ProgressCircle),
++    /// Any element, drawn as it is at every size, loading or not.
++    Custom(AnyElement),
+ }
+ 
+ impl<T> From<T> for ButtonIconVariant
+@@ -91,6 +93,12 @@ impl ButtonIconVariant {
+     pub(crate) fn is_progress(&self) -> bool {
+         matches!(self, Self::Progress(_))
+     }
++
++    /// Returns true if the ButtonIconKind is a custom element.
++    #[inline]
++    pub(crate) fn is_custom(&self) -> bool {
++        matches!(self, Self::Custom(_))
++    }
+ }
+ 
+ impl Sizable for ButtonIconVariant {
+@@ -99,6 +107,7 @@ impl Sizable for ButtonIconVariant {
+             Self::Icon(icon) => Self::Icon(icon.with_size(size)),
+             Self::Spinner(spinner) => Self::Spinner(spinner.with_size(size)),
+             Self::Progress(progress) => Self::Progress(progress.with_size(size)),
++            Self::Custom(element) => Self::Custom(element),
+         }
+     }
+ }
+@@ -109,6 +118,7 @@ impl RenderOnce for ButtonIconVariant {
+             Self::Icon(icon) => icon.into_any_element(),
+             Self::Spinner(spinner) => spinner.into_any_element(),
+             Self::Progress(progress) => progress.into_any_element(),
++            Self::Custom(element) => element,
+         }
+     }
+ }
+@@ -116,7 +126,7 @@ impl RenderOnce for ButtonIconVariant {
+ impl RenderOnce for ButtonIcon {
+     fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
+         if self.loading {
+-            if self.icon.is_spinner() || self.icon.is_progress() {
++            if self.icon.is_spinner() || self.icon.is_progress() || self.icon.is_custom() {
+                 self.icon.with_size(self.size).into_any_element()
+             } else {
+                 Spinner::new()
 diff --git a/src/diff/code_names.rs b/src/diff/code_names.rs
 new file mode 100644
 index 0000000..213d660

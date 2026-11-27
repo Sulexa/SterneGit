@@ -1164,7 +1164,43 @@ function icon(name, size = 'md', color) {
   return `<svg class="icon" width="${px}" height="${px}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"${style}>${IconPaths[name]}</svg>`;
 }
 
-const RustTokens = /(\/\/.*$)|("(?:[^"\\]|\\.)*")|\b(fn|let|pub|impl|if|else|return|match|mut|use|struct|enum|crate|self|Self|move|for|in|const|as|where|loop|while|break|continue|ref|dyn|trait|type|mod|static|super|async|await|unsafe)\b|\b([A-Z][A-Z0-9_]+|true|false|\d[\d_]*(?:\.\d*)?)\b|\b([A-Z][A-Za-z0-9_]*|bool|char|str|f32|f64|usize|isize|u8|u16|u32|u64|i8|i16|i32|i64)\b|\b([a-z_][a-z0-9_]*!?)(?=\()/g;
+const TernRows = [
+  '................',
+  '................',
+  '.......KKK......',
+  '......KKKKK.....',
+  '......KKKWKOOOOK',
+  '......WWWWWLLL..',
+  '.....GWWWWW.....',
+  '....GGGWWWW.....',
+  '..GGGGGGWWWS....',
+  '.DGGGGGGGWWS....',
+  'DDDGGGGGWWWS....',
+  'D..DDDWWWWS.....',
+  'D.....SSSS......',
+  '........R.R.....',
+  '.......RR.RR....',
+  '................',
+];
+
+const TernColors = { K: '#111111', W: '#ffffff', G: '#c9d3dc', S: '#9aa7b3', D: '#6f7c88', O: '#f26b1d', L: '#f7893a', R: '#e0452b' };
+
+const TernHeadRows = 6;
+
+function ternPaths(rows, from) {
+  const runs = {};
+  rows.forEach((line, offset) => {
+    const row = from + offset;
+    for (const match of line.matchAll(/([^.])\1*/g)) {
+      runs[match[1]] = (runs[match[1]] || '') + `M${match.index} ${row}h${match[0].length}v1h-${match[0].length}z`;
+    }
+  });
+  return Object.entries(runs).map(([pixel, d]) => `<path fill="${TernColors[pixel]}" d="${d}"/>`).join('');
+}
+
+const NoddingTern = `<svg class="nodding" width="16" height="16" viewBox="0 0 16 16" shape-rendering="crispEdges">${ternPaths(TernRows.slice(TernHeadRows), TernHeadRows)}<g class="head">${ternPaths(TernRows.slice(0, TernHeadRows), 0)}</g></svg>`;
+
+const RustTokens =/(\/\/.*$)|("(?:[^"\\]|\\.)*")|\b(fn|let|pub|impl|if|else|return|match|mut|use|struct|enum|crate|self|Self|move|for|in|const|as|where|loop|while|break|continue|ref|dyn|trait|type|mod|static|super|async|await|unsafe)\b|\b([A-Z][A-Z0-9_]+|true|false|\d[\d_]*(?:\.\d*)?)\b|\b([A-Z][A-Za-z0-9_]*|bool|char|str|f32|f64|usize|isize|u8|u16|u32|u64|i8|i16|i32|i64)\b|\b([a-z_][a-z0-9_]*!?)(?=\()/g;
 
 function findRanges(text, find) {
   if (!find || !find.query || text === undefined) return [];
@@ -1796,8 +1832,7 @@ function slotted(text, slot, label) {
 
 function checkIcon(state, size = 'sm') {
   const look = CheckLooks[state];
-  const glyph = icon(look.icon, size, look.color);
-  return look.spin ? glyph.replace('class="icon"', 'class="icon spinner"') : glyph;
+  return look.spin ? NoddingTern : icon(look.icon, size, look.color);
 }
 
 function checkRollup(checks) {
@@ -1857,7 +1892,7 @@ const C = {
     const title = tooltip ? ` title="${esc(tooltip)}"` : '';
     const glyphSize = size === 'xs' ? 'xs' : 'sm';
     const glyph = loading
-      ? icon('loader', glyphSize).replace('class="icon"', 'class="icon spinner"')
+      ? NoddingTern
       : iconName
         ? icon(iconName, glyphSize)
         : '';
@@ -1882,8 +1917,8 @@ const C = {
     return `<div data-c="Input" class="${classes}"${height}>${lead}${text}</div>`;
   },
 
-  Spinner({ size = 'md' } = {}) {
-    return `<span data-c="Spinner" class="h none">${icon('loader', size).replace('class="icon"', 'class="icon spinner"')}</span>`;
+  NoddingLogo() {
+    return `<span data-c="NoddingLogo" class="h none">${NoddingTern}</span>`;
   },
 
   WindowControls() {
@@ -1916,7 +1951,7 @@ const C = {
 
   TabPrefix({ state = 'ready', icon: glyph }) {
     return state === 'reading'
-      ? `<span class="prefix">${C.Spinner({ size: 'xs' })}</span>`
+      ? `<span class="prefix">${C.NoddingLogo()}</span>`
       : state === 'failed'
         ? `<span class="prefix">${icon('triangle-alert', 'xs', 'var(--red)')}</span>`
         : glyph
@@ -2028,7 +2063,7 @@ const C = {
 
   Loading({ message, detail, action = '' }) {
     const more = detail ? `<div class="xs muted mono">${esc(detail)}</div>` : '';
-    return `<div data-c="Loading" class="loading">${C.Spinner()}<div class="sm">${esc(message)}</div>${more}${action}</div>`;
+    return `<div data-c="Loading" class="loading">${C.NoddingLogo()}<div class="sm">${esc(message)}</div>${more}${action}</div>`;
   },
 
   Hint({ message }) {
@@ -3463,7 +3498,7 @@ const C = {
   },
 
   FileHistoryList({ history, selected = 0, reading = false }) {
-    const head = C.SectionHeader({ title: Texts.fileHistory, count: reading ? undefined : history.entries.length, action: reading ? C.Spinner({ size: 'xs' }) : '' });
+    const head = C.SectionHeader({ title: Texts.fileHistory, count: reading ? undefined : history.entries.length, action: reading ? C.NoddingLogo() : '' });
     const rows = reading ? '' : history.entries.map((entry, ix) => C.FileHistoryRow({ entry, selected: ix === selected })).join('');
     return `<div data-c="FileHistoryList" class="file-history">${head}${rows}</div>`;
   },
@@ -3480,7 +3515,7 @@ const C = {
   ToolbarButton({ label, icon: iconName, disabled = false, loading = false, tooltip }) {
     const classes = ['btn', 'ghost', 'toolbar-button', disabled && 'disabled'].filter(Boolean).join(' ');
     const title = tooltip ? ` title="${esc(tooltip)}"` : '';
-    const glyph = loading ? icon('loader', 'md').replace('class="icon"', 'class="icon spinner"') : icon(iconName, 'md');
+    const glyph = loading ? NoddingTern : icon(iconName, 'md');
     return `<span data-c="ToolbarButton" data-base="Button" class="${classes}"${title}>${glyph}<span>${esc(label)}</span></span>`;
   },
 
@@ -3850,7 +3885,7 @@ const C = {
     const built = installation === 'built';
     const shown = built ? 'built' : status;
     const where = built ? HostTexts.builtHere : installation === 'portable' ? HostTexts.portableAt(folder) : HostTexts.installedAt(folder);
-    const spinning = icon('loader', 'xs').replace('class="icon"', 'class="icon spinner"');
+    const spinning = NoddingTern;
     const [glyph, line] = {
       'up-to-date': [icon('circle-check', 'xs', 'var(--green)'), HostTexts.upToDate(ago)],
       checking: [spinning, HostTexts.checking],
@@ -4066,7 +4101,7 @@ const C = {
 
   ReaderBar({ state, reader = 'Unity', problem = '' }) {
     if (state === 'reading') {
-      return `<div data-c="ReaderBar" class="reader-bar">${C.Spinner({ size: 'xs' })}<span class="sm">${esc(ReaderTexts.reading(reader))}</span><span class="xs muted fill">${esc(ReaderTexts.readingAbout)}</span></div>`;
+      return `<div data-c="ReaderBar" class="reader-bar">${C.NoddingLogo()}<span class="sm">${esc(ReaderTexts.reading(reader))}</span><span class="xs muted fill">${esc(ReaderTexts.readingAbout)}</span></div>`;
     }
     return `<div data-c="ReaderBar" class="reader-bar stopped">${icon('circle-alert', 'sm', 'var(--red)')}<span class="sm">${esc(ReaderTexts.stopped(reader, problem))}</span><span class="fill"></span>${C.Button({ label: HostTexts.showLog, size: 'sm' })}${C.Button({ label: ReaderTexts.tryAgain, icon: 'refresh-cw', size: 'sm', variant: 'ghost' })}</div>`;
   },
@@ -4147,7 +4182,7 @@ const C = {
       const code = `<div class="device-code${stale ? ' stale' : ''}"><span class="code">${esc(Sample.hosting.deviceCode)}</span>${stale ? '' : C.Button({ label: HostTexts.copy, icon: 'copy', size: 'sm' })}</div>`;
       const status =
         step === 'device'
-          ? `<div class="dialog-status">${C.Spinner({ size: 'sm' })}<span class="muted">${esc(HostTexts.waitingForYou(service))}</span></div>`
+          ? `<div class="dialog-status">${C.NoddingLogo()}<span class="muted">${esc(HostTexts.waitingForYou(service))}</span></div>`
           : step === 'expired'
             ? `<div class="dialog-status">${icon('clock', 'md', 'var(--yellow)')}<span>${esc(HostTexts.expired)}</span></div>`
             : `<div class="dialog-status">${icon('circle-x', 'md', 'var(--red)')}<span>${esc(HostTexts.denied(service))}</span></div>`;
@@ -4292,7 +4327,7 @@ const C = {
     const note = (glyph, text, action = '') => C.ListRow({ content: `<div class="h fill section-note xs muted" title="${esc(text)}">${glyph}<span class="fill ellipsis">${esc(text)}</span>${action}</div>`, name: 'ListRow' });
     const loadMore = more ? C.ListRow({ content: `<div class="h fill section-more xs muted">${esc(HostTexts.loadMore)}</div>` }) : '';
     const states = {
-      loading: () => note(C.Spinner({ size: 'xs' }), PullTexts.reading),
+      loading: () => note(C.NoddingLogo(), PullTexts.reading),
       none: () => note(icon('user', 'xs'), PullTexts.noAccount(service, server), C.Button({ label: HostTexts.addAccountShort, variant: 'ghost' })),
       signedOut: () => note(icon('triangle-alert', 'xs'), PullTexts.signedOut(login), C.Button({ label: HostTexts.signInAgain, variant: 'ghost' })),
       choosing: () => note(icon('user', 'xs'), PullTexts.choosing),
@@ -4313,7 +4348,7 @@ const C = {
   },
 
   ChecksBox({ checks, state = 'ready' }) {
-    if (state === 'loading') return `<div data-c="ChecksBox" class="pull-box"><div class="box-head">${C.Spinner({ size: 'sm' })}<span class="sm muted">${esc(PullTexts.checks)}</span></div></div>`;
+    if (state === 'loading') return `<div data-c="ChecksBox" class="pull-box"><div class="box-head">${C.NoddingLogo()}<span class="sm muted">${esc(PullTexts.checks)}</span></div></div>`;
     if (!checks.length) return `<div data-c="ChecksBox" class="pull-box"><div class="box-head">${icon('circle-minus', 'sm', 'var(--muted)')}<span class="sm muted">${esc(PullTexts.noChecks)}</span></div></div>`;
     const rows = checks
       .map(
@@ -4326,7 +4361,7 @@ const C = {
 
   MergeBox({ pull, details, look: key = details.mergeability, running = false }) {
     const look = MergeLooks[key];
-    const glyph = look.spin ? icon(look.icon, 'md', look.color).replace('class="icon"', 'class="icon spinner"') : icon(look.icon, 'md', look.color);
+    const glyph = look.spin ? NoddingTern : icon(look.icon, 'md', look.color);
     const actions =
       key === 'merged'
         ? C.Button({ label: PullTexts.deleteBranch, icon: 'trash-2', size: 'sm', tooltip: PullTexts.deleteBranchTooltip })

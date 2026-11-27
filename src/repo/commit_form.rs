@@ -15,6 +15,7 @@ use gpui_kit::{
     prelude::FluentBuilder as _,
 };
 
+use crate::ui::Nodding as _;
 use super::repository::{Repository, RepositoryEvent};
 use crate::{
     git::{CommitMode, commit_message},
@@ -241,7 +242,7 @@ impl Render for CommitForm {
                             .primary()
                             .flex_1()
                             .label(label(amending, committing, staged))
-                            .loading(committing)
+                            .nodding(committing)
                             .disabled(!ready && !committing)
                             .tooltip_with_action(
                                 if amending {

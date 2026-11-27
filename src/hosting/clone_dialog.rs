@@ -16,7 +16,6 @@ use gpui_kit::{
         h_flex,
         input::{Input, InputEvent, InputState},
         menu::PopupMenuItem,
-        spinner::Spinner,
         v_flex,
     },
     div,
@@ -24,6 +23,7 @@ use gpui_kit::{
     px,
 };
 
+use crate::ui::{Nodding as _, nodding_logo};
 use super::{
     clone_view::CloneJob,
     failure::{Fix, Trouble},
@@ -578,7 +578,7 @@ impl CloneForm {
                 .flex_1()
                 .items_center()
                 .justify_center()
-                .child(Spinner::new())
+                .child(nodding_logo())
                 .into_any_element(),
             Some(Listing::Shown { items, next, more }) if items.is_empty() && next.is_none() && more.is_none() => {
                 v_flex()
@@ -615,7 +615,7 @@ impl CloneForm {
                                     .ghost()
                                     .small()
                                     .label(LOAD_MORE)
-                                    .loading(loading_more)
+                                    .nodding(loading_more)
                                     .on_click(cx.listener(|this, _, _, cx| this.load_more(cx))),
                             ),
                         )

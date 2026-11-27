@@ -250,7 +250,7 @@ const Screens = (() => {
     {
       id: 'reading',
       title: 'Reading history',
-      about: 'A repository was just opened. Its tab shows a spinner and the whole body waits for the first read of refs and history.',
+      about: 'A repository was just opened. Its tab shows the nodding tern and the whole body waits for the first read of refs and history.',
       source: 'src/repo/mod.rs',
       render: () =>
         C.SterneGit({
@@ -1181,7 +1181,7 @@ const Screens = (() => {
     {
       id: 'pulling',
       title: 'Header — pulling',
-      about: 'Pull was clicked. Its icon turns into a spinner and the other header buttons wait, like the stage and commit buttons, because SterneGit runs one Git write at a time. Pull and Push need a checked-out branch, except that Pull in Fetch only mode works anywhere; Stash needs uncommitted changes; Pop needs a stash.',
+      about: 'Pull was clicked. Its icon turns into the nodding tern and the other header buttons wait, like the stage and commit buttons, because SterneGit runs one Git write at a time. Pull and Push need a checked-out branch, except that Pull in Fetch only mode works anywhere; Stash needs uncommitted changes; Pop needs a stash.',
       source: 'src/repo/toolbar.rs',
       render: () => C.SterneGit({ topBar: topBar(), tabStrip: tabStrip(), body: commitSelected(undefined, {}, C.RepoToolbar({ running: 'pull' })) }),
     },
@@ -2242,7 +2242,7 @@ const Screens = (() => {
         {
           id: 'pulls-no-account',
           title: 'Pull requests without an account',
-          about: 'A connector claims the remote but no account fits it: the section\'s one row says so, and Add account… opens the Add an account dialog. A refused token says the account is signed out, with Sign in again; nothing is asked before, and fetches keep using Git\'s own credentials. The first read shows a spinner; another failure shows its reason with Retry. When two accounts fit and SterneGit asks which one, the row says to pick one above. Hovering a row shows its whole text.',
+          about: 'A connector claims the remote but no account fits it: the section\'s one row says so, and Add account… opens the Add an account dialog. A refused token says the account is signed out, with Sign in again; nothing is asked before, and fetches keep using Git\'s own credentials. The first read shows the nodding tern; another failure shows its reason with Retry. When two accounts fit and SterneGit asks which one, the row says to pick one above. Hovering a row shows its whole text.',
           source: 'src/repo/pulls/section.rs',
           render: () =>
             C.SterneGit({

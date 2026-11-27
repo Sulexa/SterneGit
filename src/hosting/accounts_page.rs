@@ -6,7 +6,6 @@ use gpui_kit::{
         ActiveTheme as _, Icon, Sizable as _, StyledExt as _,
         button::{Button, ButtonVariants as _},
         h_flex,
-        spinner::Spinner,
         v_flex,
     },
     div,
@@ -14,6 +13,7 @@ use gpui_kit::{
     px,
 };
 
+use crate::ui::nodding_logo;
 use super::{
     failure::Fix,
     parts::{
@@ -384,7 +384,7 @@ impl SettingsTab {
         match server {
             Some(ServerKeys::Reading(_)) => rows.push(
                 slim_row()
-                    .child(Spinner::new().small())
+                    .child(nodding_logo())
                     .child(div().sm_text().text_color(muted).child(format!("Reading the keys {service} lists…")))
                     .into_any_element(),
             ),

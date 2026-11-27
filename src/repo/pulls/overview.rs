@@ -16,7 +16,6 @@ use gpui_kit::{
         input::{Enter, InputEvent, Textarea, TextareaState},
         notification::Notification,
         scroll::ScrollableElement as _,
-        spinner::Spinner,
         v_flex,
     },
     div,
@@ -24,6 +23,7 @@ use gpui_kit::{
     px,
 };
 
+use crate::ui::{Nodding as _, nodding_logo};
 use super::{
     list::Hosting,
     looks::{Mark, check_mark, checks_summary, merge_words, readable_head, review_mark, rollup, same_repository, state_mark},
@@ -639,7 +639,7 @@ impl PullView {
         };
         let mut rows: Vec<AnyElement> = Vec::new();
         match (&self.checks.value, &self.checks.trouble) {
-            (None, None) => rows.push(head(Spinner::new().small().into_any_element(), "Checks", String::new()).into_any_element()),
+            (None, None) => rows.push(head(nodding_logo().into_any_element(), "Checks", String::new()).into_any_element()),
             (None, Some(trouble)) => rows.push(self.trouble_box(trouble, cx)),
             (Some(checks), _) if checks.is_empty() => rows.push(
                 head(
@@ -765,7 +765,7 @@ impl PullView {
                 })
                 .collect(),
             (None, Some(trouble)) => vec![self.trouble_box(trouble, cx)],
-            (None, None) => vec![Spinner::new().small().into_any_element()],
+            (None, None) => vec![nodding_logo().into_any_element()],
         };
         v_flex()
             .flex_none()
@@ -809,7 +809,7 @@ impl PullView {
                         .small()
                         .icon(IconName::MessageSquare)
                         .label(COMMENT)
-                        .loading(posting)
+                        .nodding(posting)
                         .disabled(!written || posting)
                         .on_click(cx.listener(|this, _, window, cx| this.post_comment(window, cx))),
                 ),
@@ -898,12 +898,10 @@ fn boxed(rows: Vec<AnyElement>, cx: &App) -> AnyElement {
 }
 
 fn mark_icon(mark: Mark, cx: &App) -> AnyElement {
-    let color = mark.tint.color(cx);
     if mark.spins {
-        Spinner::new().small().color(color).into_any_element()
-    } else {
-        Icon::new(mark.icon).small().text_color(color).into_any_element()
+        return nodding_logo().into_any_element();
     }
+    Icon::new(mark.icon).small().text_color(mark.tint.color(cx)).into_any_element()
 }
 
 fn mark_chip(label: &'static str, icon: IconName, color: Hsla) -> AnyElement {

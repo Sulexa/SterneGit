@@ -131,13 +131,12 @@ const Catalog = (() => {
           ],
         },
         {
-          name: 'Spinner',
-          code: 'gpui_kit::spinner::Spinner',
-          source: 'src/ui/notice.rs',
-          about: 'Medium in loading notices, xsmall in a tab that is reading.',
+          name: 'NoddingLogo',
+          code: 'logo::nodding_logo',
+          source: 'src/ui/logo/mod.rs',
+          about: "The logo's tern dips its head one pixel and back up, 2.5 times a second: SterneGit's only loading sign, in place of a spinner everywhere (loading notices, a tab that is reading, a running toolbar or form button, file history, checks and pull requests being read). Always 16 px, one grid cell per pixel, so the one-pixel nod never gets lost; where a 12 or 14 px icon sat, the slot grows to 16.",
           variants: [
-            ['Medium', () => C.Spinner()],
-            ['XSmall', () => C.Spinner({ size: 'xs' })],
+            ['16 px', () => C.NoddingLogo()],
           ],
         },
         {
@@ -380,7 +379,7 @@ const Catalog = (() => {
           name: 'Loading',
           code: 'ui::loading',
           source: 'src/ui/notice.rs',
-          about: 'A centered spinner with a message.',
+          about: 'The NoddingLogo centered above a message.',
           variants: [['Reading commit', () => C.Loading({ message: Texts.readingCommit }), { w: 480, h: 160 }]],
         },
         {
@@ -423,8 +422,8 @@ const Catalog = (() => {
         },
         {
           name: 'AppLogo',
-          code: 'app::logo::logo',
-          source: 'src/app/logo/mod.rs',
+          code: 'ui::logo::logo',
+          source: 'src/ui/logo/mod.rs',
           about: 'A common tern standing in profile, facing right, the whole bird, drawn pixel by pixel on a 16 × 16 grid with nothing behind it: black cap with a white glint for the eye, a long orange bill with a black tip, white face and breast, pearl grey back, dark grey wing tips and tail streamer, a grey line under the belly so it shows on light bars, and red legs. The top bar paints it cell by cell, snapped to device pixels; the build turns the same grid into the Windows icon of the exe, its window and its taskbar button, at 16, 32, 48 and 256 px. Every size is a whole multiple of the grid, so each stays sharp.',
           variants: [
             ['16 px, top bar', () => C.AppLogo()],
@@ -483,7 +482,7 @@ const Catalog = (() => {
           name: 'Tab',
           code: 'gpui_kit::tab::Tab',
           source: 'src/app/tab_strip.rs',
-          about: '120–240 px wide. A spinner while history is read, a red warning when opening failed.',
+          about: '120–240 px wide. The NoddingLogo while history is read, a red warning when opening failed.',
           variants: [
             ['Active', () => `<div class="tab-strip">${C.Tab({ name: 'sternegit', active: true })}</div>`],
             ['Inactive', () => `<div class="tab-strip">${C.Tab({ name: 'website' })}</div>`],
@@ -564,7 +563,7 @@ const Catalog = (() => {
           name: 'ToolbarButton',
           code: 'repo::toolbar::toolbar_button',
           source: 'src/repo/toolbar.rs',
-          about: 'A ghost button 40 px high and at least 56 px wide, its 16 px icon above a 12 px label. A spinner replaces the icon while it runs.',
+          about: 'A ghost button 40 px high and at least 56 px wide, its 16 px icon above a 12 px label. The NoddingLogo replaces the icon while it runs.',
           variants: [
             ['Ready', () => C.ToolbarButton(ToolbarGroups[0][0])],
             ['Running', () => C.ToolbarButton({ ...ToolbarGroups[0][0], loading: true })],

@@ -15,7 +15,6 @@ use gpui_kit::{
     assets::IconName,
     component::{
         ActiveTheme as _, Disableable as _, Icon, Selectable as _, Sizable as _, WindowExt as _,
-        spinner::Spinner,
         button::{Button, ButtonVariants as _},
         diff::{
             Diff, DiffChangeIndicator, DiffChangeMark, DiffFile, DiffHoverHighlight,
@@ -66,7 +65,7 @@ use crate::{
         soundtrack, thumbnails, visible_changes,
     },
     ui::{
-        self, FindBar, FindEvent, Found, Job, Load, Look as _, Matcher, SideUi as _, handler,
+        self, FindBar, FindEvent, Found, Job, Load, Look as _, Matcher, SideUi as _, handler, nodding_logo,
         run_in_background,
     },
     unity::{self, NotUnityText, ReaderStopped, Shape as UnityShape, Source as UnitySource, UnityFiles},
@@ -539,7 +538,7 @@ impl FileDiffPanel {
             return Some(
                 bar()
                     .bg(sidebar)
-                    .child(Spinner::new().xsmall())
+                    .child(nodding_logo())
                     .child(div().sm_text().child(format!("Reading with {reader}…")))
                     .into_any_element(),
             );

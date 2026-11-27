@@ -1,4 +1,4 @@
-#[path = "../src/app/logo/pixels.rs"]
+#[path = "../src/ui/logo/pixels.rs"]
 mod pixels;
 
 use std::{fs, path::Path};

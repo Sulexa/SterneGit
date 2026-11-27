@@ -8,7 +8,6 @@ use gpui_kit::{
         h_flex,
         menu::{DropdownMenu as _, PopupMenu, PopupMenuItem},
         notification::Notification,
-        spinner::Spinner,
         v_flex,
     },
     div,
@@ -16,6 +15,7 @@ use gpui_kit::{
     px,
 };
 
+use crate::ui::nodding_logo;
 use super::{
     operation::{Operated, Operation, Outcome},
     repository::Repository,
@@ -170,7 +170,7 @@ impl RepoToolbar {
     fn toolbar_button(&self, operation: Operation) -> Button {
         let running = self.state.is_running(operation);
         let glyph = if running {
-            Spinner::new().into_any_element()
+            nodding_logo().into_any_element()
         } else {
             Icon::new(icon(operation)).into_any_element()
         };

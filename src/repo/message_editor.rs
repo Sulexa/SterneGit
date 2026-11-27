@@ -14,6 +14,7 @@ use gpui_kit::{
     prelude::FluentBuilder as _,
 };
 
+use crate::ui::Nodding as _;
 use super::repository::{Repository, RepositoryEvent, Reworded};
 use crate::{
     actions::CloseDiff,
@@ -231,7 +232,7 @@ impl Render for MessageEditor {
                             .primary()
                             .small()
                             .label(if self.saving { SAVING } else { SAVE })
-                            .loading(self.saving)
+                            .nodding(self.saving)
                             .disabled(!ready && !self.saving)
                             .tooltip_with_action(
                                 "Save the message",

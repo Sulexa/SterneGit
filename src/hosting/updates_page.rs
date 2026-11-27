@@ -7,13 +7,13 @@ use gpui_kit::{
         ActiveTheme as _, Disableable as _, Icon, Sizable as _, StyledExt as _,
         button::{Button, ButtonVariants as _},
         h_flex,
-        spinner::Spinner,
         switch::Switch,
         v_flex,
     },
     div,
 };
 
+use crate::ui::nodding_logo;
 use super::{
     parts::{Heading, boxed, page, row, shown_path},
     settings_tab::SettingsTab,
@@ -70,7 +70,7 @@ impl SettingsTab {
                             .gap_1p5()
                             .xs_text()
                             .child(match line.spinning {
-                                true => Spinner::new().xsmall().into_any_element(),
+                                true => nodding_logo().into_any_element(),
                                 false => Icon::new(line.icon).xsmall().text_color(line.color).into_any_element(),
                             })
                             .child(div().min_w_0().child(line.text)),

@@ -1,5 +1,5 @@
 use crate::{Icon, Sizable, Size, progress::ProgressCircle, spinner::Spinner};
-use gpui::{App, IntoElement, RenderOnce, Window, prelude::FluentBuilder};
+use gpui::{AnyElement, App, IntoElement, RenderOnce, Window, prelude::FluentBuilder};
 
 /// Button icon which can be an Icon, Spinner, or Progress use for `icon` method of Button.
 #[doc(hidden)]
@@ -56,6 +56,8 @@ pub enum ButtonIconVariant {
     Icon(Icon),
     Spinner(Spinner),
     Progress(ProgressCircle),
+    /// Any element, drawn as it is at every size, loading or not.
+    Custom(AnyElement),
 }
 
 impl<T> From<T> for ButtonIconVariant
@@ -91,6 +93,12 @@ impl ButtonIconVariant {
     pub(crate) fn is_progress(&self) -> bool {
         matches!(self, Self::Progress(_))
     }
+
+    /// Returns true if the ButtonIconKind is a custom element.
+    #[inline]
+    pub(crate) fn is_custom(&self) -> bool {
+        matches!(self, Self::Custom(_))
+    }
 }
 
 impl Sizable for ButtonIconVariant {
@@ -99,6 +107,7 @@ impl Sizable for ButtonIconVariant {
             Self::Icon(icon) => Self::Icon(icon.with_size(size)),
             Self::Spinner(spinner) => Self::Spinner(spinner.with_size(size)),
             Self::Progress(progress) => Self::Progress(progress.with_size(size)),
+            Self::Custom(element) => Self::Custom(element),
         }
     }
 }
@@ -109,6 +118,7 @@ impl RenderOnce for ButtonIconVariant {
             Self::Icon(icon) => icon.into_any_element(),
             Self::Spinner(spinner) => spinner.into_any_element(),
             Self::Progress(progress) => progress.into_any_element(),
+            Self::Custom(element) => element,
         }
     }
 }
@@ -116,7 +126,7 @@ impl RenderOnce for ButtonIconVariant {
 impl RenderOnce for ButtonIcon {
     fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
         if self.loading {
-            if self.icon.is_spinner() || self.icon.is_progress() {
+            if self.icon.is_spinner() || self.icon.is_progress() || self.icon.is_custom() {
                 self.icon.with_size(self.size).into_any_element()
             } else {
                 Spinner::new()

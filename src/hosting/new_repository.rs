@@ -18,6 +18,7 @@ use gpui_kit::{
     div, px,
 };
 
+use crate::ui::Nodding as _;
 use super::{
     accounts_page::service_label,
     hosted::{Hosted, connect_origin, creating_accounts, remember_use},
@@ -224,7 +225,7 @@ impl Render for NewRepositoryForm {
                             .primary()
                             .icon(IconName::FolderPlus)
                             .label(CREATE)
-                            .loading(busy)
+                            .nodding(busy)
                             .disabled(!ready || busy)
                             .on_click(cx.listener(|this, _, window, cx| this.create(window, cx))),
                     ),

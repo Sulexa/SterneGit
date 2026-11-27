@@ -16,6 +16,7 @@ use gpui_kit::{
     div, px,
 };
 
+use crate::ui::Nodding as _;
 use super::{
     accounts_page::service_label,
     parts::{Note, field, shown_path},
@@ -192,7 +193,7 @@ impl Render for SshKeyForm {
                 .primary()
                 .icon(IconName::KeyRound)
                 .label(CREATE_AND_ADD)
-                .loading(busy)
+                .nodding(busy)
                 .disabled(busy)
                 .on_click(cx.listener(|this, _, window, cx| this.create(window, cx))),
         };

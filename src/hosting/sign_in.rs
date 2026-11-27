@@ -15,7 +15,6 @@ use gpui_kit::{
         input::{Input, InputEvent, InputState},
         menu::PopupMenuItem,
         notification::Notification,
-        spinner::Spinner,
         v_flex,
     },
     div,
@@ -24,6 +23,7 @@ use gpui_kit::{
 };
 use url::Url;
 
+use crate::ui::{Nodding as _, nodding_logo};
 use super::{
     failure::Trouble,
     parts::{Note, Picker, field},
@@ -528,8 +528,8 @@ impl SignIn {
                 })
         });
         let status = match device {
-            Device::Asking => h_flex().gap_2().child(Spinner::new().small()).child(div().text_color(muted).child(format!("Asking {label} for a code…"))),
-            Device::Waiting(_) => h_flex().gap_2().child(Spinner::new().small()).child(div().text_color(muted).child(format!("Waiting for you to approve SterneGit on {label}…"))),
+            Device::Asking => h_flex().gap_2().child(nodding_logo()).child(div().text_color(muted).child(format!("Asking {label} for a code…"))),
+            Device::Waiting(_) => h_flex().gap_2().child(nodding_logo()).child(div().text_color(muted).child(format!("Waiting for you to approve SterneGit on {label}…"))),
             Device::Expired(_) => h_flex().gap_2().child(Icon::new(IconName::Clock).small().text_color(yellow)).child("The code expired. Nothing was saved."),
             Device::Denied(_) => h_flex().gap_2().child(Icon::new(IconName::CircleX).small().text_color(red)).child(format!("{label} says you declined. Nothing was saved.")),
         };
@@ -556,7 +556,7 @@ impl SignIn {
                 Button::new("sign-in-token")
                     .primary()
                     .label(if busy { CHECKING } else { SIGN_IN })
-                    .loading(busy)
+                    .nodding(busy)
                     .disabled(busy)
                     .on_click(cx.listener(|this, _, window, cx| this.submit_token(window, cx))),
             ),
@@ -564,7 +564,7 @@ impl SignIn {
                 Button::new("sign-in-credential")
                     .primary()
                     .label(if busy { CHECKING } else { USE_TOKEN })
-                    .loading(busy)
+                    .nodding(busy)
                     .disabled(busy)
                     .on_click(cx.listener(|this, _, window, cx| this.borrow_from_git(window, cx))),
             ),

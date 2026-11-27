@@ -13,14 +13,14 @@ use gpui_kit::{
     px,
 };
 
+use crate::ui::Nodding as _;
 use super::{
-    logo::logo,
     updates::{
         DOWNLOADING, OPEN_RELEASE_PAGE, RESTART_TO_UPDATE, Status, UPDATE_THEN_RESTART, WHATS_NEW, download,
         downloading, ready_tip, release_out, restart_to_update, update_to,
     },
 };
-use crate::{update::Release, ui::Look as _};
+use crate::{update::Release, ui::{Look as _, logo}};
 
 const TINT: f32 = 0.16;
 const TINT_HOVERED: f32 = 0.24;
@@ -161,7 +161,7 @@ fn update_button(status: &Status, cx: &App) -> Option<AnyElement> {
             Button::new("downloading-update")
                 .custom(update_variant(cx))
                 .xsmall()
-                .loading(true)
+                .nodding(true)
                 .disabled(true)
                 .label(DOWNLOADING)
                 .tooltip(downloading(release))

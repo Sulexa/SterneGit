@@ -16,6 +16,7 @@ use gpui_kit::{
     div, px,
 };
 
+use crate::ui::Nodding as _;
 use super::list::Hosting;
 use crate::{
     app::connectors::note_failure,
@@ -364,7 +365,7 @@ impl Render for CreateForm {
                             .primary()
                             .icon(IconName::GitPullRequest)
                             .label(CREATE)
-                            .loading(busy)
+                            .nodding(busy)
                             .disabled(!ready)
                             .on_click(cx.listener(|this, _, window, cx| this.create(window, cx))),
                     ),

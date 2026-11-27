@@ -14,6 +14,7 @@ use gpui_kit::{
     div, px,
 };
 
+use crate::ui::Nodding as _;
 use super::{
     hosted::{Hosted, connect_origin, creating_accounts, remember_use},
     parts::{Note, field},
@@ -154,7 +155,7 @@ impl Render for PublishForm {
                         .primary()
                         .icon(IconName::Upload)
                         .label(PUBLISH)
-                        .loading(busy)
+                        .nodding(busy)
                         .disabled(!ready || busy)
                         .on_click(cx.listener(|this, _, window, cx| this.publish(window, cx))),
                 ),

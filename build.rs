@@ -1,4 +1,4 @@
-#[path = "src/app/logo/pixels.rs"]
+#[path = "src/ui/logo/pixels.rs"]
 mod pixels;
 
 use std::{env, fs, path::PathBuf};
@@ -28,7 +28,7 @@ const BEST_COMPRESSION: u8 = 10;
 
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
-    println!("cargo:rerun-if-changed=src/app/logo/pixels.rs");
+    println!("cargo:rerun-if-changed=src/ui/logo/pixels.rs");
     if !links_with_msvc_on_windows() {
         return;
     }

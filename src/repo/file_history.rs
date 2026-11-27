@@ -6,13 +6,14 @@ use gpui_kit::{
     ParentElement as _, Pixels, RenderOnce, ScrollStrategy, SharedString, Styled as _, Task,
     UniformListScrollHandle, Window,
     component::{
-        ActiveTheme as _, Sizable as _, h_flex, scroll::Scrollbar, spinner::Spinner, v_flex,
+        ActiveTheme as _, h_flex, scroll::Scrollbar, v_flex,
     },
     div,
     prelude::FluentBuilder as _,
     px, uniform_list,
 };
 
+use crate::ui::nodding_logo;
 use super::navigation::Step;
 use crate::{
     actions::HISTORY_CONTEXT,
@@ -177,7 +178,7 @@ impl RenderOnce for FileHistoryList {
             .when_some(commits.as_ref(), |header, commits| {
                 header.count(commits.len())
             })
-            .when(reading, |header| header.action(Spinner::new().xsmall()));
+            .when(reading, |header| header.action(nodding_logo()));
         let body = match (commits, failure) {
             (_, Some(failure)) => {
                 ui::failure("Couldn't read this file's history", failure.message(), cx)

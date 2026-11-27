@@ -11,6 +11,7 @@ use gpui_kit::{
     px,
 };
 
+use crate::ui::Nodding as _;
 use super::operation::Finish;
 use crate::{
     git::{Picking, Rebasing, Underway},
@@ -163,7 +164,7 @@ impl OperationBar {
         .small()
         .label(label)
         .tooltip(tooltip)
-        .loading(self.finishing == Some(finish))
+        .nodding(self.finishing == Some(finish))
         .disabled(self.writing || blocked)
         .when_some(on_finish, |button, on_finish| {
             button.on_click(move |_, window, cx| on_finish(&finish, window, cx))

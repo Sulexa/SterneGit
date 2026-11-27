@@ -3,7 +3,7 @@ use std::{rc::Rc, time::Duration};
 use crate::{
     ActiveTheme, Colorize as _, Disableable, Icon, Placement, RoleOverride, Selectable, Sizable,
     Size, StyleSized, StyledExt,
-    button::ButtonIcon,
+    button::{ButtonIcon, ButtonIconVariant},
     h_flex,
     select::Caret,
     styled::{FocusLine, focus_style},
@@ -400,6 +400,12 @@ impl Button {
     /// Set the icon of the button, if the Button have no label, the button well in Icon Button mode.
     pub fn icon(mut self, icon: impl Into<ButtonIcon>) -> Self {
         self.icon = Some(icon.into());
+        self
+    }
+
+    /// Set any element as the icon of the button, drawn as it is at every size and kept while loading.
+    pub fn icon_element(mut self, element: impl IntoElement) -> Self {
+        self.icon = Some(ButtonIcon::new(ButtonIconVariant::Custom(element.into_any_element())));
         self
     }
 

@@ -6,12 +6,12 @@ use gpui_kit::{
     component::{
         ActiveTheme as _, StyledExt as _,
         button::Button,
-        spinner::Spinner,
         v_flex,
     },
     div, px,
 };
 
+use crate::ui::nodding_logo;
 use crate::{
     accounts::AccountId,
     app::connectors::change_account,
@@ -129,7 +129,7 @@ impl Render for CloneView {
             None => v_flex()
                 .items_center()
                 .gap_3()
-                .child(Spinner::new())
+                .child(nodding_logo())
                 .child(div().sm_text().child(format!("Cloning {} into {into}…", self.shown)))
                 .children(progress.map(|line| div().xs_text().font_family(mono).text_color(muted).child(line)))
                 .child(

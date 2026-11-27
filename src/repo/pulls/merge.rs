@@ -16,6 +16,7 @@ use gpui_kit::{
     px,
 };
 
+use crate::ui::Nodding as _;
 use super::{
     looks::{makes_a_commit, method_about, method_button, method_label},
     overview::PullView,
@@ -195,7 +196,7 @@ impl Render for MergeForm {
                             .primary()
                             .icon(IconName::GitMerge)
                             .label(method_button(self.method))
-                            .loading(busy)
+                            .nodding(busy)
                             .disabled(busy)
                             .on_click(cx.listener(|this, _, window, cx| this.merge(window, cx))),
                     ),

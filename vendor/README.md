@@ -12,6 +12,7 @@ and examples from the upstream repository that the release doesn't ship.
 
 | Change | Where | Why |
 | --- | --- | --- |
+| `Button::icon_element`, `ButtonIconVariant::Custom` | `src/button/button.rs`, `src/button/button_icon.rs` | Any element can be a button's icon and stays while it loads, so a busy button shows SterneGit's nodding tern instead of the kit's spinner |
 | `Diff::render_hunk_suffix` | `src/diff/mod.rs` | Puts Stage, Unstage and Discard hunk buttons at the right end of each `@@` header |
 | `DiffState::refresh_files` | `src/diff/state.rs` | Re-reads a file after a hunk moves without jumping back to its top |
 | `Diff::on_line_secondary_press`, `Diff::on_hunk_secondary_press` | `src/diff/mod.rs` | Tell the right-click menu which line or hunk header was pressed. `on_line_hover` can't: moving down from one line to the next reports the new line, then `None` for the old one |

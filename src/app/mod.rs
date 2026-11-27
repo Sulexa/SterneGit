@@ -1,5 +1,4 @@
 pub(crate) mod connectors;
-mod logo;
 mod opening;
 pub(crate) mod readers;
 mod saved_tabs;

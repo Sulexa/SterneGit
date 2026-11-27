@@ -10,7 +10,6 @@ use gpui_kit::{
         button::{Button, ButtonVariants as _},
         h_flex,
         menu::{DropdownMenu as _, PopupMenuItem},
-        spinner::Spinner,
         tooltip::Tooltip,
     },
     div,
@@ -18,6 +17,7 @@ use gpui_kit::{
     px,
 };
 
+use crate::ui::nodding_logo;
 use super::looks::{check_mark, state_mark};
 use crate::{
     hosting::{Fix, Trouble},
@@ -113,7 +113,7 @@ impl PullsSection {
             return self.header(cx);
         }
         match &self.state {
-            SectionState::Reading => note_row(Lead::Spinner, READING.into(), None, cx),
+            SectionState::Reading => note_row(Lead::Nodding, READING.into(), None, cx),
             SectionState::Note { icon, text, fix } => {
                 let action = fix.map(|fix| self.fix_button(fix));
                 note_row(Lead::Icon(*icon), text.clone(), action, cx)
@@ -226,7 +226,7 @@ impl PullsSection {
                     .gap_2()
                     .xs_text()
                     .text_color(muted)
-                    .when(loading, |row| row.child(Spinner::new().xsmall()))
+                    .when(loading, |row| row.child(nodding_logo()))
                     .child(LOAD_MORE),
             )
             .when_some(self.on_more.clone().filter(|_| !loading), |row, on_more| {
@@ -257,7 +257,7 @@ impl PullsSection {
 
 enum Lead {
     Icon(IconName),
-    Spinner,
+    Nodding,
     Nothing,
 }
 
@@ -277,7 +277,7 @@ fn note_row(lead: Lead, text: SharedString, action: Option<AnyElement>, cx: &App
                 .text_color(muted)
                 .child(match lead {
                     Lead::Icon(icon) => Icon::new(icon).xsmall().text_color(muted).into_any_element(),
-                    Lead::Spinner => Spinner::new().xsmall().into_any_element(),
+                    Lead::Nodding => nodding_logo().into_any_element(),
                     Lead::Nothing => div().into_any_element(),
                 })
                 .child(div().flex_1().ellipsis().child(text))
