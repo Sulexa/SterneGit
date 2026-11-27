@@ -1408,6 +1408,89 @@ const Sample = (() => {
     ],
   };
 
+  const unityKinds = [
+    { label: 'Prefab', extensions: ['.prefab'] },
+    { label: 'Scene', extensions: ['.unity'] },
+    { label: 'Material', extensions: ['.mat'] },
+    { label: 'Animation clip', extensions: ['.anim'] },
+    { label: 'Animator controller', extensions: ['.controller', '.overrideController'] },
+    { label: 'Asset', extensions: ['.asset', '.mask', '.mixer', '.playable', '.spriteatlas', '…'] },
+    { label: 'Import settings', extensions: ['.meta'] },
+  ];
+  const readers = [
+    { id: 'unity', name: 'Unity', version: '1.0.0', origin: 'bundled', standing: 'ready', kinds: unityKinds, grant: { read: 'repository', jobs: ['compare', 'side_files', 'fixes', 'merge'] } },
+    {
+      id: 'godot',
+      name: 'Godot',
+      version: '0.4.0',
+      origin: 'installed',
+      standing: 'waiting',
+      kinds: [
+        { label: 'Scene', extensions: ['.tscn'] },
+        { label: 'Resource', extensions: ['.tres'] },
+      ],
+      grant: { read: 'repository', jobs: ['compare'] },
+    },
+    { id: 'scriptable', name: 'Scriptable Objects', version: '2.1.0', was: '2.0.3', origin: 'installed', standing: 'updated', kinds: [{ label: 'Game data', extensions: ['.asset'] }], grant: { read: 'file', jobs: ['compare'] } },
+    { id: 'blender', name: 'Blender', version: '0.1.0', origin: 'installed', standing: 'unusable', kinds: [], grant: { read: 'file', jobs: [] }, problem: 'It speaks reader protocol 2.0, and this SterneGit speaks 1.0' },
+  ];
+  const readerUpdate = { ...readers[1], version: '0.5.0', was: '0.4.0', added: { read: null, jobs: ['side_files', 'fixes'] } };
+  const sharedExtensions = [{ extension: '.asset', chosen: 'Unity' }];
+  const readerChoice = {
+    extension: '.asset',
+    chosen: 'Unity',
+    readers: [
+      { name: 'Unity', version: '1.0.0', kind: 'Asset: ScriptableObjects, script graphs and other Unity assets' },
+      { name: 'Scriptable Objects', version: '2.1.0', kind: 'Game data: your project’s ScriptableObjects with their custom editors’ names' },
+    ],
+  };
+  const guidFix = {
+    title: 'Point 3 files to the new GUID',
+    reader: 'Unity',
+    edits: [
+      {
+        path: 'Assets/Prefabs/Enemies/Slime.prefab',
+        additions: 1,
+        deletions: 1,
+        hunks: [
+          {
+            header: '@@ -88,5 +88,5 @@ MonoBehaviour:',
+            lines: [
+              [' ', 88, 88, '  moveSpeed: 2.5'],
+              [' ', 89, 89, '  jumpHeight: 1.2'],
+              ['-', 90, null, '  hitSound: {fileID: 8300000, guid: 9a3c51e07d2b4f6c8e1a0b2c3d4e5f60, type: 3}'],
+              ['+', null, 90, '  hitSound: {fileID: 8300000, guid: 51e0c4a1b9f84d2e97c3a6b5d4e3f201, type: 3}'],
+              [' ', 91, 91, '  crown: {fileID: 4100}'],
+            ],
+          },
+        ],
+      },
+      { path: 'Assets/Scenes/Level1.unity', additions: 1, deletions: 1, hunks: [] },
+      { path: 'Assets/Data/Enemies/SlimeStats.asset', additions: 1, deletions: 1, hunks: [] },
+    ],
+  };
+  const prefabMerge = {
+    kind: 'objectmerge',
+    change: { ...unityWork.unstaged[0], kind: 'U' },
+    side: 'conflicted',
+    sources: onDisk,
+    facts: 'Prefab · merged by Unity',
+    reader: 'Unity',
+    merged: 7,
+    labels: { current: 'HEAD', incoming: 'feature/slime-hop' },
+    objects: [
+      {
+        name: 'Slime',
+        part: 'Slime Controller',
+        fields: [
+          { label: 'Move Speed', current: '2.5', incoming: '3', take: 'incoming' },
+          { label: 'Jump Height', current: '1.2', incoming: '1.6', take: null },
+        ],
+      },
+      { name: 'Shadow', part: 'Transform', fields: [{ label: 'Scale', current: 'X 1  Y 0.25  Z 1', incoming: 'X 1.2  Y 0.3  Z 1', take: null }] },
+      { name: 'Crown', part: 'Sprite Renderer', fields: [{ label: 'Color', current: '#FFD24A', incoming: '#FFE680', take: 'current' }] },
+    ],
+  };
   const unity = { work: unityWork, prefabDiff, prefabYaml, menuDiff, levelDiff, materialDiff, jumpDiff, animatorDiff, brainDiff, brainVariable, slimeMetaDiff, guidDiff, longValues, longLine };
 
   const stoppedAt ={ id: '3f2a91c', subject: 'Show conflicted files in the changes list' };
@@ -1787,5 +1870,6 @@ const Sample = (() => {
     hosting,
     pulls,
     worktrees,
+    readers: { readers, readerUpdate, sharedExtensions, readerChoice, guidFix, prefabMerge },
   };
 })();

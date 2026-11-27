@@ -1,4 +1,9 @@
 const IconPaths = {
+  'ban': '<circle cx="12" cy="12" r="10"/><path d="m4.9 4.9 14.2 14.2"/>',
+  'wrench': '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>',
+  'file-text': '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/>',
+  'file-pen': '<path d="M12.5 22H18a2 2 0 0 0 2-2V7l-5-5H6a2 2 0 0 0-2 2v9.5"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M13.378 15.626a1 1 0 1 0-3.004-3.004l-5.01 5.012a2 2 0 0 0-.506.854l-.837 2.87a.5.5 0 0 0 .62.62l2.87-.837a2 2 0 0 0 .854-.506z"/>',
+  'folder-git-2': '<path d="M9 20H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H20a2 2 0 0 1 2 2v5"/><circle cx="13" cy="12" r="2"/><path d="M18 19c-2.8 0-5-2.2-5-5v8"/><circle cx="20" cy="19" r="2"/>',
   'git-branch': '<path d="M15 6a9 9 0 0 0-9 9V3"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/>',
   'git-merge': '<circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/>',
   cloud: '<path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/>',
@@ -650,6 +655,54 @@ const MethodLabels = {
   device: 'Signed in with the browser',
   token: 'Signed in with a pasted token',
   credential: 'Token from Git Credential Manager',
+};
+
+const ReaderTexts = {
+  readers: 'Readers',
+  readersAbout: 'Readers teach SterneGit file formats it can compare object by object, such as Unity scenes and prefabs. Each one runs in a sandbox: it reads files of the repository being shown and answers what they hold; SterneGit compares and draws everything itself.',
+  readersFolder: 'To install a reader, copy its folder into %APPDATA%\\SterneGit\\readers and restart SterneGit.',
+  reachShort: { file: 'Reads only the file shown', repository: 'Reads the repository being shown' },
+  reach: {
+    file: 'The file being compared and its side files, such as its .meta',
+    repository: 'Any file of the repository being shown, at the commit being compared, then in the working tree for what that commit lacks',
+  },
+  filesTitle: 'Files it reads',
+  filesAbout: 'Read only: it never writes a file, reaches the network or starts a program.',
+  kindsTitle: 'Kinds of files',
+  jobsTitle: 'What it does',
+  jobs: {
+    compare: { icon: 'columns-2', label: 'Compare two versions', about: 'Reads each version into objects; SterneGit pairs and compares them' },
+    side_files: { icon: 'link', label: 'Check side files', about: 'Warns when a file and its side files disagree, such as a GUID that changed' },
+    fixes: { icon: 'wrench', label: 'Propose fixes', about: 'Suggests edits to files; you see them first and SterneGit writes them only when you apply' },
+    merge: { icon: 'git-merge', label: 'Merge by object', about: 'Merges a conflicted file object by object and leaves you the fields both sides changed' },
+  },
+  neverTitle: 'Never',
+  never: ['Writes a file', 'Reaches the network', 'Starts a program or reads outside the repository'],
+  installedIn: (id) => `Installed in %APPDATA%\\SterneGit\\readers\\${id}`,
+  approvalWarning: (name) => `Approve only a reader you trust. Once approved, ${name} can read the files of any repository you open in SterneGit. It can't change them, send them anywhere or run anything.`,
+  sharedTitle: 'Files more than one reader opens',
+  sharedAbout: 'SterneGit asked which reader to use the first time; change it here.',
+  reading: (reader) => `Reading with ${reader}…`,
+  readingAbout: 'The text is shown meanwhile; the objects replace it when they are ready.',
+  stopped: (reader, problem) => `${reader} couldn't read this file: ${problem}. Showing the text.`,
+  tryAgain: 'Try again',
+  choiceTitle: (extension) => `Which reader opens ${extension} files?`,
+  choiceAbout: (extension) => `More than one reader knows ${extension}. SterneGit remembers your choice for every repository.`,
+  choiceNote: 'Change it later in Settings → Readers.',
+  asText: 'Show as text',
+  useThis: (name) => `Use ${name}`,
+  fixAbout: (reader) => `${reader} proposes these edits. Nothing is written until you apply them.`,
+  fixNote: 'Apply writes each file only if it hasn’t changed since it was read; then the changes list reads them again.',
+  applyFix: (n) => `Apply to ${counted(n, 'file', 'files')}`,
+};
+
+const ObjectMergeTexts = {
+  title: (reader) => `Merged by ${reader}`,
+  merged: (n) => `${counted(n, 'change', 'changes')} from both sides merged on their own`,
+  left: (n) => `${counted(n, 'field', 'fields')} to choose`,
+  takeAll: { current: 'Take current', incoming: 'Take incoming' },
+  byText: 'Merge as text',
+  byObject: 'Merge by object',
 };
 
 const StandingLooks = {
@@ -3325,7 +3378,7 @@ const C = {
     return `<div data-c="ScriptGraphCompare" class="animator-compare">${canvas}${C.GraphChanges({ diff, hidden })}</div>`;
   },
 
-  FileDiffPanel({ diff, mode = 'split', state = 'ready', writing = false, reason = '', selection, pointed, expanded = false, filePosition, menuOpen = false, hot, view = {}, look = {}, find }) {
+  FileDiffPanel({ diff, mode = 'split', state = 'ready', writing = false, reason = '', selection, pointed, expanded = false, filePosition, menuOpen = false, hot, view = {}, look = {}, find, banner = '' }) {
     const kind = diff.kind || 'text';
     const modes = diff.unity ? UnityModes[diff.unity] : kind;
     const labels = diff.commit ? null : SideLabels[diff.side];
@@ -3344,7 +3397,7 @@ const C = {
     const zoom = kind === 'image' ? { percent: (mode === 'split' && !view.sides ? 12 : 18) * 100 } : kind === 'video' ? { percent: 36 } : ['curves', 'animator', 'scriptgraph'].includes(kind) || mode === 'scene' ? { percent: 100 } : {};
     const hidden = kind === 'objects' ? diff.hidden || 0 : 0;
     const viewBar =
-      kind === 'binary'
+      kind === 'binary' || kind === 'objectmerge'
         ? ''
         : C.ViewBar({ kind, modes, mode, changes: ready ? { current: (diff.current || 0) + 1, total, noun } : null, zoom, menuOpen, hot, hidden, shown: ['animator', 'scriptgraph'].includes(kind) ? view.shown || 'both' : undefined });
     const conflict = () => C.MergeEditor({ merge: diff, find });
@@ -3368,6 +3421,7 @@ const C = {
     const bodies = {
       text,
       conflict,
+      objectmerge: () => C.ObjectMergeEditor({ merge: diff }),
       image: () => C.ImageCompare({ diff, mode, ...view }),
       video: () => C.VideoCompare({ diff, mode }),
       audio: () => C.AudioCompare({ diff, mode }),
@@ -3389,7 +3443,7 @@ const C = {
     const results = find && diff.unchanged ? fileFinds(diff, find) : [];
     const reached = find ? find.reached ?? results.findIndex((result) => result.key === `${find.current}:${find.occurrence || 0}`) + 1 : 0;
     const findBar = find ? C.FindBar({ query: find.query, options: find.options, current: reached, total: find.total ?? results.length, focused: find.focused !== false }) : '';
-    return `<div data-c="FileDiffPanel" class="file-diff">${bars}${findBar}<div class="fill v">${content}</div></div>`;
+    return `<div data-c="FileDiffPanel" class="file-diff">${bars}${banner}${findBar}<div class="fill v">${content}</div></div>`;
   },
 
   FileHistoryRow({ entry, selected = false }) {
@@ -3762,14 +3816,14 @@ const C = {
     return `<div data-c="PageHeader" class="page-head">${crumbs}<div class="h top">${media}<div class="v fill" style="gap:2px"><div class="lg semibold">${esc(title)}</div>${subtitle}${text}</div>${actions ? `<div class="h actions">${actions}</div>` : ''}</div></div>`;
   },
 
-  SettingsNav({ page = 'accounts', accounts = 0, waiting = 0, zoom = 100, update }) {
+  SettingsNav({ page = 'accounts', accounts = 0, waiting = 0, readersWaiting = 0, zoom = 100, update }) {
     const row = (key, label, glyph, extra) =>
       C.ListRow({ content: `<div class="h fill" style="gap:8px">${icon(glyph, 'sm', 'var(--muted)')}<span class="fill sm">${esc(label)}</span>${extra}</div>`, selected: key === page });
     const count = accounts ? `<span class="xs muted">${thousands(accounts)}</span>` : '';
     const badge = waiting ? `<span class="count-badge" title="${esc(counted(waiting, 'connector waits', 'connectors wait'))} for your approval">${thousands(waiting)}</span>` : '';
     const zoomed = zoom === 100 ? '' : `<span class="xs muted">${thousands(zoom)} %</span>`;
     const ready = update ? `<span class="xs update-ready" title="${esc(HostTexts.readyTip(update))}">${esc(update)}</span>` : '';
-    return `<div data-c="SettingsNav" class="settings-nav">${C.SectionHeader({ title: HostTexts.settings })}${row('accounts', HostTexts.accounts, 'user', count)}${row('connectors', HostTexts.connectors, 'plug', badge)}${row('interface', HostTexts.interface, 'monitor', zoomed)}${row('updates', HostTexts.updates, 'download', ready)}</div>`;
+    return `<div data-c="SettingsNav" class="settings-nav">${C.SectionHeader({ title: HostTexts.settings })}${row('accounts', HostTexts.accounts, 'user', count)}${row('connectors', HostTexts.connectors, 'plug', badge)}${row('readers', ReaderTexts.readers, 'file-code', readersWaiting ? `<span class="count-badge" title="${esc(counted(readersWaiting, 'reader waits', 'readers wait'))} for your approval">${thousands(readersWaiting)}</span>` : '')}${row('interface', HostTexts.interface, 'monitor', zoomed)}${row('updates', HostTexts.updates, 'download', ready)}</div>`;
   },
 
   SettingsTab({ page, content, nav = {} }) {
@@ -3942,6 +3996,129 @@ const C = {
     const rest = update ? `<div class="sm muted">${esc(HostTexts.sameAsBefore(connector.was))}</div>` : '';
     const actions = `<div class="h page-actions">${C.Button({ label: HostTexts.notNow, size: 'md' })}${C.Button({ label: HostTexts.approve, icon: 'shield-check', variant: 'primary', size: 'md' })}</div>`;
     return `<div data-c="ApprovalPage" class="v page">${header}${warning}${grant}${rest}${actions}</div>`;
+  },
+
+  ReaderRow({ reader, hot = false }) {
+    const look = StandingLooks[reader.standing];
+    const chips = C.Chip({ label: reader.origin === 'bundled' ? HostTexts.bundled : HostTexts.installed }) + C.Chip({ label: look.label(reader), color: look.color });
+    const facts = reader.problem || [reader.kinds.map((kind) => kind.label).join(', '), ReaderTexts.reachShort[reader.grant.read]].join(' · ');
+    const end =
+      reader.standing === 'waiting' || reader.standing === 'modified'
+        ? C.Button({ label: HostTexts.review, variant: 'primary', size: 'sm' })
+        : reader.standing === 'failed'
+          ? C.Button({ label: HostTexts.showLog, size: 'sm' })
+          : icon('chevron-right', 'sm', 'var(--muted)');
+    const problem = reader.problem ? ' problem-text' : '';
+    return `<div data-c="ReaderRow" class="row${hot ? ' hot' : ''}"><span class="mark">${icon('file-code', 'md')}</span><div class="v fill"><div class="h" style="gap:6px"><span class="sm medium">${esc(reader.name)}</span><span class="sm muted">${esc(reader.version)}</span>${chips}</div><div class="xs muted ellipsis${problem}">${esc(facts)}</div></div>${end}</div>`;
+  },
+
+  ReadersPage({ readers, shared = [] }) {
+    const open = C.Button({ label: HostTexts.openFolder, icon: 'folder-open', size: 'md' });
+    const header = C.PageHeader({ title: ReaderTexts.readers, about: ReaderTexts.readersAbout, actions: open });
+    const rows = readers.map((reader) => C.ReaderRow({ reader, hot: reader.standing === 'waiting' }));
+    const choices = shared.length
+      ? C.GroupBox({
+          title: ReaderTexts.sharedTitle,
+          about: ReaderTexts.sharedAbout,
+          rows: shared.map((entry) => `<div class="row"><span class="sm mono fill">${esc(entry.extension)}</span>${C.Select({ value: entry.chosen })}</div>`),
+        })
+      : '';
+    const note = `<div class="h xs muted" style="gap:6px">${icon('info', 'xs')}${esc(ReaderTexts.readersFolder)}</div>`;
+    return `<div data-c="ReadersPage" class="v page">${header}${C.GroupBox({ rows })}${choices}${note}</div>`;
+  },
+
+  ReaderGrantList({ reader, fresh = false }) {
+    const isNew = fresh ? C.Chip({ label: HostTexts.newGrant, color: 'var(--yellow)' }) : '';
+    const row = (glyph, html, side = '') => `<div class="row slim">${icon(glyph, 'sm', 'var(--muted)')}<span class="fill sm">${html}</span>${side}</div>`;
+    const grant = fresh ? reader.added : reader.grant;
+    const groups = [
+      grant.read &&
+        C.GroupBox({
+          title: ReaderTexts.filesTitle,
+          about: ReaderTexts.filesAbout,
+          rows: [row(grant.read === 'repository' ? 'folder-git-2' : 'file', esc(ReaderTexts.reach[grant.read]), isNew)],
+        }),
+      !fresh &&
+        C.GroupBox({
+          title: ReaderTexts.kindsTitle,
+          rows: reader.kinds.map((kind) => row('file-code', `${esc(kind.label)} <span class="xs muted mono">${esc(kind.extensions.join(' '))}</span>`)),
+        }),
+      grant.jobs.length &&
+        C.GroupBox({
+          title: ReaderTexts.jobsTitle,
+          rows: grant.jobs.map((job) => row(ReaderTexts.jobs[job].icon, `<span class="v"><span class="sm">${esc(ReaderTexts.jobs[job].label)}</span><span class="xs muted">${esc(ReaderTexts.jobs[job].about)}</span></span>`, isNew)),
+        }),
+      !fresh && C.GroupBox({ title: ReaderTexts.neverTitle, rows: ReaderTexts.never.map((line) => row('ban', esc(line))) }),
+    ];
+    return `<div data-c="ReaderGrantList" class="v grant">${groups.filter(Boolean).join('')}</div>`;
+  },
+
+  ReaderApprovalPage({ reader, update = false }) {
+    const look = StandingLooks[reader.standing];
+    const title = update ? HostTexts.moreTitle(reader.name, reader.version, reader.was) : HostTexts.approveTitle(reader.name, reader.version);
+    const chips = `<div class="h" style="gap:6px;margin-top:4px">${C.Chip({ label: HostTexts.installed })}${C.Chip({ label: look.label(reader), color: look.color })}<span class="xs muted">${esc(ReaderTexts.installedIn(reader.id))}</span></div>`;
+    const header = C.PageHeader({ title, crumb: ReaderTexts.readers, here: reader.name, subtitle: chips, media: `<span class="mark large">${icon('file-code', 'lg')}</span>` });
+    const warning = `<div class="callout">${icon('shield-check', 'md', 'var(--yellow)')}<div class="sm">${esc(ReaderTexts.approvalWarning(reader.name))}</div></div>`;
+    const rest = update ? `<div class="sm muted">${esc(HostTexts.sameAsBefore(reader.was))}</div>` : '';
+    const actions = `<div class="h page-actions">${C.Button({ label: HostTexts.notNow, size: 'md' })}${C.Button({ label: HostTexts.approve, icon: 'shield-check', variant: 'primary', size: 'md' })}</div>`;
+    return `<div data-c="ReaderApprovalPage" class="v page">${header}${warning}${C.ReaderGrantList({ reader, fresh: update })}${rest}${actions}</div>`;
+  },
+
+  ReaderBar({ state, reader = 'Unity', problem = '' }) {
+    if (state === 'reading') {
+      return `<div data-c="ReaderBar" class="reader-bar">${C.Spinner({ size: 'xs' })}<span class="sm">${esc(ReaderTexts.reading(reader))}</span><span class="xs muted fill">${esc(ReaderTexts.readingAbout)}</span></div>`;
+    }
+    return `<div data-c="ReaderBar" class="reader-bar stopped">${icon('circle-alert', 'sm', 'var(--red)')}<span class="sm">${esc(ReaderTexts.stopped(reader, problem))}</span><span class="fill"></span>${C.Button({ label: HostTexts.showLog, size: 'sm' })}${C.Button({ label: ReaderTexts.tryAgain, icon: 'refresh-cw', size: 'sm', variant: 'ghost' })}</div>`;
+  },
+
+  ReaderChoiceDialog({ extension, readers, chosen }) {
+    const option = (reader) =>
+      `<div class="method-option${reader.name === chosen ? ' hot' : ''}">${icon('file-code', 'md', 'var(--muted)')}<div class="v fill"><span class="sm medium">${esc(reader.name)} ${esc(reader.version)}</span><span class="xs muted">${esc(reader.kind)}</span></div>${reader.name === chosen ? icon('check', 'sm', 'var(--blue)') : ''}</div>`;
+    const body = `<div class="v" style="gap:8px">${readers.map(option).join('')}</div><div class="xs muted" style="margin-top:8px">${esc(ReaderTexts.choiceNote)}</div>`;
+    const buttons = C.Button({ label: ReaderTexts.asText, size: 'md' }) + C.Button({ label: ReaderTexts.useThis(chosen), variant: 'primary', size: 'md' });
+    return dialogShell({ name: 'ReaderChoiceDialog', title: ReaderTexts.choiceTitle(extension), description: ReaderTexts.choiceAbout(extension), body, buttons });
+  },
+
+  FixPreviewDialog({ fix, open = 0 }) {
+    const files = fix.edits
+      .map((edit, ix) => {
+        const [file, folder] = splitPath(edit.path);
+        const counts = `<span class="counts xs">${C.Additions({ count: edit.additions })}${C.Deletions({ count: edit.deletions })}</span>`;
+        return `<div class="h fix-file${ix === open ? ' hot' : ''}">${icon('file-pen', 'sm', 'var(--muted)')}<div class="v fill" style="min-width:0"><span class="sm ellipsis">${esc(file)}</span><span class="xs muted ellipsis">${esc(folder)}</span></div>${counts}</div>`;
+      })
+      .join('');
+    const shown = fix.edits[open];
+    const preview = C.DiffView({ files: [{ path: shown.path, additions: shown.additions, deletions: shown.deletions, hunks: shown.hunks }], mode: 'unified', header: false, look: { marks: 'bars', scroll: true } });
+    const body = `<div class="fix-preview"><div class="fix-files">${files}</div><div class="fix-diff">${preview}</div></div><div class="xs muted">${esc(ReaderTexts.fixNote)}</div>`;
+    const buttons = C.Button({ label: HostTexts.cancel, size: 'md' }) + C.Button({ label: ReaderTexts.applyFix(fix.edits.length), icon: 'check', variant: 'primary', size: 'md' });
+    return dialogShell({ name: 'FixPreviewDialog', title: fix.title, description: ReaderTexts.fixAbout(fix.reader), body, buttons, size: 'wider', stretch: true });
+  },
+
+  ObjectMergeEditor({ merge }) {
+    const left = merge.objects.reduce((sum, object) => sum + object.fields.filter((field) => !field.take).length, 0);
+    const choice = (field, side) => {
+      const taken = field.take === side;
+      return `<div class="merge-cell${taken ? ' taken' : ''}${field.take && !taken ? ' dropped' : ''}"><span class="radio${taken ? ' on' : ''}"></span><span class="sm mono ellipsis">${esc(field[side])}</span></div>`;
+    };
+    const objects = merge.objects
+      .map((object) => {
+        const head =
+          `<div class="merge-object-head"><span class="sm medium">${esc(object.name)}</span><span class="xs muted">${esc(object.part)}</span><span class="fill"></span>` +
+          C.Button({ label: ObjectMergeTexts.takeAll.current, size: 'sm', variant: 'ghost' }) +
+          C.Button({ label: ObjectMergeTexts.takeAll.incoming, size: 'sm', variant: 'ghost' }) +
+          `</div>`;
+        const rows = object.fields.map((field) => `<div class="merge-row"><span class="sm label ellipsis">${esc(field.label)}</span>${choice(field, 'current')}${choice(field, 'incoming')}</div>`).join('');
+        return `<div class="merge-object">${head}${rows}</div>`;
+      })
+      .join('');
+    const sides = `<div class="merge-row heads"><span></span><div class="merge-head"><span class="version-dot current"></span><span class="medium">${ConflictTexts.title.current}</span><span class="ellipsis muted">${esc(merge.labels.current)}</span></div><div class="merge-head"><span class="version-dot incoming"></span><span class="medium">${ConflictTexts.title.incoming}</span><span class="ellipsis muted">${esc(merge.labels.incoming)}</span></div></div>`;
+    const state = left ? `<span class="conflicts-left">${esc(ObjectMergeTexts.left(left))}</span>` : `<span class="resolved">${esc(OperationTexts.noConflicts)}</span>`;
+    const bar =
+      `<div class="merge-head result">${icon('git-merge', 'sm', 'var(--muted)')}<span class="medium">${esc(ObjectMergeTexts.title(merge.reader))}</span>${state}<span class="muted ellipsis">${esc(ObjectMergeTexts.merged(merge.merged))}</span><span class="fill"></span>` +
+      C.Button({ label: ObjectMergeTexts.byText, icon: 'file-text', variant: 'ghost' }) +
+      C.Button({ label: ConflictTexts.startOver, icon: 'undo-2', variant: 'ghost', tooltip: ConflictTexts.startOverTooltip }) +
+      `</div>`;
+    return `<div data-c="ObjectMergeEditor" class="object-merge">${bar}${sides}<div class="merge-objects">${objects}</div></div>`;
   },
 
   SignInDialog({ step = 'choose', service = 'GitHub', host = 'github.com', enterprise = false, offer, problem, warning, hot }) {

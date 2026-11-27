@@ -217,14 +217,15 @@ const Screens = (() => {
   const { unity } = Sample;
   const unityFiles = [...unity.work.staged, ...unity.work.unstaged];
 
-  const unityComparison = (diff, mode, { menuOpen = false, hot, view = {}, find } = {}) =>
+  const unityComparison = (diff, mode, { menuOpen = false, hot, view = {}, find, banner = '', overlays = '' } = {}) =>
     C.SterneGit({
+      overlays,
       topBar: C.TopBar({ repository: starfall.name, head: starfall.head }),
       tabStrip: C.TabStrip({ tabs: gameTabs, active: gameTabs.length - 1 }),
       body: C.RepoView({
         toolbar: find ? C.RepoToolbar({ finding: true }) : undefined,
         left: false,
-        middle: C.FileDiffPanel({ diff, mode, menuOpen, hot, view, find, filePosition: [unityFiles.indexOf(diff.change) + 1, unityFiles.length] }),
+        middle: C.FileDiffPanel({ diff, mode, menuOpen, hot, view, find, banner, filePosition: [unityFiles.indexOf(diff.change) + 1, unityFiles.length] }),
         right: C.ChangesList({ changes: unity.work, open: { side: diff.side, path: diff.change.path } }),
         status: C.RepoStatusBar({ summary: historySummary(starfall) }),
       }),
@@ -1136,6 +1137,41 @@ const Screens = (() => {
       render: () => unityComparison(unity.slimeMetaDiff, 'split'),
     },
     {
+      id: 'reader-reading',
+      title: 'Readers — reading a file',
+      about: "Every Unity comparison is now read by the Unity reader, a plugin bundled with SterneGit, on a background task. While it reads, the file shows as text under a bar that says so, and the objects replace it when they are ready; on the largest prefab measured that takes about a fifth of a second, so the bar is rarely seen. Opening another file cancels the read.",
+      source: 'src/read/engine.rs',
+      render: () => unityComparison(unity.prefabYaml, 'yaml', { banner: C.ReaderBar({ state: 'reading' }) }),
+    },
+    {
+      id: 'reader-stopped',
+      title: 'Readers — a reader that stopped',
+      about: "When a reader traps, runs out of time or memory, or answers something SterneGit can't read, the comparison stays the text one and the bar says why in a sentence. Show log opens the lines the reader logged before it stopped; Try again reads the file once more, for when the file was being written. Nothing else is affected: other files keep their reader.",
+      source: 'src/read/engine.rs',
+      render: () => unityComparison(unity.prefabYaml, 'yaml', { banner: C.ReaderBar({ state: 'stopped', problem: 'it ran out of memory' }) }),
+    },
+    {
+      id: 'reader-choice',
+      title: 'Readers — two readers for one file',
+      about: "When two approved readers both claim an extension, the first file of that kind asks which one to use, with what each says it reads. The choice is remembered for every repository and can be changed in Settings → Readers; Show as text opens the file without a reader this time.",
+      source: 'src/app/readers.rs',
+      render: () => unityComparison(unity.prefabYaml, 'yaml', { overlays: C.ReaderChoiceDialog(Sample.readers.readerChoice) }),
+    },
+    {
+      id: 'reader-fix-preview',
+      title: 'Readers — a fix shown before it is applied',
+      about: "Point the files to the new GUID in the GUID warning no longer writes anything at once: the Unity reader proposes the edits and SterneGit shows them, one file at a time, as an ordinary comparison. Apply writes each file only if it hasn't changed since the reader read it, then the changes list reads them again; Cancel leaves everything as it was. Keep the old GUID works the same way, with one file, the .meta. The reader never writes: SterneGit does, after you click.",
+      source: 'src/unity/read.rs',
+      render: () => unityComparison(unity.guidDiff, 'inspector', { overlays: C.FixPreviewDialog({ fix: Sample.readers.guidFix }) }),
+    },
+    {
+      id: 'merge-by-object',
+      title: 'Readers — merging a prefab by object',
+      about: "A conflicted file a reader can merge opens merged by object instead of by line. The Unity reader merged every change that only one side made, or that both made alike, on its own (here 7), and lists only the fields both sides changed differently, under their object and component, Current next to Incoming. A click takes a side for that field; Take current or Take incoming does it for every field of the object. Move Speed and Color are chosen, Jump Height and Scale are left. Mark resolved becomes primary once nothing is left: the reader writes the merged file in Unity's own format, then SterneGit stages it. Merge as text goes back to the line-by-line editor with its markers; Start over forgets the choices.",
+      source: 'src/repo/merge_editor.rs',
+      render: () => unityComparison(Sample.readers.prefabMerge, 'objectmerge'),
+    },
+    {
       id: 'unity-guid',
       title: 'Unity — a GUID that changed',
       about: "A .meta whose GUID changed is the usual way a Unity project loses references: the asset was deleted and imported again, or its .meta was never committed. Its comparison starts with what breaks: SterneGit searches the repository for the old GUID (git grep) and lists every file and property still using it. Keep the old GUID writes it back into the .meta, so nothing breaks; Point the files to the new GUID changes them instead. Either way the changes list reads the files again, and the warning goes once nothing uses the old GUID. The import settings, reset to Unity's defaults by the new import, are compared underneath.",
@@ -1704,7 +1740,7 @@ const Screens = (() => {
         C.SterneGit({
           topBar: C.TopBar(update ? { update: { state: 'ready', version: update } } : {}),
           tabStrip: C.TabStrip({ tabs: settingsTabs, active: settingsTabs.length - 1 }),
-          body: C.SettingsTab({ page, content, nav: { accounts: accounts.length, waiting: 1, zoom, update } }),
+          body: C.SettingsTab({ page, content, nav: { accounts: accounts.length, waiting: 1, readersWaiting: 1, zoom, update } }),
           overlays,
           zoom,
           light,
@@ -1846,6 +1882,27 @@ const Screens = (() => {
           about: 'A new version that asks for nothing new starts on its own and shows Updated. One that asks for more waits, and its page lists only the additions; the old version keeps running meanwhile.',
           source: 'src/connect/grant.rs',
           render: () => settings('connectors', C.ApprovalPage({ connector: gitlabUpdate, update: true })),
+        },
+        {
+          id: 'settings-readers',
+          title: 'Settings — readers',
+          about: "Every reader SterneGit found, bundled beside its exe or installed in the user's readers folder, with the kinds of files it reads, what it may read and its standing, as for connectors. Ready runs; Updated is a new version within what was approved; Waiting for approval waits for Review…; Can't run speaks a newer protocol or has a broken manifest; Stopped failed while starting. Underneath, the extensions more than one reader claims, with the reader chosen for each.",
+          source: 'src/read/catalog.rs',
+          render: () => settings('readers', C.ReadersPage({ readers: Sample.readers.readers, shared: Sample.readers.sharedExtensions })),
+        },
+        {
+          id: 'reader-approval',
+          title: 'Approve a reader',
+          about: "Exactly what the reader asks for, from its reader.json: which files it may read (only the file shown and its side files, or any file of the repository being shown), the kinds of files it claims and what it does with them. Underneath, what no reader can do. Approve records the grant and the files' SHA-256 in readers.json and starts it at once; Not now leaves it waiting and the next launch asks again.",
+          source: 'src/read/manifest.rs',
+          render: () => settings('readers', C.ReaderApprovalPage({ reader: Sample.readers.readers[1] })),
+        },
+        {
+          id: 'reader-update',
+          title: 'Approve a reader update that asks for more',
+          about: 'A new version that asks for nothing new starts on its own and shows Updated. One that asks for more waits, and its page lists only the additions, here two new jobs; the old version keeps reading meanwhile.',
+          source: 'src/read/manifest.rs',
+          render: () => settings('readers', C.ReaderApprovalPage({ reader: Sample.readers.readerUpdate, update: true })),
         },
         {
           id: 'settings-interface',
