@@ -1,368 +1,93 @@
-use std::{
-    fs, io,
-    path::{Path, PathBuf},
-    sync::Arc,
-};
+use std::sync::Arc;
+
+use serde_json::Value;
 
 use super::{
     Started, Stop,
-    approvals::{Approval, Approvals, Hashes},
     bundled::PINS,
     grant::Grant,
     manifest::{MANIFEST_FILE, Manifest},
 };
 use crate::{
     net::services::{ConnectorId, HostServices},
-    plugin::{Pin, sha256},
-    settings::Folder,
+    plugin::{self, Kind, Pin},
 };
 
-const CONNECTORS_FOLDER: &str = "connectors";
+pub(crate) const CONNECTORS_FOLDER: &str = "connectors";
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Origin {
-    Bundled,
-    Installed,
-}
+pub(crate) struct Connectors;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) enum Standing {
-    Ready,
-    Updated,
-    Waiting(Grant),
-    Modified(Grant),
-    Unusable(String),
-    Failed(Stop),
-}
+pub(crate) type Catalog = plugin::Catalog<Connectors>;
+pub(crate) type Connector = plugin::Plugin<Connectors>;
+pub(crate) type Standing = plugin::Standing<Grant>;
+pub(crate) type ConnectorFolders = plugin::Folders;
+pub(crate) use plugin::Origin;
 
-impl Standing {
-    fn may_start(&self) -> bool {
-        matches!(self, Standing::Ready | Standing::Updated)
+impl Kind for Connectors {
+    type Id = ConnectorId;
+    type Manifest = Manifest;
+    type Grant = Grant;
+    type Started = Started;
+    type Host = dyn HostServices;
+
+    const MANIFEST_FILE: &'static str = MANIFEST_FILE;
+    const APPROVALS_FILE: &'static str = "connectors.json";
+    const APPROVALS_LIST: &'static str = "connectors";
+    const NOUN: &'static str = "connector";
+
+    fn pins() -> &'static [Pin] {
+        &PINS
     }
 
-    pub(crate) fn awaits_approval(&self) -> bool {
-        matches!(self, Standing::Waiting(_) | Standing::Modified(_))
-    }
-}
-
-pub(crate) struct Connector {
-    pub(crate) id: ConnectorId,
-    pub(crate) folder: PathBuf,
-    pub(crate) origin: Origin,
-    pub(crate) manifest: Option<Arc<Manifest>>,
-    pub(crate) standing: Standing,
-    pub(crate) replaces_bundled: bool,
-    pub(crate) started: Option<Arc<Started>>,
-    files: Hashes,
-    module: Option<Vec<u8>>,
-}
-
-struct Package {
-    manifest: Manifest,
-    files: Hashes,
-    module: Vec<u8>,
-}
-
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub(crate) struct ConnectorFolders {
-    pub(crate) bundled: Option<PathBuf>,
-    pub(crate) source: Option<PathBuf>,
-    pub(crate) installed: Option<PathBuf>,
-}
-
-impl ConnectorFolders {
-    pub(crate) fn of_this_sternegit() -> Self {
-        Self {
-            bundled: std::env::current_exe()
-                .ok()
-                .and_then(|exe| bundled_beside(&exe))
-                .filter(|folder| folder.is_dir()),
-            source: Some(Path::new(env!("CARGO_MANIFEST_DIR")).join(CONNECTORS_FOLDER)),
-            installed: Folder::Data.path().map(|folder| folder.join(CONNECTORS_FOLDER)),
-        }
+    fn id_named(name: String) -> ConnectorId {
+        ConnectorId(name)
     }
 
-    fn pinned(&self, pin: &Pin) -> Option<PathBuf> {
-        match (&self.bundled, &self.source) {
-            (Some(bundled), _) => Some(bundled.join(pin.id)),
-            (None, Some(source)) => Some(pin.source_folder(source)),
-            (None, None) => None,
-        }
+    fn name_of(id: &ConnectorId) -> &str {
+        &id.0
     }
-}
 
-fn bundled_beside(exe: &Path) -> Option<PathBuf> {
-    let folder = exe.parent()?;
-    if cfg!(target_os = "macos") && folder.ends_with("Contents/MacOS") {
-        return Some(folder.parent()?.join("Resources").join(CONNECTORS_FOLDER));
+    fn parse(bytes: &[u8]) -> Result<Manifest, String> {
+        Manifest::parse(bytes)
     }
-    Some(folder.join(CONNECTORS_FOLDER))
-}
 
-pub(crate) struct Catalog {
-    connectors: Vec<Connector>,
-    approvals: Approvals,
+    fn id_of(manifest: &Manifest) -> &ConnectorId {
+        &manifest.id
+    }
+
+    fn version_of(manifest: &Manifest) -> &str {
+        &manifest.version
+    }
+
+    fn module_of(manifest: &Manifest) -> &str {
+        &manifest.module
+    }
+
+    fn asked(manifest: &Manifest) -> Grant {
+        Grant::asked_by(manifest)
+    }
+
+    fn beyond(asked: &Grant, granted: &Grant) -> Option<Grant> {
+        asked.beyond(granted)
+    }
+
+    fn grant_from_json(value: &Value) -> Grant {
+        Grant::from_json(value)
+    }
+
+    fn grant_to_json(grant: &Grant) -> Value {
+        grant.to_json()
+    }
+
+    fn start(id: &ConnectorId, wasm: &[u8], host: &Arc<dyn HostServices>) -> Result<Started, Stop> {
+        Started::start(id.clone(), wasm, Arc::clone(host)).map(|(started, _)| started)
+    }
 }
 
 impl Catalog {
-    pub(crate) fn discover(folders: &ConnectorFolders, approvals: Approvals) -> Self {
-        let mut catalog = Self {
-            connectors: Vec::new(),
-            approvals,
-        };
-        for pin in &PINS {
-            if let Some(folder) = folders.pinned(pin) {
-                catalog.add_pinned(pin, folder);
-            }
-        }
-        if let Some(bundled) = &folders.bundled {
-            for folder in subfolders(bundled) {
-                if !PINS.iter().any(|pin| folder.ends_with(pin.id)) {
-                    catalog.add_installed(folder);
-                }
-            }
-        }
-        if let Some(installed) = &folders.installed {
-            for folder in subfolders(installed) {
-                catalog.add_installed(folder);
-            }
-        }
-        catalog.settle_replacements();
-        catalog
-    }
-
     pub(crate) fn connectors(&self) -> &[Connector] {
-        &self.connectors
+        self.plugins()
     }
-
-    pub(crate) fn approved_version(&self, id: &ConnectorId) -> Option<String> {
-        self.approvals.get(id).map(|approval| approval.version.clone())
-    }
-
-    pub(crate) fn start(&mut self, host: &Arc<dyn HostServices>) {
-        for connector in &mut self.connectors {
-            if connector.started.is_some() || !connector.standing.may_start() {
-                continue;
-            }
-            let Some(module) = connector.module.take() else {
-                continue;
-            };
-            match Started::start(connector.id.clone(), &module, Arc::clone(host)) {
-                Ok((started, _)) => connector.started = Some(Arc::new(started)),
-                Err(stop) => connector.standing = Standing::Failed(stop),
-            }
-        }
-    }
-
-    pub(crate) fn approve(&mut self, id: &ConnectorId) -> io::Result<Option<Grant>> {
-        let Some(connector) = self
-            .connectors
-            .iter_mut()
-            .find(|connector| &connector.id == id && connector.standing.awaits_approval())
-        else {
-            return Ok(None);
-        };
-        let Some(manifest) = connector.manifest.clone() else {
-            return Ok(None);
-        };
-        let grant = Grant::asked_by(&manifest);
-        let mut approval = Approval::new(
-            id.clone(),
-            manifest.version.clone(),
-            connector.files.clone(),
-            grant.clone(),
-        );
-        approval.replaces_bundled = connector.replaces_bundled;
-        let replaces_bundled = connector.replaces_bundled;
-        self.approvals.record(approval)?;
-        connector.standing = Standing::Ready;
-        if replaces_bundled {
-            self.connectors
-                .retain(|connector| !(&connector.id == id && connector.origin == Origin::Bundled));
-        }
-        Ok(Some(grant))
-    }
-
-    pub(crate) fn seen(&mut self, id: &ConnectorId) -> io::Result<()> {
-        let Some(connector) = self
-            .connectors
-            .iter_mut()
-            .find(|connector| &connector.id == id && connector.standing == Standing::Updated)
-        else {
-            return Ok(());
-        };
-        connector.standing = Standing::Ready;
-        if let Some(mut approval) = self.approvals.get(id).cloned() {
-            approval.updated = false;
-            self.approvals.record(approval)?;
-        }
-        Ok(())
-    }
-
-    fn add_pinned(&mut self, pin: &Pin, folder: PathBuf) {
-        let id = ConnectorId(pin.id.to_owned());
-        let connector = match read_package(&folder, &id) {
-            Err(reason) => unusable(id, folder, Origin::Bundled, reason),
-            Ok(package) if package.files == pin.files() => {
-                built(id, folder, Origin::Bundled, package, Standing::Ready)
-            }
-            Ok(package) => {
-                let standing = self.judge_modified(&id, &package);
-                built(id, folder, Origin::Bundled, package, standing)
-            }
-        };
-        self.connectors.push(connector);
-    }
-
-    fn add_installed(&mut self, folder: PathBuf) {
-        let id = ConnectorId(folder.file_name().map_or_else(String::new, |name| name.to_string_lossy().into_owned()));
-        let installed_twice = self
-            .connectors
-            .iter()
-            .any(|known| known.id == id && known.origin == Origin::Installed);
-        let connector = match read_package(&folder, &id) {
-            Err(reason) => unusable(id, folder, Origin::Installed, reason),
-            Ok(_) if installed_twice => {
-                let reason = format!("Another installed connector already has the id {}", id.0);
-                unusable(id, folder, Origin::Installed, reason)
-            }
-            Ok(package) => {
-                let standing = self.judge_installed(&id, &package);
-                built(id, folder, Origin::Installed, package, standing)
-            }
-        };
-        self.connectors.push(connector);
-    }
-
-    fn judge_modified(&self, id: &ConnectorId, package: &Package) -> Standing {
-        let asked = Grant::asked_by(&package.manifest);
-        match self.approvals.get(id) {
-            Some(approval) if approval.files == package.files => match asked.beyond(&approval.grant) {
-                Some(more) => Standing::Modified(more),
-                None => Standing::Ready,
-            },
-            _ => Standing::Modified(asked),
-        }
-    }
-
-    fn judge_installed(&mut self, id: &ConnectorId, package: &Package) -> Standing {
-        let asked = Grant::asked_by(&package.manifest);
-        let Some(approval) = self.approvals.get(id) else {
-            return Standing::Waiting(asked);
-        };
-        if let Some(more) = asked.beyond(&approval.grant) {
-            return Standing::Waiting(more);
-        }
-        let unchanged = approval.files == package.files && approval.version == package.manifest.version;
-        if unchanged {
-            return match approval.updated {
-                true => Standing::Updated,
-                false => Standing::Ready,
-            };
-        }
-        let mut updated = approval.clone();
-        updated.version = package.manifest.version.clone();
-        updated.files = package.files.clone();
-        updated.updated = true;
-        let _ = self.approvals.record(updated);
-        Standing::Updated
-    }
-
-    fn settle_replacements(&mut self) {
-        let bundled: Vec<ConnectorId> = self
-            .connectors
-            .iter()
-            .filter(|connector| connector.origin == Origin::Bundled)
-            .map(|connector| connector.id.clone())
-            .collect();
-        let mut replaced = Vec::new();
-        for connector in &mut self.connectors {
-            if connector.origin != Origin::Installed || !bundled.contains(&connector.id) {
-                continue;
-            }
-            connector.replaces_bundled = true;
-            let approved_to_replace = self
-                .approvals
-                .get(&connector.id)
-                .is_some_and(|approval| approval.replaces_bundled);
-            match (approved_to_replace, connector.standing.may_start(), &connector.manifest) {
-                (true, true, _) => replaced.push(connector.id.clone()),
-                (false, true, Some(manifest)) => {
-                    connector.standing = Standing::Waiting(Grant::asked_by(manifest));
-                }
-                _ => {}
-            }
-        }
-        self.connectors.retain(|connector| {
-            !(connector.origin == Origin::Bundled && replaced.contains(&connector.id))
-        });
-    }
-}
-
-fn read_package(folder: &Path, id: &ConnectorId) -> Result<Package, String> {
-    let manifest_path = folder.join(MANIFEST_FILE);
-    let manifest_bytes = fs::read(&manifest_path)
-        .map_err(|error| format!("Can't read {}: {error}", manifest_path.display()))?;
-    let manifest = Manifest::parse(&manifest_bytes)?;
-    if &manifest.id != id {
-        return Err(format!(
-            "The folder {} holds the connector {}; a connector's folder must be named after its id",
-            folder.display(),
-            manifest.id.0
-        ));
-    }
-    let module_path = folder.join(&manifest.module);
-    let module = fs::read(&module_path)
-        .map_err(|error| format!("Can't read {}: {error}", module_path.display()))?;
-    let files = Hashes::from([
-        (MANIFEST_FILE.to_owned(), sha256(&manifest_bytes)),
-        (manifest.module.clone(), sha256(&module)),
-    ]);
-    Ok(Package {
-        manifest,
-        files,
-        module,
-    })
-}
-
-fn built(id: ConnectorId, folder: PathBuf, origin: Origin, package: Package, standing: Standing) -> Connector {
-    Connector {
-        id,
-        folder,
-        origin,
-        manifest: Some(Arc::new(package.manifest)),
-        standing,
-        replaces_bundled: false,
-        started: None,
-        files: package.files,
-        module: Some(package.module),
-    }
-}
-
-fn unusable(id: ConnectorId, folder: PathBuf, origin: Origin, reason: String) -> Connector {
-    Connector {
-        id,
-        folder,
-        origin,
-        manifest: None,
-        standing: Standing::Unusable(reason),
-        replaces_bundled: false,
-        started: None,
-        files: Hashes::new(),
-        module: None,
-    }
-}
-
-fn subfolders(root: &Path) -> Vec<PathBuf> {
-    let Ok(entries) = fs::read_dir(root) else {
-        return Vec::new();
-    };
-    let mut folders: Vec<PathBuf> = entries
-        .filter_map(|entry| entry.ok().map(|entry| entry.path()))
-        .filter(|path| path.is_dir())
-        .collect();
-    folders.sort();
-    folders
 }
 
 #[cfg(test)]
@@ -461,7 +186,7 @@ pub(crate) mod tests {
             assert_eq!((connector.origin, &connector.standing), (Origin::Bundled, &Standing::Ready), "{}", connector.id.0);
             assert_eq!(connector.folder, sources().join(&connector.id.0).join("dist"));
             assert!(connector.started.is_some(), "{}", connector.id.0);
-            assert!(connector.module.is_none(), "the module bytes are dropped once compiled");
+            assert!(!connector.holds_module_bytes(), "the module bytes are dropped once compiled");
         }
     }
 

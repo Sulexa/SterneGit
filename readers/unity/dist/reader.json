@@ -1,0 +1,22 @@
+{
+  "id": "unity",
+  "name": "Unity",
+  "version": "1.0.0",
+  "protocol": "1.0",
+  "module": "unity.wasm",
+  "kinds": [
+    { "id": "prefab", "label": "Prefab", "extensions": [".prefab"], "sniff": ["%YAML", "!u!"], "views": ["inspector", "layout", "text"] },
+    { "id": "scene", "label": "Scene", "extensions": [".unity"], "sniff": ["%YAML", "!u!"], "views": ["inspector", "layout", "text"] },
+    { "id": "material", "label": "Material", "extensions": [".mat"], "sniff": ["%YAML", "!u!"], "views": ["inspector", "text"] },
+    { "id": "clip", "label": "Animation clip", "extensions": [".anim"], "sniff": ["%YAML", "!u!"], "views": ["curves", "text"] },
+    { "id": "controller", "label": "Animator controller", "extensions": [".controller", ".overrideController"], "sniff": ["%YAML", "!u!"], "views": ["graph", "text"] },
+    { "id": "asset", "label": "Asset", "extensions": [".asset", ".physicMaterial", ".physicsMaterial2D", ".mask", ".flare", ".guiskin", ".fontsettings", ".mixer", ".playable", ".signal", ".lighting", ".renderTexture", ".cubemap", ".spriteatlas", ".terrainlayer", ".brush"], "sniff": ["%YAML", "!u!"], "views": ["inspector", "graph", "text"] },
+    { "id": "meta", "label": "Import settings", "extensions": [".meta"], "views": ["inspector", "text"] }
+  ],
+  "side_files": [{ "pattern": "{path}.meta" }],
+  "options": [
+    { "id": "noise", "label": "Hide noise", "detail": "Hide fields Unity rewrites on every save", "default": true, "hides": true },
+    { "id": "ids", "label": "File ids", "detail": "Show each object's fileID", "default": false, "hides": false }
+  ],
+  "grant": { "read": "repository", "jobs": ["compare", "side_files", "fixes", "merge"] }
+}

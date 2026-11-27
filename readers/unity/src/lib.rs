@@ -13,7 +13,7 @@ use sternegit_reader_sdk::{Failure, Model, ReadInput, Reader, export, read_text}
 use crate::{
     lookup::lookup_for,
     names::UnityKind,
-    yaml::{documents, is_unity_yaml},
+    yaml::{documents, is_unity_yaml, plain},
 };
 
 pub struct Unity;
@@ -24,6 +24,11 @@ impl Reader for Unity {
         let text = read_text(&input.path).ok_or_else(|| Failure::Missing {
             path: input.path.clone(),
         })?;
+        if kind == UnityKind::Meta {
+            let lookup = lookup_for(&[]);
+            let asset = input.path.strip_suffix(".meta").unwrap_or(&input.path);
+            return Ok(convert::model(&scene::Model::from_meta(&plain(&text), asset, &lookup)));
+        }
         if !is_unity_yaml(&text) {
             return Err(not_unity(&input.path));
         }

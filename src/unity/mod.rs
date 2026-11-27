@@ -3,6 +3,7 @@ mod clip;
 mod compare;
 mod graph;
 mod hints;
+mod ingest;
 mod layout;
 mod meta;
 mod names;
@@ -20,7 +21,7 @@ pub(crate) use layout::{Graphic, Layout, Marker, Paint, PlacedSprite, Shape as O
 pub(crate) use meta::{ImportChanges, import_changes};
 pub(crate) use names::UnityKind;
 pub(crate) use read::{
-    GuidChange, NotUnityText, Shape, Source, UnityFiles, UnityVersion, keep_old_guid, point_users_to_new_guid, read,
+    ByReader, GuidChange, NotUnityText, Shape, Source, UnityFiles, UnityVersion, keep_old_guid, point_users_to_new_guid, read,
 };
 pub(crate) use sprites::SpriteImage;
 pub(crate) use value::{Glyph, Reference, Value, hex_color, short_number};

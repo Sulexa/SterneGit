@@ -5,7 +5,7 @@
   #error Pass the version without its pre-release part with /DNumericVersion=X.Y.Z
 #endif
 #ifndef Staging
-  #error Pass the folder holding sternegit.exe and connectors with /DStaging=...
+  #error Pass the folder holding sternegit.exe, connectors and readers with /DStaging=...
 #endif
 #ifndef SetupIcon
   #error Pass the icon build.rs wrote with /DSetupIcon=...
@@ -55,6 +55,7 @@ Name: "path"; Description: "Add SterneGit to PATH, to start it from a terminal";
 
 [InstallDelete]
 Type: filesandordirs; Name: "{app}\connectors"
+Type: filesandordirs; Name: "{app}\readers"
 
 [Files]
 Source: "{#Staging}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs

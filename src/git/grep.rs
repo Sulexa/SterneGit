@@ -10,7 +10,21 @@ use super::{
 const GUIDS_PER_SEARCH: usize = 400;
 const OWNER_MARK: &str = ":guid: ";
 
-#[cfg_attr(not(test), expect(dead_code))]
+pub(crate) fn matches_in_commit(location: &Path, commit: &str, regex: &str, glob: &str) -> Result<Vec<(String, String)>> {
+    let output = run(
+        location,
+        &[READ_ONLY, "grep", "-I", "-o", "-E", "-e", regex, commit, "--", glob],
+        Exit::SuccessOrDifference,
+    )?;
+    let prefix = format!("{commit}:");
+    Ok(String::from_utf8_lossy(&output)
+        .lines()
+        .filter_map(|line| line.strip_prefix(&prefix))
+        .filter_map(|line| line.split_once(':'))
+        .map(|(path, text)| (path.to_owned(), text.to_owned()))
+        .collect())
+}
+
 pub(crate) fn matches_in_working_tree(location: &Path, regex: &str, glob: &str) -> Result<Vec<(String, String)>> {
     let output = run(
         location,

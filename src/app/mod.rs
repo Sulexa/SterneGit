@@ -1,6 +1,7 @@
 pub(crate) mod connectors;
 mod logo;
 mod opening;
+pub(crate) mod readers;
 mod saved_tabs;
 mod tab_strip;
 mod tabs;
@@ -59,6 +60,7 @@ pub(crate) fn run(path: Option<PathBuf>, opening: Opening) {
             ..TitleBar::window_options()
         };
         connectors::install_connectors(cx);
+        readers::install_readers(cx);
         theme::install_theme(cx);
         zoom::install_zoom(cx);
         updates::install_updates(cx);
@@ -70,6 +72,7 @@ pub(crate) fn run(path: Option<PathBuf>, opening: Opening) {
             cx.activate(true);
         }
         connectors::start_connectors(cx);
+        readers::start_readers(cx);
     });
 }
 

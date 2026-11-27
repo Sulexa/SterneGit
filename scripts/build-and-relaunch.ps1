@@ -17,12 +17,12 @@ function Write-Report([string] $message) {
     else { Write-Output $message }
 }
 
-function Sync-BundledConnectors {
-    $mirror = Join-Path $buildDir 'connectors'
+function Sync-BundledPlugins([string] $family, [string] $manifest) {
+    $mirror = Join-Path $buildDir $family
     $bundled = @()
-    foreach ($crate in Get-ChildItem (Join-Path $root 'connectors') -Directory) {
+    foreach ($crate in Get-ChildItem (Join-Path $root $family) -Directory) {
         $dist = Join-Path $crate.FullName 'dist'
-        if (-not (Test-Path (Join-Path $dist 'connector.json'))) { continue }
+        if (-not (Test-Path (Join-Path $dist $manifest))) { continue }
         $bundled += $crate.Name
         $into = Join-Path $mirror $crate.Name
         New-Item -ItemType Directory -Force $into | Out-Null
@@ -65,7 +65,8 @@ if ($exitCode -ne 0) {
     if ($hook) { exit 0 } else { exit 1 }
 }
 
-Sync-BundledConnectors
+Sync-BundledPlugins 'connectors' 'connector.json'
+Sync-BundledPlugins 'readers' 'reader.json'
 
 if ((Test-Path $installed) -and ((Get-FileHash $fresh).Hash -eq (Get-FileHash $installed).Hash)) {
     if (-not $hook) { Write-Report 'build\sternegit.exe is already the latest build.' }

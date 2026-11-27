@@ -452,6 +452,7 @@ impl FileDiffPanel {
         if unity.is_none() {
             self.unity_text = None;
         }
+        let by = unity.as_ref().and_then(|request| by_reader(&request.path, cx));
         let binary = working_request(MediaView::Other, &change, side, staged_too);
         let repo_for_binary = repo.clone();
         let repo = repo.clone();
@@ -460,7 +461,7 @@ impl FileDiffPanel {
         let task = run_in_background(
             cx,
             move || -> anyhow::Result<(WorkingPatch, Option<Arc<UnityFiles>>)> {
-                let files = unity.as_ref().map(|request| read_unity(&repo, request).map(Arc::new)).transpose()?;
+                let files = unity.as_ref().map(|request| read_unity(&repo, request, by.as_ref()).map(Arc::new)).transpose()?;
                 let patch = spread_working(&repo, repo.file_patch_with(&change, side, whitespace)?, &change, side);
                 let patch = match &files {
                     Some(files) => unity_patch(&repo, files, patch)?,
@@ -1004,6 +1005,7 @@ impl FileDiffPanel {
         self.opened = Some(request.clone());
         let repo = repo.clone();
         let unity_request = request.clone();
+        let by = by_reader(&request.path, cx);
         let meta = request.meta.clone();
         let shown_path = SharedString::from(request.path.to_string_lossy().into_owned());
         let MediaRequest {
@@ -1021,7 +1023,7 @@ impl FileDiffPanel {
                     MediaView::Sounds => read_sounds(&repo, sides, extension.as_deref()).map(Read::Sounds),
                     MediaView::Videos => read_videos(&repo, sides, extension.as_deref()).map(Read::Videos),
                     MediaView::Other => read_other(&repo, sides, extension.as_deref(), note).map(Read::Other),
-                    MediaView::Unity => read_unity(&repo, &unity_request).map(|files| Read::Unity(Arc::new(files))),
+                    MediaView::Unity => read_unity(&repo, &unity_request, by.as_ref()).map(|files| Read::Unity(Arc::new(files))),
                 }?;
                 Ok((read, meta.and_then(|sides| read_imports(&repo, sides))))
             },
@@ -1427,6 +1429,7 @@ impl FileDiffPanel {
             }
             _ => None,
         };
+        let by = unity_request.as_ref().and_then(|request| by_reader(&request.path, cx));
         let task = run_in_background(
             cx,
             move || -> anyhow::Result<(Option<DiffFile>, Option<Arc<UnityFiles>>)> {
@@ -1440,7 +1443,7 @@ impl FileDiffPanel {
                 }
                 let mut files = None;
                 if let Some(request) = &unity_request {
-                    let read = Arc::new(read_unity(&repo, request)?);
+                    let read = Arc::new(read_unity(&repo, request, by.as_ref())?);
                     text = match unity_patch(&repo, &read, FilePatch::Diff { text, hunks: None })? {
                         FilePatch::Diff { text, .. } => text,
                         FilePatch::Conflicted { contents, .. } => contents,
@@ -1980,14 +1983,23 @@ fn unity_source(source: Option<VersionSource>) -> Option<UnitySource> {
     })
 }
 
-fn read_unity(repo: &Repo, request: &MediaRequest) -> anyhow::Result<UnityFiles> {
+fn read_unity(repo: &Repo, request: &MediaRequest, by: Option<&unity::ByReader>) -> anyhow::Result<UnityFiles> {
     let path = request.path.to_string_lossy().into_owned();
     unity::read(
         repo,
         &path,
         unity_source(request.sides.before.clone()),
         unity_source(request.sides.after.clone()),
+        by,
     )
+}
+
+fn by_reader(path: &OsStr, cx: &App) -> Option<unity::ByReader> {
+    let chosen = crate::app::readers::Readers::of(cx).for_path(&path.to_string_lossy())?;
+    Some(unity::ByReader {
+        reader: chosen.reader,
+        kind: chosen.kind.id,
+    })
 }
 
 fn unity_patch(repo: &Repo, files: &UnityFiles, patch: FilePatch) -> anyhow::Result<FilePatch> {

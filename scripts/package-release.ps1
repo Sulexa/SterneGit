@@ -56,12 +56,14 @@ function New-Staging([string] $exe, [string] $staging) {
     if (Test-Path $staging) { Remove-Item $staging -Recurse -Force }
     New-Item -ItemType Directory -Force $staging | Out-Null
     Copy-Item $exe $staging
-    foreach ($crate in Get-ChildItem (Join-Path $root 'connectors') -Directory) {
-        $dist = Join-Path $crate.FullName 'dist'
-        if (-not (Test-Path (Join-Path $dist 'connector.json'))) { continue }
-        $into = Join-Path $staging "connectors\$($crate.Name)"
-        New-Item -ItemType Directory -Force $into | Out-Null
-        Copy-Item (Join-Path $dist '*') $into
+    foreach ($family in @(@('connectors', 'connector.json'), @('readers', 'reader.json'))) {
+        foreach ($crate in Get-ChildItem (Join-Path $root $family[0]) -Directory) {
+            $dist = Join-Path $crate.FullName 'dist'
+            if (-not (Test-Path (Join-Path $dist $family[1]))) { continue }
+            $into = Join-Path $staging "$($family[0])\$($crate.Name)"
+            New-Item -ItemType Directory -Force $into | Out-Null
+            Copy-Item (Join-Path $dist '*') $into
+        }
     }
 }
 

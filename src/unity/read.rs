@@ -2,7 +2,7 @@ use std::{
     collections::{HashMap, HashSet},
     ffi::OsString,
     path::Path,
-    sync::Arc,
+    sync::{Arc, atomic::AtomicBool},
 };
 
 use anyhow::Result;
@@ -13,6 +13,7 @@ use super::{
     compare::{Comparison, Options, compare},
     graph::{GraphComparison, compare_script_graphs, graph_json},
     hints::Scopes,
+    ingest,
     layout::{Layout, View, layout, view_for},
     meta::guid_of,
     names::{UnityKind, component_title, file_name, nicify},
@@ -21,9 +22,12 @@ use super::{
     value::Lookup,
     yaml::{Document, Node, documents, is_unity_yaml, plain},
 };
+use sternegit_reader_protocol::{Failure, ReadInput, Side};
+
 use crate::{
     git::{Repo, Revision},
     media::Picture,
+    read::{ReadError, Reader, RevisionTree, Tree},
 };
 
 const DEEPEST_LIBRARY: usize = 3;
@@ -154,7 +158,36 @@ fn on_disk(repo: &Repo, path: &str) -> Option<String> {
         .map(|bytes| String::from_utf8_lossy(&bytes).into_owned())
 }
 
-pub(crate) fn read(repo: &Repo, path: &str, before: Option<Source>, after: Option<Source>) -> Result<UnityFiles> {
+#[derive(Clone)]
+pub(crate) struct ByReader {
+    pub(crate) reader: Arc<Reader>,
+    pub(crate) kind: String,
+}
+
+fn read_model(repo: &Repo, by: &ByReader, source: &Source, side: Side) -> Result<Model> {
+    let path = source.path.to_string_lossy().into_owned();
+    let tree: Arc<dyn Tree> = Arc::new(RevisionTree::new(repo.clone(), source.revision, path.clone()));
+    let input = ReadInput {
+        kind: by.kind.clone(),
+        path,
+        side,
+        options: Default::default(),
+    };
+    match by.reader.read(tree, input, &AtomicBool::new(false)) {
+        Ok(read) => Ok(ingest::model(&read)),
+        Err(ReadError::Failed(Failure::NotThisFormat { .. })) => Err(NotUnityText.into()),
+        Err(error) => Err(anyhow::anyhow!("{error}")),
+    }
+}
+
+pub(crate) fn read(
+    repo: &Repo,
+    path: &str,
+    before: Option<Source>,
+    after: Option<Source>,
+    by: Option<&ByReader>,
+) -> Result<UnityFiles> {
+    let sources = [before.clone(), after.clone()];
     let kind = UnityKind::of(path).ok_or(NotUnityText)?;
     let texts = [before, after].map(|source| source.map(|source| text_of(repo, &source)).transpose());
     let [before_text, after_text] = texts;
@@ -233,11 +266,17 @@ pub(crate) fn read(repo: &Repo, path: &str, before: Option<Source>, after: Optio
         _ => Shape::Objects,
     };
     let [before_parsed, after_parsed] = parsed;
-    let version = |parsed: Option<(Vec<Document>, Option<Node>)>| {
-        parsed.map(|(docs, meta)| {
-            let model = match &meta {
-                Some(meta) => Model::from_meta(meta, path.strip_suffix(".meta").unwrap_or(path), &lookup),
-                None => Model::from_documents(kind, &docs, path, &lookup),
+    let [before_source, after_source] = sources;
+    let version = |parsed: Option<(Vec<Document>, Option<Node>)>, source: Option<Source>, side: Side| -> Result<Option<UnityVersion>> {
+        let Some((docs, meta)) = parsed else {
+            return Ok(None);
+        };
+        let by_reader = by.zip(source.as_ref()).map(|(by, source)| read_model(repo, by, source, side)).transpose()?;
+        Ok(Some({
+            let model = match (by_reader, &meta) {
+                (Some(model), _) => model,
+                (None, Some(meta)) => Model::from_meta(meta, path.strip_suffix(".meta").unwrap_or(path), &lookup),
+                (None, None) => Model::from_documents(kind, &docs, path, &lookup),
             };
             let layout = kind.has_hierarchy().then(|| layout(&docs, &model, &library, &lookup, view));
             UnityVersion {
@@ -247,10 +286,10 @@ pub(crate) fn read(repo: &Repo, path: &str, before: Option<Source>, after: Optio
                 model,
                 documents: docs,
             }
-        })
+        }))
     };
-    let before = version(before_parsed);
-    let after = version(after_parsed);
+    let before = version(before_parsed, before_source, Side::Before)?;
+    let after = version(after_parsed, after_source, Side::After)?;
     let sprites = load_sprites(repo, &lookup, [before.as_ref(), after.as_ref()]);
     let guid_change = match (kind, &before_text, &after_text) {
         (UnityKind::Meta, Some(old), Some(new)) => guid_change(repo, path, old, new, &lookup),

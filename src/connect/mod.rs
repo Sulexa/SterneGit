@@ -23,7 +23,7 @@ pub(crate) const CONNECTOR: &str = "connector";
 
 pub(crate) use approvals::Approvals;
 pub(crate) use call::{Budget, Outcome, Usage};
-pub(crate) use catalog::{Catalog, Connector, ConnectorFolders, Origin, Standing};
+pub(crate) use catalog::{CONNECTORS_FOLDER, Catalog, Connector, ConnectorFolders, Origin, Standing};
 pub(crate) use claims::Claim;
 pub(crate) use remote::Remote;
 pub(crate) use grant::Grant;

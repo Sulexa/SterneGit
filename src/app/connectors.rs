@@ -10,7 +10,7 @@ use gpui_kit::{App, AppContext as _, BorrowAppContext as _, Global};
 use crate::{
     accounts::{Account, AccountBook, AccountId, Secrets, Tokens, os_secrets, renew_for_git},
     connect::{
-        Approvals, CallError, Catalog, Claim, Connector, ConnectorFolders, Forge, Manifest,
+        Approvals, CONNECTORS_FOLDER, CallError, Catalog, Claim, Connector, ConnectorFolders, Forge, Manifest,
         Service, Started,
     },
     git,
@@ -294,7 +294,7 @@ fn run() -> Running {
         Arc::clone(&transport),
     ));
     let host: Arc<dyn HostServices> = gateway.clone();
-    let mut catalog = Catalog::discover(&ConnectorFolders::of_this_sternegit(), Approvals::load());
+    let mut catalog = Catalog::discover(&ConnectorFolders::of_this_sternegit(CONNECTORS_FOLDER), Approvals::load());
     catalog.start(&host);
     Running {
         catalog,

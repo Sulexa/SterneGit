@@ -45,6 +45,10 @@ pub(crate) struct Reference {
 pub(crate) struct Digest(u64);
 
 impl Digest {
+    pub(crate) fn from_value(value: u64) -> Self {
+        Self(value)
+    }
+
     fn of(text: &str) -> Self {
         let mut hasher = DefaultHasher::new();
         text.hash(&mut hasher);
