@@ -7,7 +7,7 @@ Chosen on 2026-11-05. This is the reference for building connectors and drawing 
 | Topic | Decision |
 | --- | --- |
 | Plugins | Connectors are plugins in folders, and anyone may write one. GitHub's connector is a plugin like any other. |
-| Engine | WebAssembly core modules (`wasm32-unknown-unknown`) on wasmi 2.0, exchanging JSON messages. |
+| Engine | WebAssembly core modules (`wasm32-unknown-unknown`) exchanging JSON messages, on Wasmtime 51 with Cranelift since 2026-11-27, shared with readers (`docs/readers/design.md`, section 9). They ran on wasmi 2.0 before; sections 3 to 5 still describe wasmi where they differ: `wait` is now an async host function, and a call yields every 20 M fuel instead of resuming from `OutOfFuel`. |
 | Sandbox | A connector can only make web requests to its account's servers, through SterneGit, which adds the token. It sees no token, file, process, SSH key or other account. |
 | Start | Every approved connector starts at launch: compiled and greeted on a background task, with no live instance. |
 | Approval | A new connector, or an update asking for more, waits for the user. An update within its grant starts and is marked "updated". |
@@ -49,7 +49,7 @@ scripts/build-connectors.ps1   rebuilds dist/ (needs the wasm target) and rewrit
 src/settings/   folders per OS, atomic JSON files
 src/accounts/   accounts, secrets per OS, device flow, refresh, Git Credential Manager import
 src/net/        requests, policy (allow-list, token schemes, redirects), curl transport, proxies, the HostServices implementation
-src/plugin/     the wasmi engine shared with readers: limits, module checks, the common imports, pins, Stop
+src/plugin/     the Wasmtime engine shared with readers: limits, module checks, the common imports, pins, Stop
 src/connect/    manifests, grants, discovery, send and wait, calls, claims, Forge
 src/git/        access.rs (scoped credential helper), ssh_key.rs, clone.rs; command.rs gains run_with_access
 src/hosting/    the screens: Settings tab (Accounts, Connectors, approval), sign-in, SSH key, remove, Clone, New repository, Publish, the account bar

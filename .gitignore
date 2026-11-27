@@ -2,5 +2,6 @@
 /build
 /.claude/worktrees/
 /connectors/*/target
+/readers/*/target
 /dist
 /graphify-out/

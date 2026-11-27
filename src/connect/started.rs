@@ -5,7 +5,7 @@ use sternegit_protocol::{
     ops::{Greet, Op as _},
     speaks_same_major,
 };
-use wasmi::{Engine, Instance, Linker, Module, Store};
+use wasmtime::{Instance, Linker, Module, Store};
 
 use super::{
     Budget, CallError, Outcome, Stop, Usage,
@@ -15,12 +15,11 @@ use super::{
 };
 use crate::{
     net::services::{AccountView, Cancel, ConnectorId, HostServices, cancel_pair},
-    plugin::{check_module, engine},
+    plugin::{compile, engine},
 };
 
 pub(crate) struct Started {
     id: ConnectorId,
-    engine: Engine,
     module: Module,
     linker: Linker<Call>,
 }
@@ -43,15 +42,11 @@ impl Started {
     }
 
     pub(crate) fn compile(id: ConnectorId, wasm: &[u8]) -> Result<Self, Stop> {
-        let engine = engine();
-        let module = Module::new(&engine, wasm)
-            .map_err(|error| Stop::Refused(format!("The module can't be loaded: {error}")))?;
-        check_module(&module, &IMPORTS)?;
-        let mut linker = Linker::new(&engine);
+        let module = compile(wasm, &IMPORTS)?;
+        let mut linker = Linker::new(engine());
         abi::link(&mut linker).map_err(|error| Stop::Refused(error.to_string()))?;
         Ok(Self {
             id,
-            engine,
             module,
             linker,
         })
@@ -73,12 +68,8 @@ impl Started {
         async move { call::run(&started, host, account, message, budget, cancel).await }
     }
 
-    pub(super) fn engine(&self) -> &Engine {
-        &self.engine
-    }
-
-    pub(super) fn instantiate(&self, store: &mut Store<Call>) -> Result<Instance, wasmi::Error> {
-        self.linker.instantiate_and_start(store, &self.module)
+    pub(super) async fn instantiate(&self, store: &mut Store<Call>) -> wasmtime::Result<Instance> {
+        self.linker.instantiate_async(store, &self.module).await
     }
 
     fn greet(&self, host: Arc<dyn HostServices>) -> Result<Greeting, Stop> {

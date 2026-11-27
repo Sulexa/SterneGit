@@ -50,6 +50,7 @@ pub(crate) use access::{Access, Attendance, CredentialScope, GIT_CREDENTIAL_FLAG
 pub(crate) use branch::{CheckedOut, NameProblem, new_branch_name};
 pub(crate) use clone::{CloneRequest, Progress, Stop, add_remote, clone, init, is_empty_or_missing};
 pub(crate) use command::without_console_window;
+pub(crate) use grep::matches_in_working_tree;
 pub(crate) use commit::{CommitMode, commit_message};
 pub(crate) use credential::{CredentialAnswer, CredentialRequest};
 pub(crate) use facts::DifftoolTarget;

@@ -5,15 +5,15 @@ use std::{
 
 use sternegit_protocol::{RequestHead, ResponseHead, resolve};
 use futures::FutureExt as _;
-use wasmi::{Memory, Store, StoreLimits, TypedResumableCall, Val};
+use wasmtime::{Memory, Store};
 
-use super::{CallError, Stop, requests::Requests, started::Started};
+use super::{CallError, Stop, abi::Halted, requests::Requests, started::Started};
 use crate::{
     net::{
         request::{ApiRequest, ApiResponse, Method, NetError},
         services::{AccountView, Cancel, ConnectorId, HostServices, Level},
     },
-    plugin::{ENTRY_EXPORT, FUEL_PER_SLICE, Guest, Interrupt, MEMORY_EXPORT, limits, stop_for},
+    plugin::{ENTRY_EXPORT, FUEL_PER_SLICE, Guest, Limits, MEMORY_EXPORT, trap_message, unless_cancelled},
 };
 
 pub(super) const MEMORY_LIMIT_BYTES: usize = 64 * 1024 * 1024;
@@ -63,7 +63,7 @@ pub(super) struct Call {
     host: Arc<dyn HostServices>,
     account: Option<AccountView>,
     cancel: Cancel,
-    limits: StoreLimits,
+    limits: Limits,
     memory: Option<Memory>,
     waiting: Vec<u8>,
     pub(super) requests: Requests,
@@ -72,6 +72,10 @@ pub(super) struct Call {
 }
 
 impl Call {
+    pub(super) async fn arrival(&mut self, id: u32) -> Result<ApiResponse, CallError> {
+        self.requests.arrival(id, &self.cancel).await
+    }
+
     pub(super) fn send(&mut self, head: &[u8], body: &[u8]) -> Result<u32, String> {
         let head: RequestHead = serde_json::from_slice(head)
             .map_err(|error| format!("the request head isn't valid: {error}"))?;
@@ -179,14 +183,14 @@ pub(super) async fn run(
         host,
         account,
         cancel,
-        limits: limits(MEMORY_LIMIT_BYTES),
+        limits: Limits::new(MEMORY_LIMIT_BYTES),
         memory: None,
         waiting: message,
         requests: Requests::default(),
         output: None,
         log: Log::default(),
     };
-    let mut execution = Execution::new(started, call);
+    let mut execution = Execution::new(call);
     let result = execution.run(started, input_len, budget).await;
     Outcome {
         result,
@@ -197,76 +201,35 @@ pub(super) async fn run(
 struct Execution {
     store: Store<Call>,
     fuel_given: u64,
-    slices: u32,
 }
 
 impl Execution {
-    fn new(started: &Started, call: Call) -> Self {
-        let mut store = Store::new(started.engine(), call);
+    fn new(call: Call) -> Self {
+        let mut store = Store::new(crate::plugin::engine(), call);
         store.limiter(|call| &mut call.limits);
-        Self {
-            store,
-            fuel_given: 0,
-            slices: 0,
-        }
+        Self { store, fuel_given: 0 }
     }
 
     async fn run(&mut self, started: &Started, input_len: i32, budget: Budget) -> Result<Vec<u8>, CallError> {
-        self.fill(FUEL_PER_SLICE)?;
+        self.fuel_given = FUEL_PER_SLICE * u64::from(budget.slices);
+        self.store.set_fuel(self.fuel_given).map_err(|error| self.stopped(&error))?;
+        self.store
+            .fuel_async_yield_interval(Some(FUEL_PER_SLICE))
+            .map_err(|error| self.stopped(&error))?;
         let instance = started
             .instantiate(&mut self.store)
+            .await
             .map_err(|error| self.stopped(&error))?;
-        self.store.data_mut().memory = instance.get_memory(&self.store, MEMORY_EXPORT);
+        self.store.data_mut().memory = instance.get_memory(&mut self.store, MEMORY_EXPORT);
         let entry = instance
-            .get_typed_func::<i32, i32>(&self.store, ENTRY_EXPORT)
+            .get_typed_func::<i32, i32>(&mut self.store, ENTRY_EXPORT)
             .map_err(|error| self.stopped(&error))?;
-        let mut step = entry
-            .call_resumable(&mut self.store, input_len)
+        let cancel = self.store.data().cancel.clone();
+        let status = unless_cancelled(entry.call_async(&mut self.store, input_len), || cancel.is_cancelled())
+            .await
+            .ok_or(CallError::Stopped(Stop::Cancelled))?
             .map_err(|error| self.stopped(&error))?;
-        loop {
-            step = match step {
-                TypedResumableCall::Finished(status) => return self.finished(status),
-                TypedResumableCall::HostTrap(paused) => {
-                    let id = match paused.host_error().downcast_ref::<Interrupt>() {
-                        Some(Interrupt::Wait(id)) => *id,
-                        _ => return Err(self.trapped(paused.host_error().to_string())),
-                    };
-                    let length = self.arrival(id).await?;
-                    paused.resume(&mut self.store, &[Val::I32(length)])
-                }
-                TypedResumableCall::OutOfFuel(paused) => {
-                    self.next_slice(budget, paused.required_fuel()).await?;
-                    paused.resume(&mut self.store)
-                }
-            }
-            .map_err(|error| self.stopped(&error))?;
-        }
-    }
-
-    fn fill(&mut self, fuel: u64) -> Result<(), CallError> {
-        self.store
-            .set_fuel(fuel)
-            .map_err(|error| self.stopped(&error))?;
-        self.fuel_given += fuel;
-        self.slices += 1;
-        Ok(())
-    }
-
-    async fn next_slice(&mut self, budget: Budget, required: u64) -> Result<(), CallError> {
-        if self.slices >= budget.slices {
-            return Err(CallError::Stopped(Stop::OutOfFuel));
-        }
-        smol::future::yield_now().await;
-        if self.store.data().cancel.is_cancelled() {
-            return Err(CallError::Stopped(Stop::Cancelled));
-        }
-        self.fill(FUEL_PER_SLICE.max(required))
-    }
-
-    async fn arrival(&mut self, id: u32) -> Result<i32, CallError> {
-        let call = self.store.data_mut();
-        let response = call.requests.arrival(id, &call.cancel).await?;
-        Ok(call.deliver(response))
+        self.finished(status)
     }
 
     fn finished(&mut self, status: i32) -> Result<Vec<u8>, CallError> {
@@ -286,19 +249,21 @@ impl Execution {
         })
     }
 
-    fn stopped(&self, error: &wasmi::Error) -> CallError {
-        match stop_for(error, MEMORY_LIMIT_BYTES) {
+    fn stopped(&self, error: &wasmtime::Error) -> CallError {
+        if let Some(Halted(halted)) = error.downcast_ref::<Halted>() {
+            return halted.clone();
+        }
+        match self.store.data().limits.stop_for(error) {
             Some(stop) => CallError::Stopped(stop),
-            None => self.trapped(error.to_string()),
+            None => self.trapped(trap_message(error)),
         }
     }
 
     fn usage(&self, elapsed: Duration) -> Usage {
+        let fuel = self.fuel_given.saturating_sub(self.store.get_fuel().unwrap_or(0));
         Usage {
-            fuel: self
-                .fuel_given
-                .saturating_sub(self.store.get_fuel().unwrap_or(0)),
-            slices: self.slices,
+            fuel,
+            slices: u32::try_from(fuel.div_ceil(FUEL_PER_SLICE)).unwrap_or(u32::MAX).max(1),
             memory: self
                 .store
                 .data()
@@ -668,7 +633,7 @@ mod tests {
         let outcome = call(&answering(r#"{"ok":{}}"#), FakeHost::quiet(), Some(fake_account()), Budget::CALL);
         assert!(outcome.result.is_ok());
         assert_eq!(outcome.usage.slices, 1);
-        assert!(outcome.usage.fuel > 0 && outcome.usage.fuel < 1_000, "{:?}", outcome.usage);
+        assert!(outcome.usage.fuel > 0 && outcome.usage.fuel < 20_000, "{:?}", outcome.usage);
         assert_eq!(outcome.usage.memory, 65_536);
         assert_eq!(outcome.usage.requests, 0);
     }

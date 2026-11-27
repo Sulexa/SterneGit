@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, path::Path};
 
 use anyhow::Result;
 
@@ -9,6 +9,20 @@ use super::{
 
 const GUIDS_PER_SEARCH: usize = 400;
 const OWNER_MARK: &str = ":guid: ";
+
+#[cfg_attr(not(test), expect(dead_code))]
+pub(crate) fn matches_in_working_tree(location: &Path, regex: &str, glob: &str) -> Result<Vec<(String, String)>> {
+    let output = run(
+        location,
+        &[READ_ONLY, "grep", "--untracked", "-I", "-o", "-E", "-e", regex, "--", glob],
+        Exit::SuccessOrDifference,
+    )?;
+    Ok(String::from_utf8_lossy(&output)
+        .lines()
+        .filter_map(|line| line.split_once(':'))
+        .map(|(path, text)| (path.to_owned(), text.to_owned()))
+        .collect())
+}
 
 impl Repo {
     pub(crate) fn meta_files_owning(&self, guids: &[String]) -> Result<HashMap<String, String>> {

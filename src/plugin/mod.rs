@@ -1,12 +1,13 @@
 mod guest;
 mod pins;
+mod run;
 mod sandbox;
 mod stop;
 
-pub(crate) use guest::{Guest, Interrupt, fault, guest_memory, length, link_common, span};
+pub(crate) use guest::{Guest, fault, guest_memory, length, link_common, span, trap_message};
 pub(crate) use pins::{Hashes, Pin, sha256};
+pub(crate) use run::unless_cancelled;
 pub(crate) use sandbox::{
-    ENTRY_EXPORT, FINISH, FUEL_PER_SLICE, Import, LOG, MEMORY_EXPORT, NOW, TAKE, check_module, engine, limits,
-    stop_for,
+    ENTRY_EXPORT, FINISH, FUEL_PER_SLICE, Import, LOG, Limits, MEMORY_EXPORT, NOW, TAKE, Ty, compile, engine,
 };
 pub(crate) use stop::Stop;

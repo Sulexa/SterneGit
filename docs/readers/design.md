@@ -8,7 +8,7 @@ Chosen on 2026-11-27. A draft for review: nothing here is built yet. It follows 
 | --- | --- |
 | What | A **reader** is a plugin that teaches SterneGit a file format. Connectors talk to servers; readers read files. |
 | Plugins | Readers are plugins in folders, and anyone may write one. Unity's reader is a plugin like any other. |
-| Engine | The connectors' engine: WebAssembly core modules on wasmi 2.0, exchanging JSON messages. No new engine in the exe. |
+| Engine | Wasmtime 51 with its Cranelift compiler, for readers and connectors alike: WebAssembly core modules exchanging JSON messages. Chosen 2026-11-27 over wasmi after measuring (section 9), knowing it adds about 11.6 MB of exe. |
 | Screens | Readers only supply data. SterneGit compares and draws every view, in the mockup first. |
 | Views | Every view Unity uses today, made generic: object tree and inspector, graph, curves, layout sketch, text with scopes. |
 | Jobs | Compare two versions; pair side files and warn about them; propose fixes; merge conflicts by object. |
@@ -20,7 +20,7 @@ Chosen on 2026-11-27. A draft for review: nothing here is built yet. It follows 
 | Writing | A reader never writes. It proposes file edits; SterneGit previews them as a change and writes only when the user applies it. |
 | Matching | The manifest lists extensions and an optional first-bytes check. A file that fails the check falls back to text. Two readers claiming one file: the user picks once. |
 | Unity | `src/unity/` leaves the exe and becomes `readers/unity/`, bundled beside the exe like the GitHub connector. |
-| Speed | Same engine, measured first. Milestone 2 ports prefabs only and times the largest prefab available. Text shows at once; the reader's view replaces it when ready. If it is still too slow, the engine question comes back with numbers. |
+| Speed | Measured at milestone 2 (section 9): the largest prefab reads in 0.16 s on Wasmtime once its GUID search is cached, against 1.0 s on wasmi and 0.10 s native. Text shows at once; the reader's view replaces it when ready. |
 | Bundled, approval, installing | As connectors: a `readers/` folder beside the exe with SHA-256 pins; a new reader or an update asking for more waits for the user; installing is copying a folder. |
 | Updates | Bundled readers update with SterneGit releases. Installed readers update by copying a new folder. No store. |
 | In-repo readers | Not in v1: a repository can't bring a reader, even sandboxed. |
@@ -47,7 +47,7 @@ readers/unity/         the Unity reader (today's src/unity/ moved, minus drawing
 readers/unity/dist/    reader.json, unity.wasm, SHA256SUMS, all committed
 readers/template/      the starting point for authors
 
-src/plugin/            what connectors and readers share: the wasmi engine and limits, module checks, the common imports (take, finish, log, now) through the Guest trait, pins and hashes, Stop
+src/plugin/            what connectors and readers share: the Wasmtime engine and limits, module checks, the common imports (take, finish, log, now) through the Guest trait, pins and hashes, Stop
 src/connect/           connector-only parts: send and wait, the call loop, manifests, grants, approvals, discovery, claims, Forge
 src/read/              reader-only parts: matching, the file host, the model, comparing models
 src/repo/compare/read/ the generic views, made from today's src/repo/compare/unity/
@@ -107,11 +107,11 @@ Each call starts a fresh instance, as for connectors.
 | --- | --- |
 | `read_file(path, len) -> i32` | The file's bytes; its length for `take`, or -1 if absent from both trees. Refused with `grant.read = "file"` except for the file itself and its side files. |
 | `search(query, len) -> i32` | `{"regex", "glob"}`: `git grep -I -o -E` over the reader's trees, answered as `[{path, text}]` for `take`. |
-| `list_files(pattern, len) -> i32` | Paths matching a glob, as JSON. |
 | `take`, `finish`, `log`, `now` | As connectors. `send` and `wait` are refused for readers. |
 
-- **Trees:** each call has a commit and the working tree. A commit file looks in that commit first (`git cat-file --batch`, kept open per tab), then in the working tree for what the commit lacks, so an old commit shows its own names and an asset added later still resolves. A working file looks in the working tree only. `search` and `list_files` merge both trees the same way, the commit winning for a path in both.
-- **Search:** what Unity's `meta_files_owning` does today (`^guid: (a|b|c)` over `*.meta`, in chunks), now asked by the reader. SterneGit holds no Unity knowledge.
+- **Trees:** each call has a commit and the working tree. A commit file looks in that commit first (`git cat-file --batch`, kept open per tab), then in the working tree for what the commit lacks, so an old commit shows its own names and an asset added later still resolves. A working file looks in the working tree only. `search` merges both trees the same way, the commit winning for a path in both.
+- **Search:** Unity asks once for every GUID line, `^guid: [0-9a-fA-F]{32}` over `*.meta`, and builds its own GUID → path map. One `git grep` takes about 0.3 s on a 12,000-file project, against 1.5 s for today's chunked searches of the GUIDs a file uses. SterneGit keeps each tree's search answers, so the second side and the next file get them at once. SterneGit holds no Unity knowledge.
+- **No `list_files`:** nothing needs it yet; a reader that does gets it in a later protocol version.
 - **What a call used:** SterneGit records every working-tree path read and every search answered from the working tree, for the cache (section 5).
 - **File cache:** SterneGit keeps the files a reader read per commit for the tab, so the second side and the next file reuse them.
 - **Pictures:** a reader never decodes images. It names a picture file and a rectangle; SterneGit decodes and crops it with its own decoders.
@@ -139,21 +139,19 @@ pub struct Object {
     pub tags: Vec<String>,
 }
 
-pub struct Field { pub key: String, pub label: String, pub value: Value, pub tags: Vec<String> }
+pub struct Field { pub key: String, pub label: String, pub value: Value, pub tags: Vec<String>, pub children: Vec<Field> }
 
 pub enum Value {
-    Text(String), Number(f64), Bool(bool), Flags(Vec<String>),
-    Vector(Vec<f64>), Color([f32; 4]), Rotation { degrees: [f64; 3] },
-    Reference { target: String, label: String, path: Option<String> },
-    List { items: Vec<Item> }, Group(Vec<Field>), Long { digest: u64, preview: String },
+    Text(String), Long { start: String, more: usize, digest: u64 }, Data { bytes: usize, digest: u64 },
+    Number(String), Flag(bool), Vector(Vec<(String, String)>), Color { rgba: [f32; 4], hdr: Option<f32> },
+    Reference(Reference), Nothing(String), Count(usize), Empty,
 }
-
-pub struct Item { pub id: Option<String>, pub value: Value }
 
 pub struct Scope { pub lines: (u32, u32), pub label: String, pub object: Option<String> }
 ```
 
-- **Ids:** pairing is by `Object.id` and `Item.id`, never by position, which keeps today's list-entry pairing (b70476a).
+- **Ids:** pairing is by `Object.id`, and by field path, never by position; list entries keep today's id-based keys (b70476a).
+- **Fields are a tree.** A field's path is its parent's path, a dot, and its key, with no dot before a key starting with `[` or `:`. Flat fields repeating whole paths made the largest prefab 9.1 MB of JSON; the tree and short names (`k`, `l`, `v`, `t`, `c`, `{"n":"0"}`) make it 4.1 MB.
 - **Tags:** option ids from the manifest. Unity tags its noise fields `noise` and its fileID fields `ids`; SterneGit filters by them, so switching an option never calls the reader.
 - **Cache:** a model is kept in memory per window under its blob id, the reader's version, the `rereads` option values and the commit, within a size cap, oldest dropped first. An entry that used the working tree also keeps the paths and searches it used, and the file watcher drops it when one of those changes. Reopening a file, or another commit holding the same blob, is instant. Nothing is saved to disk.
 - **Sameness:** SterneGit compares values with the rules Unity uses now (numbers within display precision, rotations by degrees, long values by digest), so they move out of `src/unity/value.rs` into `src/read/`.
@@ -161,7 +159,7 @@ pub struct Scope { pub lines: (u32, u32), pub label: String, pub object: Option<
 - **`Curves`:** tracks with keys and tangents; today's `Clip` and `Track`. Sampling (`hermite`, `value_at`) stays in SterneGit.
 - **`Layout`:** shapes, sprites as `{ picture, rect, pivot }`, markers and the object each one belongs to; today's `Layout` without the sprite pixels.
 - **`scopes`:** line ranges that label the text view, today's `hints.rs` output.
-- **Size of a model:** a 14k-row prefab is a few MB of JSON. Readers get a 512 MB memory limit and a CPU budget in slices of 20 M fuel, 1,000 slices per `read`; the connectors' 64 MB and 50 slices are far too small.
+- **Size of a model:** the largest prefab measured is 4.1 MB of JSON. Readers get a 512 MB memory limit and a CPU budget in slices of 20 M fuel, 1,000 slices per `read`; the connectors' 64 MB and 50 slices are far too small.
 
 ## 6. Side files and fixes
 
@@ -201,23 +199,34 @@ All mockup first.
 
 ## 9. Speed
 
-wasmi runs plugin code 15–20× slower than native. For connectors that never shows, because web requests dominate. For readers it is all CPU, so it has to be measured before Unity moves for good.
+Measured 2026-11-27 on `WizardShopUI_Canvas.prefab` (2.1 MB, 746 documents, 159 objects, 53,000 particle-system fields), the largest prefab found on this machine. Same Unity reader each time; the first read includes the 0.3 s GUID search, later reads have it cached.
 
-- Milestone 2 ports prefab reading only and times, on the largest prefab available, native read vs wasm read, both sides, cold and warm file cache.
+| | First read | Later reads |
+| --- | --- | --- |
+| Native, before the protocol changes | 1.6 s | 1.6 s |
+| wasmi, before the protocol changes | 2.6 s | 2.6 s |
+| Native | 0.40 s | 0.10 s |
+| wasmi | 1.33 s | 1.0 s |
+| Wasmtime | 0.82 s | 0.16 s |
+
+- **What changed between the rows:** one GUID search kept per tree instead of chunked searches per file; fields as a tree with short JSON names; labels made once per name; integers recognised without parsing a float.
+- **wasmi** ran the reader's own work about 10× slower than native: parsing 175 ms, building the model 390 ms, converting it 125 ms, writing JSON 85 ms.
+- **Wasmtime** compiles a module once, 0.55 s for the Unity reader, then runs it close to native speed. Compiled modules aren't cached on disk yet; the start-up cost is paid on a background task.
+- **The choice:** Wasmtime with its compiler for every plugin, at about 11.6 MB of exe, so any reader, bundled or installed, runs fast. Connectors moved with it the same day, so wasmi is gone.
 - What the user sees meanwhile: text at once, the reader's view swapped in when ready, cancelled when the file changes.
-- If it is too slow, in order: profile the reader (YAML parsing, JSON output size), cache models per blob id across tabs, then reopen the engine question with the numbers.
 
 ## 10. Size
 
+- Wasmtime and Cranelift add about 11.6 MB, measured for connectors in 2026-11 (`docs/connectors/comparison.md`); wasmi's 1.1 MB comes out.
 - Unity's reader leaves the exe: about 1.37 MB comes out, measured at 447f1f5.
 - What comes in: the generic model and comparison in `src/read/`, the file host, the Readers page, and `src/repo/compare/read/` replacing `src/repo/compare/unity/` at about its size.
-- Expected: a smaller exe. Not measured per milestone.
+- Not measured per milestone.
 
 ## 11. Milestones
 
 1. **Shared engine** (built 2026-11-27): the engine, memory limit as a parameter, module checks, the common imports behind a `Guest` trait, pins and `Stop` moved to `src/plugin/`. A stop names its plugin ("The connector ran too long…") and its memory limit. Connectors behave the same.
-2. **Prefab reader, measured:** grants, approvals and discovery shared between connectors and readers, `readers/protocol`, `readers/sdk`, the file host, `read` for prefabs only, the inspector view made generic. Time it (section 9). Decide with the numbers whether Unity moves.
-3. **All of Unity:** scenes, clips, controllers, script graphs, layouts with sprites, scopes. `src/unity/` deleted. Every Unity test moves with it or into `src/read/`.
+2. **Prefab reader, measured** (2026-11-27): `readers/protocol`, `readers/sdk` with a native test host, the reader host in `src/read/` (engine, `read_file`, `search`, a working-tree `Tree` keeping its searches), and `readers/unity` reading prefabs from a copy of `src/unity/`'s parsing files. Timed (section 9); the engine became Wasmtime for readers and connectors. Moved to milestone 3: grants, approvals and discovery shared between connectors and readers, commit trees, and the inspector view made generic.
+3. **All of Unity:** the reader manifest, grants, approvals and discovery shared with connectors, bundling with pins; commit trees; the inspector view made generic; scenes, clips, controllers, script graphs, layouts with sprites, scopes. `src/unity/` deleted. Every Unity test moves with it or into `src/read/`. The reader builds its field tree directly instead of converting flat fields.
 4. **Screens:** Settings → Readers, approval, reader stopped, two readers for one file.
 5. **Side files and fixes:** `.meta` pairing, GUID warning, fix preview. Replaces `Repository::rewrite_guid`.
 6. **Author kit and a second reader:** `docs/readers/authoring.md`, `readers/template/`, and a Godot reader for `.tscn` and `.tres` (sniffed by `[gd_scene` and `[gd_resource`) that must need no SterneGit change.

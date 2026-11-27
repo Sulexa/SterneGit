@@ -1,8 +1,8 @@
-use sternegit_protocol::ABI;
-use wasmi::{
-    CompilationMode, Config, EnforcedLimits, Engine, ExternType, Module, StoreLimits, StoreLimitsBuilder, TrapCode,
-    ValType,
-    errors::{ErrorKind, InstantiationError, MemoryError, TableError},
+use std::sync::OnceLock;
+
+use wasmtime::{
+    Config, Engine, ExternType, Module, ResourceLimiter, Trap, ValType,
+    wasmparser::{Parser, Payload},
 };
 
 use super::Stop;
@@ -13,85 +13,150 @@ pub(crate) const FUEL_PER_SLICE: u64 = 20_000_000;
 
 const TABLES: usize = 4;
 const TABLE_ELEMENTS: usize = 20_000;
-const MAX_RECURSION_DEPTH: usize = 4096;
+const WASM_STACK_BYTES: usize = 1024 * 1024;
+const HOST_STACK_BYTES: usize = 4 * 1024 * 1024;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Ty {
+    I32,
+    I64,
+}
+
+impl Ty {
+    fn is(self, ty: &ValType) -> bool {
+        match self {
+            Ty::I32 => matches!(ty, ValType::I32),
+            Ty::I64 => matches!(ty, ValType::I64),
+        }
+    }
+}
 
 pub(crate) struct Import {
     pub(crate) name: &'static str,
-    pub(crate) params: &'static [ValType],
-    pub(crate) results: &'static [ValType],
+    pub(crate) params: &'static [Ty],
+    pub(crate) results: &'static [Ty],
 }
 
 pub(crate) const TAKE: Import = Import {
     name: "take",
-    params: &[ValType::I32],
+    params: &[Ty::I32],
     results: &[],
 };
 
 pub(crate) const FINISH: Import = Import {
     name: "finish",
-    params: &[ValType::I32, ValType::I32],
+    params: &[Ty::I32, Ty::I32],
     results: &[],
 };
 
 pub(crate) const LOG: Import = Import {
     name: "log",
-    params: &[ValType::I32, ValType::I32, ValType::I32],
+    params: &[Ty::I32, Ty::I32, Ty::I32],
     results: &[],
 };
 
 pub(crate) const NOW: Import = Import {
     name: "now",
     params: &[],
-    results: &[ValType::I64],
+    results: &[Ty::I64],
 };
 
-pub(crate) fn engine() -> Engine {
-    let mut config = Config::default();
-    config
-        .consume_fuel(true)
-        .compilation_mode(CompilationMode::LazyTranslation)
-        .allow_start_fn(false)
-        .wasm_multi_memory(false)
-        .set_max_recursion_depth(MAX_RECURSION_DEPTH)
-        .enforced_limits(EnforcedLimits::strict());
-    Engine::new(&config)
+pub(crate) fn engine() -> &'static Engine {
+    static ENGINE: OnceLock<Engine> = OnceLock::new();
+    ENGINE.get_or_init(|| {
+        let mut config = Config::new();
+        config
+            .consume_fuel(true)
+            .wasm_multi_memory(false)
+            .max_wasm_stack(WASM_STACK_BYTES)
+            .async_stack_size(WASM_STACK_BYTES + HOST_STACK_BYTES);
+        Engine::new(&config).expect("SterneGit's engine settings are valid")
+    })
 }
 
-pub(crate) fn limits(memory_bytes: usize) -> StoreLimits {
-    StoreLimitsBuilder::new()
-        .memory_size(memory_bytes)
-        .memories(1)
-        .instances(1)
-        .tables(TABLES)
-        .table_elements(TABLE_ELEMENTS)
-        .trap_on_grow_failure(true)
-        .build()
+pub(crate) fn compile(wasm: &[u8], offered: &[Import]) -> Result<Module, Stop> {
+    refuse_start_function(wasm)?;
+    let module = Module::new(engine(), wasm).map_err(|error| Stop::Refused(format!("The module can't be loaded: {error}")))?;
+    refuse_foreign_imports(&module, offered)?;
+    require_exports(&module)?;
+    Ok(module)
 }
 
-pub(crate) fn check_module(module: &Module, offered: &[Import]) -> Result<(), Stop> {
-    refuse_foreign_imports(module, offered)?;
-    require_exports(module)
+pub(crate) struct Limits {
+    memory_bytes: usize,
+    denied: bool,
 }
 
-pub(crate) fn stop_for(error: &wasmi::Error, memory_bytes: usize) -> Option<Stop> {
-    if ran_out_of_memory(error) {
-        Some(Stop::OutOfMemory {
-            limit_bytes: memory_bytes,
-        })
-    } else if error.as_trap_code() == Some(TrapCode::OutOfFuel) {
-        Some(Stop::OutOfFuel)
-    } else {
-        None
+impl Limits {
+    pub(crate) fn new(memory_bytes: usize) -> Self {
+        Self {
+            memory_bytes,
+            denied: false,
+        }
     }
+
+    pub(crate) fn stop_for(&self, error: &wasmtime::Error) -> Option<Stop> {
+        if self.denied {
+            Some(Stop::OutOfMemory {
+                limit_bytes: self.memory_bytes,
+            })
+        } else if matches!(error.downcast_ref::<Trap>(), Some(Trap::OutOfFuel)) {
+            Some(Stop::OutOfFuel)
+        } else {
+            None
+        }
+    }
+
+    fn deny(&mut self) -> wasmtime::Result<bool> {
+        self.denied = true;
+        Err(wasmtime::Error::msg("the module needed more memory than SterneGit allows"))
+    }
+}
+
+impl ResourceLimiter for Limits {
+    fn memory_growing(&mut self, _: usize, desired: usize, _: Option<usize>) -> wasmtime::Result<bool> {
+        if desired > self.memory_bytes { self.deny() } else { Ok(true) }
+    }
+
+    fn table_growing(&mut self, _: usize, desired: usize, _: Option<usize>) -> wasmtime::Result<bool> {
+        if desired > TABLE_ELEMENTS { self.deny() } else { Ok(true) }
+    }
+
+    fn instances(&self) -> usize {
+        1
+    }
+
+    fn tables(&self) -> usize {
+        TABLES
+    }
+
+    fn memories(&self) -> usize {
+        1
+    }
+}
+
+fn refuse_start_function(wasm: &[u8]) -> Result<(), Stop> {
+    for payload in Parser::new(0).parse_all(wasm) {
+        match payload {
+            Ok(Payload::StartSection { .. }) => {
+                return Err(Stop::Refused("The module has a start function, which SterneGit doesn't run".to_owned()));
+            }
+            Ok(_) => {}
+            Err(error) => return Err(Stop::Refused(format!("The module can't be loaded: {error}"))),
+        }
+    }
+    Ok(())
 }
 
 fn refuse_foreign_imports(module: &Module, offered: &[Import]) -> Result<(), Stop> {
     for import in module.imports() {
-        let matching = (import.module() == ABI)
+        let matching = (import.module() == sternegit_protocol::ABI)
             .then(|| offered.iter().find(|offered| offered.name == import.name()))
             .flatten();
         let fits = match (matching, import.ty()) {
-            (Some(offered), ExternType::Func(ty)) => ty.params() == offered.params && ty.results() == offered.results,
+            (Some(offered), ExternType::Func(ty)) => {
+                same_types(ty.params(), offered.params) && same_types(ty.results(), offered.results)
+            }
             _ => false,
         };
         if !fits {
@@ -105,36 +170,21 @@ fn refuse_foreign_imports(module: &Module, offered: &[Import]) -> Result<(), Sto
     Ok(())
 }
 
-fn require_exports(module: &Module) -> Result<(), Stop> {
-    let exported = |name: &str| {
-        module
-            .exports()
-            .find(|export| export.name() == name)
-            .map(|export| export.ty().clone())
-    };
-    if !matches!(exported(MEMORY_EXPORT), Some(ExternType::Memory(_))) {
-        return Err(Stop::Refused(format!("The module exports no {MEMORY_EXPORT}")));
-    }
-    match exported(ENTRY_EXPORT) {
-        Some(ExternType::Func(ty)) if ty.params() == [ValType::I32] && ty.results() == [ValType::I32] => Ok(()),
-        _ => Err(Stop::Refused(format!("The module exports no {ENTRY_EXPORT}(i32) -> i32"))),
-    }
+fn same_types(found: impl ExactSizeIterator<Item = ValType>, offered: &[Ty]) -> bool {
+    found.len() == offered.len() && found.zip(offered).all(|(found, offered)| offered.is(&found))
 }
 
-fn ran_out_of_memory(error: &wasmi::Error) -> bool {
-    let memory_denied = |error: &MemoryError| {
-        matches!(
-            error,
-            MemoryError::ResourceLimiterDeniedAllocation | MemoryError::OutOfSystemMemory
-        )
+fn require_exports(module: &Module) -> Result<(), Stop> {
+    if !matches!(module.get_export(MEMORY_EXPORT), Some(ExternType::Memory(_))) {
+        return Err(Stop::Refused(format!("The module exports no {MEMORY_EXPORT}")));
+    }
+    let entry_fits = match module.get_export(ENTRY_EXPORT) {
+        Some(ExternType::Func(ty)) => same_types(ty.params(), &[Ty::I32]) && same_types(ty.results(), &[Ty::I32]),
+        _ => false,
     };
-    let table_denied = |error: &TableError| matches!(error, TableError::ResourceLimiterDeniedAllocation);
-    error.as_trap_code() == Some(TrapCode::GrowthOperationLimited)
-        || match error.kind() {
-            ErrorKind::Memory(error)
-            | ErrorKind::Instantiation(InstantiationError::FailedToInstantiateMemory(error)) => memory_denied(error),
-            ErrorKind::Table(error)
-            | ErrorKind::Instantiation(InstantiationError::FailedToInstantiateTable(error)) => table_denied(error),
-            _ => false,
-        }
+    if entry_fits {
+        Ok(())
+    } else {
+        Err(Stop::Refused(format!("The module exports no {ENTRY_EXPORT}(i32) -> i32")))
+    }
 }

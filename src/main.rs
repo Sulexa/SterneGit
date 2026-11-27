@@ -11,6 +11,8 @@ mod hosting;
 mod media;
 mod net;
 mod plugin;
+#[cfg_attr(not(test), expect(dead_code, unused_imports))]
+mod read;
 mod repo;
 mod settings;
 #[cfg(test)]
