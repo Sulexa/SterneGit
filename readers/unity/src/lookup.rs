@@ -12,7 +12,7 @@ const DEEPEST_LIBRARY: usize = 3;
 const GUID_LINE: &str = "guid: ";
 const META_SUFFIX: &str = ".meta";
 
-pub(crate) fn lookup_for(docs: &[Document]) -> Lookup {
+pub(crate) fn lookup_for(docs: &[Document]) -> (Lookup, HashMap<String, Vec<Document>>) {
     let mut lookup = Lookup {
         assets: every_meta_guid(),
         ..Lookup::default()
@@ -30,7 +30,7 @@ pub(crate) fn lookup_for(docs: &[Document]) -> Lookup {
         lookup.targets.extend(targets);
     }
     lookup.objects.extend(object_names(docs, &lookup.assets));
-    lookup
+    (lookup, library)
 }
 
 fn library(docs: &[Document], lookup: &Lookup) -> HashMap<String, Vec<Document>> {

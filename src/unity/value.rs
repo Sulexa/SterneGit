@@ -172,14 +172,6 @@ pub(crate) fn hex_color(rgba: [f32; 4]) -> String {
 pub(crate) struct Lookup {
     pub(crate) objects: HashMap<i64, (String, String)>,
     pub(crate) assets: HashMap<String, String>,
-    pub(crate) targets: HashMap<(String, i64), Target>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct Target {
-    pub(crate) type_name: String,
-    pub(crate) object: String,
-    pub(crate) script: Option<String>,
 }
 
 impl Lookup {
@@ -332,10 +324,6 @@ pub(crate) fn fields(body: &Node, skipped: &[&str], lookup: &Lookup) -> Vec<Fiel
         flatten(key, &nicify(key), key, node, 0, lookup, &mut out);
     }
     out
-}
-
-pub(crate) fn single(key: &str, node: &Node, lookup: &Lookup) -> Value {
-    leaf(key, node, lookup).unwrap_or_else(|| Value::Text(String::new()))
 }
 
 fn flatten(key: &str, label: &str, path: &str, node: &Node, depth: usize, lookup: &Lookup, out: &mut Vec<Field>) {
@@ -502,32 +490,9 @@ fn color(node: &Node) -> Value {
     }
 }
 
-pub(crate) fn quaternion_degrees(node: &Node) -> Option<[f64; 3]> {
-    let part = |name: &str| node.get(name).and_then(Node::number);
-    let (x, y, z, w) = (part("x")?, part("y")?, part("z")?, part("w")?);
-    Some(euler_degrees(x, y, z, w))
-}
-
-pub(crate) fn euler_degrees(x: f64, y: f64, z: f64, w: f64) -> [f64; 3] {
-    let sin_pitch = 2. * (w * x - y * z);
-    let pitch = if sin_pitch.abs() >= 1. { std::f64::consts::FRAC_PI_2.copysign(sin_pitch) } else { sin_pitch.asin() };
-    let yaw = (2. * (w * y + x * z)).atan2(1. - 2. * (x * x + y * y));
-    let roll = (2. * (w * z + x * y)).atan2(1. - 2. * (x * x + z * z));
-    let degrees = |radians: f64| {
-        let value = radians.to_degrees();
-        if value.abs() < 1e-4 { 0. } else { value }
-    };
-    [degrees(pitch), degrees(yaw), degrees(roll)]
-}
-
-pub(crate) fn rotation_value(node: &Node) -> Option<Value> {
-    let [x, y, z] = quaternion_degrees(node)?;
-    Some(Value::Vector(vec![("x", short_number(x)), ("y", short_number(y)), ("z", short_number(z))]))
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{LONGEST_VALUE_SHOWN, Lookup, Sameness, Value, euler_degrees, fields, hex_color, is_flag_name};
+    use super::{LONGEST_VALUE_SHOWN, Lookup, Sameness, Value, fields, is_flag_name};
     use crate::unity::{compare::State, yaml::Node};
 
     fn map(entries: &[(&str, Node)]) -> Node {
@@ -646,11 +611,4 @@ mod tests {
         assert!(!is_flag_name("island"));
     }
 
-    #[test]
-    fn a_quarter_turn_around_z_is_ninety_degrees() {
-        let half = std::f64::consts::FRAC_1_SQRT_2;
-        let [x, y, z] = euler_degrees(0., 0., half, half);
-        assert!(x.abs() < 1e-6 && y.abs() < 1e-6 && (z - 90.).abs() < 1e-6);
-        assert_eq!(hex_color([0.29, 0.87, 0.5, 1.]), "#4ADE80");
-    }
 }

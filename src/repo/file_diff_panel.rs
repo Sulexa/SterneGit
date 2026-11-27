@@ -2012,13 +2012,7 @@ fn unity_patch(repo: &Repo, files: &UnityFiles, patch: FilePatch) -> anyhow::Res
             hunks,
         });
     }
-    let pretty = |version: Option<&unity::UnityVersion>| {
-        version
-            .and_then(|version| version.graph.as_ref())
-            .and_then(|graph| serde_json::to_string_pretty(graph).ok())
-            .map(|text| text + "\n")
-            .unwrap_or_default()
-    };
+    let pretty = |version: Option<&unity::UnityVersion>| version.and_then(|version| version.text.clone()).unwrap_or_default();
     let name = Path::new(&files.path)
         .file_name()
         .map_or_else(|| "graph.json".to_owned(), |name| format!("{}.json", name.to_string_lossy()));

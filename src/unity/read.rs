@@ -1,36 +1,34 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     ffi::OsString,
     path::Path,
     sync::{Arc, atomic::AtomicBool},
 };
 
 use anyhow::Result;
+use sternegit_reader_protocol::{self as protocol, Failure, ReadInput, Side};
 
 use super::{
-    animator::compare_controllers,
-    clip::{Clip, ClipComparison, Keys, compare_clips, read_clip},
+    animator::{Machine, compare_controllers},
+    clip::{Clip, ClipComparison, compare_clips},
     compare::{Comparison, Options, compare},
-    graph::{GraphComparison, compare_script_graphs, graph_json},
-    hints::Scopes,
+    graph::{GraphComparison, ScriptSide, compare_script_graphs},
+    hints::{Labels, annotate},
     ingest,
-    layout::{Layout, View, layout, view_for},
+    layout::{Layout, View},
     meta::guid_of,
     names::{UnityKind, component_title, file_name, nicify},
-    scene::{Model, guids_in, guids_in_node, object_names, script_guid, source_prefabs, targets_of},
+    scene::{Model, object_names, script_guid},
     sprites::{SpriteImage, crop},
     value::Lookup,
-    yaml::{Document, Node, documents, is_unity_yaml, plain},
+    yaml::{Document, Node, documents, is_unity_yaml},
 };
-use sternegit_reader_protocol::{Failure, ReadInput, Side};
-
 use crate::{
     git::{Repo, Revision},
     media::Picture,
     read::{ReadError, Reader, RevisionTree, Tree},
 };
 
-const DEEPEST_LIBRARY: usize = 3;
 const MOST_GUID_USERS: usize = 40;
 const PLACES_PER_USER: usize = 3;
 
@@ -60,11 +58,15 @@ pub(crate) enum Shape {
 }
 
 pub(crate) struct UnityVersion {
-    pub(crate) documents: Vec<Document>,
     pub(crate) model: Model,
     pub(crate) clip: Option<Clip>,
-    pub(crate) graph: Option<serde_json::Value>,
+    pub(crate) script: ScriptSide,
+    pub(crate) machine: Machine,
     pub(crate) layout: Option<Layout>,
+    pub(crate) scopes: Vec<protocol::Scope>,
+    pub(crate) notes: Vec<protocol::Note>,
+    pub(crate) text: Option<String>,
+    pub(crate) ports: bool,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -88,8 +90,7 @@ pub(crate) struct UnityFiles {
     pub(crate) path: String,
     pub(crate) before: Option<UnityVersion>,
     pub(crate) after: Option<UnityVersion>,
-    pub(crate) lookup: Lookup,
-    pub(crate) sprites: HashMap<(String, i64), Arc<SpriteImage>>,
+    pub(crate) sprites: HashMap<String, Arc<SpriteImage>>,
     pub(crate) guid_change: Option<GuidChange>,
     pub(crate) view: View,
 }
@@ -112,19 +113,24 @@ impl UnityFiles {
     }
 
     pub(crate) fn graph(&self, layer: usize, options: Options) -> GraphComparison {
+        let empty_machine = Machine::default();
+        let empty_script = ScriptSide::default();
         match self.shape {
             Shape::Controller => compare_controllers(
-                self.before.as_ref().map(|version| version.documents.as_slice()),
-                self.after.as_ref().map(|version| version.documents.as_slice()),
-                &self.lookup,
+                self.before.as_ref().map_or(&empty_machine, |version| &version.machine),
+                self.after.as_ref().map_or(&empty_machine, |version| &version.machine),
                 layer,
                 options,
             ),
-            _ => compare_script_graphs(
-                self.before.as_ref().and_then(|version| version.graph.as_ref()),
-                self.after.as_ref().and_then(|version| version.graph.as_ref()),
-                options,
-            ),
+            _ => {
+                let ports = self.after.as_ref().or(self.before.as_ref()).is_none_or(|version| version.ports);
+                compare_script_graphs(
+                    self.before.as_ref().map_or(&empty_script, |version| &version.script),
+                    self.after.as_ref().map_or(&empty_script, |version| &version.script),
+                    ports,
+                    options,
+                )
+            }
         }
     }
 
@@ -136,15 +142,19 @@ impl UnityFiles {
     }
 
     pub(crate) fn annotate(&self, patch: &str) -> String {
-        let none: [Document; 0] = [];
-        let before = self.before.as_ref().map_or(&none[..], |version| &version.documents);
-        let after = self.after.as_ref().map_or(&none[..], |version| &version.documents);
-        Scopes::new(before, after, &self.lookup).annotate(patch)
+        annotate(patch, labels(self.before.as_ref()), labels(self.after.as_ref()))
     }
 
-    pub(crate) fn sprite(&self, guid: &str, file_id: i64) -> Option<&Arc<SpriteImage>> {
-        self.sprites.get(&(guid.to_owned(), file_id))
+    pub(crate) fn sprite(&self, picture: &str) -> Option<&Arc<SpriteImage>> {
+        self.sprites.get(picture)
     }
+}
+
+fn labels(version: Option<&UnityVersion>) -> Labels<'_> {
+    version.map_or_else(Labels::default, |version| Labels {
+        scopes: &version.scopes,
+        notes: &version.notes,
+    })
 }
 
 fn text_of(repo: &Repo, source: &Source) -> Result<String> {
@@ -164,7 +174,7 @@ pub(crate) struct ByReader {
     pub(crate) kind: String,
 }
 
-fn read_model(repo: &Repo, by: &ByReader, source: &Source, side: Side) -> Result<Model> {
+fn read_side(repo: &Repo, by: &ByReader, source: &Source, side: Side) -> Result<protocol::Model> {
     let path = source.path.to_string_lossy().into_owned();
     let tree: Arc<dyn Tree> = Arc::new(RevisionTree::new(repo.clone(), source.revision, path.clone()));
     let input = ReadInput {
@@ -174,9 +184,23 @@ fn read_model(repo: &Repo, by: &ByReader, source: &Source, side: Side) -> Result
         options: Default::default(),
     };
     match by.reader.read(tree, input, &AtomicBool::new(false)) {
-        Ok(read) => Ok(ingest::model(&read)),
+        Ok(read) => Ok(read),
         Err(ReadError::Failed(Failure::NotThisFormat { .. })) => Err(NotUnityText.into()),
         Err(error) => Err(anyhow::anyhow!("{error}")),
+    }
+}
+
+fn version(read: &protocol::Model) -> UnityVersion {
+    UnityVersion {
+        model: ingest::model(read),
+        clip: read.curves.as_ref().map(ingest::clip),
+        script: ingest::script_side(read.graph.as_ref()),
+        machine: ingest::machine(read.graph.as_ref()),
+        layout: read.layout.as_ref().map(ingest::layout),
+        scopes: read.scopes.clone(),
+        notes: read.notes.clone(),
+        text: read.text.clone(),
+        ports: read.graph.as_ref().is_none_or(|graph| graph.ports),
     }
 }
 
@@ -187,171 +211,72 @@ pub(crate) fn read(
     after: Option<Source>,
     by: Option<&ByReader>,
 ) -> Result<UnityFiles> {
-    let sources = [before.clone(), after.clone()];
     let kind = UnityKind::of(path).ok_or(NotUnityText)?;
-    let texts = [before, after].map(|source| source.map(|source| text_of(repo, &source)).transpose());
-    let [before_text, after_text] = texts;
-    let (before_text, after_text) = (before_text?, after_text?);
-    let unity_text = |text: &Option<String>| text.as_deref().is_none_or(|text| kind == UnityKind::Meta || is_unity_yaml(text));
-    if !unity_text(&before_text) || !unity_text(&after_text) || before_text.is_none() && after_text.is_none() {
+    let by = by.ok_or(NotUnityText)?;
+    if before.is_none() && after.is_none() {
         return Err(NotUnityText.into());
     }
-    let parse = |text: &Option<String>| -> Option<(Vec<Document>, Option<Node>)> {
-        let text = text.as_deref()?;
-        Some(if kind == UnityKind::Meta { (Vec::new(), Some(plain(text))) } else { (documents(text), None) })
-    };
-    let parsed = [parse(&before_text), parse(&after_text)];
-    let mut library: HashMap<String, Vec<Document>> = HashMap::new();
-    let mut lookup = Lookup::default();
-    let mut wanted: Vec<String> = parsed
-        .iter()
-        .flatten()
-        .flat_map(|(docs, _)| source_prefabs(docs))
-        .collect();
-    for _ in 0..DEEPEST_LIBRARY {
-        wanted.retain(|guid| !library.contains_key(guid));
-        wanted.sort();
-        wanted.dedup();
-        if wanted.is_empty() {
-            break;
-        }
-        lookup.assets.extend(repo.meta_files_owning(&wanted)?);
-        let mut next = Vec::new();
-        for guid in &wanted {
-            let Some(text) = lookup.asset_path(guid).and_then(|prefab| on_disk(repo, prefab)) else {
-                continue;
-            };
-            let docs = documents(&text);
-            next.extend(source_prefabs(&docs));
-            library.insert(guid.clone(), docs);
-        }
-        wanted = next;
-    }
-    let mut guids: HashSet<String> = HashSet::new();
-    for (docs, meta) in parsed.iter().flatten() {
-        guids.extend(guids_in(docs));
-        if let Some(meta) = meta {
-            guids_in_node(meta, &mut guids);
-        }
-    }
-    for docs in library.values() {
-        guids.extend(guids_in(docs));
-    }
-    let missing: Vec<String> = guids.into_iter().filter(|guid| !lookup.assets.contains_key(guid)).collect();
-    lookup.assets.extend(repo.meta_files_owning(&missing)?);
-    for (guid, docs) in &library {
-        let mut targets = targets_of(guid, docs);
-        for document in docs {
-            if let Some(target) = targets.get_mut(&(guid.clone(), document.file_id))
-                && document.type_name == "MonoBehaviour"
-            {
-                target.script = script_guid(&document.body).and_then(|script| lookup.script_name(script));
-            }
-        }
-        lookup.targets.extend(targets);
-    }
-    for (docs, _) in parsed.iter().flatten() {
-        lookup.objects.extend(object_names(docs, &lookup.assets));
-    }
-    let view = parsed
-        .iter()
-        .rev()
-        .flatten()
-        .next()
-        .map_or(View::Front, |(docs, _)| view_for(docs));
+    let read_before = before.as_ref().map(|source| read_side(repo, by, source, Side::Before)).transpose()?;
+    let read_after = after.as_ref().map(|source| read_side(repo, by, source, Side::After)).transpose()?;
     let shape = match kind {
         UnityKind::AnimationClip => Shape::Clip,
         UnityKind::AnimatorController => Shape::Controller,
-        UnityKind::Asset if parsed.iter().flatten().any(|(docs, _)| graph_json(docs).is_some()) => Shape::Graph,
+        UnityKind::Asset if [&read_before, &read_after].into_iter().flatten().any(|read| read.graph.is_some()) => {
+            Shape::Graph
+        }
         _ => Shape::Objects,
     };
-    let [before_parsed, after_parsed] = parsed;
-    let [before_source, after_source] = sources;
-    let version = |parsed: Option<(Vec<Document>, Option<Node>)>, source: Option<Source>, side: Side| -> Result<Option<UnityVersion>> {
-        let Some((docs, meta)) = parsed else {
-            return Ok(None);
-        };
-        let by_reader = by.zip(source.as_ref()).map(|(by, source)| read_model(repo, by, source, side)).transpose()?;
-        Ok(Some({
-            let model = match (by_reader, &meta) {
-                (Some(model), _) => model,
-                (None, Some(meta)) => Model::from_meta(meta, path.strip_suffix(".meta").unwrap_or(path), &lookup),
-                (None, None) => Model::from_documents(kind, &docs, path, &lookup),
-            };
-            let layout = kind.has_hierarchy().then(|| layout(&docs, &model, &library, &lookup, view));
-            UnityVersion {
-                clip: (shape == Shape::Clip).then(|| read_clip(&docs, &lookup)).flatten(),
-                graph: (shape == Shape::Graph).then(|| graph_json(&docs)).flatten(),
-                layout,
-                model,
-                documents: docs,
-            }
-        }))
-    };
-    let before = version(before_parsed, before_source, Side::Before)?;
-    let after = version(after_parsed, after_source, Side::After)?;
-    let sprites = load_sprites(repo, &lookup, [before.as_ref(), after.as_ref()]);
-    let guid_change = match (kind, &before_text, &after_text) {
-        (UnityKind::Meta, Some(old), Some(new)) => guid_change(repo, path, old, new, &lookup),
+    let view = [&read_after, &read_before]
+        .into_iter()
+        .flatten()
+        .find_map(|read| read.layout.as_ref().map(ingest::view))
+        .unwrap_or(View::Front);
+    let sprites = load_sprites(repo, [&read_before, &read_after]);
+    let guid_change = match kind {
+        UnityKind::Meta => match (&before, &after) {
+            (Some(before), Some(after)) => guid_change(repo, path, &text_of(repo, before)?, &text_of(repo, after)?),
+            _ => None,
+        },
         _ => None,
     };
     Ok(UnityFiles {
         kind,
         shape,
         path: path.to_owned(),
-        before,
-        after,
-        lookup,
+        before: read_before.as_ref().map(version),
+        after: read_after.as_ref().map(version),
         sprites,
         guid_change,
         view,
     })
 }
 
-fn wanted_sprites(versions: [Option<&UnityVersion>; 2]) -> Vec<(String, i64)> {
-    let mut wanted = Vec::new();
-    for version in versions.into_iter().flatten() {
-        if let Some(layout) = &version.layout {
-            for spot in &layout.spots {
-                wanted.extend(spot.sprites.iter().map(|sprite| (sprite.guid.clone(), sprite.file_id)));
-                wanted.extend(spot.graphics.iter().filter_map(|graphic| graphic.paint.sprite()));
-            }
-        }
-        if let Some(clip) = &version.clip {
-            for track in &clip.tracks {
-                if let Keys::Objects(keys) = &track.keys {
-                    wanted.extend(keys.iter().filter_map(|key| key.sprite.clone()));
-                }
-            }
-        }
-    }
-    wanted.sort();
-    wanted.dedup();
-    wanted
-}
-
-fn load_sprites(repo: &Repo, lookup: &Lookup, versions: [Option<&UnityVersion>; 2]) -> HashMap<(String, i64), Arc<SpriteImage>> {
-    let mut textures: HashMap<String, Option<(Picture, Node)>> = HashMap::new();
+fn load_sprites(repo: &Repo, reads: [&Option<protocol::Model>; 2]) -> HashMap<String, Arc<SpriteImage>> {
+    let mut decoded: HashMap<String, Option<Picture>> = HashMap::new();
     let mut sprites = HashMap::new();
-    for (guid, file_id) in wanted_sprites(versions) {
-        let texture = textures.entry(guid.clone()).or_insert_with(|| {
-            let path = lookup.asset_path(&guid)?;
-            let bytes = std::fs::read(repo.location().join(path)).ok()?;
-            let extension = Path::new(path).extension().and_then(|extension| extension.to_str()).map(str::to_lowercase);
-            let picture = Picture::decode(&bytes, extension.as_deref()).ok()?;
-            let meta = on_disk(repo, &format!("{path}.meta")).map(|text| plain(&text)).unwrap_or(Node::Map(Vec::new()));
-            Some((picture, meta))
+    for picture in reads.into_iter().flatten().flat_map(|read| &read.pictures) {
+        if sprites.contains_key(&picture.id) {
+            continue;
+        }
+        let image = decoded.entry(picture.path.clone()).or_insert_with(|| {
+            let bytes = std::fs::read(repo.location().join(&picture.path)).ok()?;
+            let extension = Path::new(&picture.path)
+                .extension()
+                .and_then(|extension| extension.to_str())
+                .map(str::to_lowercase);
+            Picture::decode(&bytes, extension.as_deref()).ok()
         });
-        if let Some((picture, meta)) = texture
-            && let Some(sprite) = crop(&picture.pixels, picture.width, picture.height, meta, file_id)
+        if let Some(image) = image
+            && let Some(sprite) = crop(&image.pixels, image.width, image.height, picture)
         {
-            sprites.insert((guid, file_id), Arc::new(sprite));
+            sprites.insert(picture.id.clone(), Arc::new(sprite));
         }
     }
     sprites
 }
 
-fn guid_change(repo: &Repo, path: &str, old: &str, new: &str, lookup: &Lookup) -> Option<GuidChange> {
+fn guid_change(repo: &Repo, path: &str, old: &str, new: &str) -> Option<GuidChange> {
+    let lookup = Lookup::default();
     let before = guid_of(old)?;
     let after = guid_of(new)?;
     if before == after {

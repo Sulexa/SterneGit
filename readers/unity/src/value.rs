@@ -529,3 +529,133 @@ pub(crate) fn rotation_value(node: &Node) -> Option<Value> {
     let [x, y, z] = quaternion_degrees(node)?;
     Some(Value::Vector(vec![("x", short_number(x)), ("y", short_number(y)), ("z", short_number(z))]))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{LONGEST_VALUE_SHOWN, Lookup, Sameness, Value, euler_degrees, fields, hex_color, is_flag_name};
+    use crate::{compare::State, yaml::Node};
+
+    fn map(entries: &[(&str, Node)]) -> Node {
+        Node::Map(entries.iter().map(|(key, value)| ((*key).to_owned(), value.clone())).collect())
+    }
+
+    fn text(value: &str) -> Node {
+        Node::Scalar(value.to_owned())
+    }
+
+    #[test]
+    fn long_hex_reads_as_data_compared_whole_and_shown_by_size() {
+        let data = |changed_at: usize| {
+            let hex: String = (0..4_096).map(|at| if at == changed_at { 'a' } else { '0' }).collect();
+            fields(&map(&[("_typelessdata", text(&hex))]), &[], &Lookup::default()).remove(0).value
+        };
+        let before = data(3_000);
+        assert!(matches!(before, Value::Data { bytes: 2_048, .. }));
+        assert_eq!(before.text(), "2.0 KB of data");
+        assert_eq!(before.same_as(&data(3_000)), Sameness::Equal);
+        assert_eq!(before.same_as(&data(3_001)), Sameness::Different);
+    }
+
+    #[test]
+    fn long_text_keeps_its_start_and_counts_the_rest() {
+        let long = |last: char| {
+            let words = format!("{}{last}", "é".repeat(LONGEST_VALUE_SHOWN + 4_699));
+            fields(&map(&[("m_Description", text(&words))]), &[], &Lookup::default()).remove(0).value
+        };
+        let before = long('a');
+        let Value::Long { start, more, .. } = &before else { panic!("{before:?}") };
+        assert_eq!(start.chars().count(), LONGEST_VALUE_SHOWN);
+        assert_eq!(*more, 4_700);
+        assert_eq!(before.same_as(&long('b')), Sameness::Different);
+        let short = "0".repeat(LONGEST_VALUE_SHOWN);
+        assert!(matches!(fields(&map(&[("m_Seed", text(&short))]), &[], &Lookup::default()).remove(0).value, Value::Number(_)));
+    }
+
+    #[test]
+    fn floats_that_only_round_differently_are_not_a_real_change() {
+        let one = Value::Number("1".to_owned());
+        assert_eq!(one.same_as(&Value::Number("0.99999994".to_owned())), Sameness::Rounding);
+        assert_eq!(one.same_as(&Value::Number("1.4".to_owned())), Sameness::Different);
+        assert_eq!(one.same_as(&Value::Number("1".to_owned())), Sameness::Equal);
+    }
+
+    #[test]
+    fn a_map_of_axes_reads_as_a_vector_and_channels_as_a_color() {
+        let body = map(&[
+            ("m_LocalPosition", map(&[("x", text("0")), ("y", text("0.62")), ("z", text("0"))])),
+            ("m_Color", map(&[("r", text("1")), ("g", text("1")), ("b", text("1")), ("a", text("1"))])),
+        ]);
+        let found = fields(&body, &[], &Lookup::default());
+        assert_eq!(found[0].label, "Local Position");
+        assert!(matches!(&found[0].value, Value::Vector(axes) if axes.len() == 3));
+        assert_eq!(found[1].value.text(), "#FFFFFF");
+    }
+
+    #[test]
+    fn lists_count_their_items_and_list_each_one_below() {
+        let body = map(&[(
+            "drops",
+            Node::List(vec![
+                map(&[("fileID", text("0"))]),
+                map(&[("fileID", text("11400000")), ("guid", text("c3a1e9f07b2d4c5e8f6a9b0c1d2e3f4a")), ("type", text("2"))]),
+            ]),
+        )]);
+        let found = fields(&body, &[], &Lookup::default());
+        assert_eq!(found[0].value, Value::Count(2));
+        assert_eq!(found[2].label, "Element 1");
+        assert_eq!(found[2].depth, 1);
+    }
+
+    #[test]
+    fn list_entries_with_an_id_pair_by_id_so_removing_one_leaves_the_rest_unchanged() {
+        let entry = |id: &str, words: &str| map(&[("m_Id", text(id)), ("m_Localized", text(words))]);
+        let table = |entries: Vec<Node>| fields(&map(&[("m_TableData", Node::List(entries))]), &[], &Lookup::default());
+        let before = table(vec![entry("1", "Language"), entry("2", "Send data"), entry("3", "General")]);
+        let after = table(vec![entry("1", "Language"), entry("3", "General"), entry("4", "Privacy")]);
+        let (rows, _) = crate::compare::changed_rows(Some(&before), Some(&after), Default::default());
+        let changed: Vec<(String, State)> = rows
+            .iter()
+            .filter(|row| row.depth == 2)
+            .map(|row| (row.before.as_ref().or(row.after.as_ref()).unwrap().text(), row.state))
+            .collect();
+        assert_eq!(
+            changed,
+            [
+                ("2".to_owned(), State::Removed),
+                ("Send data".to_owned(), State::Removed),
+                ("4".to_owned(), State::Added),
+                ("Privacy".to_owned(), State::Added),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_reference_inside_the_file_reads_as_the_name_of_its_object() {
+        let mut lookup = Lookup::default();
+        lookup.objects.insert(42, ("Crown".to_owned(), "Transform".to_owned()));
+        lookup.assets.insert("aa".repeat(16), "Assets/Art/crown-icon.png".to_owned());
+        let inside = lookup.reference(&map(&[("fileID", text("42"))]));
+        assert_eq!(inside.map(|value| value.text()), Some("Crown (Transform)".to_owned()));
+        let sprite = lookup.reference(&map(&[("fileID", text("21300000")), ("guid", text(&"aa".repeat(16))), ("type", text("3"))]));
+        assert_eq!(sprite.map(|value| value.text()), Some("crown-icon (Sprite)".to_owned()));
+        let empty = lookup.reference(&map(&[("fileID", text("0"))]));
+        assert_eq!(empty, Some(Value::Nothing("Object".to_owned())));
+    }
+
+    #[test]
+    fn zero_or_one_is_a_check_box_only_for_names_that_read_as_yes_or_no() {
+        assert!(is_flag_name("m_IsTrigger"));
+        assert!(is_flag_name("m_Enabled"));
+        assert!(is_flag_name("useGravity"));
+        assert!(!is_flag_name("m_Layer"));
+        assert!(!is_flag_name("island"));
+    }
+
+    #[test]
+    fn a_quarter_turn_around_z_is_ninety_degrees() {
+        let half = std::f64::consts::FRAC_1_SQRT_2;
+        let [x, y, z] = euler_degrees(0., 0., half, half);
+        assert!(x.abs() < 1e-6 && y.abs() < 1e-6 && (z - 90.).abs() < 1e-6);
+        assert_eq!(hex_color([0.29, 0.87, 0.5, 1.]), "#4ADE80");
+    }
+}

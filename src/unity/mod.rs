@@ -10,7 +10,6 @@ mod names;
 mod read;
 mod scene;
 mod sprites;
-mod ui;
 mod value;
 mod yaml;
 

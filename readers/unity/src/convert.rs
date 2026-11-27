@@ -35,9 +35,8 @@ pub(crate) fn model(unity: &scene::Model) -> Model {
     }
     objects.extend(unity.items.iter().filter(|item| !placed.contains(&item.key)).map(object));
     Model {
-        title: None,
         objects,
-        scopes: Vec::new(),
+        ..Model::default()
     }
 }
 
@@ -71,7 +70,7 @@ fn part(part: &scene::Part) -> Part {
     }
 }
 
-fn tree(flat: &[value::Field]) -> Vec<Field> {
+pub(crate) fn tree(flat: &[value::Field]) -> Vec<Field> {
     let mut roots: Vec<Field> = Vec::new();
     let mut open: Vec<(usize, String)> = Vec::new();
     for flat_field in flat {
@@ -106,7 +105,7 @@ fn is_noise_path(path: &str) -> bool {
     NOISE_FIELDS.contains(&last) || NOISE_FIELDS.iter().any(|noise| path.starts_with(noise))
 }
 
-fn value(value: &value::Value) -> Value {
+pub(crate) fn value(value: &value::Value) -> Value {
     match value {
         value::Value::Text(text) if text.is_empty() => Value::Empty,
         value::Value::Text(text) => Value::Text(text.clone()),

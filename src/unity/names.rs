@@ -100,45 +100,9 @@ pub(crate) fn component_title(type_name: &str) -> String {
     }
 }
 
-pub(crate) fn short_type(full: &str) -> String {
-    let name = outside_brackets(full).next().unwrap_or(full).trim();
-    let (base, arguments) = name.find('[').map_or((name, ""), |open| (&name[..open], &name[open..]));
-    let base = base.split('`').next().unwrap_or(base);
-    let last = base.rsplit(['.', '+']).next().unwrap_or(base);
-    let short = match last {
-        "Single" => "Float".to_owned(),
-        "Int32" => "Integer".to_owned(),
-        "Boolean" => "Boolean".to_owned(),
-        _ => nicify(last),
-    };
-    if arguments.starts_with("[]") {
-        return format!("Array of {short}");
-    }
-    let inner = arguments.strip_prefix('[').and_then(|rest| rest.strip_suffix(']')).unwrap_or_default();
-    let of: Vec<String> = outside_brackets(inner)
-        .map(str::trim)
-        .map(|argument| argument.strip_prefix('[').and_then(|rest| rest.strip_suffix(']')).unwrap_or(argument))
-        .filter(|argument| !argument.is_empty())
-        .map(short_type)
-        .collect();
-    if of.is_empty() { short } else { format!("{short} of {}", of.join(" and ")) }
-}
-
-fn outside_brackets(text: &str) -> impl Iterator<Item = &str> {
-    let mut depth = 0_i32;
-    text.split(move |letter| {
-        match letter {
-            '[' => depth += 1,
-            ']' => depth -= 1,
-            _ => {}
-        }
-        letter == ',' && depth == 0
-    })
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{UnityKind, component_title, file_stem, nicify, short_type};
+    use super::{UnityKind, component_title, nicify};
 
     #[test]
     fn field_names_read_like_the_inspector_shows_them() {
@@ -167,26 +131,4 @@ mod tests {
         assert_eq!(UnityKind::of("src/main.rs"), None);
     }
 
-    #[test]
-    fn type_names_keep_only_their_last_part() {
-        assert_eq!(short_type("System.Single"), "Float");
-        assert_eq!(short_type("UnityEngine.Vector2"), "Vector 2");
-        assert_eq!(file_stem("Assets/Scripts/SlimeController.cs"), "SlimeController");
-    }
-
-    #[test]
-    fn assembly_qualified_and_generic_types_read_like_unity_names_them() {
-        assert_eq!(short_type("System.Int32, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089"), "Integer");
-        assert_eq!(short_type("BigNumber, Stickerino, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null"), "Big Number");
-        assert_eq!(
-            short_type("System.Collections.Generic.List`1[[StickerType, Stickerino, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null]], mscorlib, Version=4.0.0.0"),
-            "List of Sticker Type"
-        );
-        assert_eq!(
-            short_type("System.Collections.Generic.Dictionary`2[[System.String, mscorlib],[System.Collections.Generic.List`1[[System.Single, mscorlib]], mscorlib]]"),
-            "Dictionary of String and List of Float"
-        );
-        assert_eq!(short_type("UnityEngine.GameObject[], UnityEngine.CoreModule"), "Array of Game Object");
-        assert_eq!(short_type("Outer+Inner"), "Inner");
-    }
 }

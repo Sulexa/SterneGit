@@ -696,3 +696,684 @@ impl<'a> Flow<'a> {
 fn ends_plain_key(next: Option<u8>) -> bool {
     matches!(next, None | Some(b' ' | b'\t' | b'\r' | b'\n' | b',' | b'}' | b']'))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::{Duration, Instant};
+
+    fn text(source: &str) -> String {
+        let mut out = String::new();
+        for line in source.lines() {
+            if let Some(kept) = line.trim_start().strip_prefix('|') {
+                out.push_str(kept);
+                out.push('\n');
+            }
+        }
+        out
+    }
+
+    fn unity(body: &str) -> String {
+        format!("%YAML 1.1\n%TAG !u! tag:unity3d.com,2011:\n{}", text(body))
+    }
+
+    fn only(source: &str) -> Document {
+        let mut parsed = documents(&unity(source));
+        assert_eq!(parsed.len(), 1, "{parsed:#?}");
+        parsed.remove(0)
+    }
+
+    fn scalar(text: &str) -> Node {
+        Node::Scalar(text.to_string())
+    }
+
+    fn entry(key: &str, value: Node) -> (String, Node) {
+        (key.to_string(), value)
+    }
+
+    fn text_at<'a>(node: &'a Node, path: &[&str]) -> Option<&'a str> {
+        node.at(path)?.text()
+    }
+
+    fn number_at(node: &Node, path: &[&str]) -> Option<f64> {
+        node.at(path)?.number()
+    }
+
+    fn items_at<'a>(node: &'a Node, path: &[&str]) -> &'a [Node] {
+        node.at(path).map(Node::items).unwrap_or_default()
+    }
+
+    fn depth(node: &Node) -> usize {
+        let inner = node.entries().iter().map(|(_, value)| value).chain(node.items());
+        1 + inner.map(depth).max().unwrap_or(0)
+    }
+
+    fn empty_list() -> Node {
+        Node::List(Vec::new())
+    }
+
+    #[test]
+    fn a_game_object_lists_its_components_at_the_same_indent_as_the_key() {
+        let object = only(
+            "
+            |--- !u!1 &6106237841907316552
+            |GameObject:
+            |  m_ObjectHideFlags: 0
+            |  m_CorrespondingSourceObject: {fileID: 0}
+            |  serializedVersion: 6
+            |  m_Component:
+            |  - component: {fileID: 4823015530731772630}
+            |  - component: {fileID: 2290457312861453377}
+            |  m_Layer: 0
+            |  m_Name: Player
+            |  m_TagString: Untagged
+            |  m_IsActive: 1
+            ",
+        );
+        assert_eq!(object.class_id, 1);
+        assert_eq!(object.file_id, 6106237841907316552);
+        assert!(!object.stripped);
+        assert_eq!(object.type_name, "GameObject");
+        let components = items_at(&object.body, &["m_Component"]).iter();
+        let ids: Vec<_> = components.filter_map(|item| text_at(item, &["component", "fileID"])).collect();
+        assert_eq!(ids, ["4823015530731772630", "2290457312861453377"]);
+        assert_eq!(object.body.get("m_Layer"), Some(&scalar("0")));
+        assert_eq!(text_at(&object.body, &["m_Name"]), Some("Player"));
+        assert_eq!(number_at(&object.body, &["m_IsActive"]), Some(1.0));
+        let keys: Vec<_> = object.body.entries().iter().map(|(key, _)| key.as_str()).collect();
+        assert_eq!(
+            keys,
+            [
+                "m_ObjectHideFlags",
+                "m_CorrespondingSourceObject",
+                "serializedVersion",
+                "m_Component",
+                "m_Layer",
+                "m_Name",
+                "m_TagString",
+                "m_IsActive",
+            ]
+        );
+    }
+
+    #[test]
+    fn a_quoted_text_closing_at_the_start_of_a_line_keeps_the_entries_after_it() {
+        let table = only(
+            "
+            |--- !u!114 &11400000
+            |MonoBehaviour:
+            |  m_TableData:
+            |  - m_Id: 1
+            |    m_Localized: 'Jouer des cartes
+            |
+            |'
+            |    m_Metadata:
+            |      m_Items: []
+            |  - m_Id: 2
+            |    m_Localized: \"Merci
+            |\"
+            |  - m_Id: 3
+            |    m_Localized: Objectif de score
+            |  m_Name: Tutorial_fr
+            ",
+        );
+        let texts: Vec<_> = items_at(&table.body, &["m_TableData"]).iter().filter_map(|item| text_at(item, &["m_Localized"])).collect();
+        assert_eq!(texts, ["Jouer des cartes\n", "Merci ", "Objectif de score"]);
+        assert_eq!(items_at(&table.body, &["m_TableData"])[0].get("m_Metadata").map(|meta| meta.get("m_Items").is_some()), Some(true));
+        assert_eq!(text_at(&table.body, &["m_Name"]), Some("Tutorial_fr"));
+    }
+
+    #[test]
+    fn a_transform_reads_its_flow_mappings_and_keeps_number_text() {
+        let transform = only(
+            "
+            |--- !u!4 &4823015530731772630
+            |Transform:
+            |  m_GameObject: {fileID: 6106237841907316552}
+            |  m_LocalRotation: {x: 0, y: 0.70710677, z: 0, w: 0.70710677}
+            |  m_LocalPosition: {x: 1.5, y: -0, z: 1e-05}
+            |  m_LocalScale: {x: 0.99999994, y: 1, z: 1}
+            |  m_Children: []
+            |  m_Father: {fileID: 0}
+            ",
+        );
+        assert_eq!(transform.type_name, "Transform");
+        let position = vec![entry("x", scalar("1.5")), entry("y", scalar("-0")), entry("z", scalar("1e-05"))];
+        assert_eq!(transform.body.get("m_LocalPosition"), Some(&Node::Map(position)));
+        assert_eq!(number_at(&transform.body, &["m_LocalPosition", "z"]), Some(0.00001));
+        let y = number_at(&transform.body, &["m_LocalPosition", "y"]);
+        assert!(y.is_some_and(|y| y == 0.0 && y.is_sign_negative()));
+        assert_eq!(text_at(&transform.body, &["m_LocalScale", "x"]), Some("0.99999994"));
+        assert_eq!(number_at(&transform.body, &["m_LocalRotation", "w"]), Some(0.70710677));
+        assert_eq!(transform.body.get("m_Children"), Some(&empty_list()));
+        assert_eq!(text_at(&transform.body, &["m_Father", "fileID"]), Some("0"));
+    }
+
+    #[test]
+    fn a_mono_behaviour_reads_lists_of_flow_mappings_and_nested_maps() {
+        let behaviour = only(
+            "
+            |--- !u!114 &2290457312861453377
+            |MonoBehaviour:
+            |  m_GameObject: {fileID: 6106237841907316552}
+            |  m_Enabled: 1
+            |  m_Script: {fileID: 11500000, guid: c3a1e9f07b2d4c5e8f6a9b0c1d2e3f4a, type: 3}
+            |  m_Name:
+            |  m_EditorClassIdentifier: Assembly-CSharp::Game.Player
+            |  speed: 4.5
+            |  targets:
+            |  - {fileID: 11400000, guid: c3a1e9f07b2d4c5e8f6a9b0c1d2e3f4a, type: 2}
+            |  - {fileID: 0}
+            |  settings:
+            |    jump:
+            |      height: 2
+            |      curve: {serializedVersion: 2, m_Curve: [], m_PreInfinity: 2}
+            |    label: Hello: world
+            |    texture: Assets/Art/slime.png
+            |  waypoints: [{x: 0, y: 1}, {x: 2, y: 3}]
+            |  ids: [0, 1, 2]
+            |  type: {class: Wrapper, ns: , asm: Assembly-CSharp}
+            ",
+        );
+        let body = &behaviour.body;
+        assert_eq!(behaviour.class_id, 114);
+        assert_eq!(text_at(body, &["m_Script", "guid"]), Some("c3a1e9f07b2d4c5e8f6a9b0c1d2e3f4a"));
+        assert_eq!(body.get("m_Name"), Some(&scalar("")));
+        assert_eq!(text_at(body, &["m_EditorClassIdentifier"]), Some("Assembly-CSharp::Game.Player"));
+        let targets = items_at(body, &["targets"]);
+        assert_eq!(targets.len(), 2);
+        assert_eq!(text_at(&targets[0], &["type"]), Some("2"));
+        assert_eq!(text_at(&targets[1], &["fileID"]), Some("0"));
+        assert_eq!(number_at(body, &["settings", "jump", "height"]), Some(2.0));
+        assert_eq!(body.at(&["settings", "jump", "curve", "m_Curve"]), Some(&empty_list()));
+        assert_eq!(text_at(body, &["settings", "jump", "curve", "m_PreInfinity"]), Some("2"));
+        assert_eq!(text_at(body, &["settings", "label"]), Some("Hello: world"));
+        assert_eq!(text_at(body, &["settings", "texture"]), Some("Assets/Art/slime.png"));
+        let waypoints = items_at(body, &["waypoints"]).iter();
+        let heights: Vec<_> = waypoints.filter_map(|point| text_at(point, &["y"])).collect();
+        assert_eq!(heights, ["1", "3"]);
+        assert_eq!(body.get("ids"), Some(&Node::List(vec![scalar("0"), scalar("1"), scalar("2")])));
+        assert_eq!(body.at(&["type", "ns"]), Some(&scalar("")));
+        assert_eq!(text_at(body, &["type", "asm"]), Some("Assembly-CSharp"));
+    }
+
+    #[test]
+    fn prefab_modifications_are_block_maps_inside_list_items() {
+        let instance = only(
+            "
+            |--- !u!1001 &100100000
+            |PrefabInstance:
+            |  m_ObjectHideFlags: 0
+            |  serializedVersion: 2
+            |  m_Modification:
+            |    serializedVersion: 3
+            |    m_TransformParent: {fileID: 0}
+            |    m_Modifications:
+            |    - target: {fileID: 400000, guid: 9f2c, type: 3}
+            |      propertyPath: m_LocalPosition.x
+            |      value: 6
+            |      objectReference: {fileID: 0}
+            |    - target: {fileID: 100000, guid: 9f2c, type: 3}
+            |      propertyPath: m_Name
+            |      value:
+            |      objectReference: {fileID: 0}
+            |    m_RemovedComponents: []
+            |  m_SourcePrefab: {fileID: 100100000, guid: 9f2c, type: 3}
+            ",
+        );
+        let modifications = items_at(&instance.body, &["m_Modification", "m_Modifications"]);
+        assert_eq!(modifications.len(), 2);
+        assert_eq!(text_at(&modifications[0], &["propertyPath"]), Some("m_LocalPosition.x"));
+        assert_eq!(number_at(&modifications[0], &["value"]), Some(6.0));
+        assert_eq!(text_at(&modifications[0], &["target", "guid"]), Some("9f2c"));
+        assert_eq!(modifications[1].get("value"), Some(&scalar("")));
+        assert_eq!(modifications[1].entries().len(), 4);
+        assert_eq!(instance.body.at(&["m_Modification", "m_RemovedComponents"]), Some(&empty_list()));
+        assert_eq!(text_at(&instance.body, &["m_SourcePrefab", "fileID"]), Some("100100000"));
+    }
+
+    #[test]
+    fn material_properties_are_single_key_maps_inside_lists() {
+        let material = only(
+            "
+            |--- !u!21 &2100000
+            |Material:
+            |  serializedVersion: 8
+            |  m_Name: Slime
+            |  m_SavedProperties:
+            |    serializedVersion: 3
+            |    m_TexEnvs:
+            |    - _BumpMap:
+            |        m_Texture: {fileID: 0}
+            |        m_Scale: {x: 1, y: 1}
+            |        m_Offset: {x: 0, y: 0}
+            |    - _MainTex:
+            |        m_Texture: {fileID: 2800000, guid: 6e1f, type: 3}
+            |        m_Scale: {x: 2, y: 2}
+            |        m_Offset: {x: 0, y: 0}
+            |    - _Detail: {m_Texture: {fileID: 2800000, guid: 6e1f, type: 3}, m_Offset: {x: 0, y: 0.25}}
+            |    m_Ints: []
+            |    m_Floats:
+            |    - _Glossiness: 0.5
+            |    - _Metallic: 0
+            |    m_Colors:
+            |    - _Color: {r: 1, g: 0.5, b: 1, a: 1}
+            |  m_BuildTextureStacks: []
+            ",
+        );
+        let properties = material.body.get("m_SavedProperties").cloned().unwrap_or(Node::empty());
+        let textures = items_at(&properties, &["m_TexEnvs"]);
+        assert_eq!(textures.len(), 3);
+        assert_eq!(text_at(&textures[1], &["_MainTex", "m_Texture", "guid"]), Some("6e1f"));
+        assert_eq!(number_at(&textures[1], &["_MainTex", "m_Scale", "x"]), Some(2.0));
+        assert_eq!(text_at(&textures[2], &["_Detail", "m_Texture", "type"]), Some("3"));
+        assert_eq!(number_at(&textures[2], &["_Detail", "m_Offset", "y"]), Some(0.25));
+        let glossiness = Node::Map(vec![entry("_Glossiness", scalar("0.5"))]);
+        let metallic = Node::Map(vec![entry("_Metallic", scalar("0"))]);
+        assert_eq!(items_at(&properties, &["m_Floats"]), [glossiness, metallic]);
+        assert_eq!(number_at(&items_at(&properties, &["m_Colors"])[0], &["_Color", "g"]), Some(0.5));
+        assert_eq!(properties.get("m_Ints"), Some(&empty_list()));
+        assert_eq!(material.body.get("m_BuildTextureStacks"), Some(&empty_list()));
+    }
+
+    #[test]
+    fn animation_curves_nest_lists_inside_list_items() {
+        let clip = only(
+            "
+            |--- !u!74 &7400000
+            |AnimationClip:
+            |  m_Name: Bounce
+            |  m_PositionCurves:
+            |  - curve:
+            |      serializedVersion: 2
+            |      m_Curve:
+            |      - serializedVersion: 3
+            |        time: 0
+            |        value: {x: 0, y: 1, z: 0}
+            |        inSlope: {x: 0, y: 0, z: 0}
+            |      - serializedVersion: 3
+            |        time: 0.5
+            |        value: {x: 0, y: 2, z: 0}
+            |      m_PreInfinity: 2
+            |      m_PostInfinity: 2
+            |    path: Body
+            |  - curve:
+            |      serializedVersion: 2
+            |      m_Curve: []
+            |    path: Body/Hat
+            |  m_SampleRate: 60
+            ",
+        );
+        let curves = items_at(&clip.body, &["m_PositionCurves"]);
+        assert_eq!(curves.len(), 2);
+        let keys = items_at(&curves[0], &["curve", "m_Curve"]);
+        assert_eq!(keys.len(), 2);
+        assert_eq!(number_at(&keys[1], &["time"]), Some(0.5));
+        assert_eq!(text_at(&keys[1], &["value", "y"]), Some("2"));
+        assert_eq!(text_at(&keys[0], &["inSlope", "x"]), Some("0"));
+        assert_eq!(text_at(&curves[0], &["curve", "m_PostInfinity"]), Some("2"));
+        assert_eq!(text_at(&curves[0], &["path"]), Some("Body"));
+        assert_eq!(curves[1].at(&["curve", "m_Curve"]), Some(&empty_list()));
+        assert_eq!(text_at(&curves[1], &["path"]), Some("Body/Hat"));
+        assert_eq!(number_at(&clip.body, &["m_SampleRate"]), Some(60.0));
+    }
+
+    #[test]
+    fn a_list_indented_deeper_than_its_key_works_too() {
+        let root = plain(&text(
+            "
+            |a:
+            |    - x
+            |    -   y: 1
+            |        z: 2
+            |    -
+            |      w: 3
+            |    -
+            |    - - inner
+            |      - more
+            |b: 4
+            ",
+        ));
+        let items = items_at(&root, &["a"]);
+        assert_eq!(items.len(), 5);
+        assert_eq!(items[0], scalar("x"));
+        assert_eq!(items[1], Node::Map(vec![entry("y", scalar("1")), entry("z", scalar("2"))]));
+        assert_eq!(text_at(&items[2], &["w"]), Some("3"));
+        assert_eq!(items[3], scalar(""));
+        assert_eq!(items[4], Node::List(vec![scalar("inner"), scalar("more")]));
+        assert_eq!(text_at(&root, &["b"]), Some("4"));
+    }
+
+    #[test]
+    fn a_list_at_the_same_indent_as_its_key_ends_at_the_next_key() {
+        let root = plain("names:\n- one\n- two\ncount: 2\nlast:\n- {a: 1}\n");
+        assert_eq!(root.get("names"), Some(&Node::List(vec![scalar("one"), scalar("two")])));
+        assert_eq!(text_at(&root, &["count"]), Some("2"));
+        assert_eq!(items_at(&root, &["last"]).len(), 1);
+        assert_eq!(root.entries().len(), 3);
+    }
+
+    #[test]
+    fn single_quoted_json_turns_doubled_quotes_into_one() {
+        let graph = only(
+            r#"
+            |--- !u!114 &11400000
+            |MonoBehaviour:
+            |  _json: '{"graph":{"elements":[{"$type":"Unity.VisualScripting.Update","name":''hello''}]}}'
+            |  quote: 'it''s: fine'
+            |  'quoted key': ''''
+            "#,
+        );
+        assert_eq!(
+            text_at(&graph.body, &["_json"]),
+            Some(r#"{"graph":{"elements":[{"$type":"Unity.VisualScripting.Update","name":'hello'}]}}"#)
+        );
+        assert_eq!(text_at(&graph.body, &["quote"]), Some("it's: fine"));
+        assert_eq!(text_at(&graph.body, &["quoted key"]), Some("'"));
+    }
+
+    #[test]
+    fn quoted_and_plain_scalars_fold_their_continuation_lines() {
+        let label = only(
+            r#"
+            |--- !u!114 &1
+            |MonoBehaviour:
+            |  single: 'The quick brown fox
+            |    jumps over
+            |
+            |    the lazy dog'
+            |  double: "Caf\u00E9 \"menu\"\tand a line that wraps \
+            |    \ here\nnext \U0001F600 \uD83D\uDE00"
+            |  plain: a long plain
+            |    text that wraps
+            |
+            |  after: 1
+            |  items:
+            |  - first long
+            |    item
+            |  - second
+            "#,
+        );
+        let body = &label.body;
+        assert_eq!(text_at(body, &["single"]), Some("The quick brown fox jumps over\nthe lazy dog"));
+        assert_eq!(
+            text_at(body, &["double"]),
+            Some("Café \"menu\"\tand a line that wraps  here\nnext \u{1F600} \u{1F600}")
+        );
+        assert_eq!(text_at(body, &["plain"]), Some("a long plain text that wraps"));
+        assert_eq!(text_at(body, &["after"]), Some("1"));
+        assert_eq!(items_at(body, &["items"]), [scalar("first long item"), scalar("second")]);
+    }
+
+    #[test]
+    fn a_stripped_header_keeps_its_negative_file_id() {
+        let object = only(
+            "
+            |--- !u!1 &-8123456789012345678 stripped
+            |GameObject:
+            |  m_CorrespondingSourceObject: {fileID: 100000, guid: 9f2c, type: 3}
+            |  m_PrefabInstance: {fileID: 1001}
+            ",
+        );
+        assert_eq!(object.class_id, 1);
+        assert_eq!(object.file_id, -8123456789012345678);
+        assert!(object.stripped);
+        assert_eq!(text_at(&object.body, &["m_PrefabInstance", "fileID"]), Some("1001"));
+    }
+
+    #[test]
+    fn scene_roots_carry_the_largest_class_and_file_ids() {
+        let roots = only(
+            "
+            |--- !u!1660057539 &9223372036854775807
+            |SceneRoots:
+            |  m_ObjectHideFlags: 0
+            |  m_Roots:
+            |  - {fileID: 1234}
+            |  - {fileID: 5678}
+            ",
+        );
+        assert_eq!(roots.class_id, 1660057539);
+        assert_eq!(roots.file_id, i64::MAX);
+        assert_eq!(roots.type_name, "SceneRoots");
+        assert_eq!(text_at(&items_at(&roots.body, &["m_Roots"])[1], &["fileID"]), Some("5678"));
+    }
+
+    #[test]
+    fn documents_know_their_first_and_last_lines() {
+        let source = unity(
+            "
+            |--- !u!1 &1
+            |GameObject:
+            |  m_Name: A
+            |--- !u!4 &2
+            |Transform:
+            |  m_Children: []
+            |  m_Father: {fileID: 0}
+            |--- !u!1 &3 stripped
+            |GameObject:
+            ",
+        );
+        let parsed = documents(&source);
+        let spans: Vec<_> = parsed.iter().map(|doc| (doc.first_line, doc.last_line)).collect();
+        assert_eq!(spans, [(3, 5), (6, 9), (10, 11)]);
+        assert_eq!(parsed.iter().map(|doc| doc.file_id).collect::<Vec<_>>(), [1, 2, 3]);
+        assert_eq!(parsed.iter().map(|doc| doc.class_id).collect::<Vec<_>>(), [1, 4, 1]);
+        assert_eq!(parsed[2].type_name, "GameObject");
+        assert_eq!(parsed[2].body, Node::Map(Vec::new()));
+    }
+
+    #[test]
+    fn windows_line_endings_read_like_unix_ones() {
+        let source = unity(
+            "
+            |--- !u!1 &1
+            |GameObject:
+            |  m_Name: A
+            |  m_Component:
+            |  - component: {fileID: 4}
+            ",
+        )
+        .replace('\n', "\r\n");
+        let parsed = documents(&source);
+        assert_eq!(parsed.len(), 1);
+        assert_eq!(text_at(&parsed[0].body, &["m_Name"]), Some("A"));
+        assert_eq!(items_at(&parsed[0].body, &["m_Component"]).len(), 1);
+        assert_eq!(parsed[0].last_line, 7);
+        assert!(is_unity_yaml(&source));
+    }
+
+    #[test]
+    fn a_meta_file_reads_as_one_map() {
+        let meta = plain(&text(
+            "
+            |fileFormatVersion: 2
+            |guid: 9a3c51e07d2b4f6c8e1a0b2c3d4e5f60
+            |TextureImporter:
+            |  internalIDToNameTable: []
+            |  externalObjects: {}
+            |  serializedVersion: 12
+            |  mipmaps:
+            |    mipMapMode: 0
+            |  spritePixelsToUnits: 16
+            |  spriteSheet:
+            |    sprites: []
+            |  platformSettings:
+            |  - serializedVersion: 3
+            |    buildTarget: DefaultTexturePlatform
+            |  userData:
+            |  assetBundleName:
+            ",
+        ));
+        assert_eq!(number_at(&meta, &["fileFormatVersion"]), Some(2.0));
+        assert_eq!(text_at(&meta, &["guid"]), Some("9a3c51e07d2b4f6c8e1a0b2c3d4e5f60"));
+        assert_eq!(meta.at(&["TextureImporter", "internalIDToNameTable"]), Some(&empty_list()));
+        assert_eq!(meta.at(&["TextureImporter", "externalObjects"]), Some(&Node::Map(Vec::new())));
+        assert_eq!(text_at(&meta, &["TextureImporter", "mipmaps", "mipMapMode"]), Some("0"));
+        assert_eq!(meta.at(&["TextureImporter", "spriteSheet", "sprites"]), Some(&empty_list()));
+        let platforms = items_at(&meta, &["TextureImporter", "platformSettings"]);
+        assert_eq!(text_at(&platforms[0], &["buildTarget"]), Some("DefaultTexturePlatform"));
+        assert_eq!(meta.at(&["TextureImporter", "userData"]), Some(&scalar("")));
+        assert_eq!(meta.at(&["TextureImporter", "assetBundleName"]), Some(&scalar("")));
+        assert_eq!(meta.entries().len(), 3);
+    }
+
+    #[test]
+    fn empty_values_and_empty_collections_stay_distinct() {
+        let root = plain(concat!(
+            "name: \n",
+            "list: []\n",
+            "map: {}\n",
+            "quoted: ''\n",
+            "double: \"\"\n",
+            "blank:\n",
+            "next: [ ]\n",
+            "flow: {a: , b: [], c: {}}\n",
+        ));
+        assert_eq!(root.get("name"), Some(&scalar("")));
+        assert_eq!(root.get("list"), Some(&empty_list()));
+        assert_eq!(root.get("map"), Some(&Node::Map(Vec::new())));
+        assert_eq!(root.get("quoted"), Some(&scalar("")));
+        assert_eq!(root.get("double"), Some(&scalar("")));
+        assert_eq!(root.get("blank"), Some(&scalar("")));
+        assert_eq!(root.get("next"), Some(&empty_list()));
+        let flow = vec![entry("a", scalar("")), entry("b", empty_list()), entry("c", Node::Map(Vec::new()))];
+        assert_eq!(root.get("flow"), Some(&Node::Map(flow)));
+        assert_eq!(root.get("missing"), None);
+        assert_eq!(root.at(&[]), Some(&root));
+        assert!(scalar("x").entries().is_empty());
+        assert!(scalar("x").items().is_empty());
+        assert_eq!(root.text(), None);
+    }
+
+    #[test]
+    fn plain_scalars_keep_their_text_exactly() {
+        let source = text(
+            "
+            |hex: 0a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f9
+            |path: Assets/Art/slime.png
+            |url: https:example.com/a?b=c:d
+            |text: Hello: world
+            |odd: it's
+            ",
+        );
+        let root = plain(&(source + "trailing: spaced   \n"));
+        let hex = "0a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f9";
+        assert_eq!(text_at(&root, &["hex"]), Some(hex));
+        assert_eq!(number_at(&root, &["hex"]), None);
+        assert_eq!(text_at(&root, &["path"]), Some("Assets/Art/slime.png"));
+        assert_eq!(text_at(&root, &["url"]), Some("https:example.com/a?b=c:d"));
+        assert_eq!(text_at(&root, &["text"]), Some("Hello: world"));
+        assert_eq!(text_at(&root, &["odd"]), Some("it's"));
+        assert_eq!(text_at(&root, &["trailing"]), Some("spaced"));
+    }
+
+    #[test]
+    fn numbers_read_unity_float_spellings() {
+        assert_eq!(scalar("1e-05").number(), Some(0.00001));
+        assert_eq!(scalar("-0").number().map(f64::is_sign_negative), Some(true));
+        assert_eq!(scalar("42").number(), Some(42.0));
+        assert_eq!(scalar("-17").number(), Some(-17.0));
+        assert_eq!(scalar("0.99999994").number(), Some(0.99999994));
+        assert_eq!(scalar("Infinity").number(), Some(f64::INFINITY));
+        assert_eq!(scalar("-Infinity").number(), Some(f64::NEG_INFINITY));
+        assert!(scalar("NaN").number().is_some_and(f64::is_nan));
+        assert_eq!(scalar("").number(), None);
+        assert_eq!(scalar("0a1b").number(), None);
+        assert_eq!(empty_list().number(), None);
+    }
+
+    #[test]
+    fn unity_yaml_is_told_apart_from_other_text() {
+        assert!(is_unity_yaml("%YAML 1.1\n%TAG !u! tag:unity3d.com,2011:\n--- !u!1 &1\nGameObject:\n"));
+        assert!(is_unity_yaml("\u{feff}%YAML 1.1\r\n%TAG !u! tag:unity3d.com,2011:\r\n"));
+        assert!(!is_unity_yaml("%YAML 1.1\n--- !u!1 &1\n%TAG !u! tag:unity3d.com,2011:\n"));
+        assert!(!is_unity_yaml("fileFormatVersion: 2\nguid: 9a3c\n"));
+        assert!(!is_unity_yaml("%TAG !u! tag:unity3d.com,2011:\n"));
+        assert!(!is_unity_yaml(""));
+    }
+
+    #[test]
+    fn text_without_headers_has_no_documents() {
+        assert!(documents("fileFormatVersion: 2\n").is_empty());
+        assert!(documents("").is_empty());
+        let lone = documents("---");
+        assert_eq!(lone.len(), 1);
+        assert_eq!((lone[0].class_id, lone[0].file_id, lone[0].first_line, lone[0].last_line), (0, 0, 1, 1));
+        assert_eq!(lone[0].type_name, "");
+        assert_eq!(lone[0].body, Node::Map(Vec::new()));
+    }
+
+    #[test]
+    fn garbage_gives_a_best_effort_result_without_panicking() {
+        let samples = [
+            "--- !u!x &y\n: : :\n- - -\n'unclosed\n  \"also\n{[}]\n",
+            "--- !u!99999999999 &99999999999999999999 stripped extra\nA:\n      deep: 1\n  shallow: 2\n- x\n",
+            "a: {b: [c, {d: 'e''\n  f: \"\\u12\\UFFFFFFFF\\x\\\n",
+            "key: \"\\uD800 lone \\uDC00 low \\\n\n  \\",
+            "- \n-\n  - \n    -\n- 'x'\n  - y\n  z: 1\n",
+            "---\n---\n--- !u!1\n%YAML\n\t\ttab: 1\n日本: 語\n  é: [日, 本]\n",
+            "a:\n  b:\n c: 1\n   d: 2\n    - e\n",
+            ": \n:\n'': ''\n\"\": x\n{}: 1\n[]: 2\n",
+        ];
+        for sample in samples {
+            documents(sample);
+            plain(sample);
+        }
+        let pieces = [
+            "-", " ", "  ", "    ", ": ", ":", "'", "''", "\"", "\\", "\\u", "{", "}", "[", "]", ",", "\n",
+            "\r\n", "a", "é", "日", "--- !u!1 &", "%YAML", "0", "#", "&", "|",
+        ];
+        let mut state = 0x9e3779b97f4a7c15u64;
+        let mut next = move || {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            state
+        };
+        for _ in 0..3000 {
+            let length = next() % 120;
+            let picks = (0..length).map(|_| next() % pieces.len() as u64);
+            let sample: String = picks.map(|pick| pieces[pick as usize]).collect();
+            documents(&sample);
+            plain(&sample);
+            is_unity_yaml(&sample);
+        }
+    }
+
+    #[test]
+    fn deep_nesting_is_capped_instead_of_overflowing_the_stack() {
+        let levels = 20_000;
+        let maps = format!("a: {}{}\n", "{k: ".repeat(levels), "}".repeat(levels));
+        let lists = format!("b: {}x{}\n", "[".repeat(levels), "]".repeat(levels));
+        let dashes = format!("{}x\n", "- ".repeat(levels));
+        let stairs: String = (0..3_000).map(|level| format!("{}k:\n", " ".repeat(level))).collect();
+        let items: String = (0..3_000).map(|level| format!("{}-\n", " ".repeat(level))).collect();
+        for source in [maps, lists, dashes, stairs, items] {
+            let root = plain(&source);
+            assert!(depth(&root) <= DEEPEST_BLOCK + DEEPEST_FLOW + 4, "depth {}", depth(&root));
+            assert!(!format!("{root:?}").is_empty());
+        }
+    }
+
+    #[test]
+    #[ignore = "measures speed; run with --release -- --ignored"]
+    fn fifty_thousand_documents_parse_in_under_three_seconds() {
+        let mut source = String::from("%YAML 1.1\n%TAG !u! tag:unity3d.com,2011:\n");
+        for id in 0..50_000 {
+            source.push_str(&format!("--- !u!1 &{id}\nGameObject:\n  m_Component:\n"));
+            source.push_str(&format!("  - component: {{fileID: {}}}\n  m_Name: Object {id}\n", id + 1));
+            source.push_str("  m_LocalPosition: {x: 0, y: 1.5, z: -2}\n  m_Children: []\n");
+        }
+        let started = Instant::now();
+        let parsed = documents(&source);
+        let spent = started.elapsed();
+        assert_eq!(parsed.len(), 50_000);
+        let last = &parsed[49_999];
+        assert_eq!(text_at(&last.body, &["m_Name"]), Some("Object 49999"));
+        let component = &items_at(&last.body, &["m_Component"])[0];
+        assert_eq!(text_at(component, &["component", "fileID"]), Some("50000"));
+        assert_eq!(last.last_line, 2 + 50_000 * 7);
+        assert!(spent < Duration::from_secs(3), "took {spent:?}");
+    }
+}

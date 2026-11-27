@@ -9,7 +9,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 sternegit-reader-sdk = { path = "../sdk" }
-serde_json = "1.0.154"
+serde_json = { version = "1.0.154", features = ["preserve_order"] }
 
 [build-dependencies]
 sternegit-reader-sdk = { path = "../sdk" }

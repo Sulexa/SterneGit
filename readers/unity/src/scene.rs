@@ -828,3 +828,113 @@ fn shader_name(reference: &Node, lookup: &Lookup) -> String {
         _ => "Shader".to_owned(),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{Model, Role, object_names};
+    use crate::{
+        names::UnityKind,
+        value::{Lookup, Value},
+        yaml::{documents, plain},
+    };
+
+    const PREFAB: &str = "%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1 &100
+GameObject:
+  m_ObjectHideFlags: 0
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 400}
+  - component: {fileID: 500}
+  m_Layer: 0
+  m_Name: Slime
+  m_IsActive: 1
+--- !u!4 &400
+Transform:
+  m_ObjectHideFlags: 0
+  m_GameObject: {fileID: 100}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_Children:
+  - {fileID: 410}
+  m_Father: {fileID: 0}
+--- !u!114 &500
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_GameObject: {fileID: 100}
+  m_Enabled: 1
+  m_Script: {fileID: 11500000, guid: 4f1d0c7a2b9e4e3f8a6b5c4d3e2f1a09, type: 3}
+  m_Name:
+  moveSpeed: 2.5
+  crown: {fileID: 410}
+--- !u!1 &110
+GameObject:
+  m_Component:
+  - component: {fileID: 410}
+  m_Name: Crown
+--- !u!4 &410
+Transform:
+  m_GameObject: {fileID: 110}
+  m_LocalPosition: {x: 0, y: 0.62, z: 0}
+  m_Children: []
+  m_Father: {fileID: 400}
+";
+
+    fn lookup() -> Lookup {
+        let docs = documents(PREFAB);
+        let mut lookup = Lookup::default();
+        lookup.assets.insert("4f1d0c7a2b9e4e3f8a6b5c4d3e2f1a09".to_owned(), "Assets/Scripts/SlimeController.cs".to_owned());
+        lookup.objects = object_names(&docs, &lookup.assets);
+        lookup
+    }
+
+    #[test]
+    fn file_ids_beyond_float_precision_still_find_their_objects() {
+        let text = PREFAB.replace("410", "1633666572594267926").replace("400", "4336690671088430637").replace("110", "488688405476195148");
+        let docs = documents(&text);
+        let mut lookup = Lookup::default();
+        lookup.objects = object_names(&docs, &lookup.assets);
+        let model = Model::from_documents(UnityKind::Prefab, &docs, "Assets/Slime.prefab", &lookup);
+        assert_eq!(model.children.get(&100), Some(&vec![488688405476195148]));
+        let crown = model.items.iter().find(|item| item.name == "Crown").map(|item| item.parts.len());
+        assert_eq!(crown, Some(2));
+    }
+
+    #[test]
+    fn a_prefab_reads_as_its_hierarchy_with_components_in_order() {
+        let lookup = lookup();
+        let model = Model::from_documents(UnityKind::Prefab, &documents(PREFAB), "Assets/Slime.prefab", &lookup);
+        let names: Vec<&str> = model.items.iter().map(|item| item.name.as_str()).collect();
+        assert_eq!(names, vec!["Slime", "Crown"]);
+        assert_eq!(model.roots, vec![100]);
+        assert_eq!(model.children.get(&100), Some(&vec![110]));
+        let slime = &model.items[0];
+        assert_eq!(slime.role, Role::GameObject { root_of: Some("Slime.prefab".to_owned()) });
+        let titles: Vec<&str> = slime.parts.iter().map(|part| part.title.as_str()).collect();
+        assert_eq!(titles, vec!["GameObject", "Transform", "Slime Controller"]);
+    }
+
+    #[test]
+    fn a_script_field_that_points_inside_the_prefab_names_the_object() {
+        let lookup = lookup();
+        let model = Model::from_documents(UnityKind::Prefab, &documents(PREFAB), "Assets/Slime.prefab", &lookup);
+        let script = &model.items[0].parts[2];
+        let crown = script.fields.iter().find(|field| field.label == "Crown").map(|field| field.value.text());
+        assert_eq!(crown.as_deref(), Some("Crown (Transform)"));
+        assert_eq!(script.script.as_deref(), Some("SlimeController"));
+    }
+
+    #[test]
+    fn a_meta_file_reads_as_its_guid_and_its_importer_settings() {
+        let meta = plain("fileFormatVersion: 2\nguid: 9a3c51e07d2b4f6c8e1a0b2c3d4e5f60\nAudioImporter:\n  loadType: 0\n  preloadAudioData: 1\n");
+        let model = Model::from_meta(&meta, "Assets/Audio/slime-hit.wav", &Lookup::default());
+        let item = &model.items[0];
+        assert_eq!(item.name, "slime-hit.wav");
+        assert_eq!(item.role, Role::Asset { type_name: "Audio Importer".to_owned(), detail: None });
+        let field = |part: usize, label: &str| item.parts[part].fields.iter().find(|field| field.label == label).map(|field| field.value.clone());
+        assert_eq!(field(0, "GUID").map(|value| value.text()).as_deref(), Some("9a3c51e07d2b4f6c8e1a0b2c3d4e5f60"));
+        assert_eq!(field(1, "Preload Audio Data"), Some(Value::Flag(true)));
+    }
+}

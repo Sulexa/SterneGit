@@ -160,7 +160,7 @@ fn draw(compare: &UnityCompare, sketch: &mut Sketch, device: f64, width: f64) {
                         let center = (x_of(key.time) / device).max(THUMB / 2. + 1.);
                         let left = center - THUMB / 2.;
                         sketch.fill_rect((left * device) as f32, (row_top * device) as f32, (THUMB * device) as f32, (THUMB * device) as f32, [255, 255, 255, 8]);
-                        if let Some(image) = key.sprite.as_ref().and_then(|(guid, file_id)| compare.files.sprite(guid, *file_id)) {
+                        if let Some(image) = key.picture.as_deref().and_then(|picture| compare.files.sprite(picture)) {
                             let fit = (THUMB - 4.) / f64::from(image.width.max(image.height));
                             let (w, h) = (f64::from(image.width) * fit, f64::from(image.height) * fit);
                             sketch.image(

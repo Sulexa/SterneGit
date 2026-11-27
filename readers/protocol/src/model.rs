@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use crate::views::{Curves, Graph, Layout, Note, Picture};
+
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Model {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -8,6 +10,18 @@ pub struct Model {
     pub objects: Vec<Object>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub scopes: Vec<Scope>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub notes: Vec<Note>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub curves: Option<Curves>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub graph: Option<Graph>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub layout: Option<Layout>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub pictures: Vec<Picture>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -173,7 +187,7 @@ mod tests {
                 }],
                 tags: vec!["noise".into()],
             }],
-            scopes: Vec::new(),
+            ..Model::default()
         };
         let json = serde_json::to_string(&model).unwrap();
         assert!(!json.contains("scopes") && !json.contains("overrides"), "{json}");

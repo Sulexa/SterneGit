@@ -149,3 +149,58 @@ fn outside_brackets(text: &str) -> impl Iterator<Item = &str> {
         letter == ',' && depth == 0
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{UnityKind, component_title, file_stem, nicify, short_type};
+
+    #[test]
+    fn field_names_read_like_the_inspector_shows_them() {
+        assert_eq!(nicify("m_LocalPosition"), "Local Position");
+        assert_eq!(nicify("moveSpeed"), "Move Speed");
+        assert_eq!(nicify("_BaseColor"), "Base Color");
+        assert_eq!(nicify("spritePixelsToUnits"), "Sprite Pixels To Units");
+        assert_eq!(nicify("HDRColor"), "HDR Color");
+        assert_eq!(nicify("kMaxCount"), "Max Count");
+        assert_eq!(nicify("ifTrue"), "If True");
+    }
+
+    #[test]
+    fn two_d_stays_together_after_its_number() {
+        assert_eq!(nicify("CircleCollider2D"), "Circle Collider 2D");
+        assert_eq!(component_title("Rigidbody2D"), "Rigidbody 2D");
+        assert_eq!(nicify("Light2D"), "Light 2D");
+    }
+
+    #[test]
+    fn unity_files_are_known_by_their_extension() {
+        assert_eq!(UnityKind::of("Assets/Slime.prefab"), Some(UnityKind::Prefab));
+        assert_eq!(UnityKind::of("Assets/Scenes/Level1.unity"), Some(UnityKind::Scene));
+        assert_eq!(UnityKind::of("Assets/slime.png.meta"), Some(UnityKind::Meta));
+        assert_eq!(UnityKind::of("ProjectSettings/QualitySettings.asset"), Some(UnityKind::Asset));
+        assert_eq!(UnityKind::of("src/main.rs"), None);
+    }
+
+    #[test]
+    fn type_names_keep_only_their_last_part() {
+        assert_eq!(short_type("System.Single"), "Float");
+        assert_eq!(short_type("UnityEngine.Vector2"), "Vector 2");
+        assert_eq!(file_stem("Assets/Scripts/SlimeController.cs"), "SlimeController");
+    }
+
+    #[test]
+    fn assembly_qualified_and_generic_types_read_like_unity_names_them() {
+        assert_eq!(short_type("System.Int32, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089"), "Integer");
+        assert_eq!(short_type("BigNumber, Stickerino, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null"), "Big Number");
+        assert_eq!(
+            short_type("System.Collections.Generic.List`1[[StickerType, Stickerino, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null]], mscorlib, Version=4.0.0.0"),
+            "List of Sticker Type"
+        );
+        assert_eq!(
+            short_type("System.Collections.Generic.Dictionary`2[[System.String, mscorlib],[System.Collections.Generic.List`1[[System.Single, mscorlib]], mscorlib]]"),
+            "Dictionary of String and List of Float"
+        );
+        assert_eq!(short_type("UnityEngine.GameObject[], UnityEngine.CoreModule"), "Array of Game Object");
+        assert_eq!(short_type("Outer+Inner"), "Inner");
+    }
+}

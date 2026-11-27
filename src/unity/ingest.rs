@@ -6,6 +6,11 @@ use std::{
 use sternegit_reader_protocol as protocol;
 
 use super::{
+    animator::{Drawn, Machine},
+    clip::{Clip, CurveKey, Keys, ObjectKey, Track},
+    compare::State,
+    graph::{Declared, GraphEdge, GraphNode, NodeKind, Port, PortType, ScriptSide},
+    layout::{Graphic, Layout, Marker, Paint, PlacedSprite, Shape, Spot, View},
     scene::{Item, Key, Model, Part, Role},
     value::{Digest, Field, Glyph, Reference, Value},
 };
@@ -64,6 +69,12 @@ fn part(part: &protocol::Part) -> Part {
         overrides: part.overrides,
         fields,
     }
+}
+
+pub(crate) fn fields(tree: &[protocol::Field]) -> Vec<Field> {
+    let mut out = Vec::new();
+    flatten(tree, "", 0, &mut out);
+    out
 }
 
 fn flatten(tree: &[protocol::Field], parent: &str, depth: usize, out: &mut Vec<Field>) {
@@ -126,19 +137,317 @@ fn glyph(icon: protocol::Icon) -> Glyph {
     }
 }
 
+pub(crate) fn clip(curves: &protocol::Curves) -> Clip {
+    Clip {
+        tracks: curves
+            .tracks
+            .iter()
+            .map(|track| Track {
+                id: track.id.clone(),
+                group: track.group.clone(),
+                name: track.name.clone(),
+                keys: match &track.keys {
+                    protocol::Keys::Curve(keys) => Keys::Curve(
+                        keys.iter()
+                            .map(|key| CurveKey {
+                                time: key.time,
+                                value: key.value,
+                                in_slope: key.in_slope,
+                                out_slope: key.out_slope,
+                            })
+                            .collect(),
+                    ),
+                    protocol::Keys::Objects(keys) => Keys::Objects(
+                        keys.iter()
+                            .map(|key| ObjectKey {
+                                time: key.time,
+                                value: value(&key.value),
+                                picture: key.picture.clone(),
+                            })
+                            .collect(),
+                    ),
+                },
+            })
+            .collect(),
+        events: curves.events.clone(),
+        length: curves.length,
+        sample_rate: curves.sample_rate,
+        settings: curves.settings.clone(),
+    }
+}
+
+fn node_kind(kind: protocol::NodeKind) -> NodeKind {
+    match kind {
+        protocol::NodeKind::Entry => NodeKind::Entry,
+        protocol::NodeKind::AnyState => NodeKind::AnyState,
+        protocol::NodeKind::Exit => NodeKind::Exit,
+        protocol::NodeKind::DefaultState => NodeKind::DefaultState,
+        protocol::NodeKind::State => NodeKind::State,
+        protocol::NodeKind::Machine => NodeKind::Machine,
+        protocol::NodeKind::Event => NodeKind::Event,
+        protocol::NodeKind::Flow => NodeKind::Flow,
+        protocol::NodeKind::Value => NodeKind::Value,
+        protocol::NodeKind::Variable => NodeKind::Variable,
+    }
+}
+
+fn port_type(kind: protocol::PortType) -> PortType {
+    match kind {
+        protocol::PortType::Flow => PortType::Flow,
+        protocol::PortType::Float => PortType::Float,
+        protocol::PortType::Integer => PortType::Integer,
+        protocol::PortType::Bool => PortType::Bool,
+        protocol::PortType::Vector => PortType::Vector,
+        protocol::PortType::Text => PortType::Text,
+        protocol::PortType::Object => PortType::Object,
+    }
+}
+
+fn ports(ports: &[protocol::Port]) -> Vec<Port> {
+    ports
+        .iter()
+        .map(|port| Port {
+            key: port.key.clone(),
+            label: port.label.clone(),
+            kind: port_type(port.kind),
+            literal: port.literal.clone(),
+            was: None,
+        })
+        .collect()
+}
+
+fn graph_node(node: &protocol::Node) -> GraphNode {
+    GraphNode {
+        id: node.id.clone(),
+        title: node.title.clone(),
+        kind: node_kind(node.kind),
+        at: node.at,
+        size: node.size,
+        state: State::Same,
+        inputs: ports(&node.inputs),
+        outputs: ports(&node.outputs),
+        was_at: None,
+        variable: node.variable.clone(),
+    }
+}
+
+fn graph_edge(edge: &protocol::Edge) -> GraphEdge {
+    GraphEdge {
+        id: edge.id.clone(),
+        from: edge.from.clone(),
+        to: edge.to.clone(),
+        from_port: edge.from_port.clone(),
+        to_port: edge.to_port.clone(),
+        state: State::Same,
+        kind: port_type(edge.kind),
+    }
+}
+
+fn declared(declared: &protocol::Declared) -> Declared {
+    Declared {
+        name: declared.name.clone(),
+        kind: declared.kind.clone(),
+        value: declared.value.clone(),
+        members: {
+            let mut members = Vec::new();
+            flatten(&declared.members, "", 1, &mut members);
+            members
+        },
+    }
+}
+
+pub(crate) fn script_side(graph: Option<&protocol::Graph>) -> ScriptSide {
+    let Some(graph) = graph else {
+        return ScriptSide::default();
+    };
+    let layer = graph.layers.first();
+    ScriptSide {
+        units: layer
+            .map(|layer| {
+                layer
+                    .nodes
+                    .iter()
+                    .map(|node| (node.key.clone(), graph_node(node), fields(&node.fields)))
+                    .collect()
+            })
+            .unwrap_or_default(),
+        edges: layer.map(|layer| layer.edges.iter().map(graph_edge).collect()).unwrap_or_default(),
+        variables: graph.parameters.iter().map(declared).collect(),
+    }
+}
+
+pub(crate) fn machine(graph: Option<&protocol::Graph>) -> Machine {
+    let Some(graph) = graph else {
+        return Machine::default();
+    };
+    Machine {
+        layers: graph
+            .layers
+            .iter()
+            .map(|layer| {
+                (
+                    layer.name.clone(),
+                    Drawn {
+                        nodes: layer.nodes.iter().map(|node| (graph_node(node), fields(&node.fields))).collect(),
+                        edges: layer.edges.iter().map(|edge| (graph_edge(edge), fields(&edge.fields))).collect(),
+                    },
+                )
+            })
+            .collect(),
+        parameters: graph.parameters.iter().map(declared).collect(),
+    }
+}
+
+pub(crate) fn view(layout: &protocol::Layout) -> View {
+    match layout.facing {
+        protocol::Facing::Front => View::Front,
+        protocol::Facing::Above => View::Above,
+    }
+}
+
+fn shape(shape: &protocol::Shape) -> Shape {
+    match shape {
+        protocol::Shape::Circle { center, radius } => Shape::Circle {
+            center: *center,
+            radius: *radius,
+        },
+        protocol::Shape::Box { center, size } => Shape::Box {
+            center: *center,
+            size: *size,
+        },
+    }
+}
+
+fn marker(marker: protocol::Marker) -> Marker {
+    match marker {
+        protocol::Marker::Plain => Marker::Plain,
+        protocol::Marker::Camera => Marker::Camera,
+        protocol::Marker::Light => Marker::Light,
+        protocol::Marker::Canvas => Marker::Canvas,
+    }
+}
+
+fn paint(paint: &protocol::Paint) -> Paint {
+    match paint {
+        protocol::Paint::Fill => Paint::Fill,
+        protocol::Paint::Sprite {
+            picture,
+            sliced,
+            keep_aspect,
+            unit,
+        } => Paint::Sprite {
+            picture: picture.clone(),
+            sliced: *sliced,
+            keep_aspect: *keep_aspect,
+            unit: *unit,
+        },
+        protocol::Paint::Texture { picture } => Paint::Texture { picture: picture.clone() },
+        protocol::Paint::Text { text, size, align } => Paint::Text {
+            text: text.clone(),
+            size: *size,
+            align: *align,
+        },
+    }
+}
+
+fn spot(spot: &protocol::Spot) -> Spot {
+    Spot {
+        key: key_of(&spot.object),
+        name: spot.name.clone(),
+        at: spot.at,
+        sprites: spot
+            .sprites
+            .iter()
+            .map(|sprite| PlacedSprite {
+                picture: sprite.picture.clone(),
+                at: sprite.at,
+                scale: sprite.scale,
+                flip: sprite.flip,
+                order: sprite.order,
+                alpha: sprite.alpha,
+            })
+            .collect(),
+        shapes: spot.shapes.iter().map(|(name, found)| (name.clone(), shape(found))).collect(),
+        camera: spot.camera,
+        marker: marker(spot.marker),
+        rect: spot.rect,
+        graphics: spot
+            .graphics
+            .iter()
+            .map(|graphic| Graphic {
+                area: graphic.area,
+                color: graphic.color,
+                paint: paint(&graphic.paint),
+            })
+            .collect(),
+    }
+}
+
+pub(crate) fn layout(layout: &protocol::Layout) -> Layout {
+    Layout {
+        spots: layout.spots.iter().map(spot).collect(),
+    }
+}
+
 #[cfg(test)]
 pub(crate) mod tests {
     use std::{
         ffi::OsString,
         path::Path,
-        sync::{Arc, OnceLock},
+        sync::{Arc, OnceLock, atomic::AtomicBool},
     };
+
+    use sternegit_reader_protocol::{self as protocol, Found, ReadInput, Search, Side};
 
     use crate::{
         git::{Revision, scratch::ScratchRepo},
-        read::Reader,
+        read::{Reader, Tree},
         unity::{ByReader, Source, read},
     };
+
+    struct Files(Vec<(String, String)>);
+
+    impl Tree for Files {
+        fn read(&self, path: &str) -> Option<Vec<u8>> {
+            self.0.iter().find(|(name, _)| name == path).map(|(_, text)| text.as_bytes().to_vec())
+        }
+
+        fn search(&self, search: &Search) -> Vec<Found> {
+            let regex = fancy_regex::Regex::new(&format!("(?m){}", search.regex)).unwrap();
+            let suffix = search.glob.trim_start_matches("**/").trim_start_matches('*');
+            self.0
+                .iter()
+                .filter(|(name, _)| name.ends_with(suffix))
+                .flat_map(|(name, text)| {
+                    regex.find_iter(text).filter_map(Result::ok).map(move |found| Found {
+                        path: name.clone(),
+                        text: found.as_str().to_owned(),
+                    })
+                })
+                .collect()
+        }
+    }
+
+    pub(crate) fn read_files(path: &str, files: &[(&str, &str)]) -> protocol::Model {
+        let tree: Arc<dyn Tree> = Arc::new(Files(
+            files.iter().map(|(name, text)| ((*name).to_owned(), (*text).to_owned())).collect(),
+        ));
+        let input = ReadInput {
+            kind: String::new(),
+            path: path.to_owned(),
+            side: Side::After,
+            options: Default::default(),
+        };
+        bundled_unity().read(tree, input, &AtomicBool::new(false)).unwrap()
+    }
+
+    pub(crate) fn read_text(path: &str, text: &str) -> protocol::Model {
+        read_files(path, &[(path, text)])
+    }
+
+    pub(crate) fn model_of(path: &str, text: &str) -> crate::unity::scene::Model {
+        super::model(&read_text(path, text))
+    }
 
     pub(crate) fn bundled_unity() -> Arc<Reader> {
         static UNITY: OnceLock<Arc<Reader>> = OnceLock::new();
@@ -197,7 +506,7 @@ Transform:
 ";
 
     #[test]
-    fn the_unity_reader_gives_the_same_objects_as_reading_in_sternegit() -> anyhow::Result<()> {
+    fn a_working_file_and_its_meta_read_through_the_unity_reader() -> anyhow::Result<()> {
         let scratch = ScratchRepo::new("unity-reader-parity")?;
         scratch.write("Slime.prefab", PREFAB)?;
         scratch.write(
@@ -217,13 +526,24 @@ Transform:
                 reader: bundled_unity(),
                 kind: kind.to_owned(),
             };
-            let native = read(&repo, path, None, source(), None)?;
-            let through_reader = read(&repo, path, None, source(), Some(&by))?;
-            let model = |files: &crate::unity::UnityFiles| {
-                let after = files.after.as_ref().unwrap();
-                (after.model.items.clone(), after.model.roots.clone(), after.model.children.clone())
-            };
-            assert_eq!(model(&through_reader), model(&native), "{path}");
+            assert!(read(&repo, path, None, source(), None).is_err(), "{path} needs a reader");
+            let files = read(&repo, path, None, source(), Some(&by))?;
+            let model = &files.after.as_ref().unwrap().model;
+            let names: Vec<&str> = model.items.iter().map(|item| item.name.as_str()).collect();
+            match kind {
+                "prefab" => {
+                    assert_eq!(names, ["Slime", "Crown"]);
+                    assert_eq!(model.roots, [100]);
+                    assert_eq!(model.children.get(&100), Some(&vec![110]));
+                    let titles: Vec<&str> = model.items[0].parts.iter().map(|part| part.title.as_str()).collect();
+                    assert_eq!(titles, ["GameObject", "Transform", "Slime Controller"]);
+                }
+                _ => {
+                    assert_eq!(names, ["Slime.prefab"]);
+                    let guid = model.items[0].parts[0].fields.iter().find(|field| field.path == "guid");
+                    assert!(guid.is_some_and(|field| field.label == "GUID"));
+                }
+            }
         }
         Ok(())
     }

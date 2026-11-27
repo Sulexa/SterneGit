@@ -1,11 +1,20 @@
 #![allow(dead_code)]
 
+mod animator;
+mod clip;
+mod compare;
 mod convert;
+mod graph;
+mod hints;
+mod layout;
 mod lookup;
 mod names;
 mod scene;
 mod size;
+mod sprites;
+mod ui;
 mod value;
+mod views;
 mod yaml;
 
 use sternegit_reader_sdk::{Failure, Model, ReadInput, Reader, export, read_text};
@@ -25,7 +34,7 @@ impl Reader for Unity {
             path: input.path.clone(),
         })?;
         if kind == UnityKind::Meta {
-            let lookup = lookup_for(&[]);
+            let (lookup, _) = lookup_for(&[]);
             let asset = input.path.strip_suffix(".meta").unwrap_or(&input.path);
             return Ok(convert::model(&scene::Model::from_meta(&plain(&text), asset, &lookup)));
         }
@@ -33,9 +42,24 @@ impl Reader for Unity {
             return Err(not_unity(&input.path));
         }
         let docs = documents(&text);
-        let lookup = lookup_for(&docs);
+        let (lookup, library) = lookup_for(&docs);
         let unity = scene::Model::from_documents(kind, &docs, &input.path, &lookup);
-        Ok(convert::model(&unity))
+        let mut model = convert::model(&unity);
+        match kind {
+            UnityKind::AnimationClip => model.curves = views::curves(&docs, &lookup),
+            UnityKind::AnimatorController => model.graph = Some(views::controller(&docs, &lookup)),
+            UnityKind::Asset if views::shaped(kind, &docs) => {
+                model.graph = views::script_graph(&docs);
+                model.text = views::readable_graph(&docs);
+            }
+            UnityKind::Prefab | UnityKind::Scene => model.layout = Some(views::layout(&docs, &unity, &library, &lookup)),
+            _ => {}
+        }
+        model.pictures = views::pictures(&model, &lookup);
+        let (scopes, notes) = views::scopes_and_notes(&text, &docs, &lookup);
+        model.scopes = scopes;
+        model.notes = notes;
+        Ok(model)
     }
 }
 

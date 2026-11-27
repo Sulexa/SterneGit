@@ -447,18 +447,10 @@ fn merged_tree(before: &Model, after: &Model, states: &HashMap<Key, State>) -> V
 #[cfg(test)]
 mod tests {
     use super::{Options, State, compare, merge_keys};
-    use crate::unity::{
-        names::UnityKind,
-        scene::{Model, object_names},
-        value::Lookup,
-        yaml::documents,
-    };
+    use crate::unity::{ingest::tests::model_of, scene::Model};
 
     fn model(text: &str) -> Model {
-        let docs = documents(text);
-        let mut lookup = Lookup::default();
-        lookup.objects = object_names(&docs, &lookup.assets);
-        Model::from_documents(UnityKind::Prefab, &docs, "Assets/Slime.prefab", &lookup)
+        model_of("Assets/Slime.prefab", text)
     }
 
     fn prefab(mass: &str, shadow_scale: &str, with_crown: bool, with_particles: bool) -> String {

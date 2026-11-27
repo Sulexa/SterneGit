@@ -128,7 +128,7 @@ fn placed(compare: &UnityCompare) -> Vec<Placed> {
 }
 
 fn sprite_rect(compare: &UnityCompare, sprite: &crate::unity::PlacedSprite) -> Option<(Arc<crate::unity::SpriteImage>, Area)> {
-    let image = compare.files.sprite(&sprite.guid, sprite.file_id)?.clone();
+    let image = compare.files.sprite(&sprite.picture)?.clone();
     let (width, height) = image.size_in_units();
     let (w, h) = (width * sprite.scale.0, height * sprite.scale.1);
     let left = sprite.at.0 - image.pivot.0 * w;
@@ -263,13 +263,13 @@ fn draw_graphic(compare: &UnityCompare, sketch: &mut crate::media::Sketch, graph
         return;
     }
     let tint = [graphic.color[0] as f32, graphic.color[1] as f32, graphic.color[2] as f32, graphic.color[3] as f32 * opacity];
-    let Some((guid, file_id)) = graphic.paint.sprite() else {
+    let Some(picture) = graphic.paint.picture() else {
         if graphic.paint == Paint::Fill {
             sketch.fill_rect(left, top, width, height, rgba8(graphic.color, opacity));
         }
         return;
     };
-    let Some(image) = compare.files.sprite(&guid, file_id) else {
+    let Some(image) = compare.files.sprite(picture) else {
         sketch.fill_rect(left, top, width, height, rgba8(graphic.color, opacity * MISSING_SPRITE_ALPHA));
         return;
     };
@@ -539,7 +539,7 @@ fn prepare(compare: &mut UnityCompare, bounds: Bounds<Pixels>, window: &mut Wind
     let spots = || items.iter().flat_map(|item| item.after.iter().chain(&item.before));
     let unit = spots()
         .flat_map(|spot| spot.sprites.iter())
-        .find_map(|sprite| compare.files.sprite(&sprite.guid, sprite.file_id).map(|image| image.pixels_per_unit))
+        .find_map(|sprite| compare.files.sprite(&sprite.picture).map(|image| image.pixels_per_unit))
         .unwrap_or(if spots().any(|spot| spot.rect.is_some()) { 1. } else { 100. });
     compare.scene.unit = unit;
     let resized = compare.scene.bounds.is_none_or(|old| old.size != bounds.size || old.origin != bounds.origin);
