@@ -81,28 +81,9 @@ fn is_dimension(c: char, next: Option<char>) -> bool {
     c == 'D' && !next.is_some_and(char::is_lowercase)
 }
 
-pub(crate) fn file_stem(path: &str) -> &str {
-    let name = path.rsplit_once('/').map_or(path, |(_, name)| name);
-    name.rsplit_once('.').map_or(name, |(stem, _)| stem)
-}
-
-pub(crate) fn file_name(path: &str) -> &str {
-    path.rsplit_once('/').map_or(path, |(_, name)| name)
-}
-
-pub(crate) fn component_title(type_name: &str) -> String {
-    match type_name {
-        "MonoBehaviour" => "Script".to_owned(),
-        "GameObject" => "GameObject".to_owned(),
-        "Rigidbody2D" => "Rigidbody 2D".to_owned(),
-        "RectTransform" => "Rect Transform".to_owned(),
-        _ => nicify(type_name),
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{UnityKind, component_title, nicify};
+    use super::{UnityKind, nicify};
 
     #[test]
     fn field_names_read_like_the_inspector_shows_them() {
@@ -118,7 +99,6 @@ mod tests {
     #[test]
     fn two_d_stays_together_after_its_number() {
         assert_eq!(nicify("CircleCollider2D"), "Circle Collider 2D");
-        assert_eq!(component_title("Rigidbody2D"), "Rigidbody 2D");
         assert_eq!(nicify("Light2D"), "Light 2D");
     }
 

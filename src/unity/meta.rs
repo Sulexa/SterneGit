@@ -1,8 +1,10 @@
 use super::{
     compare::{Options, State, changed_rows},
-    value::{Lookup, Value, fields},
-    yaml::{Node, plain},
+    scene::Model,
+    value::{Field, Value},
 };
+
+const IMPORTER: &str = "importer";
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct ImportChanges {
@@ -13,18 +15,20 @@ pub(crate) struct ImportChanges {
     pub(crate) same: usize,
 }
 
-fn importer(meta: &Node) -> Option<&Node> {
-    meta.entries().iter().find(|(_, value)| matches!(value, Node::Map(_))).map(|(_, body)| body)
+fn importer(model: &Model) -> Option<&[Field]> {
+    model
+        .items
+        .iter()
+        .flat_map(|item| &item.parts)
+        .find(|part| part.key == IMPORTER)
+        .map(|part| part.fields.as_slice())
 }
 
-pub(crate) fn import_changes(before: Option<&str>, after: Option<&str>, file: &str) -> Option<ImportChanges> {
-    let before = plain(before?);
-    let after = plain(after?);
-    let lookup = Lookup::default();
-    let old = fields(importer(&before)?, &[], &lookup);
-    let new = fields(importer(&after)?, &[], &lookup);
-    let leaves = |list: &[super::value::Field]| list.iter().filter(|field| is_leaf(&field.value)).count();
-    let (rows, _) = changed_rows(Some(&old), Some(&new), Options::default());
+pub(crate) fn import_changes(before: &Model, after: &Model, file: &str) -> Option<ImportChanges> {
+    let old = importer(before)?;
+    let new = importer(after)?;
+    let leaves = |list: &[Field]| list.iter().filter(|field| is_leaf(&field.value)).count();
+    let (rows, _) = changed_rows(Some(old), Some(new), Options::default());
     let mut columns = Vec::new();
     let mut before_values = Vec::new();
     let mut after_values = Vec::new();
@@ -50,7 +54,7 @@ pub(crate) fn import_changes(before: Option<&str>, after: Option<&str>, file: &s
     if columns.is_empty() {
         return None;
     }
-    let same = leaves(&new).saturating_sub(columns.len());
+    let same = leaves(new).saturating_sub(columns.len());
     Some(ImportChanges {
         file: file.to_owned(),
         columns,
@@ -64,49 +68,21 @@ fn is_leaf(value: &Value) -> bool {
     !matches!(value, Value::Count(_)) && !matches!(value, Value::Text(text) if text.is_empty())
 }
 
-pub(crate) fn guid_of(text: &str) -> Option<String> {
-    plain(text).get("guid").and_then(Node::text).map(ToOwned::to_owned)
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{guid_of, import_changes};
+    use super::import_changes;
+    use crate::unity::ingest::tests::model_of;
 
-    const BEFORE: &str = "fileFormatVersion: 2
-guid: 9a3c51e07d2b4f6c8e1a0b2c3d4e5f60
-TextureImporter:
-  serializedVersion: 12
-  filterMode: 1
-  spritePixelsToUnits: 16
-  maxTextureSize: 2048
-  mipmaps:
-    enableMipMap: 0
-";
-
-    const AFTER: &str = "fileFormatVersion: 2
-guid: 9a3c51e07d2b4f6c8e1a0b2c3d4e5f60
-TextureImporter:
-  serializedVersion: 12
-  filterMode: 0
-  spritePixelsToUnits: 24
-  maxTextureSize: 256
-  mipmaps:
-    enableMipMap: 0
-";
+    const BEFORE: &str = "fileFormatVersion: 2\nguid: 1\nTextureImporter:\n  serializedVersion: 12\n  filterMode: 1\n  maxTextureSize: 2048\n  spritePixelsToUnits: 100\n";
+    const AFTER: &str = "fileFormatVersion: 2\nguid: 1\nTextureImporter:\n  serializedVersion: 12\n  filterMode: 0\n  maxTextureSize: 512\n  spritePixelsToUnits: 100\n";
 
     #[test]
     fn only_the_import_settings_that_changed_become_columns() {
-        let changes = import_changes(Some(BEFORE), Some(AFTER), "slime.png.meta");
-        let changes = changes.expect("three settings changed");
-        assert_eq!(changes.columns, vec!["Filter Mode", "Sprite Pixels To Units", "Max Texture Size"]);
-        assert_eq!(changes.before, vec!["1", "16", "2048"]);
-        assert_eq!(changes.after, vec!["0", "24", "256"]);
+        let changes = import_changes(&model_of("slime.png.meta", BEFORE), &model_of("slime.png.meta", AFTER), "slime.png.meta")
+            .expect("two settings changed");
+        assert_eq!(changes.columns, ["Filter Mode", "Max Texture Size"]);
+        assert_eq!((changes.before.as_slice(), changes.after.as_slice()), (&["1".to_owned(), "2048".to_owned()][..], &["0".to_owned(), "512".to_owned()][..]));
         assert_eq!(changes.same, 2);
-    }
-
-    #[test]
-    fn nothing_to_show_when_the_settings_are_the_same() {
-        assert_eq!(import_changes(Some(BEFORE), Some(BEFORE), "slime.png.meta"), None);
-        assert_eq!(guid_of(BEFORE).as_deref(), Some("9a3c51e07d2b4f6c8e1a0b2c3d4e5f60"));
+        assert!(import_changes(&model_of("a.meta", BEFORE), &model_of("a.meta", BEFORE), "a.meta").is_none());
     }
 }

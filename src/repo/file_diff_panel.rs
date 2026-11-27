@@ -47,7 +47,10 @@ use super::{
         renamed_from, WorkingPatch, working_patch,
     },
 };
-use super::reader_choice::ask_for_reader;
+use super::{
+    fix_preview::{Preview, show_fix, show_fix_failure},
+    reader_choice::ask_for_reader,
+};
 use crate::{
     app::readers::{Chosen, Readers, Routed},
     git::{
@@ -196,6 +199,8 @@ pub(crate) struct FileDiffPanel {
     stopped: HashMap<SharedString, ReaderStopped>,
     asking: Option<(String, Vec<Chosen>)>,
     reading_with: Option<SharedString>,
+    fixing: Option<gpui_kit::Task<()>>,
+    fixed: Option<(Result<Preview, String>, String)>,
     unity_events: Vec<Subscription>,
     imports: Option<unity::ImportChanges>,
     find: Option<Entity<FindBar>>,
@@ -246,6 +251,8 @@ impl FileDiffPanel {
             stopped: HashMap::new(),
             asking: None,
             reading_with: None,
+            fixing: None,
+            fixed: None,
             unity_events: Vec::new(),
             imports: None,
             find: None,
@@ -691,11 +698,41 @@ impl FileDiffPanel {
     }
 
     fn on_unity_event(&mut self, event: &UnityEvent, cx: &mut Context<Self>) {
-        let (change, keep_old) = match event {
-            UnityEvent::KeepOldGuid(change) => (change.clone(), true),
-            UnityEvent::PointToNewGuid(change) => (change.clone(), false),
+        let UnityEvent::Fix(id) = event;
+        let Some(Media::Unity(view)) = self.media.value() else {
+            return;
         };
-        self.repository.update(cx, |repository, cx| repository.rewrite_guid(change, keep_old, cx));
+        let Some(fixer) = view.read(cx).files().fixer.clone() else {
+            return;
+        };
+        let Some(repo) = self.repository.read(cx).repo().cloned() else {
+            return;
+        };
+        let reader = self.reading_with.clone().unwrap_or_default().to_string();
+        let id = id.clone();
+        self.fixing = Some(run_in_background(
+            cx,
+            move || -> anyhow::Result<Preview> {
+                let fix = fixer.fix(&repo, &id)?;
+                let patches = fix
+                    .edits
+                    .iter()
+                    .map(|edit| {
+                        let before = std::fs::read(repo.location().join(&edit.path))
+                            .map(|bytes| String::from_utf8_lossy(&bytes).into_owned())
+                            .unwrap_or_default();
+                        let name = edit.path.rsplit('/').next().unwrap_or(&edit.path);
+                        repo.texts_patch(&before, &edit.text, name).unwrap_or_default()
+                    })
+                    .collect();
+                Ok(Preview { fix, patches })
+            },
+            move |this, result, cx| {
+                this.fixing = None;
+                this.fixed = Some((result.map_err(|error| error.to_string()), reader));
+                cx.notify();
+            },
+        ));
     }
 
     fn unity_modes(&self, mut bar: ViewBar, shape: UnityShape, kind: UnityKind, current: UnityMode, cx: &mut Context<Self>) -> ViewBar {
@@ -1092,6 +1129,10 @@ impl FileDiffPanel {
         let by = by_reader(&request.path, cx);
         self.reading_with = by.as_ref().map(|by| SharedString::from(by.name.clone()));
         let meta = request.meta.clone();
+        let meta_reader = meta
+            .as_ref()
+            .and_then(|sides| sides.after.as_ref().or(sides.before.as_ref()))
+            .and_then(|source| by_reader(&source.path, cx));
         let shown_path = SharedString::from(request.path.to_string_lossy().into_owned());
         let MediaRequest {
             view,
@@ -1110,7 +1151,7 @@ impl FileDiffPanel {
                     MediaView::Other => read_other(&repo, sides, extension.as_deref(), note).map(Read::Other),
                     MediaView::Unity => read_unity(&repo, &unity_request, by.as_ref()).map(|files| Read::Unity(Arc::new(files))),
                 }?;
-                Ok((read, meta.and_then(|sides| read_imports(&repo, sides))))
+                Ok((read, meta.zip(meta_reader).and_then(|(sides, by)| read_imports(&repo, &by, sides))))
             },
             move |this, result, cx| {
                 let mut imports = None;
@@ -1953,6 +1994,13 @@ impl Render for FileDiffPanel {
         if let Some((extension, candidates)) = self.asking.take() {
             window.defer(cx, move |window, cx| ask_for_reader(extension, candidates, window, cx));
         }
+        if let Some((fixed, reader)) = self.fixed.take() {
+            let repository = self.repository.clone();
+            window.defer(cx, move |window, cx| match fixed {
+                Ok(preview) => show_fix(preview, repository, reader, window, cx),
+                Err(problem) => show_fix_failure(problem, window, cx),
+            });
+        }
         let (heading, move_button) = match &self.compared {
             None => return div().into_any_element(),
             Some(Compared::WorkingFile(open)) => {
@@ -2158,19 +2206,16 @@ fn working_request(view: MediaView, change: &FileChange, side: Side, staged_too:
     }
 }
 
-fn read_imports(repo: &Repo, sides: Sides) -> Option<unity::ImportChanges> {
+fn read_imports(repo: &Repo, by: &unity::ByReader, sides: Sides) -> Option<unity::ImportChanges> {
     let name = sides
         .after
         .as_ref()
         .or(sides.before.as_ref())
         .and_then(|source| Path::new(&source.path).file_name().map(|name| name.to_string_lossy().into_owned()))
         .unwrap_or_default();
-    let text = |source: Option<VersionSource>| {
-        source
-            .and_then(|source| repo.file_version(source.revision, &source.path).ok())
-            .map(|version| String::from_utf8_lossy(&version.bytes).into_owned())
-    };
-    unity::import_changes(text(sides.before).as_deref(), text(sides.after).as_deref(), &name)
+    let before = unity_source(sides.before)?;
+    let after = unity_source(sides.after)?;
+    unity::imports(repo, by, &before, &after, &name)
 }
 
 fn commit_request(

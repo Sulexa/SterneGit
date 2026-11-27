@@ -1,33 +1,6 @@
-use std::{
-    collections::HashMap,
-    hash::{DefaultHasher, Hash as _, Hasher as _},
-};
-
-use super::{
-    names::{file_name, file_stem, nicify},
-    yaml::Node,
-};
 use crate::media::file_size;
 
-const AXES: [&str; 4] = ["x", "y", "z", "w"];
-const CHANNELS: [&str; 4] = ["r", "g", "b", "a"];
 const SAME_NUMBER: f64 = 1e-5;
-const LONGEST_VALUE_SHOWN: usize = 300;
-const BUILT_IN_EXTRA: &str = "0000000000000000e000000000000000";
-const BUILT_IN_DEFAULT: &str = "0000000000000000f000000000000000";
-const FLAG_PREFIXES: [&str; 25] = [
-    "is", "has", "use", "enable", "enabled", "can", "should", "show", "allow", "auto", "loop", "play", "mute",
-    "flip", "invert", "lock", "keep", "ignore", "apply", "cast", "receive", "bypass", "preload", "force", "generate",
-];
-
-const NOISE_FIELDS: [&str; 6] = [
-    "serializedVersion",
-    "m_RootOrder",
-    "m_LocalEulerAnglesHint",
-    "m_ConstrainProportionsScale",
-    "m_EditorClassIdentifier",
-    "m_ModificationsOrder",
-];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Glyph {
@@ -56,12 +29,6 @@ pub(crate) struct Digest(u64);
 impl Digest {
     pub(crate) fn from_value(value: u64) -> Self {
         Self(value)
-    }
-
-    fn of(text: &str) -> Self {
-        let mut hasher = DefaultHasher::new();
-        text.hash(&mut hasher);
-        Self(hasher.finish())
     }
 }
 
@@ -177,145 +144,6 @@ pub(crate) fn hex_color(rgba: [f32; 4]) -> String {
     }
 }
 
-#[derive(Clone, Debug, Default)]
-pub(crate) struct Lookup {
-    pub(crate) objects: HashMap<i64, (String, String)>,
-    pub(crate) assets: HashMap<String, String>,
-}
-
-impl Lookup {
-    pub(crate) fn asset_path(&self, guid: &str) -> Option<&str> {
-        self.assets.get(guid).map(String::as_str)
-    }
-
-    pub(crate) fn script_name(&self, guid: &str) -> Option<String> {
-        self.asset_path(guid)
-            .map(|path| file_stem(path).to_owned())
-            .or_else(|| known_script(guid).map(str::to_owned))
-    }
-
-    pub(crate) fn reference(&self, node: &Node) -> Option<Value> {
-        let file_id = node.get("fileID")?.integer()?;
-        let guid = node.get("guid").and_then(Node::text).filter(|guid| !guid.is_empty());
-        if file_id == 0 && guid.is_none() {
-            return Some(Value::Nothing("Object".to_owned()));
-        }
-        let Some(guid) = guid else {
-            return Some(Value::Reference(match self.objects.get(&file_id) {
-                Some((name, kind)) => Reference {
-                    name: name.clone(),
-                    kind: kind.clone(),
-                    glyph: Glyph::Object,
-                    guid: None,
-                    missing: false,
-                },
-                None => Reference {
-                    name: "Missing".to_owned(),
-                    kind: format!("fileID {file_id}"),
-                    glyph: Glyph::Object,
-                    guid: None,
-                    missing: true,
-                },
-            }));
-        };
-        if guid == BUILT_IN_EXTRA || guid == BUILT_IN_DEFAULT {
-            return Some(Value::Reference(Reference {
-                name: built_in_name(file_id),
-                kind: "Built-in".to_owned(),
-                glyph: Glyph::Asset,
-                guid: Some(guid.to_owned()),
-                missing: false,
-            }));
-        }
-        let (kind, glyph) = asset_kind(file_id, self.asset_path(guid));
-        let reference = match self.asset_path(guid) {
-            Some(path) => Reference {
-                name: if kind == "Script" { file_stem(path).to_owned() } else { file_stem(file_name(path)).to_owned() },
-                kind: kind.to_owned(),
-                glyph,
-                guid: Some(guid.to_owned()),
-                missing: false,
-            },
-            None => match known_script(guid) {
-                Some(name) => Reference {
-                    name: name.to_owned(),
-                    kind: "Script".to_owned(),
-                    glyph: Glyph::Script,
-                    guid: Some(guid.to_owned()),
-                    missing: false,
-                },
-                None => Reference {
-                    name: format!("Missing {}", &guid[..guid.len().min(8)]),
-                    kind: kind.to_owned(),
-                    glyph,
-                    guid: Some(guid.to_owned()),
-                    missing: true,
-                },
-            },
-        };
-        Some(Value::Reference(reference))
-    }
-}
-
-fn built_in_name(file_id: i64) -> String {
-    match file_id {
-        10303 | 10302 => "Default-Material".to_owned(),
-        10754 => "Sprites-Default".to_owned(),
-        10202 => "Cube".to_owned(),
-        10207 => "Sphere".to_owned(),
-        10208 => "Capsule".to_owned(),
-        10209 => "Plane".to_owned(),
-        10210 => "Quad".to_owned(),
-        10102 => "Arial".to_owned(),
-        _ => format!("Built-in {file_id}"),
-    }
-}
-
-fn asset_kind(file_id: i64, path: Option<&str>) -> (&'static str, Glyph) {
-    match file_id {
-        21300000 => ("Sprite", Glyph::Image),
-        2800000 => ("Texture", Glyph::Image),
-        2100000 => ("Material", Glyph::Material),
-        11500000 => ("Script", Glyph::Script),
-        7400000 => ("Animation Clip", Glyph::Clip),
-        9100000 => ("Animator Controller", Glyph::Clip),
-        8300000 => ("Audio Clip", Glyph::Sound),
-        100100000 => ("Prefab", Glyph::Prefab),
-        4300000 => ("Mesh", Glyph::Asset),
-        4800000 => ("Shader", Glyph::Asset),
-        11400000 => ("Asset", Glyph::Asset),
-        _ => match path.map(|path| path.rsplit_once('.').map_or("", |(_, extension)| extension)) {
-            Some("png" | "jpg" | "jpeg" | "psd" | "tga" | "tif" | "tiff" | "exr" | "bmp" | "gif") => {
-                ("Sprite", Glyph::Image)
-            }
-            Some("wav" | "ogg" | "mp3" | "aif" | "aiff" | "flac") => ("Audio Clip", Glyph::Sound),
-            Some("fbx" | "obj" | "blend") => ("Model", Glyph::Prefab),
-            Some("prefab") => ("Prefab", Glyph::Prefab),
-            Some("mat") => ("Material", Glyph::Material),
-            Some("anim") => ("Animation Clip", Glyph::Clip),
-            _ => ("Asset", Glyph::Asset),
-        },
-    }
-}
-
-fn known_script(guid: &str) -> Option<&'static str> {
-    Some(match guid {
-        "fe87c0e1cc204ed48ad3b37840f39efc" => "Image",
-        "5f7201a12d95ffc409449d95f23cf332" => "Text",
-        "4e29b1a8efbd4b44bb3f3716e73f07ff" => "Button",
-        "0cd44c1031e13a943bb63640046fad76" => "Canvas Scaler",
-        "dc42784cf147c0c48a680349fa168899" => "Graphic Raycaster",
-        "76c392e42b5098c458856cdf6ecaaaa1" => "Event System",
-        "4f231c4fb786f3946a6b90b886c48677" => "Standalone Input Module",
-        "f4688fdb7df04437aeb418b961361dc5" => "TextMeshPro UGUI",
-        "9541d86e2fd84c1d9990edf0852d74ab" => "TextMeshPro",
-        "073797afb82c5a1438f328866b10b3f0" => "Light 2D",
-        "a79441f348de89743a2939f4d699eac1" => "Universal Additional Camera Data",
-        "172515602e62fb746b5d573b38a5fe58" => "Volume",
-        _ => return None,
-    })
-}
-
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct Field {
     pub(crate) path: String,
@@ -325,228 +153,37 @@ pub(crate) struct Field {
     pub(crate) noise: bool,
 }
 
-pub(crate) fn is_noise_path(path: &str) -> bool {
-    let last = path.rsplit(['.', ':']).next().unwrap_or(path);
-    NOISE_FIELDS.contains(&last) || NOISE_FIELDS.iter().any(|noise| path.starts_with(noise))
-}
-
-pub(crate) fn fields(body: &Node, skipped: &[&str], lookup: &Lookup) -> Vec<Field> {
-    let mut out = Vec::new();
-    for (key, node) in body.entries() {
-        if skipped.contains(&key.as_str()) {
-            continue;
-        }
-        flatten(key, &nicify(key), key, node, 0, lookup, &mut out);
-    }
-    out
-}
-
-fn flatten(key: &str, label: &str, path: &str, node: &Node, depth: usize, lookup: &Lookup, out: &mut Vec<Field>) {
-    if let Some(value) = leaf(key, node, lookup) {
-        out.push(Field {
-            path: path.to_owned(),
-            label: label.to_owned(),
-            depth,
-            value,
-            noise: is_noise_path(path),
-        });
-        return;
-    }
-    match node {
-        Node::List(items) => {
-            out.push(Field {
-                path: path.to_owned(),
-                label: label.to_owned(),
-                depth,
-                value: Value::Count(items.len()),
-                noise: is_noise_path(path),
-            });
-            let mut seen = std::collections::HashSet::new();
-            let ids = identities(items);
-            for (ix, item) in items.iter().enumerate() {
-                let named = leaf(key, item, lookup).is_none().then(|| single_entry(item)).flatten();
-                let at = ids.as_ref().map_or_else(|| ix.to_string(), |ids| format!("#{}", ids[ix]));
-                match named {
-                    Some((name, inner)) if seen.insert(name) => {
-                        flatten(name, &nicify(name), &format!("{path}.{name}"), inner, depth + 1, lookup, out)
-                    }
-                    Some((name, inner)) => {
-                        flatten(name, &nicify(name), &format!("{path}[{at}].{name}"), inner, depth + 1, lookup, out)
-                    }
-                    None => flatten(key, &format!("Element {ix}"), &format!("{path}[{at}]"), item, depth + 1, lookup, out),
-                }
-            }
-        }
-        Node::Map(entries) => {
-            out.push(Field {
-                path: path.to_owned(),
-                label: label.to_owned(),
-                depth,
-                value: Value::Text(String::new()),
-                noise: is_noise_path(path),
-            });
-            for (name, inner) in entries {
-                flatten(name, &nicify(name), &format!("{path}.{name}"), inner, depth + 1, lookup, out);
-            }
-        }
-        Node::Scalar(_) => {}
-    }
-}
-
-const IDENTITY_FIELDS: [&str; 5] = ["m_Id", "m_Key", "m_Guid", "guid", "rid"];
-
-fn identities(items: &[Node]) -> Option<Vec<&str>> {
-    IDENTITY_FIELDS.iter().find_map(|field| {
-        let ids: Vec<&str> = items.iter().map(|item| item.get(field)?.text()).collect::<Option<_>>()?;
-        let mut seen = std::collections::HashSet::new();
-        (!ids.is_empty() && ids.iter().all(|id| !id.is_empty() && seen.insert(*id))).then_some(ids)
-    })
-}
-
-fn single_entry(item: &Node) -> Option<(&str, &Node)> {
-    match item.entries() {
-        [(name, inner)] => Some((name.as_str(), inner)),
-        _ => None,
-    }
-}
-
-fn leaf(key: &str, node: &Node, lookup: &Lookup) -> Option<Value> {
-    match node {
-        Node::Scalar(text) => Some(scalar(key, text)),
-        Node::Map(_) if node.get("fileID").is_some() => lookup.reference(node),
-        Node::Map(_) if is_vector(node) => Some(vector(node)),
-        Node::Map(_) if is_color(node) => Some(color(node)),
-        Node::List(items) if items.is_empty() => Some(Value::Count(0)),
-        _ => None,
-    }
-}
-
-fn scalar(key: &str, text: &str) -> Value {
-    if let Some(long) = long_value(text) {
-        return long;
-    }
-    let looks_numeric = text.parse::<f64>().is_ok();
-    if (text == "0" || text == "1") && is_flag_name(key) {
-        Value::Flag(text == "1")
-    } else if looks_numeric {
-        Value::Number(text.to_owned())
-    } else {
-        Value::Text(text.to_owned())
-    }
-}
-
-fn long_value(text: &str) -> Option<Value> {
-    if text.len() <= LONGEST_VALUE_SHOWN {
-        return None;
-    }
-    if text.len().is_multiple_of(2) && text.bytes().all(|byte| byte.is_ascii_hexdigit()) {
-        return Some(Value::Data {
-            bytes: text.len() / 2,
-            digest: Digest::of(text),
-        });
-    }
-    let (end, _) = text.char_indices().nth(LONGEST_VALUE_SHOWN)?;
-    Some(Value::Long {
-        start: text[..end].to_owned(),
-        more: text[end..].chars().count(),
-        digest: Digest::of(text),
-    })
-}
-
-pub(crate) fn is_flag_name(key: &str) -> bool {
-    let bare = key.trim_start_matches("m_").trim_start_matches('_');
-    let lower = bare.to_ascii_lowercase();
-    if matches!(lower.as_str(), "enabled" | "isactive" | "istrigger" | "simulated" | "flipx" | "flipy" | "mute" | "loop") {
-        return true;
-    }
-    FLAG_PREFIXES.iter().any(|prefix| {
-        lower.starts_with(prefix)
-            && bare[prefix.len()..]
-                .chars()
-                .next()
-                .is_none_or(|next| next.is_uppercase() || next.is_ascii_digit())
-    })
-}
-
-fn keys_within(node: &Node, allowed: &[&str]) -> bool {
-    let entries = node.entries();
-    !entries.is_empty()
-        && entries.len() <= allowed.len()
-        && entries
-            .iter()
-            .all(|(key, value)| allowed.contains(&key.as_str()) && value.number().is_some())
-}
-
-fn is_vector(node: &Node) -> bool {
-    keys_within(node, &AXES) && node.get("x").is_some() && node.get("y").is_some()
-}
-
-fn is_color(node: &Node) -> bool {
-    keys_within(node, &CHANNELS) && node.entries().len() >= 3
-}
-
-fn vector(node: &Node) -> Value {
-    Value::Vector(
-        AXES.iter()
-            .filter_map(|axis| Some((*axis, node.get(axis)?.text()?.to_owned())))
-            .collect(),
-    )
-}
-
-fn color(node: &Node) -> Value {
-    let channel = |name: &str, default: f32| node.get(name).and_then(Node::number).map_or(default, |value| value as f32);
-    let rgba = [channel("r", 0.), channel("g", 0.), channel("b", 0.), channel("a", 1.)];
-    let brightest = rgba[0].max(rgba[1]).max(rgba[2]);
-    if brightest > 1.0001 {
-        let scaled = [rgba[0] / brightest, rgba[1] / brightest, rgba[2] / brightest, rgba[3]];
-        Value::Color {
-            rgba: scaled,
-            hdr: Some(brightest.log2()),
-        }
-    } else {
-        Value::Color { rgba, hdr: None }
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{LONGEST_VALUE_SHOWN, Lookup, Sameness, Value, fields, is_flag_name};
-    use crate::unity::{compare::State, yaml::Node};
+    use super::{Field, Sameness, Value};
+    use crate::unity::{
+        compare::{State, changed_rows},
+        ingest::tests::model_of,
+    };
 
-    fn map(entries: &[(&str, Node)]) -> Node {
-        Node::Map(entries.iter().map(|(key, value)| ((*key).to_owned(), value.clone())).collect())
-    }
-
-    fn text(value: &str) -> Node {
-        Node::Scalar(value.to_owned())
+    fn read_fields(body: &str) -> Vec<Field> {
+        let text = format!("%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &1
+MonoBehaviour:
+  m_Name: Table
+{body}");
+        let model = model_of("Table.asset", &text);
+        model.items[0].parts[0].fields.iter().filter(|field| field.path != "m_Name").cloned().collect()
     }
 
     #[test]
     fn long_hex_reads_as_data_compared_whole_and_shown_by_size() {
         let data = |changed_at: usize| {
             let hex: String = (0..4_096).map(|at| if at == changed_at { 'a' } else { '0' }).collect();
-            fields(&map(&[("_typelessdata", text(&hex))]), &[], &Lookup::default()).remove(0).value
+            read_fields(&format!("  _typelessdata: {hex}
+")).remove(0).value
         };
         let before = data(3_000);
         assert!(matches!(before, Value::Data { bytes: 2_048, .. }));
         assert_eq!(before.text(), "2.0 KB of data");
         assert_eq!(before.same_as(&data(3_000)), Sameness::Equal);
         assert_eq!(before.same_as(&data(3_001)), Sameness::Different);
-    }
-
-    #[test]
-    fn long_text_keeps_its_start_and_counts_the_rest() {
-        let long = |last: char| {
-            let words = format!("{}{last}", "é".repeat(LONGEST_VALUE_SHOWN + 4_699));
-            fields(&map(&[("m_Description", text(&words))]), &[], &Lookup::default()).remove(0).value
-        };
-        let before = long('a');
-        let Value::Long { start, more, .. } = &before else { panic!("{before:?}") };
-        assert_eq!(start.chars().count(), LONGEST_VALUE_SHOWN);
-        assert_eq!(*more, 4_700);
-        assert_eq!(before.same_as(&long('b')), Sameness::Different);
-        let short = "0".repeat(LONGEST_VALUE_SHOWN);
-        assert!(matches!(fields(&map(&[("m_Seed", text(&short))]), &[], &Lookup::default()).remove(0).value, Value::Number(_)));
     }
 
     #[test]
@@ -558,39 +195,17 @@ mod tests {
     }
 
     #[test]
-    fn a_map_of_axes_reads_as_a_vector_and_channels_as_a_color() {
-        let body = map(&[
-            ("m_LocalPosition", map(&[("x", text("0")), ("y", text("0.62")), ("z", text("0"))])),
-            ("m_Color", map(&[("r", text("1")), ("g", text("1")), ("b", text("1")), ("a", text("1"))])),
-        ]);
-        let found = fields(&body, &[], &Lookup::default());
-        assert_eq!(found[0].label, "Local Position");
-        assert!(matches!(&found[0].value, Value::Vector(axes) if axes.len() == 3));
-        assert_eq!(found[1].value.text(), "#FFFFFF");
-    }
-
-    #[test]
-    fn lists_count_their_items_and_list_each_one_below() {
-        let body = map(&[(
-            "drops",
-            Node::List(vec![
-                map(&[("fileID", text("0"))]),
-                map(&[("fileID", text("11400000")), ("guid", text("c3a1e9f07b2d4c5e8f6a9b0c1d2e3f4a")), ("type", text("2"))]),
-            ]),
-        )]);
-        let found = fields(&body, &[], &Lookup::default());
-        assert_eq!(found[0].value, Value::Count(2));
-        assert_eq!(found[2].label, "Element 1");
-        assert_eq!(found[2].depth, 1);
-    }
-
-    #[test]
     fn list_entries_with_an_id_pair_by_id_so_removing_one_leaves_the_rest_unchanged() {
-        let entry = |id: &str, words: &str| map(&[("m_Id", text(id)), ("m_Localized", text(words))]);
-        let table = |entries: Vec<Node>| fields(&map(&[("m_TableData", Node::List(entries))]), &[], &Lookup::default());
-        let before = table(vec![entry("1", "Language"), entry("2", "Send data"), entry("3", "General")]);
-        let after = table(vec![entry("1", "Language"), entry("3", "General"), entry("4", "Privacy")]);
-        let (rows, _) = crate::unity::compare::changed_rows(Some(&before), Some(&after), Default::default());
+        let table = |entries: &[(&str, &str)]| {
+            let listed: String = entries.iter().map(|(id, words)| format!("  - m_Id: {id}
+    m_Localized: {words}
+")).collect();
+            read_fields(&format!("  m_TableData:
+{listed}"))
+        };
+        let before = table(&[("1", "Language"), ("2", "Send data"), ("3", "General")]);
+        let after = table(&[("1", "Language"), ("3", "General"), ("4", "Privacy")]);
+        let (rows, _) = changed_rows(Some(&before), Some(&after), Default::default());
         let changed: Vec<(String, State)> = rows
             .iter()
             .filter(|row| row.depth == 2)
@@ -606,27 +221,4 @@ mod tests {
             ]
         );
     }
-
-    #[test]
-    fn a_reference_inside_the_file_reads_as_the_name_of_its_object() {
-        let mut lookup = Lookup::default();
-        lookup.objects.insert(42, ("Crown".to_owned(), "Transform".to_owned()));
-        lookup.assets.insert("aa".repeat(16), "Assets/Art/crown-icon.png".to_owned());
-        let inside = lookup.reference(&map(&[("fileID", text("42"))]));
-        assert_eq!(inside.map(|value| value.text()), Some("Crown (Transform)".to_owned()));
-        let sprite = lookup.reference(&map(&[("fileID", text("21300000")), ("guid", text(&"aa".repeat(16))), ("type", text("3"))]));
-        assert_eq!(sprite.map(|value| value.text()), Some("crown-icon (Sprite)".to_owned()));
-        let empty = lookup.reference(&map(&[("fileID", text("0"))]));
-        assert_eq!(empty, Some(Value::Nothing("Object".to_owned())));
-    }
-
-    #[test]
-    fn zero_or_one_is_a_check_box_only_for_names_that_read_as_yes_or_no() {
-        assert!(is_flag_name("m_IsTrigger"));
-        assert!(is_flag_name("m_Enabled"));
-        assert!(is_flag_name("useGravity"));
-        assert!(!is_flag_name("m_Layer"));
-        assert!(!is_flag_name("island"));
-    }
-
 }

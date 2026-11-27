@@ -26,7 +26,7 @@ use self::{
 };
 use super::{Direction, Position};
 use crate::unity::{
-    ClipComparison, Comparison, GraphComparison, GuidChange, Shape, Shown, State, UnityFiles, UnityKind, clock,
+    ClipComparison, Comparison, GraphComparison, Shape, Shown, State, UnityFiles, UnityKind, clock,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -108,8 +108,7 @@ pub(crate) fn modes_for(shape: Shape, kind: UnityKind) -> Vec<ModeLook> {
 const MEASURED_AHEAD: f32 = 1000.;
 
 pub(crate) enum UnityEvent {
-    KeepOldGuid(GuidChange),
-    PointToNewGuid(GuidChange),
+    Fix(String),
 }
 
 pub(crate) struct UnityCompare {
@@ -302,8 +301,8 @@ impl UnityCompare {
     pub(crate) fn facts(&self) -> String {
         let kind = self.files.kind.label();
         match self.files.shape {
-            Shape::Objects if self.files.kind == UnityKind::Meta => match &self.files.guid_change {
-                Some(_) => "Import settings · the GUID changed".to_owned(),
+            Shape::Objects if self.files.kind == UnityKind::Meta => match self.files.warnings.first() {
+                Some(warning) => format!("Import settings · {}", warning.title),
                 None => "Import settings".to_owned(),
             },
             Shape::Objects if self.files.kind.has_hierarchy() => {

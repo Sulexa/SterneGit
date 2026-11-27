@@ -2,6 +2,7 @@ mod animator;
 mod clip;
 mod convert;
 mod graph;
+mod guid;
 mod hints;
 mod layout;
 mod lookup;
@@ -13,7 +14,7 @@ mod value;
 mod views;
 mod yaml;
 
-use sternegit_reader_sdk::{Failure, Model, ReadInput, Reader, export, read_text};
+use sternegit_reader_sdk::{Failure, Fix, FixInput, Model, ReadInput, Reader, SideFilesInput, Warning, export, read_text};
 
 use crate::{
     lookup::lookup_for,
@@ -56,6 +57,24 @@ impl Reader for Unity {
         model.scopes = scopes;
         model.notes = notes;
         Ok(model)
+    }
+
+    fn side_files(&self, input: SideFilesInput) -> Result<Vec<Warning>, Failure> {
+        let (Some(before), Some(after)) = (&input.before, &input.after) else {
+            return Ok(Vec::new());
+        };
+        if UnityKind::of(&input.path) != Some(UnityKind::Meta) {
+            return Ok(Vec::new());
+        }
+        Ok(guid::guid_change(&input.path, before, after).map(|change| change.warning()).into_iter().collect())
+    }
+
+    fn fix(&self, input: FixInput) -> Result<Fix, Failure> {
+        let (Some(before), Some(after)) = (&input.before, &input.after) else {
+            return Err(Failure::Unsupported);
+        };
+        let change = guid::guid_change(&input.path, before, after).ok_or(Failure::Unsupported)?;
+        change.fix(&input.path, &input.fix)
     }
 }
 

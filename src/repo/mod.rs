@@ -12,6 +12,7 @@ mod compare;
 mod discard_dialog;
 mod file_diff_panel;
 mod file_history;
+mod fix_preview;
 mod file_menu;
 mod file_tree;
 mod history_list;

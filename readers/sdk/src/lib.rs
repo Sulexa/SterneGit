@@ -16,7 +16,8 @@ pub use log::{Level, log, now};
 pub use reader::Reader;
 pub use sternegit_reader_protocol as protocol;
 pub use sternegit_reader_protocol::{
-    Failure, Field, Found, Icon, Model, Object, Part, ReadInput, Reference, Role, Scope, Search, Side, Value,
+    Edit, Failure, Field, Fix, FixInput, FixOffer, Found, Icon, Model, Object, Part, Place, ReadInput, Reference, Role, Scope,
+    Search, Side, SideFilesInput, Value, Warning, digest,
 };
 
 pub const SDK_VERSION: &str = env!("CARGO_PKG_VERSION");

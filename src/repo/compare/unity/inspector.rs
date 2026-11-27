@@ -446,7 +446,7 @@ pub(super) fn render(compare: &mut UnityCompare, _: &mut Window, cx: &mut Contex
     };
     let widths = InspectorWidths::current(cx);
     let has_tree = !compare.comparison.tree.is_empty();
-    let warning = compare.files.guid_change.clone().map(|change| guid::warning(change, cx));
+    let warning = compare.files.warnings.first().cloned().map(|warning| guid::warning(warning, cx));
     let inspector = v_flex()
         .relative()
         .flex_1()

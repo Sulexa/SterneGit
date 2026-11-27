@@ -1,4 +1,5 @@
 mod files;
+mod fixes;
 mod model;
 mod views;
 
@@ -7,6 +8,7 @@ use std::{collections::BTreeMap, fmt};
 use serde::{Deserialize, Serialize};
 
 pub use files::{Found, Search};
+pub use fixes::{Edit, Fix, FixInput, FixOffer, Place, SideFilesInput, Warning, digest};
 pub use model::{Field, Icon, Model, Object, Part, Reference, Role, Scope, Value};
 pub use views::{
     CurveKey, Curves, Declared, Edge, Facing, Graph, GraphKind, Graphic, Keys, Layer, Layout, Marker, Node, NodeKind,
@@ -26,6 +28,8 @@ pub fn speaks_same_major(protocol: &str) -> bool {
 pub enum Call {
     Hello(Hello),
     Read(ReadInput),
+    SideFiles(SideFilesInput),
+    Fix(FixInput),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

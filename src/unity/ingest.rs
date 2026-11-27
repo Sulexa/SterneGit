@@ -508,6 +508,49 @@ Transform:
 ";
 
     #[test]
+    fn a_changed_guid_warns_proposes_fixes_and_applies_only_what_was_read() -> anyhow::Result<()> {
+        let old = "0123456789abcdef0123456789abcdef";
+        let new = "fedcba9876543210fedcba9876543210";
+        let scratch = ScratchRepo::new("unity-reader-guid")?;
+        scratch.write("slime.png.meta", &format!("fileFormatVersion: 2
+guid: {old}
+"))?;
+        scratch.write(
+            "Slime.prefab",
+            &format!("%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1 &1
+GameObject:
+  m_Name: Slime
+--- !u!212 &2
+SpriteRenderer:
+  m_GameObject: {{fileID: 1}}
+  m_Sprite: {{fileID: 21300000, guid: {old}, type: 3}}
+"),
+        )?;
+        scratch.git(&["add", "-A"])?;
+        scratch.commit("first")?;
+        scratch.write("slime.png.meta", &format!("fileFormatVersion: 2
+guid: {new}
+"))?;
+        let (repo, _) = scratch.open()?;
+        let by = ByReader {
+            name: "Unity".to_owned(),
+            reader: bundled_unity(),
+            kind: "meta".to_owned(),
+        };
+        let source = |revision| Some(Source { revision, path: OsString::from("slime.png.meta") });
+        let files = read(&repo, "slime.png.meta", source(Revision::Head), source(Revision::WorkTree), Some(&by))?;
+        assert_eq!(files.warnings[0].title, "The GUID changed: 1 file loses slime.png");
+        let fix = files.fixer.as_ref().unwrap().fix(&repo, "point_users_to_new_guid")?;
+        assert_eq!(fix.edits.len(), 1);
+        crate::unity::apply_edits(&repo, &fix.edits)?;
+        assert!(std::fs::read_to_string(std::path::Path::new(&scratch.location()).join("Slime.prefab"))?.contains(new));
+        assert!(crate::unity::apply_edits(&repo, &fix.edits).is_err(), "the file changed since the fix read it");
+        Ok(())
+    }
+
+    #[test]
     fn a_working_file_and_its_meta_read_through_the_unity_reader() -> anyhow::Result<()> {
         let scratch = ScratchRepo::new("unity-reader-parity")?;
         scratch.write("Slime.prefab", PREFAB)?;

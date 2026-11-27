@@ -1,14 +1,8 @@
-use std::{collections::HashMap, path::Path};
+use std::path::Path;
 
 use anyhow::Result;
 
-use super::{
-    Repo,
-    command::{Exit, READ_ONLY, run},
-};
-
-const GUIDS_PER_SEARCH: usize = 400;
-const OWNER_MARK: &str = ":guid: ";
+use super::command::{Exit, READ_ONLY, run};
 
 pub(crate) fn matches_in_commit(location: &Path, commit: &str, regex: &str, glob: &str) -> Result<Vec<(String, String)>> {
     let output = run(
@@ -38,71 +32,43 @@ pub(crate) fn matches_in_working_tree(location: &Path, regex: &str, glob: &str) 
         .collect())
 }
 
-impl Repo {
-    pub(crate) fn meta_files_owning(&self, guids: &[String]) -> Result<HashMap<String, String>> {
-        let mut owners = HashMap::new();
-        for chunk in guids.chunks(GUIDS_PER_SEARCH) {
-            let pattern = format!("^guid: ({})", chunk.join("|"));
-            let output = run(
-                self.location(),
-                &[READ_ONLY, "grep", "--untracked", "-I", "-o", "-E", "-e", &pattern, "--", "*.meta"],
-                Exit::SuccessOrDifference,
-            )?;
-            for line in String::from_utf8_lossy(&output).lines() {
-                if let Some((meta, guid)) = line.rsplit_once(OWNER_MARK) {
-                    let asset = meta.strip_suffix(".meta").unwrap_or(meta);
-                    owners.entry(guid.trim().to_owned()).or_insert_with(|| asset.to_owned());
-                }
-            }
-        }
-        Ok(owners)
-    }
-
-    pub(crate) fn files_mentioning(&self, text: &str) -> Result<Vec<String>> {
-        let output = run(
-            self.location(),
-            &[READ_ONLY, "grep", "--untracked", "-I", "-l", "-F", "-e", text],
-            Exit::SuccessOrDifference,
-        )?;
-        Ok(String::from_utf8_lossy(&output)
-            .lines()
-            .filter(|line| !line.is_empty())
-            .map(ToOwned::to_owned)
-            .collect())
-    }
-}
-
 #[cfg(test)]
 mod tests {
+    use super::{matches_in_commit, matches_in_working_tree};
     use crate::git::scratch::ScratchRepo;
 
+    const GUID: &str = "0123456789abcdef0123456789abcdef";
+
     #[test]
-    fn each_guid_is_owned_by_the_meta_file_that_declares_it() -> anyhow::Result<()> {
-        let scratch = ScratchRepo::new("guid-owners")?;
-        scratch.write("slime.png.meta", "fileFormatVersion: 2\nguid: 0123456789abcdef0123456789abcdef\n")?;
-        scratch.write(
-            "Slime.prefab",
-            "--- !u!1 &1\nm_Sprite: {fileID: 21300000, guid: 0123456789abcdef0123456789abcdef, type: 3}\n",
-        )?;
-        let (repo, _) = scratch.open()?;
-        let owners = repo.meta_files_owning(&["0123456789abcdef0123456789abcdef".to_owned()])?;
-        assert_eq!(
-            owners.get("0123456789abcdef0123456789abcdef").map(String::as_str),
-            Some("slime.png")
-        );
+    fn a_search_finds_matches_in_files_not_committed_yet() -> anyhow::Result<()> {
+        let scratch = ScratchRepo::new("grep-working-tree")?;
+        scratch.write("slime.png.meta", &format!("fileFormatVersion: 2
+guid: {GUID}
+"))?;
+        scratch.write("Slime.prefab", &format!("m_Sprite: {{fileID: 21300000, guid: {GUID}, type: 3}}
+"))?;
+        let found = matches_in_working_tree(std::path::Path::new(&scratch.location()), "^guid: [0-9a-f]{32}", "*.meta")?;
+        assert_eq!(found, vec![("slime.png.meta".to_owned(), format!("guid: {GUID}"))]);
+        let mut users: Vec<String> = matches_in_working_tree(std::path::Path::new(&scratch.location()), GUID, "*")?
+            .into_iter()
+            .map(|(path, _)| path)
+            .collect();
+        users.sort();
+        assert_eq!(users, ["Slime.prefab", "slime.png.meta"]);
         Ok(())
     }
 
     #[test]
-    fn files_that_mention_a_guid_are_found_even_before_they_are_committed() -> anyhow::Result<()> {
-        let scratch = ScratchRepo::new("guid-users")?;
-        scratch.write("a.prefab", "guid: feedfeedfeedfeedfeedfeedfeedfeed\n")?;
-        scratch.write("b.prefab", "nothing here\n")?;
-        let (repo, _) = scratch.open()?;
-        assert_eq!(
-            repo.files_mentioning("feedfeedfeedfeedfeedfeedfeedfeed")?,
-            vec!["a.prefab".to_owned()]
-        );
+    fn a_search_in_a_commit_reads_that_commit_only() -> anyhow::Result<()> {
+        let scratch = ScratchRepo::new("grep-commit")?;
+        scratch.write("slime.png.meta", &format!("guid: {GUID}
+"))?;
+        scratch.git(&["add", "-A"])?;
+        scratch.commit("first")?;
+        scratch.write("slime.png.meta", "guid: ffffffffffffffffffffffffffffffff
+")?;
+        let found = matches_in_commit(std::path::Path::new(&scratch.location()), "HEAD", "^guid: [0-9a-f]{32}", "*.meta")?;
+        assert_eq!(found, vec![("slime.png.meta".to_owned(), format!("guid: {GUID}"))]);
         Ok(())
     }
 }
