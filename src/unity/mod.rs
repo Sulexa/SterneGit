@@ -17,7 +17,6 @@ pub(crate) use compare::{Anchor, Comparison, ObjectChange, Options, PartChange, 
 pub(crate) use graph::{ChangeTarget, GraphComparison, GraphEdge, GraphNode, GraphParameter, NodeKind, Port, PortType, Shown};
 pub(crate) use layout::{Graphic, Layout, Marker, Paint, PlacedSprite, Shape as Outline, Spot, View};
 pub(crate) use meta::ImportChanges;
-pub(crate) use names::UnityKind;
 pub(crate) use read::{
     ByReader, NotUnityText, ReaderStopped, Shape, Source, UnityFiles, UnityVersion, apply_edits, imports, read,
 };

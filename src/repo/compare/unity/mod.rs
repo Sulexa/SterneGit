@@ -25,8 +25,9 @@ use self::{
     sheet::Sheet,
 };
 use super::{Direction, Position};
+use crate::read::FileKind;
 use crate::unity::{
-    ClipComparison, Comparison, GraphComparison, Shape, Shown, State, UnityFiles, UnityKind, clock,
+    ClipComparison, Comparison, GraphComparison, Shape, Shown, State, UnityFiles, clock,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -46,63 +47,63 @@ impl UnityMode {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct ModeLook {
     pub(crate) mode: UnityMode,
-    pub(crate) label: &'static str,
+    pub(crate) label: SharedString,
     pub(crate) icon: IconName,
     pub(crate) tooltip: &'static str,
 }
 
-pub(crate) fn modes_for(shape: Shape, kind: UnityKind) -> Vec<ModeLook> {
+pub(crate) fn modes_for(shape: Shape, kind: &FileKind) -> Vec<ModeLook> {
     let main = match shape {
         Shape::Objects => ModeLook {
             mode: UnityMode::Main,
-            label: "Inspector",
+            label: "Inspector".into(),
             icon: IconName::ListTree,
             tooltip: "Compare objects, components and properties",
         },
         Shape::Clip => ModeLook {
             mode: UnityMode::Main,
-            label: "Curves",
+            label: "Curves".into(),
             icon: IconName::Spline,
             tooltip: "Draw both versions of every animated property",
         },
         Shape::Controller => ModeLook {
             mode: UnityMode::Main,
-            label: "Graph",
+            label: "Graph".into(),
             icon: IconName::Workflow,
             tooltip: "Compare the state machine",
         },
         Shape::Graph => ModeLook {
             mode: UnityMode::Main,
-            label: "Graph",
+            label: "Graph".into(),
             icon: IconName::Workflow,
             tooltip: "Compare the nodes and their connections",
         },
     };
     let scene = ModeLook {
         mode: UnityMode::Scene,
-        label: "Scene",
+        label: "Scene".into(),
         icon: IconName::Map,
         tooltip: "See what moved, appeared or went away",
     };
     let text = if shape == Shape::Graph {
         ModeLook {
             mode: UnityMode::Text,
-            label: "JSON",
+            label: "JSON".into(),
             icon: IconName::Braces,
             tooltip: "Compare the graph data, one value per line",
         }
     } else {
         ModeLook {
             mode: UnityMode::Text,
-            label: "YAML",
+            label: SharedString::from(kind.text_label().to_owned()),
             icon: IconName::Braces,
-            tooltip: "Compare the text Unity saved",
+            tooltip: "Compare the text the file holds",
         }
     };
-    if kind.has_hierarchy() && shape == Shape::Objects { vec![main, scene, text] } else { vec![main, text] }
+    if kind.offers("layout") && shape == Shape::Objects { vec![main, scene, text] } else { vec![main, text] }
 }
 
 const MEASURED_AHEAD: f32 = 1000.;
@@ -147,7 +148,7 @@ impl UnityCompare {
             this.recompute();
             cx.notify();
         });
-        let mode = if modes_for(files.shape, files.kind).iter().any(|look| look.mode == mode) { mode } else { UnityMode::Main };
+        let mode = if modes_for(files.shape, &files.kind).iter().any(|look| look.mode == mode) { mode } else { UnityMode::Main };
         let mut this = Self {
             scene: SceneState::new(),
             files,
@@ -299,13 +300,12 @@ impl UnityCompare {
     }
 
     pub(crate) fn facts(&self) -> String {
-        let kind = self.files.kind.label();
+        let kind = self.files.kind.label.as_str();
         match self.files.shape {
-            Shape::Objects if self.files.kind == UnityKind::Meta => match self.files.warnings.first() {
-                Some(warning) => format!("Import settings · {}", warning.title),
-                None => "Import settings".to_owned(),
-            },
-            Shape::Objects if self.files.kind.has_hierarchy() => {
+            Shape::Objects if !self.files.warnings.is_empty() => {
+                format!("{kind} · {}", self.files.warnings[0].title)
+            }
+            Shape::Objects if !self.comparison.tree.is_empty() => {
                 let count = self.comparison.changed_objects();
                 format!("{kind} · {} changed", crate::ui::counted(count, "object", "objects"))
             }

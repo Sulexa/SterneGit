@@ -451,6 +451,11 @@ pub(crate) mod tests {
         super::model(&read_text(path, text))
     }
 
+    pub(crate) fn unity_kind(path: &str) -> crate::read::FileKind {
+        let manifest = std::fs::read(Path::new(env!("CARGO_MANIFEST_DIR")).join("readers/unity/dist/reader.json")).unwrap();
+        crate::read::Manifest::parse(&manifest).unwrap().kind_for(path, None).unwrap().clone()
+    }
+
     pub(crate) fn bundled_unity() -> Arc<Reader> {
         static UNITY: OnceLock<Arc<Reader>> = OnceLock::new();
         Arc::clone(UNITY.get_or_init(|| {
@@ -537,7 +542,7 @@ guid: {new}
         let by = ByReader {
             name: "Unity".to_owned(),
             reader: bundled_unity(),
-            kind: "meta".to_owned(),
+            kind: unity_kind("slime.png.meta"),
         };
         let source = |revision| Some(Source { revision, path: OsString::from("slime.png.meta") });
         let files = read(&repo, "slime.png.meta", source(Revision::Head), source(Revision::WorkTree), Some(&by))?;
@@ -570,7 +575,7 @@ guid: {new}
             let by = ByReader {
                 name: "Unity".to_owned(),
                 reader: bundled_unity(),
-                kind: kind.to_owned(),
+                kind: unity_kind(path),
             };
             assert!(read(&repo, path, None, source(), None).is_err(), "{path} needs a reader");
             let files = read(&repo, path, None, source(), Some(&by))?;

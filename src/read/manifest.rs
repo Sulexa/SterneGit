@@ -37,6 +37,18 @@ pub(crate) struct FileKind {
     pub(crate) sniff: Vec<String>,
     #[serde(default)]
     pub(crate) views: Vec<String>,
+    #[serde(default)]
+    pub(crate) text: Option<String>,
+}
+
+impl FileKind {
+    pub(crate) fn offers(&self, view: &str) -> bool {
+        self.views.iter().any(|offered| offered == view)
+    }
+
+    pub(crate) fn text_label(&self) -> &str {
+        self.text.as_deref().unwrap_or("Text")
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize)]

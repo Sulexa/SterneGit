@@ -6,7 +6,7 @@ use std::{
 };
 
 use anyhow::Result;
-use sternegit_reader_protocol::{self as protocol, Edit, Failure, Fix, FixInput, ReadInput, Side, SideFilesInput, Warning, digest};
+use sternegit_reader_protocol::{self as protocol, Edit, GraphKind, Failure, Fix, FixInput, ReadInput, Side, SideFilesInput, Warning, digest};
 
 use super::{
     animator::{Machine, compare_controllers},
@@ -17,11 +17,11 @@ use super::{
     ingest,
     layout::{Layout, View},
     meta::{ImportChanges, import_changes},
-    names::UnityKind,
     scene::Model,
     sprites::{SpriteImage, crop},
 };
 use crate::{
+    read::FileKind,
     git::{Repo, Revision},
     media::Picture,
     plugin::Stop,
@@ -111,7 +111,7 @@ pub(crate) fn apply_edits(repo: &Repo, edits: &[Edit]) -> Result<()> {
 }
 
 pub(crate) struct UnityFiles {
-    pub(crate) kind: UnityKind,
+    pub(crate) kind: FileKind,
     pub(crate) shape: Shape,
     pub(crate) path: String,
     pub(crate) before: Option<UnityVersion>,
@@ -193,7 +193,7 @@ fn text_of(repo: &Repo, source: &Source) -> Result<String> {
 pub(crate) struct ByReader {
     pub(crate) name: String,
     pub(crate) reader: Arc<Reader>,
-    pub(crate) kind: String,
+    pub(crate) kind: FileKind,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -231,7 +231,7 @@ fn read_side(repo: &Repo, by: &ByReader, source: &Source, side: Side) -> Result<
     let path = source.path.to_string_lossy().into_owned();
     let tree: Arc<dyn Tree> = Arc::new(RevisionTree::new(repo.clone(), source.revision, path.clone()));
     let input = ReadInput {
-        kind: by.kind.clone(),
+        kind: by.kind.id.clone(),
         path,
         side,
         options: Default::default(),
@@ -270,19 +270,20 @@ pub(crate) fn read(
     after: Option<Source>,
     by: Option<&ByReader>,
 ) -> Result<UnityFiles> {
-    let kind = UnityKind::of(path).ok_or(NotUnityText)?;
     let by = by.ok_or(NotUnityText)?;
+    let kind = by.kind.clone();
     if before.is_none() && after.is_none() {
         return Err(NotUnityText.into());
     }
     let read_before = before.as_ref().map(|source| read_side(repo, by, source, Side::Before)).transpose()?;
     let read_after = after.as_ref().map(|source| read_side(repo, by, source, Side::After)).transpose()?;
-    let shape = match kind {
-        UnityKind::AnimationClip => Shape::Clip,
-        UnityKind::AnimatorController => Shape::Controller,
-        UnityKind::Asset if [&read_before, &read_after].into_iter().flatten().any(|read| read.graph.is_some()) => {
-            Shape::Graph
+    let reads: Vec<&protocol::Model> = [&read_before, &read_after].into_iter().flatten().collect();
+    let shape = match () {
+        _ if reads.iter().any(|read| read.curves.is_some()) => Shape::Clip,
+        _ if reads.iter().any(|read| read.graph.as_ref().is_some_and(|graph| graph.kind == GraphKind::Controller)) => {
+            Shape::Controller
         }
+        _ if reads.iter().any(|read| read.graph.is_some()) => Shape::Graph,
         _ => Shape::Objects,
     };
     let view = [&read_after, &read_before]
@@ -294,7 +295,7 @@ pub(crate) fn read(
     let (warnings, fixer) = match (&before, &after) {
         (Some(old), Some(new)) => {
             let input = SideFilesInput {
-                kind: by.kind.clone(),
+                kind: by.kind.id.clone(),
                 path: path.to_owned(),
                 before: Some(text_of(repo, old)?),
                 after: Some(text_of(repo, new)?),

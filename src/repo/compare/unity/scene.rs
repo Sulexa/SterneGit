@@ -835,7 +835,7 @@ pub(super) fn render(compare: &mut UnityCompare, _: &mut Window, cx: &mut Contex
         View::Front => "Seen from the front, X and Y",
         View::Above => "Seen from above, X and Z",
     };
-    let prefab = compare.files.kind == crate::unity::UnityKind::Prefab;
+    let prefab = compare.files.kind.id == "prefab";
     let hidden_places = if prefab {
         format!("Prefab mode · {view}")
     } else {

@@ -69,7 +69,7 @@ use crate::{
         self, FindBar, FindEvent, Found, Job, Load, Look as _, Matcher, SideUi as _, handler,
         run_in_background,
     },
-    unity::{self, NotUnityText, ReaderStopped, Shape as UnityShape, Source as UnitySource, UnityFiles, UnityKind},
+    unity::{self, NotUnityText, ReaderStopped, Shape as UnityShape, Source as UnitySource, UnityFiles},
 };
 
 const TEXTS: PatchTexts = PatchTexts {
@@ -803,12 +803,12 @@ impl FileDiffPanel {
         ));
     }
 
-    fn unity_modes(&self, mut bar: ViewBar, shape: UnityShape, kind: UnityKind, current: UnityMode, cx: &mut Context<Self>) -> ViewBar {
+    fn unity_modes(&self, mut bar: ViewBar, shape: UnityShape, kind: &crate::read::FileKind, current: UnityMode, cx: &mut Context<Self>) -> ViewBar {
         for look in modes_for(shape, kind) {
             let mode = look.mode;
             bar = bar.mode(
                 mode.id(),
-                look.label,
+                look.label.clone(),
                 look.icon,
                 look.tooltip,
                 mode == current,
@@ -820,13 +820,13 @@ impl FileDiffPanel {
 
     fn unity_bar(&self, view: &Entity<UnityCompare>, cx: &mut Context<Self>) -> ViewBar {
         let unity = view.read(cx);
-        let (shape, kind, current) = (unity.files().shape, unity.files().kind, unity.mode());
+        let (shape, kind, current) = (unity.files().shape, unity.files().kind.clone(), unity.mode());
         let position = unity.change_position();
         let hidden = unity.hidden();
         let zoom = unity.has_zoom().then(|| (unity.zoom_percent(), unity.fits()));
         let shown = unity.shown();
         let muted = cx.theme().muted_foreground;
-        let mut bar = self.unity_modes(ViewBar::new(), shape, kind, current, cx);
+        let mut bar = self.unity_modes(ViewBar::new(), shape, &kind, current, cx);
         if let Some(shown) = shown {
             bar = bar.picker(version_picker(view, shown, cx));
         }
@@ -895,7 +895,7 @@ impl FileDiffPanel {
     fn unity_text_bar(&self, files: &UnityFiles, cx: &mut Context<Self>) -> ViewBar {
         let state = self.diff.read(cx);
         let position = self.change_position(&state.change_marks(), state.top_row(), state.visible_rows());
-        self.unity_modes(ViewBar::new(), files.shape, files.kind, UnityMode::Text, cx)
+        self.unity_modes(ViewBar::new(), files.shape, &files.kind, UnityMode::Text, cx)
             .stepper(ChangeStepper::new(
                 position,
                 handler(cx.listener(|this, direction: &Direction, window, cx| this.step_change(*direction, window, cx))),
@@ -2292,7 +2292,7 @@ fn by_reader(path: &OsStr, cx: &App) -> Option<unity::ByReader> {
     Some(unity::ByReader {
         name: chosen.name,
         reader: chosen.reader,
-        kind: chosen.kind.id,
+        kind: chosen.kind,
     })
 }
 

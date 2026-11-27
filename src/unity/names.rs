@@ -1,48 +1,3 @@
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub(crate) enum UnityKind {
-    Prefab,
-    Scene,
-    Material,
-    AnimationClip,
-    AnimatorController,
-    Asset,
-    Meta,
-}
-
-impl UnityKind {
-    pub(crate) fn of(path: &str) -> Option<Self> {
-        let extension = path.rsplit_once('.')?.1.to_ascii_lowercase();
-        Some(match extension.as_str() {
-            "prefab" => UnityKind::Prefab,
-            "unity" => UnityKind::Scene,
-            "mat" => UnityKind::Material,
-            "anim" => UnityKind::AnimationClip,
-            "controller" | "overridecontroller" => UnityKind::AnimatorController,
-            "asset" | "physicmaterial" | "physicsmaterial2d" | "mask" | "flare" | "guiskin" | "fontsettings"
-            | "mixer" | "playable" | "signal" | "lighting" | "renderTexture" | "rendertexture" | "cubemap"
-            | "spriteatlas" | "terrainlayer" | "brush" => UnityKind::Asset,
-            "meta" => UnityKind::Meta,
-            _ => return None,
-        })
-    }
-
-    pub(crate) fn label(self) -> &'static str {
-        match self {
-            UnityKind::Prefab => "Prefab",
-            UnityKind::Scene => "Scene",
-            UnityKind::Material => "Material",
-            UnityKind::AnimationClip => "Animation clip",
-            UnityKind::AnimatorController => "Animator controller",
-            UnityKind::Asset => "Asset",
-            UnityKind::Meta => "Import settings",
-        }
-    }
-
-    pub(crate) fn has_hierarchy(self) -> bool {
-        matches!(self, UnityKind::Prefab | UnityKind::Scene)
-    }
-}
-
 pub(crate) fn nicify(name: &str) -> String {
     let trimmed = name
         .strip_prefix("m_")
@@ -83,7 +38,7 @@ fn is_dimension(c: char, next: Option<char>) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{UnityKind, nicify};
+    use super::nicify;
 
     #[test]
     fn field_names_read_like_the_inspector_shows_them() {
@@ -100,15 +55,6 @@ mod tests {
     fn two_d_stays_together_after_its_number() {
         assert_eq!(nicify("CircleCollider2D"), "Circle Collider 2D");
         assert_eq!(nicify("Light2D"), "Light 2D");
-    }
-
-    #[test]
-    fn unity_files_are_known_by_their_extension() {
-        assert_eq!(UnityKind::of("Assets/Slime.prefab"), Some(UnityKind::Prefab));
-        assert_eq!(UnityKind::of("Assets/Scenes/Level1.unity"), Some(UnityKind::Scene));
-        assert_eq!(UnityKind::of("Assets/slime.png.meta"), Some(UnityKind::Meta));
-        assert_eq!(UnityKind::of("ProjectSettings/QualitySettings.asset"), Some(UnityKind::Asset));
-        assert_eq!(UnityKind::of("src/main.rs"), None);
     }
 
 }

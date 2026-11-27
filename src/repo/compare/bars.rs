@@ -329,7 +329,7 @@ impl ViewBar {
     pub(crate) fn mode(
         mut self,
         id: &'static str,
-        label: &'static str,
+        label: impl Into<gpui_kit::SharedString>,
         icon: IconName,
         tooltip: &'static str,
         selected: bool,
