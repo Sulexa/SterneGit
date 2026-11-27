@@ -9,6 +9,7 @@ mod interface_page;
 mod new_repository;
 mod parts;
 mod publish;
+mod readers_page;
 mod remove;
 mod settings_tab;
 mod sign_in;

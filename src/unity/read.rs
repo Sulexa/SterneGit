@@ -26,6 +26,7 @@ use super::{
 use crate::{
     git::{Repo, Revision},
     media::Picture,
+    plugin::Stop,
     read::{ReadError, Reader, RevisionTree, Tree},
 };
 
@@ -170,8 +171,40 @@ fn on_disk(repo: &Repo, path: &str) -> Option<String> {
 
 #[derive(Clone)]
 pub(crate) struct ByReader {
+    pub(crate) name: String,
     pub(crate) reader: Arc<Reader>,
     pub(crate) kind: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct ReaderStopped {
+    pub(crate) reader: String,
+    pub(crate) why: String,
+    pub(crate) log: Vec<String>,
+}
+
+impl std::fmt::Display for ReaderStopped {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(formatter, "{} couldn't read this file: {}", self.reader, self.why)
+    }
+}
+
+impl std::error::Error for ReaderStopped {}
+
+fn stopped(by: &ByReader, error: ReadError) -> anyhow::Error {
+    let (why, log) = match error {
+        ReadError::Stopped(Stop::Trapped { message, log }) => (message, log),
+        ReadError::Stopped(Stop::OutOfMemory { .. }) => ("it ran out of memory".to_owned(), Vec::new()),
+        ReadError::Stopped(Stop::OutOfFuel) => ("it ran too long".to_owned(), Vec::new()),
+        ReadError::Stopped(stop) => (stop.told_of("reader"), Vec::new()),
+        ReadError::Failed(failure) => (failure.to_string(), Vec::new()),
+    };
+    ReaderStopped {
+        reader: by.name.clone(),
+        why: why.trim_end_matches('.').to_owned(),
+        log,
+    }
+    .into()
 }
 
 fn read_side(repo: &Repo, by: &ByReader, source: &Source, side: Side) -> Result<protocol::Model> {
@@ -186,7 +219,7 @@ fn read_side(repo: &Repo, by: &ByReader, source: &Source, side: Side) -> Result<
     match by.reader.read(tree, input, &AtomicBool::new(false)) {
         Ok(read) => Ok(read),
         Err(ReadError::Failed(Failure::NotThisFormat { .. })) => Err(NotUnityText.into()),
-        Err(error) => Err(anyhow::anyhow!("{error}")),
+        Err(error) => Err(stopped(by, error)),
     }
 }
 

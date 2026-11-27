@@ -130,6 +130,10 @@ impl<K: Kind> Catalog<K> {
         &self.plugins
     }
 
+    pub(crate) fn approved_grant(&self, id: &K::Id) -> Option<K::Grant> {
+        self.approvals.get(id).map(|approval| approval.grant.clone())
+    }
+
     pub(crate) fn approved_version(&self, id: &K::Id) -> Option<String> {
         self.approvals.get(id).map(|approval| approval.version.clone())
     }

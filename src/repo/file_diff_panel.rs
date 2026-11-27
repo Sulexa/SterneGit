@@ -1,5 +1,5 @@
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     ffi::{OsStr, OsString},
     path::{Path, PathBuf},
     rc::Rc,
@@ -14,7 +14,8 @@ use gpui_kit::{
     base::TextSelection,
     assets::IconName,
     component::{
-        ActiveTheme as _, Disableable as _, Selectable as _, Sizable as _,
+        ActiveTheme as _, Disableable as _, Icon, Selectable as _, Sizable as _, WindowExt as _,
+        spinner::Spinner,
         button::{Button, ButtonVariants as _},
         diff::{
             Diff, DiffChangeIndicator, DiffChangeMark, DiffFile, DiffHoverHighlight,
@@ -46,7 +47,9 @@ use super::{
         renamed_from, WorkingPatch, working_patch,
     },
 };
+use super::reader_choice::ask_for_reader;
 use crate::{
+    app::readers::{Chosen, Readers, Routed},
     git::{
         Baseline, ChangeKind, Conflicted, DifftoolTarget, FileChange, FilePatch, Hunks, Part,
         PartAction, Repo, Revision, Scope, Side, Version as Kept, Whitespace,
@@ -59,7 +62,7 @@ use crate::{
         self, FindBar, FindEvent, Found, Job, Load, Look as _, Matcher, SideUi as _, handler,
         run_in_background,
     },
-    unity::{self, NotUnityText, Shape as UnityShape, Source as UnitySource, UnityFiles, UnityKind},
+    unity::{self, NotUnityText, ReaderStopped, Shape as UnityShape, Source as UnitySource, UnityFiles, UnityKind},
 };
 
 const TEXTS: PatchTexts = PatchTexts {
@@ -190,12 +193,15 @@ pub(crate) struct FileDiffPanel {
     unity_mode: UnityMode,
     unity_text: Option<Arc<UnityFiles>>,
     not_unity: HashSet<SharedString>,
+    stopped: HashMap<SharedString, ReaderStopped>,
+    asking: Option<(String, Vec<Chosen>)>,
+    reading_with: Option<SharedString>,
     unity_events: Vec<Subscription>,
     imports: Option<unity::ImportChanges>,
     find: Option<Entity<FindBar>>,
     finding: bool,
     find_events: Option<Subscription>,
-    _subscriptions: [Subscription; 2],
+    _subscriptions: [Subscription; 3],
 }
 
 impl EventEmitter<FileDiffEvent> for FileDiffPanel {}
@@ -212,6 +218,7 @@ impl FileDiffPanel {
         let subscriptions = [
             cx.observe(&diff, |_, _, cx| cx.notify()),
             cx.observe_global::<TextOptions>(|this, cx| this.apply_options(cx)),
+            cx.observe_global::<Readers>(|this, cx| this.on_readers_changed(cx)),
         ];
         Self {
             repository,
@@ -236,6 +243,9 @@ impl FileDiffPanel {
             unity_mode: UnityMode::Main,
             unity_text: None,
             not_unity: HashSet::new(),
+            stopped: HashMap::new(),
+            asking: None,
+            reading_with: None,
             unity_events: Vec::new(),
             imports: None,
             find: None,
@@ -409,7 +419,8 @@ impl FileDiffPanel {
             return;
         }
         self.leave_merge();
-        if self.routes_to_unity(&change.path) {
+        self.ask_reader_for(&change.path, cx);
+        if self.routes_to_unity(&change.path, cx) {
             let request = working_request(MediaView::Unity, &change, side, staged_too);
             if self.unity_mode == UnityMode::Text {
                 self.open_working_text(repo, change, side, staged_too, Some(request), reload, cx);
@@ -429,8 +440,80 @@ impl FileDiffPanel {
         self.open_working_text(repo, change, side, staged_too, None, reload, cx);
     }
 
-    fn routes_to_unity(&self, path: &SharedString) -> bool {
-        UnityKind::of(path).is_some() && !self.not_unity.contains(path)
+    fn routes_to_unity(&self, path: &SharedString, cx: &App) -> bool {
+        !self.not_unity.contains(path) && matches!(Readers::of(cx).route(path), Routed::By(_))
+    }
+
+    fn ask_reader_for(&mut self, path: &SharedString, cx: &App) {
+        if let Routed::Ask { extension, candidates } = Readers::of(cx).route(path) {
+            self.asking = Some((extension, candidates));
+        }
+    }
+
+    fn compared_path(&self) -> Option<SharedString> {
+        match &self.compared {
+            Some(Compared::WorkingFile(open)) => Some(open.path.clone()),
+            Some(Compared::CommitFile { file, .. }) => Some(file.path().clone()),
+            None => None,
+        }
+    }
+
+    fn on_readers_changed(&mut self, cx: &mut Context<Self>) {
+        let Some(path) = self.compared_path() else {
+            return;
+        };
+        let shown_by_reader = self.media_view == Some(MediaView::Unity) || self.unity_text.is_some();
+        if self.routes_to_unity(&path, cx) != shown_by_reader {
+            self.reopen(cx);
+        }
+    }
+
+    fn read_again(&mut self, cx: &mut Context<Self>) {
+        if let Some(path) = self.compared_path() {
+            self.stopped.remove(&path);
+            self.not_unity.remove(&path);
+        }
+        self.reopen(cx);
+    }
+
+    fn reader_banner(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let theme = cx.theme();
+        let (muted, red, sidebar, border) = (theme.muted_foreground, theme.red, theme.sidebar, theme.border);
+        let bar = || h_flex().flex_none().gap_2().px_3().py_1p5().border_b_1().border_color(border);
+        if self.media_view == Some(MediaView::Unity) && matches!(self.media, Load::Loading { .. }) {
+            let reader = self.reading_with.clone()?;
+            return Some(
+                bar()
+                    .bg(sidebar)
+                    .child(Spinner::new().xsmall())
+                    .child(div().sm_text().child(format!("Reading with {reader}…")))
+                    .into_any_element(),
+            );
+        }
+        let stop = self.compared_path().and_then(|path| self.stopped.get(&path).cloned())?;
+        let log = stop.log.clone();
+        Some(
+            bar()
+                .bg(red.opacity(0.1))
+                .child(Icon::new(IconName::CircleAlert).small().text_color(red))
+                .child(div().flex_1().min_w_0().sm_text().ellipsis().child(format!("{stop}. Showing the text.")))
+                .child(
+                    Button::new("reader-log")
+                        .small()
+                        .label("Show log")
+                        .on_click(move |_, window, cx| show_reader_log(&log, window, cx)),
+                )
+                .child(
+                    Button::new("reader-again")
+                        .small()
+                        .ghost()
+                        .icon(IconName::RefreshCw)
+                        .label("Try again")
+                        .on_click(cx.listener(|this, _, _, cx| this.read_again(cx))),
+                )
+                .child(div().text_color(muted))
+                .into_any_element(),
+        )
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -876,7 +959,8 @@ impl FileDiffPanel {
         cx: &mut Context<Self>,
     ) {
         self.leave_merge();
-        if self.routes_to_unity(file.path()) {
+        self.ask_reader_for(file.path(), cx);
+        if self.routes_to_unity(file.path(), cx) {
             let reload = self.shows_commit_file(id, file.path());
             let request = commit_request(MediaView::Unity, &file, id, baseline.commit(), &names);
             self.compared = Some(Compared::CommitFile { id, baseline, names, file });
@@ -1006,6 +1090,7 @@ impl FileDiffPanel {
         let repo = repo.clone();
         let unity_request = request.clone();
         let by = by_reader(&request.path, cx);
+        self.reading_with = by.as_ref().map(|by| SharedString::from(by.name.clone()));
         let meta = request.meta.clone();
         let shown_path = SharedString::from(request.path.to_string_lossy().into_owned());
         let MediaRequest {
@@ -1036,6 +1121,15 @@ impl FileDiffPanel {
                 this.imports = imports.clone();
                 match result {
                     Err(error) if error.downcast_ref::<NotUnityText>().is_some() => {
+                        this.not_unity.insert(shown_path.clone());
+                        this.media.clear();
+                        this.media_view = None;
+                        this.reopen(cx);
+                    }
+                    Err(error) if error.downcast_ref::<ReaderStopped>().is_some() => {
+                        if let Some(stop) = error.downcast_ref::<ReaderStopped>() {
+                            this.stopped.insert(shown_path.clone(), stop.clone());
+                        }
                         this.not_unity.insert(shown_path.clone());
                         this.media.clear();
                         this.media_view = None;
@@ -1424,7 +1518,7 @@ impl FileDiffPanel {
         let kind = change_kind(file);
         let whitespace = TextOptions::current(cx).whitespace();
         let unity_request = match &self.compared {
-            Some(Compared::CommitFile { names, file, .. }) if self.unity_mode == UnityMode::Text && self.routes_to_unity(file.path()) => {
+            Some(Compared::CommitFile { names, file, .. }) if self.unity_mode == UnityMode::Text && self.routes_to_unity(file.path(), cx) => {
                 Some(commit_request(MediaView::Unity, file, id, baseline.commit(), names))
             }
             _ => None,
@@ -1856,6 +1950,9 @@ impl FileDiffPanel {
 impl Render for FileDiffPanel {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.redraw_after_measuring.request(window);
+        if let Some((extension, candidates)) = self.asking.take() {
+            window.defer(cx, move |window, cx| ask_for_reader(extension, candidates, window, cx));
+        }
         let (heading, move_button) = match &self.compared {
             None => return div().into_any_element(),
             Some(Compared::WorkingFile(open)) => {
@@ -1949,6 +2046,7 @@ impl Render for FileDiffPanel {
             .pane()
             .child(file_bar)
             .children(view_bar)
+            .children(self.reader_banner(cx))
             .children(self.find_bar())
             .child(div().fill_height().child(content))
             .into_any_element()
@@ -1994,9 +2092,25 @@ fn read_unity(repo: &Repo, request: &MediaRequest, by: Option<&unity::ByReader>)
     )
 }
 
+fn show_reader_log(log: &[String], window: &mut Window, cx: &mut App) {
+    let lines: Vec<SharedString> = if log.is_empty() {
+        vec!["The reader wrote nothing to its log.".into()]
+    } else {
+        log.iter().map(|line| SharedString::from(line.clone())).collect()
+    };
+    let mono = cx.theme().mono_font_family.clone();
+    window.open_dialog(cx, move |dialog, _, _| {
+        dialog
+            .w(px(640.))
+            .title("Reader log")
+            .child(v_flex().gap_0p5().font_family(mono.clone()).xs_text().children(lines.iter().cloned().map(|line| div().child(line))))
+    });
+}
+
 fn by_reader(path: &OsStr, cx: &App) -> Option<unity::ByReader> {
-    let chosen = crate::app::readers::Readers::of(cx).for_path(&path.to_string_lossy())?;
+    let chosen = Readers::of(cx).for_path(&path.to_string_lossy())?;
     Some(unity::ByReader {
+        name: chosen.name,
         reader: chosen.reader,
         kind: chosen.kind.id,
     })

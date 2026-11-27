@@ -525,6 +525,7 @@ Transform:
                 })
             };
             let by = ByReader {
+                name: "Unity".to_owned(),
                 reader: bundled_unity(),
                 kind: kind.to_owned(),
             };

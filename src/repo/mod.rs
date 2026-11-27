@@ -26,6 +26,7 @@ mod operation_bar;
 mod patch_view;
 mod picked_panel;
 mod pulls;
+mod reader_choice;
 mod ref_menus;
 mod ref_tree;
 mod refs_list;

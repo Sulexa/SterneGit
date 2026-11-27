@@ -14,11 +14,13 @@ use crate::{
     accounts::AccountId,
     app::{
         connectors::{Connectors, mark_seen, note_failure},
+        readers::{Readers, mark_seen as mark_reader_seen},
         updates::Updates,
         zoom::{Zoom, current_zoom},
     },
     connect::Standing,
     net::services::ConnectorId,
+    read::ReaderId,
     ui::{Look as _, SectionHeader, list_row, run_async_in_background},
 };
 
@@ -26,6 +28,7 @@ const NAV_WIDTH: f32 = 224.;
 const SETTINGS: &str = "Settings";
 const ACCOUNTS: &str = "Accounts";
 const CONNECTORS: &str = "Connectors";
+const READERS: &str = "Readers";
 const INTERFACE: &str = "Interface";
 const UPDATES: &str = "Updates";
 
@@ -35,6 +38,8 @@ pub(crate) enum Page {
     Account(AccountId),
     Connectors,
     Connector(ConnectorId),
+    Readers,
+    Reader(ReaderId),
     Interface,
     Updates,
 }
@@ -51,12 +56,17 @@ pub(crate) struct SettingsTab {
     pub(super) note: Option<SharedString>,
     focus: FocusHandle,
     _connectors: Subscription,
+    _readers: Subscription,
     _updates: Subscription,
 }
 
 impl SettingsTab {
     pub(crate) fn new(page: Page, cx: &mut Context<Self>) -> Self {
         let connectors = cx.observe_global::<Connectors>(|this, cx| {
+            this.settle_page(cx);
+            cx.notify();
+        });
+        let readers = cx.observe_global::<Readers>(|this, cx| {
             this.settle_page(cx);
             cx.notify();
         });
@@ -67,6 +77,7 @@ impl SettingsTab {
             note: None,
             focus: cx.focus_handle(),
             _connectors: connectors,
+            _readers: readers,
             _updates: updates,
         };
         this.show(page, cx);
@@ -81,6 +92,14 @@ impl SettingsTab {
                 .is_some_and(|connector| connector.standing == Standing::Updated);
             if updated {
                 mark_seen(cx, id);
+            }
+        }
+        if let Page::Reader(id) = &page {
+            let updated = Readers::of(cx)
+                .reader(id)
+                .is_some_and(|reader| reader.standing == crate::plugin::Standing::Updated);
+            if updated {
+                mark_reader_seen(cx, id);
             }
         }
         if let Page::Account(id) = &page {
@@ -131,11 +150,13 @@ impl SettingsTab {
         let gone = match &self.page {
             Page::Account(id) => connectors.is_ready() && connectors.account(id).is_none(),
             Page::Connector(id) => connectors.is_ready() && connectors.connector(id).is_none(),
-            Page::Accounts | Page::Connectors | Page::Interface | Page::Updates => false,
+            Page::Reader(id) => Readers::of(cx).is_ready() && Readers::of(cx).reader(id).is_none(),
+            Page::Accounts | Page::Connectors | Page::Readers | Page::Interface | Page::Updates => false,
         };
         if gone {
             self.page = match self.page {
                 Page::Account(_) => Page::Accounts,
+                Page::Reader(_) => Page::Readers,
                 _ => Page::Connectors,
             };
         }
@@ -147,6 +168,8 @@ impl SettingsTab {
         let waiting = connectors.waiting().count();
         let on_accounts = matches!(self.page, Page::Accounts | Page::Account(_));
         let on_connectors = matches!(self.page, Page::Connectors | Page::Connector(_));
+        let on_readers = matches!(self.page, Page::Readers | Page::Reader(_));
+        let readers_waiting = Readers::of(cx).waiting();
         let zoom = current_zoom(cx);
         let theme = cx.theme();
         let (muted, yellow, green, sidebar, border) =
@@ -170,7 +193,7 @@ impl SettingsTab {
             Some(version) => div().xs_text().text_color(green).child(version).into_any_element(),
             None => div().into_any_element(),
         };
-        let badge = match waiting {
+        let badge_of = |waiting: usize| match waiting {
             0 => div().into_any_element(),
             waiting => div()
                 .min_w(px(18.))
@@ -199,8 +222,12 @@ impl SettingsTab {
                     .on_click(cx.listener(|this, _, _, cx| this.show(Page::Accounts, cx))),
             )
             .child(
-                nav_row("settings-connectors", IconName::Plug, CONNECTORS, on_connectors, badge)
+                nav_row("settings-connectors", IconName::Plug, CONNECTORS, on_connectors, badge_of(waiting))
                     .on_click(cx.listener(|this, _, _, cx| this.show(Page::Connectors, cx))),
+            )
+            .child(
+                nav_row("settings-readers", IconName::FileCode, READERS, on_readers, badge_of(readers_waiting))
+                    .on_click(cx.listener(|this, _, _, cx| this.show(Page::Readers, cx))),
             )
             .child(
                 nav_row("settings-interface", IconName::Monitor, INTERFACE, self.page == Page::Interface, zoomed)
@@ -226,6 +253,8 @@ impl Render for SettingsTab {
             Page::Account(id) => self.account_page(&id, window, cx),
             Page::Connectors => self.connectors_page(cx),
             Page::Connector(id) => self.connector_page(&id, cx),
+            Page::Readers => self.readers_page(cx),
+            Page::Reader(id) => self.reader_page(&id, cx),
             Page::Interface => self.interface_page(cx),
             Page::Updates => self.updates_page(cx),
         };
