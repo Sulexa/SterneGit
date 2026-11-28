@@ -1,4 +1,5 @@
 mod access;
+mod big_binaries;
 mod branch;
 mod clone;
 mod command;

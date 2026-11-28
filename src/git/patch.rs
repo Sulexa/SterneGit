@@ -105,7 +105,9 @@ impl Repo {
     pub(crate) fn commit_details(&self, id: ObjectId) -> Result<CommitDetails> {
         let body = message_body(&self.local().find_commit(id)?);
         let id = id.to_string();
-        let mut args = COMMIT_PATCH.to_vec();
+        let skipping = self.skipping_big_binaries_of_commit(&id);
+        let mut args: Vec<&str> = skipping.iter().map(String::as_str).collect();
+        args.extend(COMMIT_PATCH);
         args.extend([id.as_str(), "--"]);
         let patch = run_text(&self.location, &args, Exit::Success)?;
         Ok(CommitDetails { body, patch })
@@ -213,7 +215,9 @@ impl Repo {
 
     pub(crate) fn range_patch(&self, base: ObjectId, head: ObjectId) -> Result<String> {
         let (base, head) = (base.to_string(), head.to_string());
-        let mut args = FILE_PATCH.to_vec();
+        let skipping = self.skipping_big_binaries_between(&base, &head);
+        let mut args: Vec<&str> = skipping.iter().map(String::as_str).collect();
+        args.extend(FILE_PATCH);
         args.extend([FIND_RENAMES, base.as_str(), head.as_str(), "--"]);
         run_text(&self.location, &args, Exit::Success)
     }

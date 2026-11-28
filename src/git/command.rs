@@ -1,6 +1,6 @@
 use std::{
     ffi::OsStr,
-    io::Write as _,
+    io::{Read as _, Write as _},
     path::Path,
     process::{Command, Output, Stdio},
 };
@@ -58,6 +58,21 @@ pub(crate) fn run_with_input<A: AsRef<OsStr>>(
         stdin.write_all(input)?;
     }
     checked(child.wait_with_output()?, Exit::Success)
+}
+
+pub(crate) fn first_bytes<A: AsRef<OsStr>>(location: &Path, args: &[A], count: usize) -> Result<Vec<u8>> {
+    let mut child = git(location, args)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .context(GIT_MISSING)?;
+    let mut start = Vec::with_capacity(count);
+    if let Some(stdout) = child.stdout.take() {
+        stdout.take(count as u64).read_to_end(&mut start)?;
+    }
+    let _ = child.kill();
+    let _ = child.wait();
+    Ok(start)
 }
 
 fn git<A: AsRef<OsStr>>(location: &Path, args: &[A]) -> Command {
