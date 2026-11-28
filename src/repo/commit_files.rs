@@ -21,9 +21,45 @@ use super::{
     patch_view::change_kind,
 };
 use crate::{
-    git::ChangeKind,
-    ui::{self, FilePlace, FileView, Folded, Handler, Look as _, file_row, folder_row, handler},
+    app::readers::Readers,
+    git::{ChangeKind, SideFiles, side_label},
+    ui::{
+        self, FilePlace, FileView, Folded, Handler, Look as _, file_name, file_row_tagged, folder_row, handler, side_tag,
+        tags_of,
+    },
 };
+
+fn paths_of(files: &[DiffFile]) -> Vec<&str> {
+    files.iter().map(|file| file.path().as_ref()).collect()
+}
+
+pub(crate) fn listed_files<'a>(files: &'a [DiffFile], side_files: &SideFiles) -> impl Iterator<Item = &'a DiffFile> {
+    side_files.listed(&paths_of(files)).into_iter().map(|ix| &files[ix])
+}
+
+pub(crate) fn commit_file_rows(
+    view: FileView,
+    files: &[DiffFile],
+    side_files: &SideFiles,
+    folded: &Folded<SharedString>,
+) -> Vec<FileTreeRow> {
+    let listed = side_files.listed(&paths_of(files));
+    let mut rows = file_rows(view, listed.iter().map(|&ix| files[ix].path().as_ref()), folded);
+    for row in &mut rows {
+        if let FileTreeRow::File { ix, .. } = row {
+            *ix = listed[*ix];
+        }
+    }
+    rows
+}
+
+pub(crate) fn side_files_of<'a>(files: &'a [DiffFile], file: &DiffFile, side_files: &SideFiles) -> Vec<&'a DiffFile> {
+    let paths = paths_of(files);
+    let Some(owner) = paths.iter().position(|path| *path == file.path().as_ref()) else {
+        return Vec::new();
+    };
+    side_files.sides_of(&paths, owner).into_iter().map(|ix| &files[ix]).collect()
+}
 
 #[derive(Clone, Default)]
 struct FileActions {
@@ -59,7 +95,8 @@ pub(crate) fn scroll_to_file(
     let (Some(files), Some(path)) = (files, path) else {
         return;
     };
-    let paths = files.iter().map(|file| file.path().as_ref());
+    let side_files = Readers::side_files_in(cx);
+    let paths = listed_files(&files, &side_files).map(|file| file.path().as_ref());
     if let Some(row) = row_of_file(FileView::current(cx), paths, folded, path) {
         scroll.scroll_to_item(row, ScrollStrategy::Nearest);
     }
@@ -68,6 +105,7 @@ pub(crate) fn scroll_to_file(
 #[derive(IntoElement)]
 pub(crate) struct CommitFiles {
     files: Arc<[DiffFile]>,
+    side_files: SideFiles,
     rows: Vec<FileTreeRow>,
     open: Option<SharedString>,
     scroll: UniformListScrollHandle,
@@ -81,10 +119,13 @@ impl CommitFiles {
         view: FileView,
         folded: &Folded<SharedString>,
         scroll: UniformListScrollHandle,
+        cx: &App,
     ) -> Self {
+        let side_files = Readers::side_files_in(cx);
         Self {
-            rows: file_rows(view, files.iter().map(|file| file.path().as_ref()), folded),
+            rows: commit_file_rows(view, &files, &side_files, folded),
             files,
+            side_files,
             open: None,
             scroll,
             actions: FileActions::default(),
@@ -131,6 +172,7 @@ impl RenderOnce for CommitFiles {
     fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
         let Self {
             files,
+            side_files,
             rows,
             open,
             scroll,
@@ -155,7 +197,8 @@ impl RenderOnce for CommitFiles {
                             &FileTreeRow::File { ix, place } => {
                                 let file = &files[ix];
                                 let selected = open.as_ref() == Some(file.path());
-                                commit_file_row(file, place, selected, &actions, cx)
+                                let sides = side_files_of(&files, file, &side_files);
+                                commit_file_row(file, &sides, place, selected, &actions, cx)
                             }
                         })
                         .collect::<Vec<_>>()
@@ -192,6 +235,7 @@ fn commit_folder_row(
 
 fn commit_file_row(
     file: &DiffFile,
+    sides: &[&DiffFile],
     place: FilePlace,
     selected: bool,
     actions: &FileActions,
@@ -214,12 +258,21 @@ fn commit_file_row(
             .child(ui::deletions(file.deletions(), cx))
     };
     let opened = file.clone();
-    file_row(
+    let tags = tags_of(sides.iter().map(|side| {
+        side_tag(
+            format!("commit-side/{}/{}", file.path(), side.path()),
+            side_label(file.path(), side.path()),
+            format!("{} changed too: it is compared with this file", file_name(side.path())),
+            cx,
+        )
+    }));
+    file_row_tagged(
         SharedString::from(format!("commit-file/{}", file.path())),
         change_kind(file),
         file.path(),
         place,
         selected,
+        tags,
         counts,
         cx,
     )

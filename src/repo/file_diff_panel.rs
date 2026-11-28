@@ -158,6 +158,7 @@ enum Compared {
         baseline: Baseline,
         names: CommitNames,
         file: DiffFile,
+        meta: Option<DiffFile>,
     },
 }
 
@@ -747,8 +748,8 @@ impl FileDiffPanel {
                     _ => self.compared = Some(Compared::WorkingFile(open)),
                 }
             }
-            Some(Compared::CommitFile { id, baseline, names, file }) => {
-                self.open_commit_file(id, baseline, names, file, cx);
+            Some(Compared::CommitFile { id, baseline, names, file, meta }) => {
+                self.open_commit_file(id, baseline, names, file, meta, cx);
             }
             None => {}
         }
@@ -1120,14 +1121,15 @@ impl FileDiffPanel {
         baseline: Baseline,
         names: CommitNames,
         file: DiffFile,
+        meta: Option<DiffFile>,
         cx: &mut Context<Self>,
     ) {
         self.leave_merge();
         self.ask_reader_for(file.path(), cx);
         if self.routes_to_unity(file.path(), cx) {
             let reload = self.shows_commit_file(id, file.path());
-            let request = commit_request(MediaView::Unity, &file, id, baseline.commit(), &names);
-            self.compared = Some(Compared::CommitFile { id, baseline, names, file });
+            let request = commit_request(MediaView::Unity, &file, meta.as_ref(), id, baseline.commit(), &names);
+            self.compared = Some(Compared::CommitFile { id, baseline, names, file, meta });
             if self.unity_mode == UnityMode::Text {
                 self.leave_media(cx);
                 self.parts = None;
@@ -1148,8 +1150,8 @@ impl FileDiffPanel {
         let view = media_view(file.path()).or_else(|| file.is_binary().then_some(MediaView::Other));
         if let Some(view) = view {
             let reload = self.shows_commit_file(id, file.path());
-            let request = commit_request(view, &file, id, baseline.commit(), &names);
-            self.compared = Some(Compared::CommitFile { id, baseline, names, file });
+            let request = commit_request(view, &file, meta.as_ref(), id, baseline.commit(), &names);
+            self.compared = Some(Compared::CommitFile { id, baseline, names, file, meta });
             if let Some(repo) = self.repository.read(cx).repo().cloned() {
                 self.open_media(&repo, request, reload, cx);
             }
@@ -1171,7 +1173,7 @@ impl FileDiffPanel {
         if !same {
             self.stepped = None;
         }
-        self.compared = Some(Compared::CommitFile { id, baseline, names, file });
+        self.compared = Some(Compared::CommitFile { id, baseline, names, file, meta });
         self.reread_commit_file(!same, cx);
         cx.notify();
     }
@@ -1686,8 +1688,8 @@ impl FileDiffPanel {
         let kind = change_kind(file);
         let whitespace = TextOptions::current(cx).whitespace();
         let unity_request = match &self.compared {
-            Some(Compared::CommitFile { names, file, .. }) if self.unity_mode == UnityMode::Text && self.routes_to_unity(file.path(), cx) => {
-                Some(commit_request(MediaView::Unity, file, id, baseline.commit(), names))
+            Some(Compared::CommitFile { names, file, meta, .. }) if self.unity_mode == UnityMode::Text && self.routes_to_unity(file.path(), cx) => {
+                Some(commit_request(MediaView::Unity, file, meta.as_ref(), id, baseline.commit(), names))
             }
             _ => None,
         };
@@ -1967,6 +1969,7 @@ impl FileDiffPanel {
                 baseline,
                 names,
                 file,
+                ..
             } => Some(commit_sides(file, *id, baseline.commit(), names).1),
         }
     }
@@ -2333,7 +2336,7 @@ fn working_request(view: MediaView, change: &FileChange, side: Side, staged_too:
             Side::Staged => DifftoolTarget::Staged,
         }),
         path: change.exact_path().to_owned(),
-        meta: change.meta().map(|meta| working_sides(meta, side, staged_too).0),
+        meta: change.side_files().first().map(|meta| working_sides(meta, side, staged_too).0),
     }
 }
 
@@ -2352,6 +2355,7 @@ fn read_imports(repo: &Repo, by: &unity::ByReader, sides: Sides) -> Option<unity
 fn commit_request(
     view: MediaView,
     file: &DiffFile,
+    meta: Option<&DiffFile>,
     id: ObjectId,
     parent: Option<ObjectId>,
     names: &CommitNames,
@@ -2364,7 +2368,7 @@ fn commit_request(
         extension: extension(file.path()),
         difftool: parent.map(|parent| DifftoolTarget::Commit { parent, id }),
         path: OsString::from(file.path().as_ref()),
-        meta: None,
+        meta: meta.map(|meta| commit_sides(meta, id, parent, names).0),
     }
 }
 

@@ -80,7 +80,7 @@ use crate::{
         Baseline, ChangeKind, Commit, FileChange, FileCommit, HISTORY_LIMIT, History, NamedRemote,
         PullMode, RefKind, RefLabel, ResetMode, Scope, Side, Stash, WorkingChanges, Worktree, short_id,
     },
-    app::connectors::Connectors,
+    app::{connectors::Connectors, readers::Readers},
     hosting::{
         AccountQuestion, Fix, SignInStart, account_bar, account_question, open_publish,
         open_sign_in,
@@ -111,6 +111,7 @@ use commit_panel::{CommitPanel, OpenCommitFile, ShowFileHistory, copy_commit_has
 use compare::{Direction, FilePlace, Position};
 use file_diff_panel::{CommitNames, FileDiffEvent, FileDiffPanel, Resolution};
 use file_history::{FileHistory, HistorySource};
+use commit_files::{commit_file_rows, side_files_of};
 use file_tree::{FileTreeRow, file_rows, row_of_file};
 use history_list::HistoryList;
 use navigation::{OpenFile, Step, Target};
@@ -225,7 +226,7 @@ pub(crate) struct RepoView {
     pulls: Entity<Pulls>,
     pull_pane: Option<PullPane>,
     commit_find: CommitFind,
-    _subscriptions: [Subscription; 9],
+    _subscriptions: [Subscription; 10],
 }
 
 impl EventEmitter<RepoViewEvent> for RepoView {}
@@ -313,6 +314,10 @@ impl RepoView {
             cx.observe(&commit_panel, |this, _, cx| {
                 this.open_history_file(cx);
                 this.place_file(cx)
+            }),
+            cx.observe_global::<Readers>(|this, cx| {
+                this.repository.update(cx, |repository, cx| repository.check_for_changes(cx));
+                cx.notify();
             }),
             cx.observe_global::<Connectors>(|this, cx| {
                 this.ask_which_account(cx);
@@ -692,10 +697,11 @@ impl RepoView {
             shown_in: format!("{} commits", thousands(count)).into(),
             after: short_id(newest),
         };
+        let meta = self.picked_panel.read(cx).files().and_then(|files| first_side_file(&files, &file, cx));
         let here = self.repository.clone();
         self.file_diff.update(cx, |panel, cx| {
             panel.use_repository(here);
-            panel.open_commit_file(newest, Baseline::Commit(base), names, file, cx)
+            panel.open_commit_file(newest, Baseline::Commit(base), names, file, meta, cx)
         });
         self.place_file(cx);
         cx.notify();
@@ -1017,11 +1023,12 @@ impl RepoView {
         let path = file.path().clone();
         *open = Some(path.clone());
         let label: SharedString = format!("#{number}").into();
+        let meta = view.read(cx).files().and_then(|files| first_side_file(&files, &file, cx));
         view.update(cx, |view, cx| view.mark_open(Some(path), cx));
         let here = self.repository.clone();
         self.file_diff.update(cx, |panel, cx| {
             panel.use_repository(here);
-            panel.open_commit_file(head, Baseline::Commit(merge_base), CommitNames::one(label), file, cx)
+            panel.open_commit_file(head, Baseline::Commit(merge_base), CommitNames::one(label), file, meta, cx)
         });
         self.place_file(cx);
         cx.notify();
@@ -1175,12 +1182,13 @@ impl RepoView {
             self.file_history = None;
         }
         let parent = self.commit_panel.read(cx).first_parent_of(id);
+        let meta = self.commit_panel.read(cx).files_of(id).and_then(|files| first_side_file(&files, &file, cx));
         self.commit_panel
             .update(cx, |panel, cx| panel.mark_open(Some(path), cx));
         let here = self.repository.clone();
         self.file_diff.update(cx, |panel, cx| {
             panel.use_repository(here);
-            panel.open_commit_file(id, Baseline::FirstParent(parent), CommitNames::one(short_id(id)), file, cx)
+            panel.open_commit_file(id, Baseline::FirstParent(parent), CommitNames::one(short_id(id)), file, meta, cx)
         });
         self.place_file(cx);
         cx.notify();
@@ -1397,7 +1405,7 @@ impl RepoView {
                     return Vec::new();
                 };
                 let folded = folds.applied(folded, &unfolded);
-                file_rows(view, files.iter().map(|file| file.path().as_ref()), folded)
+                commit_file_rows(view, &files, &Readers::side_files_in(cx), folded)
                     .into_iter()
                     .filter_map(|row| match row {
                         FileTreeRow::File { ix, .. } => Some(Openable::Commit(files[ix].clone())),
@@ -1413,7 +1421,7 @@ impl RepoView {
                     return Vec::new();
                 };
                 let folded = folds.applied(pull.folded(), &unfolded);
-                file_rows(view, files.iter().map(|file| file.path().as_ref()), folded)
+                commit_file_rows(view, &files, &Readers::side_files_in(cx), folded)
                     .into_iter()
                     .filter_map(|row| match row {
                         FileTreeRow::File { ix, .. } => Some(Openable::Pull(files[ix].clone())),
@@ -2221,4 +2229,8 @@ impl Render for RepoView {
             .child(div().fill_height().child(self.render_body(window, cx)))
             .child(status_bar)
     }
+}
+
+fn first_side_file(files: &[DiffFile], file: &DiffFile, cx: &App) -> Option<DiffFile> {
+    side_files_of(files, file, &Readers::side_files_in(cx)).first().map(|side| (*side).clone())
 }

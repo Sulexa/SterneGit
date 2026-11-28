@@ -1132,7 +1132,7 @@ const Screens = (() => {
     {
       id: 'unity-texture-meta',
       title: 'Unity — an asset and its .meta',
-      about: "In a Unity project a .meta file moves with its asset: the changes list shows slime.png once, with a meta tag, and staging, unstaging or discarding it does the same to slime.png.meta. The comparison is the asset's own, here the picture, with the import settings that changed in the .meta under its details: here the sprite was made crisper and smaller. A .meta that changed alone is listed on its own.",
+      about: "In a Unity project a .meta file moves with its asset: the changes list shows slime.png once, with a meta tag, and staging, unstaging or discarding it does the same to slime.png.meta. A commit's files fold the same way when the commit changes both. The grouping comes from the Unity reader's side_files pattern, {path}.meta: with the reader off, a .meta is an ordinary file. The comparison is the asset's own, here the picture, with the import settings that changed in the .meta under its details: here the sprite was made crisper and smaller. A .meta that changed alone is listed on its own.",
       source: 'src/repo/changes_list.rs',
       render: () => unityComparison(unity.slimeMetaDiff, 'split'),
     },

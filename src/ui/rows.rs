@@ -48,6 +48,39 @@ pub(crate) fn file_row(
     file_row_tagged(id, kind, path, place, selected, None, trailing, cx)
 }
 
+pub(crate) fn file_name(path: &str) -> &str {
+    path.rsplit('/').next().unwrap_or(path)
+}
+
+pub(crate) fn tags_of(tags: impl IntoIterator<Item = AnyElement>) -> Option<AnyElement> {
+    let tags: Vec<AnyElement> = tags.into_iter().collect();
+    (!tags.is_empty()).then(|| h_flex().flex_none().gap_1().children(tags).into_any_element())
+}
+
+pub(crate) fn side_tag(
+    id: impl Into<ElementId>,
+    label: &str,
+    tooltip: impl Into<SharedString>,
+    cx: &App,
+) -> AnyElement {
+    let theme = cx.theme();
+    let tooltip = tooltip.into();
+    div()
+        .id(id)
+        .flex_none()
+        .px_1()
+        .rounded(px(3.))
+        .border_1()
+        .border_color(theme.border)
+        .text_size(px(10.))
+        .line_height(px(14.))
+        .font_weight(gpui_kit::FontWeight::SEMIBOLD)
+        .text_color(theme.muted_foreground)
+        .child(SharedString::from(label.to_owned()))
+        .tooltip(move |window, cx| Tooltip::new(tooltip.clone()).build(window, cx))
+        .into_any_element()
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn file_row_tagged(
     id: impl Into<ElementId>,

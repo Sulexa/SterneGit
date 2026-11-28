@@ -11,7 +11,7 @@ use gix::ObjectId;
 use gpui_kit::SharedString;
 
 use super::{
-    Repo,
+    Repo, SideFiles,
     command::{Exit, READ_ONLY, run},
     text::{decode, os_name},
     underway::{Underway, underway_in},
@@ -60,7 +60,7 @@ pub(crate) struct FileChange {
     pub(crate) kind: ChangeKind,
     path_as_git_wrote_it: Arc<[u8]>,
     original_path_as_git_wrote_it: Option<Arc<[u8]>>,
-    meta: Option<Arc<FileChange>>,
+    side_files: Arc<[FileChange]>,
 }
 
 impl FileChange {
@@ -71,16 +71,16 @@ impl FileChange {
             kind,
             path_as_git_wrote_it: path.into(),
             original_path_as_git_wrote_it: original_path.map(Into::into),
-            meta: None,
+            side_files: Arc::new([]),
         }
     }
 
-    pub(crate) fn meta(&self) -> Option<&FileChange> {
-        self.meta.as_deref()
+    pub(crate) fn side_files(&self) -> &[FileChange] {
+        &self.side_files
     }
 
     pub(crate) fn together(&self) -> impl Iterator<Item = &FileChange> {
-        std::iter::once(self).chain(self.meta())
+        std::iter::once(self).chain(self.side_files.iter())
     }
 
     pub(crate) fn name_as_git_wrote_it(&self) -> &[u8] {
@@ -159,9 +159,17 @@ pub(crate) struct WorkingChanges {
     pub(crate) head: Option<ObjectId>,
     pub(crate) underway: Option<Underway>,
     pub(crate) digest: StatusDigest,
+    pub(crate) side_files: SideFiles,
 }
 
 impl WorkingChanges {
+    pub(crate) fn with_side_files(mut self, side_files: SideFiles) -> Self {
+        self.unstaged = beside_their_files(std::mem::take(&mut self.unstaged), &side_files);
+        self.staged = beside_their_files(std::mem::take(&mut self.staged), &side_files);
+        self.side_files = side_files;
+        self
+    }
+
     pub(crate) fn is_empty(&self) -> bool {
         self.conflicted.is_empty() && self.unstaged.is_empty() && self.staged.is_empty()
     }
@@ -270,32 +278,32 @@ fn parse_status(output: &[u8]) -> WorkingChanges {
     }
     let by_path = |a: &FileChange, b: &FileChange| a.path.as_str().cmp(b.path.as_str());
     changes.conflicted.sort_by(by_path);
-    changes.unstaged = with_metas_beside_their_assets(std::mem::take(&mut changes.unstaged));
-    changes.staged = with_metas_beside_their_assets(std::mem::take(&mut changes.staged));
     changes.unstaged.sort_by(by_path);
     changes.staged.sort_by(by_path);
     changes
 }
 
-const META: &str = ".meta";
-
-fn with_metas_beside_their_assets(changes: Vec<FileChange>) -> Vec<FileChange> {
-    let assets: HashSet<&str> = changes.iter().map(|change| change.path.as_str()).collect();
-    let paired = |change: &FileChange| {
-        change
-            .path
-            .strip_suffix(META)
-            .is_some_and(|asset| assets.contains(asset))
-    };
-    let (metas, mut rest): (Vec<FileChange>, Vec<FileChange>) =
-        changes.iter().cloned().partition(|change| paired(change));
-    for meta in metas {
-        let asset = meta.path.strip_suffix(META).unwrap_or_default().to_owned();
-        if let Some(owner) = rest.iter_mut().find(|change| change.path == asset) {
-            owner.meta = Some(Arc::new(meta));
+fn beside_their_files(changes: Vec<FileChange>, side_files: &SideFiles) -> Vec<FileChange> {
+    let paths: Vec<&str> = changes.iter().map(|change| change.path.as_str()).collect();
+    let owners = side_files.owners(&paths);
+    let mut sides: Vec<Vec<FileChange>> = vec![Vec::new(); changes.len()];
+    for (ix, owner) in owners.iter().enumerate() {
+        if let Some(owner) = owner {
+            sides[*owner].push(changes[ix].clone());
         }
     }
-    rest
+    changes
+        .into_iter()
+        .zip(sides)
+        .zip(owners)
+        .filter(|(_, owner)| owner.is_none())
+        .map(|((mut change, sides), _)| {
+            if !sides.is_empty() {
+                change.side_files = sides.into();
+            }
+            change
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -303,17 +311,25 @@ mod tests {
     use anyhow::Result;
 
     use super::{ChangeKind, FileChange, parse_status};
+    use crate::git::SideFiles;
     use crate::git::{FilePatch, PartAction, Side, scratch::ScratchRepo};
 
     #[test]
-    fn a_meta_file_moves_with_its_asset_on_the_same_side_only() {
-        let status = parse_status(b" M slime.png\0 M slime.png.meta\0M  hit.wav.meta\0 M Folder.meta\0");
+    fn a_side_file_moves_with_its_file_on_the_same_side_only() {
+        let status = parse_status(b" M slime.png\0 M slime.png.meta\0M  hit.wav.meta\0 M Folder.meta\0")
+            .with_side_files(SideFiles::new(["{path}.meta".to_owned()]));
         let listed: Vec<&str> = status.unstaged.iter().map(|change| change.path.as_str()).collect();
         assert_eq!(listed, vec!["Folder.meta", "slime.png"]);
         let slime = &status.unstaged[1];
-        assert_eq!(slime.meta().map(|meta| meta.path.as_str()), Some("slime.png.meta"));
+        assert_eq!(slime.side_files().first().map(|meta| meta.path.as_str()), Some("slime.png.meta"));
         assert_eq!(slime.together().count(), 2);
         assert_eq!(status.staged[0].path.as_str(), "hit.wav.meta");
+    }
+
+    #[test]
+    fn without_side_files_a_meta_keeps_its_row() {
+        let status = parse_status(b" M slime.png\0 M slime.png.meta\0").with_side_files(SideFiles::default());
+        assert_eq!(status.unstaged.len(), 2);
     }
 
     #[test]

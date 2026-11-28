@@ -612,6 +612,7 @@ const Texts = {
   cannotShow: (type) => `SterneGit can’t draw ${type} files`,
   cannotShowDescription: 'Open each version in the app that made it, or hand both to the diff tool set in Git’s diff.tool.',
   metaWith: (file) => `${file}.meta changed too: it is staged, unstaged and discarded with ${file}`,
+  metaInCommit: (file) => `${file}.meta changed too: it is compared with this file`,
   unityHidden: (n) => `${counted(n, 'change', 'changes')} Unity made on its own hidden`,
   guidTitle: (n, asset) => `The GUID changed: ${counted(n, 'file loses', 'files lose')} ${asset}`,
   guidAbout: 'Unity finds assets by GUID, not by path. These files still use the old GUID, so Unity shows the asset as Missing in them:',
@@ -2440,16 +2441,20 @@ const C = {
     return C.ListRow({ content: place + trailing, selected, extraClass: `file-row${hot ? ' hot' : ''}`, name, base: name === 'FileRow' ? 'ListRow' : 'FileRow' });
   },
 
-  CommitFileRow({ file, depth, selected = false, menu = '' }) {
+  CommitFileRow({ file, depth, selected = false, menu = '', meta = false }) {
     const counts = file.binary
       ? '<div class="counts xs muted">binary</div>'
       : `<div class="counts xs">${C.Additions({ count: file.additions })}${C.Deletions({ count: file.deletions })}</div>`;
-    return C.FileRow({ kind: file.kind, path: file.path, depth, selected, trailing: counts + menu, name: 'CommitFileRow' });
+    const tag = meta ? `<span class="meta-chip" title="${esc(Texts.metaInCommit(splitPath(file.path)[0]))}">meta</span>` : '';
+    return C.FileRow({ kind: file.kind, path: file.path, depth, selected, trailing: counts + menu, name: 'CommitFileRow', tag });
   },
 
-  CommitFiles({ files, open, view = 'list', collapsed = [], pointed }) {
+  CommitFiles({ files: changed, open, view = 'list', collapsed = [], pointed }) {
+    const paths = new Set(changed.map((file) => file.path));
+    const besideItsAsset = (path) => path.endsWith('.meta') && paths.has(path.slice(0, -'.meta'.length));
+    const files = changed.filter((file) => !besideItsAsset(file.path));
     const menu = (file) => (pointed && pointed.path === file.path ? C.CommitFileMenu({ file, left: pointed.left, top: pointed.top, hot: pointed.hot }) : '');
-    const row = (file, depth) => C.CommitFileRow({ file, depth, selected: file.path === open, menu: menu(file) });
+    const row = (file, depth) => C.CommitFileRow({ file, depth, selected: file.path === open, menu: menu(file), meta: paths.has(`${file.path}.meta`) });
     const rows =
       view === 'tree'
         ? fileTreeRows(fileTree(files), {

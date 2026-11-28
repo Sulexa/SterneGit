@@ -35,7 +35,8 @@ pub(crate) use notice::{Notice, failure, hint, loading};
 pub(crate) use palette::Palette;
 pub(crate) use picked::{Pick, Picked, PickedFor};
 pub(crate) use rows::{
-    FilePlace, ROW_HEIGHT, SectionHeader, file_row, file_row_tagged, folder_row, list_row, tree_line,
+    FilePlace, ROW_HEIGHT, SectionHeader, file_name, file_row, file_row_tagged, folder_row, list_row, side_tag, tags_of,
+    tree_line,
 };
 pub(crate) use search::{Matcher, Search};
 #[cfg(test)]

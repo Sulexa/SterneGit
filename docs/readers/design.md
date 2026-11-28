@@ -163,6 +163,7 @@ pub struct Scope { pub lines: (u32, u32), pub label: String, pub object: Option<
 
 ## 6. Side files and fixes
 
+- The manifest's `side_files` patterns also group rows: while the reader runs, a side file that changed with its file folds into the file's row, in the changes list and in a commit's files. Without a running reader that names it, a `.meta` is an ordinary file.
 - After both sides are read, SterneGit calls `side_files` with the file and the side files the manifest names.
 - A warning has a level, a sentence and up to three fixes: Unity's changed GUID offers "Keep the old GUID" and "Point users to the new GUID".
 - Picking a fix calls `fixes`, which returns:

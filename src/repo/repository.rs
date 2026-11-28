@@ -14,6 +14,7 @@ use super::{
 };
 use crate::{
     accounts,
+    app::readers::Readers,
     git::{
         self, Attendance, Behind, CheckedOut, CommitMode, FileChange, History, MergeMode,
         PartAction, PullMode, PullSource, RefLabel, RemoteBranch, Repo, ResetMode, Scope, Side,
@@ -1205,9 +1206,10 @@ impl Repository {
             return;
         }
         let repo = repo.clone();
+        let side_files = Readers::side_files_in(cx);
         let task = run_in_background(
             cx,
-            move || repo.status(),
+            move || repo.status().map(|changes| changes.with_side_files(side_files)),
             |this, result, cx| {
                 this.status_read.finish();
                 if let Ok(changes) = result {
@@ -1222,7 +1224,7 @@ impl Repository {
         if self
             .changes
             .as_ref()
-            .is_some_and(|shown| shown.digest == changes.digest)
+            .is_some_and(|shown| shown.digest == changes.digest && shown.side_files == changes.side_files)
         {
             return;
         }

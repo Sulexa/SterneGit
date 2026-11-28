@@ -4,6 +4,7 @@ use gpui_kit::{App, AppContext as _, BorrowAppContext as _, Global};
 use serde_json::Value;
 
 use crate::{
+    git::SideFiles,
     plugin::{Folders, Plugin},
     read::{FileKind, Grant, READERS_FOLDER, Reader, ReaderApprovals, ReaderCatalog, ReaderId, Readers as ReaderKind},
     settings::{Folder, JsonFile},
@@ -104,6 +105,20 @@ impl Readers {
             }
         }
         claims.into_iter().filter(|(_, readers)| readers.len() > 1).collect()
+    }
+
+    pub(crate) fn side_files(&self) -> SideFiles {
+        SideFiles::new(
+            self.readers()
+                .iter()
+                .filter(|reader| reader.started.is_some())
+                .filter_map(|reader| reader.manifest.as_ref())
+                .flat_map(|manifest| manifest.side_files.iter().map(|side| side.pattern.clone())),
+        )
+    }
+
+    pub(crate) fn side_files_in(cx: &App) -> SideFiles {
+        cx.try_global::<Self>().map(Self::side_files).unwrap_or_default()
     }
 
     pub(crate) fn chosen_for(&self, extension: &str) -> Option<&str> {

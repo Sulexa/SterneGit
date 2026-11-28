@@ -495,6 +495,7 @@ impl PullView {
                 FileView::current(cx),
                 &self.folded,
                 self.files_scroll.clone(),
+                cx,
             )
             .open(self.open.clone())
             .root(root)

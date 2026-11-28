@@ -908,12 +908,18 @@ const Catalog = (() => {
           name: 'CommitFiles',
           code: 'repo::commit_files::CommitFiles',
           source: 'src/repo/commit_files.rs',
-          about: 'Every file the commit changes in a virtual list: in patch order as a list, or as a tree with folders first, then files, both by name and regardless of case. Clicking a folder folds it; folded folders open again when another commit is selected. The open file is highlighted. A right-click on a file opens its CommitFileMenu.',
+          about: 'Every file the commit changes in a virtual list: in patch order as a list, or as a tree with folders first, then files, both by name and regardless of case. A side file that a running reader names, such as Unity’s .meta, has no row of its own when the commit also changes its file: the file shows a tag named after the side file and its comparison shows the import settings, as in the ChangesList; a side file that changed alone, or that no running reader names, keeps its row. Clicking a folder folds it; folded folders open again when another commit is selected. The open file is highlighted. A right-click on a file opens its CommitFileMenu.',
           variants: [
             ['Files', () => C.CommitFiles({ files: commitDetails.files }), { w: 480, h: 180 }],
             ['One open', () => C.CommitFiles({ files: commitDetails.files, open: commitFileDiff.change.path }), { w: 480, h: 180 }],
             ['As a tree, one open', () => C.CommitFiles({ files: commitDetails.files, open: commitFileDiff.change.path, view: 'tree' }), { w: 480, h: 240 }],
             ['As a tree, a folder folded', () => C.CommitFiles({ files: commitDetails.files, view: 'tree', collapsed: ['docs/mockup'] }), { w: 480, h: 180 }],
+            ['Unity assets and their .meta', () => C.CommitFiles({ files: [
+              { kind: 'A', path: 'Assets/Prefabs/UI/LeaderboardConsentPopup.prefab', additions: 8022, deletions: 0 },
+              { kind: 'A', path: 'Assets/Prefabs/UI/LeaderboardConsentPopup.prefab.meta', additions: 7, deletions: 0 },
+              { kind: 'A', path: 'Assets/Resources/Inputs/TermsConsent_Accept_Holder.asset.meta', additions: 8, deletions: 0 },
+              { kind: 'A', path: 'Assets/Resources/Inputs/TermsConsent_Decline_Holder.asset', additions: 29, deletions: 0 },
+            ] }), { w: 480, h: 120 }],
           ],
         },
         {

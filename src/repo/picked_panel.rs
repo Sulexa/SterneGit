@@ -247,6 +247,7 @@ impl Render for PickedPanel {
                         view,
                         &self.folded,
                         self.files_scroll.clone(),
+                        cx,
                     )
                     .open(self.open.clone())
                     .root(self.root.clone())

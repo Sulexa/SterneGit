@@ -24,10 +24,11 @@ use super::{
     navigation::OpenFile,
 };
 use crate::{
-    git::{ChangeKind, FileChange, Scope, Side, WorkingChanges},
+    git::{ChangeKind, FileChange, Scope, Side, WorkingChanges, side_label},
     ui::{
         self, BySide, FilePlace, FileView, FileViewToggle, Folded, Handler, Look as _, Pick,
-        Picked, ROW_HEIGHT, SectionHeader, SideUi as _, counted, file_row, file_row_tagged, folder_row, handler, thousands,
+        Picked, ROW_HEIGHT, SectionHeader, SideUi as _, counted, file_name, file_row, file_row_tagged, folder_row, handler,
+        side_tag, tags_of, thousands,
     },
 };
 
@@ -935,29 +936,15 @@ fn change_row(
                 on_move(&moved, window, cx)
             })
         });
-    let meta = change.meta().map(|meta| {
-        let theme = cx.theme();
-        div()
-            .id(SharedString::from(format!("meta/{id}")))
-            .flex_none()
-            .px_1()
-            .rounded(px(3.))
-            .border_1()
-            .border_color(theme.border)
-            .text_size(px(10.))
-            .line_height(px(14.))
-            .font_weight(gpui_kit::FontWeight::SEMIBOLD)
-            .text_color(theme.muted_foreground)
-            .child("meta")
-            .tooltip({
-                let text = SharedString::from(format!(
-                    "{} changed too: it is staged, unstaged and discarded with this file",
-                    meta.path.rsplit('/').next().unwrap_or(&meta.path)
-                ));
-                move |window, cx| gpui_kit::component::tooltip::Tooltip::new(text.clone()).build(window, cx)
-            })
-            .into_any_element()
+    let tags = change.side_files().iter().map(|side| {
+        side_tag(
+            format!("side/{id}/{}", side.path),
+            side_label(&change.path, &side.path),
+            format!("{} changed too: it is staged, unstaged and discarded with this file", file_name(&side.path)),
+            cx,
+        )
     });
+    let tags = tags_of(tags);
     let discard = match (side, discard_label(change), actions.on_discard.clone()) {
         (Side::Unstaged, Some(label), Some(on_discard)) => {
             let discarded = change.clone();
@@ -977,7 +964,7 @@ fn change_row(
         &change.path,
         place,
         selected,
-        meta,
+        tags,
         h_flex().flex_none().children(discard).child(move_button),
         cx,
     )

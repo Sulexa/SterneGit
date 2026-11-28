@@ -103,6 +103,7 @@ Each is a method of `Reader` with a default that does nothing, and a job in the 
 
 - **`id`**: up to 40 lowercase letters, digits, `-` or `_`; the folder's name.
 - **`kinds`**: `sniff` strings must all appear in the file's first 4 KB; `views` are `inspector`, `layout`, `curves`, `graph` and `text`; `text` names the text view (default Text).
+- **`side_files`** (manifest): patterns where `{path}` stands for the file's path. While the reader runs, a side file that changed along with its file has no row of its own in the changes list or a commit's files: the file shows a tag named after what the pattern adds (`meta` for `{path}.meta`), and staging, unstaging or discarding the file does the same to its side files.
 - **`grant.read`**: `file` or `repository`. **`grant.jobs`**: `compare`, `side_files`, `fixes`, `merge`. Asking for more in an update waits for the user's approval again.
 
 ## 7. Testing and installing
